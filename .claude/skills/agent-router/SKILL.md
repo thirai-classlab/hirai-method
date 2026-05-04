@@ -1,6 +1,6 @@
 ---
 name: agent-router
-description: Route ambiguous "general-purpose" subagent prompts to the most relevant named agent. Use when about to launch Agent/Task with subagent_type=general-purpose and unsure which named agent fits, when reviewing past general-purpose flows for downgrade to a specialist, or when the user asks "which agent should handle X?". Inputs a prompt string, scores against the dispatch table (~100 active agents under .claude/agents/), and returns the best-matching agent + confidence + reason. Hybrid mode (--use-llm-fallback / AGENT_ROUTER_LLM_FALLBACK=on) invokes a Claude CLI selector for low-confidence prompts to lift dispatch rate further. Falls back to general-purpose only when no candidate clears the confidence threshold.
+description: Route ambiguous "general-purpose" subagent prompts to the most relevant named agent. Use when about to launch Agent/Task with subagent_type=general-purpose and unsure which named agent fits, when reviewing past general-purpose flows for downgrade to a specialist, or when the user asks "which agent should handle X?". Inputs a prompt string, scores against the dispatch table (~100 active agents under .claude/agents/), and returns the best-matching agent + confidence + reason. Hybrid mode (--use-llm-fallback / AGENT_ROUTER_LLM_FALLBACK=on) invokes a Claude CLI selector for low-confidence prompts to lift dispatch rate further. Three-stage fallback (keyword → LLM → previous → general-purpose) inherits the prior dispatch on the same prompt before falling back to general-purpose.
 ---
 
 # Agent Router

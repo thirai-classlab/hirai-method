@@ -68,6 +68,14 @@ DEFAULT_LLM_BUDGET_USD = 0.05
 DEFAULT_HISTORY_PATH = Path.home() / ".claude" / "agent-router-history.json"
 DEFAULT_HISTORY_LOOKBACK = 3
 
+# Phase 6: long-term dispatch telemetry (separate from cycle-detection history).
+DEFAULT_HOMUNCULUS_ROOT = Path.home() / ".claude" / "homunculus"
+DISPATCH_LOG_NAME = "dispatch.jsonl"
+
+# Phase 3: ordered fallback ladder. fallback_chain on RoutingResult is the
+# prefix of layers the router actually traversed to reach the final agent.
+FALLBACK_LAYERS = ("keyword", "llm", "previous", "general-purpose")
+
 
 @dataclass
 class RoutingResult:
@@ -82,6 +90,10 @@ class RoutingResult:
     llm_attempts: int = 0
     llm_cost_usd: float = 0.0
     cycle_broken: bool = False
+    # Phase 3: ordered list of fallback layers traversed to pick `agent`.
+    # Always at least one entry; the *last* element is the layer that
+    # produced the final agent.
+    fallback_chain: list[str] = field(default_factory=list)
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -94,6 +106,8 @@ class RoutingResult:
             d.pop("llm_cost_usd", None)
         if not d["cycle_broken"]:
             d.pop("cycle_broken", None)
+        if not d.get("fallback_chain"):
+            d.pop("fallback_chain", None)
         return json.dumps(d, ensure_ascii=False)
 
 
@@ -624,6 +638,120 @@ def pick_alternative_agent(
 
 
 # ---------------------------------------------------------------------------
+# Phase 3: previous-agent fallback (third stage of the ladder)
+# ---------------------------------------------------------------------------
+
+def get_previous_dispatch(
+    prompt: str,
+    history_path: Path,
+    fallback: str,
+    *,
+    lookback: int = 10,
+) -> str | None:
+    """Return the most recent dispatched named agent for the *same prompt hash*,
+    or None when no prior dispatch exists or the only matches were the fallback
+    itself.
+
+    The "previous" layer is intentionally prompt-keyed (not session-keyed) so
+    re-issuing the same vague prompt resolves to the same specialist as last
+    time, providing context continuity without leaking across topics.
+    """
+    history = _load_history(history_path)
+    if not history:
+        return None
+    prompt_hash = _hash_prompt(prompt)
+    # Walk newest-first within the lookback window.
+    candidates = [e for e in history[-lookback:] if e.get("prompt_hash") == prompt_hash]
+    for entry in reversed(candidates):
+        agent = entry.get("dispatched")
+        if agent and agent != fallback:
+            return agent
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: dispatch.jsonl telemetry (long-term, project-scoped)
+# ---------------------------------------------------------------------------
+
+def _project_hash_for_telemetry(cwd: Path | None = None) -> str:
+    """Derive a stable per-project hash. Mirrors the convention used by
+    harness-audit.py / observe.sh: SHA-256 prefix of the git remote URL when
+    available, falling back to the absolute CWD path for non-git directories.
+    """
+    import hashlib
+    import subprocess
+
+    try:
+        out = subprocess.check_output(
+            ["git", "remote", "get-url", "origin"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            cwd=str(cwd) if cwd else None,
+        ).strip()
+        if out:
+            return hashlib.sha256(out.encode()).hexdigest()[:12]
+    except Exception:
+        pass
+    base = str((cwd or Path.cwd()).resolve())
+    return hashlib.sha256(base.encode()).hexdigest()[:12]
+
+
+def dispatch_log_path(
+    homunculus_root: Path | None = None,
+    cwd: Path | None = None,
+) -> Path:
+    """Return the project-scoped dispatch.jsonl path."""
+    root = Path(homunculus_root) if homunculus_root else DEFAULT_HOMUNCULUS_ROOT
+    return root / "projects" / _project_hash_for_telemetry(cwd) / DISPATCH_LOG_NAME
+
+
+def append_dispatch_log(
+    log_path: Path,
+    *,
+    prompt: str,
+    dispatched_agent: str,
+    fallback_layer: str,
+    confidence: float,
+    cost_usd: float = 0.0,
+    cycle_broken: bool = False,
+) -> None:
+    """Atomically append a dispatch event to dispatch.jsonl.
+
+    Atomicity strategy: write the new line to a per-process temp file, then
+    rename-append by reading current contents + the new line into a temp file
+    and `os.replace`-ing it onto the target. This avoids partial-line writes
+    even if the process is killed mid-write.
+    """
+    record = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "prompt_hash": _hash_prompt(prompt),
+        "dispatched_agent": dispatched_agent,
+        "fallback_layer": fallback_layer,
+        "confidence": round(float(confidence), 3),
+        "cost_usd": round(float(cost_usd), 6),
+        "cycle_broken": bool(cycle_broken),
+    }
+
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = ""
+        if log_path.exists():
+            try:
+                existing = log_path.read_text(encoding="utf-8")
+            except OSError:
+                existing = ""
+            if existing and not existing.endswith("\n"):
+                existing += "\n"
+        new_blob = existing + json.dumps(record, ensure_ascii=False) + "\n"
+        tmp = log_path.with_suffix(log_path.suffix + f".tmp.{os.getpid()}")
+        tmp.write_text(new_blob, encoding="utf-8")
+        os.replace(tmp, log_path)
+    except OSError:
+        # Telemetry is best-effort; never break routing because of it.
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Routing entry point
 # ---------------------------------------------------------------------------
 
@@ -643,6 +771,10 @@ def route(
     enable_cycle_detection: bool = True,
     history_path: Path | None = None,
     record_history: bool = True,
+    enable_previous_fallback: bool = True,
+    record_dispatch_log: bool = True,
+    homunculus_root: Path | None = None,
+    cwd_for_telemetry: Path | None = None,
 ) -> RoutingResult:
     if table is None:
         table = load_table(table_path)
@@ -653,9 +785,11 @@ def route(
             confidence=0.0,
             reason="empty prompt",
             fallback=True,
+            fallback_chain=["general-purpose"],
         )
 
     history_path = history_path or DEFAULT_HISTORY_PATH
+    chain: list[str] = ["keyword"]
 
     scores, matches = score_prompt(prompt, table)
 
@@ -699,8 +833,10 @@ def route(
 
     # ---- Decide whether to invoke LLM selector ----------------------------
     final = keyword_result
+    llm_failed = False
 
     if use_llm_fallback and keyword_result.confidence < llm_threshold:
+        chain.append("llm")
         parsed, meta = llm_select(
             prompt,
             table,
@@ -726,6 +862,7 @@ def route(
                 llm_cost_usd=round(cost_usd, 6),
             )
         else:
+            llm_failed = True
             # All LLM attempts failed; keep keyword result but record the
             # attempt count + cost so callers can audit.
             final = RoutingResult(
@@ -744,8 +881,38 @@ def route(
                 llm_cost_usd=round(cost_usd, 6),
             )
 
+    # ---- Phase 3: previous-agent layer ------------------------------------
+    # Only triggered when LLM was attempted and failed AND we still don't
+    # have a named agent. Skip when the previous dispatch was the fallback
+    # itself (that gives no signal).
+    if enable_previous_fallback and llm_failed and final.fallback:
+        prev = get_previous_dispatch(prompt, history_path, table.fallback)
+        if prev and prev != final.agent:
+            chain.append("previous")
+            final = RoutingResult(
+                agent=prev,
+                confidence=max(final.confidence, 0.4),
+                reason=(
+                    f"previous-agent fallback: inheriting {prev} from prior "
+                    f"dispatch on same prompt. {final.reason}"
+                ),
+                fallback=False,
+                matched_keywords=final.matched_keywords,
+                candidates=final.candidates,
+                llm_used=final.llm_used,
+                llm_attempts=final.llm_attempts,
+                llm_cost_usd=final.llm_cost_usd,
+            )
+
+    # ---- Final layer: general-purpose fallback ---------------------------
+    if final.fallback or final.agent == table.fallback:
+        chain.append("general-purpose")
+
     # ---- Cycle detection --------------------------------------------------
-    if enable_cycle_detection and not final.fallback:
+    # Skip when we deliberately inherited the previous agent — repeating it is
+    # the whole point of the previous-fallback layer.
+    came_from_previous = chain and chain[-1] == "previous"
+    if enable_cycle_detection and not final.fallback and not came_from_previous:
         if detect_cycle(prompt, final.agent, history_path):
             alt = pick_alternative_agent(final.agent, scores, table.fallback)
             if alt != final.agent:
@@ -761,9 +928,31 @@ def route(
                     llm_cost_usd=final.llm_cost_usd,
                     cycle_broken=True,
                 )
+                if alt == table.fallback and "general-purpose" not in chain:
+                    chain.append("general-purpose")
+
+    # Stamp the chain on the result.
+    final.fallback_chain = chain
 
     if record_history:
         record_dispatch(prompt, final.agent, history_path)
+
+    # Phase 6: append project-scoped dispatch telemetry.
+    if record_dispatch_log:
+        try:
+            log_path = dispatch_log_path(homunculus_root, cwd_for_telemetry)
+            append_dispatch_log(
+                log_path,
+                prompt=prompt,
+                dispatched_agent=final.agent,
+                fallback_layer=chain[-1] if chain else "keyword",
+                confidence=final.confidence,
+                cost_usd=final.llm_cost_usd,
+                cycle_broken=final.cycle_broken,
+            )
+        except Exception:
+            # Never let telemetry break routing.
+            pass
 
     return final
 
@@ -847,6 +1036,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip writing the dispatch result to history (cycle detection still reads)",
     )
+    parser.add_argument(
+        "--no-dispatch-log",
+        action="store_true",
+        help="Skip appending to ~/.claude/homunculus/projects/<hash>/dispatch.jsonl",
+    )
+    parser.add_argument(
+        "--no-previous-fallback",
+        action="store_true",
+        help="Disable Phase 3 'previous-agent' fallback layer",
+    )
     args = parser.parse_args(argv)
 
     if args.stdin:
@@ -867,6 +1066,8 @@ def main(argv: list[str] | None = None) -> int:
             llm_budget_usd=args.llm_budget_usd,
             enable_cycle_detection=not args.no_cycle_detection,
             record_history=not (args.no_record or args.no_cycle_detection),
+            enable_previous_fallback=not args.no_previous_fallback,
+            record_dispatch_log=not (args.no_dispatch_log or args.no_record),
         )
     except FileNotFoundError as exc:
         print(json.dumps({"error": str(exc), "agent": "general-purpose", "fallback": True}), flush=True)

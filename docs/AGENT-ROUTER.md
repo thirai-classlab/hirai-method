@@ -21,7 +21,7 @@ The empirical 84.1% dispatch rate (1,178 historical `general-purpose` prompts, s
 | `.claude/skills/agent-router/SKILL.md` | Skill manifest (description / triggers) |
 | `.claude/skills/agent-router/router.py` | Pure-stdlib dispatch implementation (Phase 1) + Claude CLI selector (Phase 2) |
 | `.claude/skills/agent-router/dispatch-table.yml` | Single source of truth: keyword → agent |
-| `.claude/skills/agent-router/tests/test_router.py` | 40 unit + integration tests (Phase 1: 19, Phase 2: 21) |
+| `.claude/skills/agent-router/tests/test_router.py` | 48 unit + integration tests (Phase 1: 19, Phase 2: 21, Phase 3+6: 8) |
 | `.claude/skills/agent-router/samples/representative_prompts.txt` | Verification fixtures |
 | `.claude/hooks/agent-router-suggest.sh` | Optional `UserPromptSubmit` hint injector (forwards `AGENT_ROUTER_LLM_FALLBACK` to the router) |
 
@@ -172,22 +172,74 @@ The 1,178-prompt live re-measurement against the actual `claude -p` selector is 
 
 ## 改善 backlog（残）
 
-### Phase 3: AutoGen 三段 fallback の採用（優先度: 中）
+### Phase 3: AutoGen 三段 fallback の採用 — **Done (2026-05-05)**
 
-AutoGen の `max_selector_attempts=3` → previous → first participant の三段 fallback を移植:
+AutoGen の `max_selector_attempts=3` → previous → first participant の三段 fallback を移植済:
 
-- 1 段目: keyword（現状）
-- 2 段目: LLM selector（Phase 2 で実装済み）
-- 3 段目: 直前の named agent（context 継承） ← 未実装
-- 4 段目: general-purpose（最終 fallback、現状）
+- 1 段目: **keyword**（Phase 1）
+- 2 段目: **llm** selector（Phase 2、`--use-llm-fallback` で有効）
+- 3 段目: **previous** — 同一 prompt hash で直前に dispatch された named agent を継承（context 継承）
+- 4 段目: **general-purpose**（最終 fallback）
 
-### Phase 6: dispatch 履歴可観測化（優先度: 低）
+実装上の決定:
 
-router.py の dispatch 結果を `~/.claude/homunculus/projects/<hash>/dispatch.jsonl` に append:
+- `RoutingResult.fallback_chain: list[str]` に通過した layer 名が順に積まれる。例: `["keyword", "llm", "previous"]` または `["keyword", "general-purpose"]`。
+- `previous` layer は **「LLM が試行されて失敗、かつ keyword 結果も fallback」** のときだけ発火。LLM が成功して named agent を選んだケースでは `previous` は経由しない。
+- 直前 dispatch が `general-purpose` だった場合は `previous` を skip して直接 4 段目へ進む（"signal" として無価値なため）。
+- `previous` 経由で agent を継承したときは **cycle detection を意図的に skip** する。前回 dispatch をそのまま採用する layer なので、cycle 判定にかけると即座に `general-purpose` に押し戻されてしまう。
+- 制御フラグ: `--no-previous-fallback` で 3 段目 layer を無効化可能（CLI / API 双方）。
 
-- 30/90 日後の再集計（INVENTORY-stocktake §8 で言及した再測定）と統合
-- `/harness-audit --router` で名前付き agent 起動率の経時変化を表示
-- 現状の `~/.claude/agent-router-history.json` は cycle detection 専用 (last 100)。長期 telemetry とは分離。
+### Phase 6: dispatch 履歴可観測化 — **Done (2026-05-05)**
+
+#### Phase 6-A: dispatch.jsonl 永続化
+
+router.py が dispatch ごとに 1 行を append（atomic write、temp file → `os.replace`）。出力先:
+
+```
+~/.claude/homunculus/projects/<git-remote-sha256[:12]>/dispatch.jsonl
+```
+
+各行のスキーマ:
+
+| field | 型 | 説明 |
+|---|---|---|
+| `ts` | string (ISO8601 UTC) | 書き込み時刻、`Z` suffix |
+| `prompt_hash` | string (16 hex) | prompt SHA-256 prefix |
+| `dispatched_agent` | string | 最終的に選ばれた agent 名 |
+| `fallback_layer` | string | `fallback_chain[-1]` の値（`keyword` / `llm` / `previous` / `general-purpose`） |
+| `confidence` | float | 0.0–1.0、`fallback_chain` 末端 layer の confidence |
+| `cost_usd` | float | LLM selector が呼ばれた場合の累積 cost、未呼出は 0 |
+| `cycle_broken` | bool | cycle detection が発火した場合のみ true |
+
+opt-out:
+
+- `--no-dispatch-log` — append を skip（cycle detection 用 history は別系統で動く）
+- `--no-record` — history も dispatch.jsonl も skip
+
+#### Phase 6-B: harness-audit --router
+
+```bash
+python3 .claude/scripts/harness-audit.py --router
+# あるいは集計のみ JSON で
+python3 .claude/scripts/harness-audit.py --router --json
+```
+
+出力フィールド:
+
+- total dispatches
+- layer 別件数（`keyword` / `llm` / `previous` / `general-purpose`）と share %
+- named-agent 起動率（`= 1 - general-purpose 率`）
+- 平均 confidence
+- 累計 cost (USD)
+- cycle-broken events
+- top-10 dispatched agents
+
+`--router-homunculus-root <path>` で集計対象 root を上書き可能（テスト / 別 home スキャン用）。
+
+#### Phase 2 で導入した `~/.claude/agent-router-history.json` との分離
+
+- `agent-router-history.json` は cycle detection / previous-fallback 用の **直近 100 件**ローリング（global、project 横断）。
+- `dispatch.jsonl` は **無圧縮の長期 telemetry**（project 別、`harness-audit.py` 集計対象）。retention は手動。
 
 ### 採用判断の SSoT
 

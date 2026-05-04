@@ -447,12 +447,158 @@ def fmt_swe_bench(sb: dict) -> str:
     return "\n".join(lines)
 
 
+def router_breakdown(homunculus_root: Path | None = None, project_hash_override: str | None = None) -> dict:
+    """Aggregate dispatch.jsonl rows from the homunculus tree.
+
+    Strategy:
+      - When an explicit `homunculus_root` is given (e.g. `--router-homunculus-root`),
+        scan every projects/<hash>/dispatch.jsonl beneath it.
+      - Otherwise resolve the current project's hash via `project_hash()` and read
+        only that project's log; if absent, fall back to a global tree-wide scan.
+
+    The aggregation is purposely tolerant: malformed rows are skipped, and a
+    completely empty tree returns zeroed counters with `total: 0`.
+    """
+    root = Path(homunculus_root) if homunculus_root else HOMUNCULUS
+
+    # Discover candidate logs.
+    logs: list[Path] = []
+    if homunculus_root:
+        logs = sorted((root / "projects").glob("*/dispatch.jsonl")) if (root / "projects").is_dir() else []
+    else:
+        ph = project_hash_override or project_hash()
+        if ph:
+            cand = root / "projects" / ph / "dispatch.jsonl"
+            if cand.exists():
+                logs = [cand]
+        if not logs and (root / "projects").is_dir():
+            logs = sorted((root / "projects").glob("*/dispatch.jsonl"))
+
+    rows: list[dict] = []
+    for log in logs:
+        try:
+            for line in log.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        except OSError:
+            continue
+
+    layer_counts: Counter[str] = Counter()
+    agent_counts: Counter[str] = Counter()
+    confidences: list[float] = []
+    cumulative_cost = 0.0
+    named_count = 0
+    cycles = 0
+
+    for r in rows:
+        layer = str(r.get("fallback_layer") or "unknown")
+        layer_counts[layer] += 1
+        agent = str(r.get("dispatched_agent") or "unknown")
+        agent_counts[agent] += 1
+        if agent and agent != "general-purpose":
+            named_count += 1
+        try:
+            confidences.append(float(r.get("confidence") or 0.0))
+        except (TypeError, ValueError):
+            pass
+        try:
+            cumulative_cost += float(r.get("cost_usd") or 0.0)
+        except (TypeError, ValueError):
+            pass
+        if r.get("cycle_broken"):
+            cycles += 1
+
+    total = len(rows)
+    avg_conf = round(sum(confidences) / len(confidences), 3) if confidences else 0.0
+    named_rate = round(named_count / total, 3) if total else 0.0
+
+    # Order layers in canonical fallback ladder; surface "unknown" last if present.
+    canonical = ["keyword", "llm", "previous", "general-purpose"]
+    layers_ordered = {l: layer_counts.get(l, 0) for l in canonical}
+    for l, c in layer_counts.items():
+        if l not in layers_ordered:
+            layers_ordered[l] = c
+
+    return {
+        "logs_scanned": [str(p) for p in logs],
+        "total": total,
+        "by_layer": layers_ordered,
+        "named_agent_count": named_count,
+        "named_agent_rate": named_rate,
+        "avg_confidence": avg_conf,
+        "cumulative_cost_usd": round(cumulative_cost, 6),
+        "cycle_broken": cycles,
+        "top_agents": dict(agent_counts.most_common(10)),
+    }
+
+
+def fmt_router(r: dict) -> str:
+    """Markdown leaderboard for the router section."""
+    lines: list[str] = []
+    lines.append("# Router Dispatch Audit")
+    lines.append(f"_generated: {datetime.now().isoformat(timespec='seconds')}_")
+    lines.append("")
+    if r["total"] == 0:
+        lines.append("- (no dispatch.jsonl rows found)")
+        if r["logs_scanned"]:
+            lines.append("")
+            lines.append("## Scanned logs")
+            for p in r["logs_scanned"]:
+                lines.append(f"  - `{p}`")
+        return "\n".join(lines)
+
+    lines.append(f"- total dispatches: **{r['total']}**")
+    lines.append(f"- named-agent rate: **{r['named_agent_rate']:.1%}** ({r['named_agent_count']}/{r['total']})")
+    lines.append(f"- avg confidence: **{r['avg_confidence']:.3f}**")
+    lines.append(f"- cumulative cost: **${r['cumulative_cost_usd']:.4f}**")
+    lines.append(f"- cycle-broken events: {r['cycle_broken']}")
+    lines.append("")
+
+    lines.append("## Layer breakdown")
+    lines.append("| layer | count | share |")
+    lines.append("|---|---:|---:|")
+    for layer, count in r["by_layer"].items():
+        share = (count / r["total"]) if r["total"] else 0
+        lines.append(f"| {layer} | {count} | {share:.1%} |")
+    lines.append("")
+
+    if r["top_agents"]:
+        lines.append("## Top dispatched agents")
+        lines.append("| agent | dispatches |")
+        lines.append("|---|---:|")
+        for agent, count in r["top_agents"].items():
+            lines.append(f"| {agent} | {count} |")
+
+    if r["logs_scanned"]:
+        lines.append("")
+        lines.append(f"_logs scanned: {len(r['logs_scanned'])}_")
+
+    return "\n".join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true", help="出力を JSON にする")
     ap.add_argument("--window", type=int, default=100, help="観察ログの集計件数")
     ap.add_argument("--swe-bench", action="store_true", help="SWE-bench Lite leaderboard markdown のみ出力")
+    ap.add_argument("--router", action="store_true", help="Agent-router dispatch.jsonl leaderboard markdown のみ出力")
+    ap.add_argument("--router-homunculus-root", default=None, help="Override homunculus_root for the --router subcommand (mainly for tests)")
     args = ap.parse_args()
+
+    if args.router:
+        rr = router_breakdown(
+            homunculus_root=Path(args.router_homunculus_root) if args.router_homunculus_root else None,
+        )
+        if args.json:
+            print(json.dumps(rr, indent=2, ensure_ascii=False))
+        else:
+            print(fmt_router(rr))
+        return 0
 
     if args.swe_bench:
         sb = swe_bench_breakdown()
@@ -475,6 +621,7 @@ def main() -> int:
         "failure_window": failure_window_summary(),
         "confidence_gate": confidence_gate_breakdown(),
         "swe_bench": swe_bench_breakdown(),
+        "router": router_breakdown(),
     }
 
     if args.json:
@@ -485,6 +632,10 @@ def main() -> int:
         if sb["total_runs"] > 0:
             print("")
             print(fmt_swe_bench(sb))
+        rr = report["router"]
+        if rr["total"] > 0:
+            print("")
+            print(fmt_router(rr))
     return 0
 
 

@@ -263,6 +263,8 @@ C-1.5 の whole-file 方式は適用率を 1.5× にしつつコストを下げ�
 | Phase 2 (Hybrid mock) — 15 low-/subtle-signal prompts | 100% (15/15) | mock selector で wiring 検証。live 計測は `AGENT_ROUTER_LLM_FALLBACK=on` を有効化後 |
 | Phase 2 — LLM selector per-call cap | $0.05 / call (default) | `--llm-budget-usd` で調整可、cumulative cost は `llm_cost_usd` に出力 |
 
+> 上記の dispatch rate は静的 fixture の集計です。Phase 6 から実運用 dispatch を `~/.claude/homunculus/projects/<hash>/dispatch.jsonl` に永続化（**開始 2026-05-05**）し、`/harness-audit --router` で経時集計可能。30/90 日後に live 計測値で再評価予定。
+
 公式 `swebench` harness 統合済 (opt-in)。`apply_only=false` モードで FAIL_TO_PASS pytest 実行可。本番 200 task (50 × F1/F2 on/off) は約 $45-60 / 3.5h（parallel=4）見込み。
 
 評価実行:

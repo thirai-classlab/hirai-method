@@ -36,11 +36,23 @@ class IsolatedRouteMixin:
         # the temp path.
         self._patch = mock.patch.object(router, "DEFAULT_HISTORY_PATH", self._history_path)
         self._patch.start()
+        # Phase 6: redirect dispatch.jsonl telemetry away from the real
+        # ~/.claude/homunculus tree.
+        self._homunculus_root = self._history_path.parent / "homunculus"
+        self._homunculus_patch = mock.patch.object(
+            router, "DEFAULT_HOMUNCULUS_ROOT", self._homunculus_root
+        )
+        self._homunculus_patch.start()
 
     def tearDown(self) -> None:  # type: ignore[override]
+        self._homunculus_patch.stop()
         self._patch.stop()
         try:
             self._history_path.unlink(missing_ok=True)
+            # Recursive cleanup for the homunculus tree if present.
+            import shutil
+            if self._homunculus_root.exists():
+                shutil.rmtree(self._homunculus_root, ignore_errors=True)
             self._history_path.parent.rmdir()
         except OSError:
             pass
@@ -493,6 +505,257 @@ class HistoryRecordingTests(IsolatedRouteMixin, unittest.TestCase):
             router.record_dispatch(f"prompt-{i}", "code-reviewer", self._history_path)
         history = router._load_history(self._history_path)
         self.assertEqual(len(history), 100)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 + Phase 6 tests
+# ---------------------------------------------------------------------------
+
+
+class ThreeStageFallbackTests(IsolatedRouteMixin, unittest.TestCase):
+    """Phase 3 — keyword → llm → previous → general-purpose ladder."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.table = router.load_table(TABLE_PATH)
+
+    def test_three_stage_fallback_to_previous(self):
+        """LLM fails → previous-agent layer kicks in with the prior dispatch."""
+        prompt = "totally vague help me out please friend"
+
+        # Seed history: this same prompt previously routed to react-specialist.
+        router.record_dispatch(prompt, "react-specialist", self._history_path)
+
+        def failing_runner(_candidates, _prompt_text, _timeout):
+            return (None, {"error": "timeout", "cost_usd": 0.0})
+
+        r = router.route(
+            prompt,
+            table=self.table,
+            use_llm_fallback=True,
+            llm_threshold=0.99,
+            llm_runner=failing_runner,
+            llm_max_attempts=2,
+            history_path=self._history_path,
+            record_history=False,
+            record_dispatch_log=False,
+        )
+        self.assertEqual(r.agent, "react-specialist")
+        self.assertFalse(r.fallback)
+        self.assertIn("previous", r.fallback_chain)
+        # Order: keyword → llm → previous
+        self.assertEqual(r.fallback_chain[:3], ["keyword", "llm", "previous"])
+        self.assertNotIn("general-purpose", r.fallback_chain)
+
+    def test_previous_skipped_if_general(self):
+        """Previous dispatch == general-purpose ⇒ skip 3rd layer, land at 4th."""
+        prompt = "vague question with no keyword signal at all qqxx"
+
+        # Seed history with general-purpose itself — the previous-layer should
+        # treat that as "no signal" and skip directly to general-purpose.
+        router.record_dispatch(prompt, self.table.fallback, self._history_path)
+
+        def failing_runner(_candidates, _prompt_text, _timeout):
+            return (None, {"error": "no candidate", "cost_usd": 0.0})
+
+        r = router.route(
+            prompt,
+            table=self.table,
+            use_llm_fallback=True,
+            llm_threshold=0.99,
+            llm_runner=failing_runner,
+            llm_max_attempts=2,
+            history_path=self._history_path,
+            record_history=False,
+            record_dispatch_log=False,
+        )
+        self.assertEqual(r.agent, self.table.fallback)
+        self.assertTrue(r.fallback)
+        # previous layer must NOT appear; chain ends at general-purpose.
+        self.assertNotIn("previous", r.fallback_chain)
+        self.assertEqual(r.fallback_chain[-1], "general-purpose")
+
+    def test_fallback_chain_keyword_only_for_high_conf(self):
+        """High-confidence keyword route must report only the keyword layer."""
+        r = router.route(
+            "review the auth module for SQL injection vulnerabilities and security",
+            table=self.table,
+            history_path=self._history_path,
+            record_history=False,
+            record_dispatch_log=False,
+        )
+        self.assertFalse(r.fallback)
+        self.assertEqual(r.fallback_chain, ["keyword"])
+
+    def test_fallback_chain_includes_general_when_no_keyword(self):
+        """No keyword + LLM disabled → chain is keyword → general-purpose."""
+        r = router.route(
+            "zzzzz qqqqq xxxx kkkkk wwwww gibberish yyyyy zzzzz",
+            table=self.table,
+            history_path=self._history_path,
+            record_history=False,
+            record_dispatch_log=False,
+        )
+        self.assertTrue(r.fallback)
+        self.assertEqual(r.fallback_chain, ["keyword", "general-purpose"])
+
+
+class DispatchLogTests(IsolatedRouteMixin, unittest.TestCase):
+    """Phase 6-A — dispatch.jsonl telemetry."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.table = router.load_table(TABLE_PATH)
+
+    def _read_log(self):
+        log_path = router.dispatch_log_path(self._homunculus_root)
+        if not log_path.exists():
+            return []
+        out = []
+        for line in log_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            out.append(json.loads(line))
+        return out
+
+    def test_dispatch_jsonl_appended(self):
+        router.route(
+            "review the auth module for SQL injection",
+            table=self.table,
+            history_path=self._history_path,
+            record_history=False,
+            record_dispatch_log=True,
+            homunculus_root=self._homunculus_root,
+        )
+        rows = self._read_log()
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertIn("ts", row)
+        self.assertIn("prompt_hash", row)
+        self.assertIn("dispatched_agent", row)
+        self.assertIn("fallback_layer", row)
+        self.assertIn("confidence", row)
+        self.assertIn("cost_usd", row)
+        self.assertIn("cycle_broken", row)
+        self.assertEqual(row["dispatched_agent"], "security-auditor")
+        # Fallback layer for a clean keyword hit must be "keyword".
+        self.assertEqual(row["fallback_layer"], "keyword")
+
+    def test_dispatch_jsonl_atomic(self):
+        """Atomic append: even if the existing file is partially written, the
+        next call must produce a clean, fully-parseable JSONL."""
+        log_path = router.dispatch_log_path(self._homunculus_root)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        # Simulate a corrupted partial-write from a crashed process.
+        log_path.write_text("{\"partial\": tru", encoding="utf-8")
+
+        router.append_dispatch_log(
+            log_path,
+            prompt="hello",
+            dispatched_agent="code-reviewer",
+            fallback_layer="keyword",
+            confidence=0.7,
+            cost_usd=0.0,
+        )
+        # Final file must end with a newline and last line must parse.
+        text = log_path.read_text(encoding="utf-8")
+        self.assertTrue(text.endswith("\n"))
+        last_line = [ln for ln in text.splitlines() if ln.strip()][-1]
+        record = json.loads(last_line)
+        self.assertEqual(record["dispatched_agent"], "code-reviewer")
+        self.assertEqual(record["fallback_layer"], "keyword")
+        # No partial temp files left around.
+        leftovers = list(log_path.parent.glob("dispatch.jsonl.tmp.*"))
+        self.assertEqual(leftovers, [])
+
+    def test_dispatch_jsonl_skipped_when_no_record(self):
+        router.route(
+            "review the auth module for security",
+            table=self.table,
+            history_path=self._history_path,
+            record_history=False,
+            record_dispatch_log=False,
+            homunculus_root=self._homunculus_root,
+        )
+        log_path = router.dispatch_log_path(self._homunculus_root)
+        self.assertFalse(log_path.exists())
+
+
+class HarnessAuditRouterIntegrationTests(unittest.TestCase):
+    """Phase 6-B — `harness-audit.py --router` output schema."""
+
+    def test_router_subcommand_runs_against_temp_log(self):
+        import subprocess
+        import tempfile
+
+        scripts = (
+            Path(__file__).resolve().parents[3]
+            / "scripts" / "harness-audit.py"
+        )
+        if not scripts.exists():
+            self.skipTest(f"harness-audit.py not found at {scripts}")
+
+        # Build a synthetic dispatch.jsonl under a tmp homunculus root.
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            project_dir = home / "projects" / "synthetic-test"
+            project_dir.mkdir(parents=True)
+            log = project_dir / "dispatch.jsonl"
+            rows = [
+                {
+                    "ts": "2026-05-05T01:02:03Z",
+                    "prompt_hash": "abc",
+                    "dispatched_agent": "code-reviewer",
+                    "fallback_layer": "keyword",
+                    "confidence": 0.71,
+                    "cost_usd": 0.0,
+                    "cycle_broken": False,
+                },
+                {
+                    "ts": "2026-05-05T01:02:04Z",
+                    "prompt_hash": "def",
+                    "dispatched_agent": "security-auditor",
+                    "fallback_layer": "llm",
+                    "confidence": 0.65,
+                    "cost_usd": 0.002,
+                    "cycle_broken": False,
+                },
+                {
+                    "ts": "2026-05-05T01:02:05Z",
+                    "prompt_hash": "ghi",
+                    "dispatched_agent": "general-purpose",
+                    "fallback_layer": "general-purpose",
+                    "confidence": 0.0,
+                    "cost_usd": 0.0,
+                    "cycle_broken": False,
+                },
+            ]
+            log.write_text(
+                "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+                encoding="utf-8",
+            )
+
+            # Invoke the subcommand with the synthetic root.
+            proc = subprocess.run(
+                [
+                    sys.executable, str(scripts),
+                    "--router",
+                    "--router-homunculus-root", str(home),
+                ],
+                capture_output=True, text=True, timeout=15,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            out = proc.stdout
+
+            # Schema spot-checks.
+            self.assertIn("Router Dispatch Audit", out)
+            self.assertIn("total dispatches", out.lower())
+            self.assertIn("keyword", out)
+            self.assertIn("llm", out)
+            self.assertIn("general-purpose", out)
+            self.assertIn("named-agent rate", out.lower())
+
 
 
 if __name__ == "__main__":
