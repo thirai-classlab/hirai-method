@@ -113,6 +113,28 @@ echo '{"tool_input":{"file_path":"/some/repo/<your-protected-path>/foo.ts"}}' \
 - **`.claude/skills/continuous-learning-v2/hooks/observe.sh`** は ECC 由来の独立スキルで `HOMUNCULUS_DIR` 環境変数のみを参照する（harness-config と一致させたい場合は環境変数で渡す）
 - `.gitignore` で state dir 群（`.gateguard-state/` `.taskguard-state/` 等）を除外済み — `harness-config.yml` で配置を変えた場合は `.gitignore` も更新する
 
+
+## Env override（gate disable）
+
+以下の環境変数で gate を一時 disable 可能（fail-open）:
+
+| Env Var | 対象 | 用途 |
+|---|---|---|
+| `ECC_F1_OFF=1` | `gateguard.sh` (F1) | 事実材料強制 gate を skip |
+| `ECC_F2_OFF=1` | `task-rule-guard.sh` (F2) | task naming / draft 一致 gate を skip |
+| `ECC_F3_OFF=1` | `confidence-gate.sh` (F3) | subagent confidence 閾値 gate を skip |
+
+主に SWE-bench grid evaluation で F1/F2 単独 / 組合せ効果を測定する目的（runner.py が `_combo_to_env()` で自動付与）。**本番運用では設定しないこと**。
+
+セッション全体 OFF（既存）と並列に有効:
+
+- 既存: `ECC_GATEGUARD=off` / `ECC_TASKGUARD=off` / `ECC_CONFIDENCE_GATE=off`
+- 新規: `ECC_F1_OFF=1` / `ECC_F2_OFF=1` / `ECC_F3_OFF=1`
+
+挙動: env set 時、hook 冒頭で `{"decision":"approve","reason":"F<n> ... disabled via ECC_F<n>_OFF"}` を返して即 exit 0。env 未設定なら従来ロジックに到達する（fail-open 設計）。
+
+smoke test: `.claude/hooks/tests/run-tests.sh`
+
 ## 履歴
 
 - 2026-05-04 初版（`feat/harness-improvement-2026-05-04`）。3 hook のハードコード `src/ tests/ scripts/` `docs/tasks/` `docs/draft/` `.claude/bash-whitelist.txt` `~/.claude/homunculus` を `harness-config.yml` に集約

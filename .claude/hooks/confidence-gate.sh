@@ -50,6 +50,18 @@ if [ -n "$_env_threshold" ]; then HC_CONFIDENCE_THRESHOLD="$_env_threshold"; fi
 if [ -n "$_env_state_dir" ]; then HC_CONFIDENCE_STATE_DIR="$_env_state_dir"; fi
 unset _env_required _env_threshold _env_state_dir
 
+# Phase β: F3 disable for SWE-bench grid evaluation (fail-open)
+# ECC_F{1,2,3}_OFF env vars allow runner.py to bypass gates per-task
+# while measuring gate effectiveness. Production usage MUST NOT set these.
+if [ "${ECC_F3_OFF:-0}" = "1" ] || [ "${ECC_F3_OFF:-}" = "true" ]; then
+  if command -v jq >/dev/null 2>&1; then
+    jq -n '{decision:"approve", reason:"F3 (confidence-gate) disabled via ECC_F3_OFF"}'
+  else
+    printf '{"decision":"approve","reason":"F3 (confidence-gate) disabled via ECC_F3_OFF"}\n'
+  fi
+  exit 0
+fi
+
 # === 全 bypass (env) ===
 if [ "${ECC_CONFIDENCE_GATE:-}" = "off" ]; then
   echo '{}'

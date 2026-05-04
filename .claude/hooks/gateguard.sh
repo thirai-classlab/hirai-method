@@ -19,6 +19,18 @@ set -u
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
 
+# Phase β: F1 disable for SWE-bench grid evaluation (fail-open)
+# ECC_F{1,2,3}_OFF env vars allow runner.py to bypass gates per-task
+# while measuring gate effectiveness. Production usage MUST NOT set these.
+if [ "${ECC_F1_OFF:-0}" = "1" ] || [ "${ECC_F1_OFF:-}" = "true" ]; then
+  if command -v jq >/dev/null 2>&1; then
+    jq -n '{decision:"approve", reason:"F1 (gateguard) disabled via ECC_F1_OFF"}'
+  else
+    printf '{"decision":"approve","reason":"F1 (gateguard) disabled via ECC_F1_OFF"}\n'
+  fi
+  exit 0
+fi
+
 # Bypass
 if [ "${ECC_GATEGUARD:-}" = "off" ]; then
   echo '{}'

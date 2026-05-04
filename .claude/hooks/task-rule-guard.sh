@@ -34,6 +34,18 @@ set -u
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
 
+# Phase β: F2 disable for SWE-bench grid evaluation (fail-open)
+# ECC_F{1,2,3}_OFF env vars allow runner.py to bypass gates per-task
+# while measuring gate effectiveness. Production usage MUST NOT set these.
+if [ "${ECC_F2_OFF:-0}" = "1" ] || [ "${ECC_F2_OFF:-}" = "true" ]; then
+  if command -v jq >/dev/null 2>&1; then
+    jq -n '{decision:"approve", reason:"F2 (task-rule-guard) disabled via ECC_F2_OFF"}'
+  else
+    printf '{"decision":"approve","reason":"F2 (task-rule-guard) disabled via ECC_F2_OFF"}\n'
+  fi
+  exit 0
+fi
+
 # === 全 bypass ===
 if [ "${ECC_TASKGUARD:-}" = "off" ]; then
   echo '{}'
