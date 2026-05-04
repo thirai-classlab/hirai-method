@@ -254,6 +254,12 @@ agent-router (300+ keywords) が prompt から最適 agent を推薦。`python3 
 
 C-1.5 の whole-file 方式は適用率を 1.5× にしつつコストを下げる結果に。C-1.6 hybrid は user 都合で中断、後続セッションで再開予定。
 
+### agent-router dispatch rate
+
+| 指標 | 値 | 備考 |
+|---|---|---|
+| agent-router dispatch rate (90日サンプル) | 84.1% (991/1,178 prompts) | 目標 70% を超過、ただし dormant 指標と同様に再測定推奨 |
+
 公式 `swebench` harness 統合済 (opt-in)。`apply_only=false` モードで FAIL_TO_PASS pytest 実行可。本番 200 task (50 × F1/F2 on/off) は約 $45-60 / 3.5h（parallel=4）見込み。
 
 評価実行:
@@ -267,13 +273,55 @@ python3 .claude/skills/eval-harness/swe-bench/runner.py \
 
 ## ハーネス比較
 
-> _調査中_。SuperClaude / claude-flow / OpenHands / SWE-agent / Aider との agent-routing 実装比較は別タスクで進行中。完了次第、本セクションに追補予定（pending）。
+平井メソッド (claude-code-harness) を、有名な agent harness / multi-agent framework と比較します。
 
-現時点で確認できている差別化要素:
+### Dispatch 方式の比較
 
-- **委譲強制を hook block で物理的に成立させる** — 他 OSS の多くはガイドライン / プロンプト誘導レベル
-- **事実検証ゲート（F1/F3）が独立した hook 層として動く** — SubagentStop で confidence を強制チェック
-- **100% tool call 観測の外部 JSONL 記録** — セッション境界を越えて監査可能
+| OSS | Dispatch 方式 | SSoT | LLM 利用 | Fallback | star数 |
+|---|---|---|---|---|---:|
+| **平井メソッド** | keyword 一段（agent-router skill）+ UserPromptSubmit hint | dispatch-table.yml + .claude/agents/*.md | No（純粋 keyword） | general-purpose | (本リポ) |
+| Claude Code 公式 sub-agents | 親 LLM が description を読み Agent tool で起動 | Markdown frontmatter | Yes（親 LLM） | general-purpose | Anthropic 純正 |
+| AutoGen SelectorGroupChat | LLM が selector で次話者選定 | Python class + description | Yes | 3 回 retry → previous → first | 54k |
+| LangGraph supervisor | handoff tool 呼出で routing | create_supervisor([agents]) | Yes | END node | 24.8k+ |
+| CrewAI hierarchical | manager_llm が役割で動的割当 | Agent class (role/goal) | Yes | 不明確（バグ多発） | 49.9k |
+| BMAD-METHOD | "BMad Master" が persona 切替 | .bmad-core (YAML/MD) | Yes | 明文化なし | 43k+ |
+| SuperClaude | keyword + ファイル拡張子 + flag | CLAUDE.md / AGENTS.md / ORCHESTRATOR.md | No（pattern matching） | flag override | 6k |
+| claude-flow / Ruflo | 手動指定 + Hooks 補助 | TypeScript registry | 部分的 | 不明 | 大規模 |
+| OpenHands | AgentDelegateAction で明示呼出 | register_agent(name, factory, desc) | Yes | parent へ報告 | 72.3k |
+
+### 推奨アーキテクチャ（参考）
+
+純粋 LLM-based selection（CrewAI / AutoGen 型）は柔軟だが、1 dispatch ごとに +1 LLM call で **token を 4-15 倍消費** する報告があります（[Multi-Agent Trap](https://towardsdatascience.com/the-multi-agent-trap/)）。
+逆に純粋 keyword 方式（SuperClaude 型）は決定論的だが、表現揺れに弱い。
+
+平井メソッドは現状 **keyword 一段（A）**ですが、将来的に **Hybrid (C)** への進化を想定:
+
+| 方式 | pros | cons |
+|---|---|---|
+| **A. Keyword-only**(現状) | 0 cost / 決定論的 / 可観測性高 | 表現揺れに弱い、新 agent で table 肥大化 |
+| **B. LLM-only** | 自然言語理解で柔軟 | +1 LLM call / hallucination リスク |
+| **C. Hybrid（将来）** | keyword 高信頼時 cost 0、低信頼時のみ LLM 確認 | 実装複雑度 +1 |
+
+詳細は [docs/AGENT-ROUTER.md](docs/AGENT-ROUTER.md#改善-backlog) 参照。
+
+### 学んだアンチパターン（自リポでの回避策）
+
+| アンチパターン | 出典 | 平井メソッドでの対策 |
+|---|---|---|
+| Agent ループ／循環 handoff | Multi-Agent Trap 記事 | failure-loop-detect.sh が同種エラー 3 連続で /agent-introspect 提案 |
+| Manager に worker tools 渡す | CrewAI hierarchical バグ群 | dispatcher (router) は dispatch 専用、tool 持たせない |
+| Selector 毎回呼び出し | LangGraph supervisor 等 | UserPromptSubmit hook の hint-only モード（confidence ≥ 0.5 のみ提案）|
+| agent name matching の脆弱性 | CrewAI #1823 | dispatch-table.yml で正規化、underscore↔space 対応（backlog）|
+| fallback の沈黙 | OpenHands 等 | general-purpose は明示 fallback、observe.sh で全 dispatch 記録 |
+
+### 哲学的位置付け
+
+- **平井メソッド**: defensive design（fabrication 抑止 / 委譲強制 / 監査可能性）が最大の特色。LLM-based dispatch を排し、coverage を犠牲にしてでも決定論性を取る
+- **SuperClaude / OpenHands**: 親 LLM の判断に丸投げ、設計はミニマル
+- **CrewAI / AutoGen / LangGraph**: 多 agent の collaboration 自体が価値、dispatch 精度はトレードオフ
+- **claude-flow**: 100+ agents の swarm が売り、dispatch は手動寄り
+
+選択は **対象 agent が定型化された workflow 内か、open-ended な research 系か** で判断すべきです。
 
 ## トラブルシューティング
 
