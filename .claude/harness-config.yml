@@ -1,0 +1,68 @@
+# .claude/harness-config.yml
+#
+# === Harness Portability Config (Single Source of Truth) ===
+#
+# 他リポへ移植する際、本ファイル 1 枚を編集すれば全 hook / rule の挙動が連動変化する。
+# 直接ハードコードは禁止 (delegation-guard.sh / gateguard.sh / task-rule-guard.sh /
+# failure-loop-detect.sh / init-tasks-on-start.sh はすべて config-loader.sh 経由で本値を読む)。
+#
+# パーサ仕様 (`.claude/hooks/lib/config-loader.sh`):
+#   - フラットな key: value
+#   - フラットな key: [a, b, c] (インライン JSON-like 配列)
+#   - 値内コメント禁止 (行頭 # のみ可)
+#   - クォート任意 (シングル / ダブルどちらも strip される)
+#   - YAML 完全互換ではない。深いネスト / アンカー / マルチライン文字列は非対応
+#
+# ## 移植チェックリスト
+#  1. protected_paths      → 対象リポのプロダクションコード配置に合わせる
+#  2. task_dir / draft_dir → docs/tasks 以外を使う場合
+#  3. bash_whitelist_path  → bash-whitelist.txt の置き場所を変える場合
+#  4. homunculus_root      → 個人別ストレージ位置 (~/.claude/homunculus 既定)
+#  5. その他 path 系       → 非標準の .claude/ 配置を使う場合のみ
+
+# === 委譲ガードの保護パス ===
+# delegation-guard.sh が「メインエージェント直接操作禁止」とみなす path 部分一致リスト。
+# 例: protected_paths に "src" が入っていれば */src/* / */src を block する。
+# プロダクションコード / テスト / スクリプト等、サブエージェント委譲を強制したい領域を列挙。
+protected_paths: [src, tests, scripts]
+
+# === タスク管理ファイル配置 ===
+# task-rule-guard.sh / delegation-guard.sh が docs/tasks/ docs/draft/ 規約を判定する基準。
+# 値はプロジェクトルートからの相対 path セグメント (slashなし)。
+# 例: app/tasks 等にしたい場合は task_dir: "app/tasks" 等に変更。
+task_dir: docs/tasks
+draft_dir: docs/draft
+
+# === Bash ホワイトリスト ===
+# delegation-guard.sh が読む allow-list ファイルの位置 (リポルートからの相対 path)。
+bash_whitelist_path: .claude/bash-whitelist.txt
+
+# === Hook state ディレクトリ ===
+# 各 hook が cleared/marker 等の状態を書き出す位置。
+# プロジェクトルートからの相対 path。.gitignore で .claude/.* を除外推奨。
+gateguard_state_dir: .claude/.gateguard-state
+taskguard_state_dir: .claude/.taskguard-state
+agent_marker_dir: .claude/.agent-markers
+failure_window_dir: .claude/.failure-window
+
+# === 外部ストレージ (continuous-learning v2.1) ===
+# observe.sh / harness-audit.py が観察ログを書き出す外部 root。
+# tilde (~) や $HOME は config-loader.sh で展開される。
+homunculus_root: ~/.claude/homunculus
+
+# === Notification 音源 (macOS のみ) ===
+# notify.sh / stop.sh が再生する afplay 対象。非 macOS 環境では無視される。
+notify_sound: /System/Library/Sounds/Hero.aiff
+stop_sound: /System/Library/Sounds/Glass.aiff
+
+# === Confidence Gate (F3) ===
+# SubagentStop hook (.claude/hooks/confidence-gate.sh) が消費。
+# サブエージェントが返す completion summary に `confidence: 0.X` を埋め込ませ、
+# 閾値未満なら block して早期完了宣言を抑止する SuperClaude 風の self-confidence threshold。
+#
+# - confidence_threshold: pass の最低値（0.0〜1.0）。0.6 が SuperClaude 既定相当。
+# - confidence_required:  true なら未記載で block。false なら未記載でも pass（fail-open 寄り）。
+# - confidence_state_dir: bypass marker / bypass.log の保管場所（.gitignore 推奨）。
+confidence_threshold: 0.6
+confidence_required: true
+confidence_state_dir: .claude/.confidence-gate-state

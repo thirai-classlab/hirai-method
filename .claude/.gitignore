@@ -1,0 +1,17 @@
+# GateGuard state（セッション/ファイル毎の cleared marker）
+.gateguard-state/
+
+# TaskGuard state（slug 毎の bypass marker）
+.taskguard-state/
+
+# サブエージェント起動マーカー
+.agent-markers/
+
+# CL v2.1 のローカルキャッシュ（実体は ~/.claude/homunculus/）
+homunculus-cache/
+
+# Failure-loop window (W2.1)
+.failure-window/
+
+# Confidence Gate state (F3) — bypass marker + bypass log
+.confidence-gate-state/

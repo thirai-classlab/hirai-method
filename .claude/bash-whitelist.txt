@@ -1,0 +1,71 @@
+# .claude/bash-whitelist.txt
+#
+# === Bash 制御の Single Source of Truth ===
+#
+# メインエージェントが Bash で実行できるコマンド prefix のホワイトリスト。
+# 1 行 1 つの正規表現を書く。先頭一致 (^) を必須にすること。
+# # で始まる行はコメント。空行は無視。
+#
+# ## SSoT ルール
+# - Bash 個別 allow を `settings.json` / `settings.local.json` に重複追加しない
+#   (重複は permission モデル分裂の原因。Wave 3-A で一本化済)
+# - 追加は本ファイルへの 1 行追記のみ。`settings.json` 側は触らない
+#
+# ## 追加方法
+# 1. `.claude/bash-whitelist-requests/YYYY-MM-DD-<slug>.md` を `REQUEST_TEMPLATE.md` に従い作成
+# 2. user がレビュー → 本ファイルに 1 行追記
+# 3. その瞬間から有効 (delegation-guard.sh が再読する)
+#
+# ## 理由
+# 「メインは src/ tests/ scripts/ を直接さわらない (= サブエージェント委譲)」原則を
+# Bash 経由で迂回されないようにするための allow-list。承認のないコマンドは
+# delegation-guard.sh で block される。
+#
+# ## セクションマーカー (W1.2 で追加)
+# 以下 2 つのセクションマーカー行は delegation-guard.sh が動的に読む:
+#   `# === PATH-AWARE ===`     -> src/ tests/ scripts/ を引数に取りうるコマンド
+#   `# === PATH-RESTRICTED ===` -> src/ tests/ scripts/ を引数に取ってはいけないコマンド
+# delegation-guard.sh は PATH-AWARE セクションの正規表現の先頭トークンを抽出し、
+# Bash 末尾の path-leak ガードで「これらは src/ paths を含んでよい」例外として扱う。
+# セクションマーカーを変更/削除すると path-leak ガードが全コマンドを block しうるので注意。
+
+# === PATH-AWARE ===
+# (これらのコマンドは引数として src/ tests/ scripts/ を受け取りうる)
+
+# git: subcommand を限定
+^git (status|diff|log|show|branch|tag|fetch|remote|rev-parse|symbolic-ref|switch|checkout|add|commit|push|pull|stash|cherry-pick|merge|rebase)( |$)
+
+# パッケージマネージャ系の run/scripts 経路 (build/test/lint 等)
+^npm run( |$)
+^pnpm( |$)
+^yarn( |$)
+
+# プラットフォーム CLI
+^vercel( |$)
+^supabase( |$)
+
+# GitHub CLI
+^gh( |$)
+
+# === PATH-RESTRICTED ===
+# (これらのコマンドは src/ tests/ scripts/ を直接 inspect してはいけない)
+
+# 軽い情報取得
+^ls( |$)
+^pwd( |$)
+^date( |$)
+^echo( |$)
+^cat \.claude/
+^cat \.gitmessage( |$)
+
+# === 自己改善 L4: Continuous Learning v2.1 ===
+# instinct-cli の管理操作（status / projects / evolve / promote / export / import / observe-analyze）
+^python3 \.claude/skills/continuous-learning-v2/instinct-cli\.py( |$)
+
+# === 自己改善 L1: Eval-Driven Dev ===
+# 自前 eval grader 用（read-only な用途のみ。書き込みは Edit/Write で）
+^cat \.claude/evals/
+
+# === 監査 (W2.2) ===
+# harness-audit スクリプトのみ許可（read-only）
+^python3 \.claude/scripts/harness-audit\.py( |$)

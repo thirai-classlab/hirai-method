@@ -1,0 +1,165 @@
+{
+  "summary": {
+    "started_at": "2026-05-04T13:57:14.132952Z",
+    "finished_at": "2026-05-04T14:13:05.622956Z",
+    "model": "claude-sonnet-4-6",
+    "patch_mode": "whole-file",
+    "parallel": 1,
+    "tasks_total": 5,
+    "tasks_run": 5,
+    "patch_generated_count": 3,
+    "patch_applied_count": 3,
+    "applied_rate": 0.6,
+    "resolved_count": 0,
+    "resolved_rate": 0.0,
+    "cumulative_cost_usd": 0.852753,
+    "cost_cap_usd": 5.0,
+    "cost_cap_hit": false,
+    "apply_only": true
+  },
+  "results": [
+    {
+      "instance_id": "astropy__astropy-12907",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "patch_mode": "whole-file",
+      "invoke_duration_sec": 300.01,
+      "claude_meta": {
+        "error": "timeout",
+        "cost_usd": 0.0
+      },
+      "diff_chars": 0,
+      "diff_gen_error": "no file blocks (or NO_FIX)",
+      "score": {
+        "task_id": "astropy__astropy-12907",
+        "patch_generated": false,
+        "patch_applies": false,
+        "apply_error": "empty patch",
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 5.245208740234375e-06,
+        "fail_to_pass_total": 0,
+        "pass_to_pass_total": 0,
+        "pass_to_pass_passed": 0
+      },
+      "cumulative_cost_usd": 0.0
+    },
+    {
+      "instance_id": "astropy__astropy-14182",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "patch_mode": "whole-file",
+      "invoke_duration_sec": 55.24,
+      "claude_meta": {
+        "cost_usd": 0.23533215000000002,
+        "duration_ms": 47969,
+        "rc": 0
+      },
+      "diff_chars": 886,
+      "diff_gen_error": null,
+      "score": {
+        "task_id": "astropy__astropy-14182",
+        "patch_generated": true,
+        "patch_applies": true,
+        "apply_error": null,
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 34.36135983467102,
+        "fail_to_pass_total": 1,
+        "pass_to_pass_total": 9,
+        "pass_to_pass_passed": 0
+      },
+      "cumulative_cost_usd": 0.235332
+    },
+    {
+      "instance_id": "astropy__astropy-14365",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "patch_mode": "whole-file",
+      "invoke_duration_sec": 119.49,
+      "claude_meta": {
+        "cost_usd": 0.29174715,
+        "duration_ms": 112311,
+        "rc": 0
+      },
+      "diff_chars": 1047,
+      "diff_gen_error": null,
+      "score": {
+        "task_id": "astropy__astropy-14365",
+        "patch_generated": true,
+        "patch_applies": true,
+        "apply_error": null,
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 34.99594187736511,
+        "fail_to_pass_total": 1,
+        "pass_to_pass_total": 8,
+        "pass_to_pass_passed": 0
+      },
+      "cumulative_cost_usd": 0.527079
+    },
+    {
+      "instance_id": "astropy__astropy-14995",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "patch_mode": "whole-file",
+      "invoke_duration_sec": 144.61,
+      "claude_meta": {
+        "cost_usd": 0.32567415,
+        "duration_ms": 136801,
+        "rc": 0
+      },
+      "diff_chars": 618,
+      "diff_gen_error": null,
+      "score": {
+        "task_id": "astropy__astropy-14995",
+        "patch_generated": true,
+        "patch_applies": true,
+        "apply_error": null,
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 34.26308584213257,
+        "fail_to_pass_total": 1,
+        "pass_to_pass_total": 179,
+        "pass_to_pass_passed": 0
+      },
+      "cumulative_cost_usd": 0.852753
+    },
+    {
+      "instance_id": "astropy__astropy-6938",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "patch_mode": "whole-file",
+      "invoke_duration_sec": 600.01,
+      "claude_meta": {
+        "error": "timeout",
+        "cost_usd": 0.0
+      },
+      "diff_chars": 0,
+      "diff_gen_error": "no file blocks (or NO_FIX)",
+      "score": {
+        "task_id": "astropy__astropy-6938",
+        "patch_generated": false,
+        "patch_applies": false,
+        "apply_error": "empty patch",
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 1.0967254638671875e-05,
+        "fail_to_pass_total": 0,
+        "pass_to_pass_total": 0,
+        "pass_to_pass_passed": 0
+      },
+      "cumulative_cost_usd": 0.852753
+    }
+  ]
+}

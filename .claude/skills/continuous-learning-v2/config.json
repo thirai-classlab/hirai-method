@@ -1,0 +1,35 @@
+{
+  "version": "2.1",
+  "observer": {
+    "enabled": false,
+    "run_interval_minutes": 5,
+    "min_observations_to_analyze": 20,
+    "model": "claude-haiku-4-5-20251001"
+  },
+  "promotion": {
+    "min_projects": 2,
+    "min_avg_confidence": 0.8
+  },
+  "confidence": {
+    "initial": 0.3,
+    "increment_on_repeat": 0.1,
+    "decrement_on_correction": 0.2,
+    "decay_per_month_unseen": 0.1
+  },
+  "patterns_to_detect": [
+    "user_corrections",
+    "error_resolutions",
+    "repeated_workflows",
+    "tool_sequences",
+    "file_access_patterns"
+  ],
+  "domains": [
+    "code-style",
+    "testing",
+    "git",
+    "debugging",
+    "workflow",
+    "security",
+    "tool-use"
+  ]
+}

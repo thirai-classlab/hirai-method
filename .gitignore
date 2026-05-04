@@ -1,0 +1,30 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Claude Code state
+.claude/.gateguard-state/
+.claude/.taskguard-state/
+.claude/.confidence-gate-state/
+.claude/.failure-window/
+.claude/.confidence-bypass.cleared
+.claude/.confidence-bypass.log
+.claude/.agent-markers/
+.claude/settings.local.json
+.claude/worktrees/
+.claude/bash-whitelist-requests/
+
+# Caches
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

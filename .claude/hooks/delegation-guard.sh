@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# サブエージェント委譲ルール: メインエージェントは保護パス (既定 src/ tests/ scripts/) を直接操作できない。
+# 保護パスのリスト・whitelist 位置・タスク管理 path 等は `.claude/harness-config.yml` で集中管理。
+# Bash は原則禁止。`.claude/bash-whitelist.txt` に登録された prefix のみ実行可能。
+# 申請フローは `.claude/bash-whitelist-requests/REQUEST_TEMPLATE.md` 参照。
+#
+# stdin から PreToolUse JSON を受け取り、stdout に hook 応答を返す。
+# 引数: $1 = tool name (Edit|Write|Read|Grep|Glob|Bash)
+#
+# === サブエージェント検出 (多段フォールバック) ===
+# Claude Code のバージョンにより subagent 識別フィールドが異なる/未提供のため、
+# 以下を順に評価し、いずれかが立っていれば「サブエージェント実行中」と判定する。
+#
+# 1. 環境変数 CLAUDE_HARNESS_ROLE=subagent (user / Agent tool が明示)
+# 2. 入力 JSON のいずれか: agent_type / subagent_type / parent_tool_use_id / agent_id
+# 3. ${HC_AGENT_MARKER_DIR}/*.lock の存在 (PreToolUse:Agent hook が書き出す)
+#
+# デバッグ時は CLAUDE_HOOK_DEBUG=1 で /tmp/claude-hook-debug.log に入力 JSON を残す。
+
+set -u
+
+# config 読み込み (HC_* 変数 export)
+# shellcheck source=lib/config-loader.sh
+source "$(dirname "$0")/lib/config-loader.sh"
+
+input=$(cat)
+tool="${1:-}"
+
+# --- debug ---
+if [ "${CLAUDE_HOOK_DEBUG:-}" = "1" ]; then
+  printf '[%s] tool=%s\n%s\n---\n' "$(date +%FT%T)" "$tool" "$input" \
+    >> /tmp/claude-hook-debug.log
+fi
+
+# --- subagent detection ---
+is_subagent="false"
+
+if [ "${CLAUDE_HARNESS_ROLE:-}" = "subagent" ]; then
+  is_subagent="true"
+fi
+
+if [ "$is_subagent" = "false" ]; then
+  for field in agent_type subagent_type parent_tool_use_id agent_id; do
+    v=$(printf '%s' "$input" | jq -r ".${field} // empty" 2>/dev/null)
+    if [ -n "$v" ] && [ "$v" != "null" ]; then
+      is_subagent="true"
+      break
+    fi
+  done
+fi
+
+if [ "$is_subagent" = "false" ] && [ -d "$HC_AGENT_MARKER_DIR" ]; then
+  if ls "$HC_AGENT_MARKER_DIR"/*.lock >/dev/null 2>&1; then
+    is_subagent="true"
+  fi
+fi
+
+if [ "$is_subagent" = "true" ]; then
+  echo '{}'
+  exit 0
+fi
+
+# --- main agent path enforcement ---
+# メッセージは harness-config.yml の protected_paths を反映 (例: "src/ tests/ scripts/")
+block_path_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
+  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " を直接操作できません。Agent tool でサブエージェントに委譲してください。")}')
+block_read_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
+  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " のファイルを直接読み取れません。Agent tool(Explore等)でサブエージェントに調査を委譲してください。")}')
+block_search_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
+  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " を直接検索できません。Agent tool(Explore等)でサブエージェントに調査を委譲してください。")}')
+
+# protected paths を case パターンに展開 (HC_PROTECTED_GLOB_FILE / HC_PROTECTED_GLOB_DIR)
+# task 配下の絶対 path 部分一致パターン
+task_glob="*/${HC_TASK_DIR}/*"
+
+case "$tool" in
+  Edit|Write)
+    f=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // empty')
+    # protected_paths 判定 (動的 case eval)
+    if [ -n "$f" ]; then
+      eval "case \"\$f\" in $HC_PROTECTED_GLOB_FILE) echo \"\$block_path_msg\"; exit 0 ;; esac"
+      case "$f" in
+        $task_glob)
+          root="${f%/${HC_TASK_DIR}/*}"
+          if [ "$tool" = "Write" ]; then
+            if ls "$root/$HC_DRAFT_DIR/"*.md 1>/dev/null 2>&1; then
+              jq -nc --arg t "$HC_TASK_DIR" --arg d "$HC_DRAFT_DIR" \
+                '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:("[タスク管理ルール] " + $t + "/ に新規ファイル作成。設計(" + $d + "/)→承認→タスク追加のフローを遵守すること。list.md と個別ファイルと設計をセットで更新。")}}'
+            else
+              jq -nc --arg t "$HC_TASK_DIR" --arg d "$HC_DRAFT_DIR" \
+                '{decision:"block", reason:($t + "/ への新規タスクファイル追加には " + $d + "/ に設計ドキュメントが必要です。先に設計を作成し、承認を得てください。")}'
+            fi
+          else
+            jq -nc --arg t "$HC_TASK_DIR" --arg d "$HC_DRAFT_DIR" \
+              '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:("[タスク管理ルール] " + $t + "/ の既存ファイルを編集中。新規タスク追加の場合は " + $d + "/ に設計を用意すること。既存タスクのステータス同期は OK。")}}'
+          fi
+          exit 0
+          ;;
+      esac
+    fi
+    ;;
+  Read)
+    f=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+    if [ -n "$f" ]; then
+      eval "case \"\$f\" in $HC_PROTECTED_GLOB_FILE) echo \"\$block_read_msg\"; exit 0 ;; esac"
+    fi
+    ;;
+  Grep|Glob)
+    p=$(printf '%s' "$input" | jq -r '.tool_input.path // empty')
+    if [ -n "$p" ]; then
+      eval "case \"\$p\" in $HC_PROTECTED_GLOB_DIR) echo \"\$block_search_msg\"; exit 0 ;; esac"
+    fi
+    ;;
+  Bash)
+    cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+
+    # --- inline env-var override 検出 (Hook バイパス封じ) ---
+    if printf '%s' "$cmd" | grep -qE '(^|[[:space:];&|])CLAUDE_(ALLOW_MAIN_PUSH|HARNESS_ROLE)='; then
+      echo '{"decision":"block","reason":"[ハーネス保全] コマンド内に CLAUDE_ALLOW_MAIN_PUSH= / CLAUDE_HARNESS_ROLE= の inline 設定が含まれています。Hook のバイパスは禁止。承認が必要なら user に申請してください。"}'
+      exit 0
+    fi
+
+    # --- ホワイトリスト判定 ---
+    # bash-whitelist の各行を正規表現として「コマンド先頭」でマッチさせる。
+    # パイプ/&&/;/|| の連結を含む場合は最初のセグメントを抽出して判定し、
+    # 残りのセグメントもすべて allow であることを要求する。
+    whitelist_file="$HC_BASH_WHITELIST_PATH"
+    if [ ! -f "$whitelist_file" ]; then
+      jq -nc --arg p "$HC_BASH_WHITELIST_PATH" \
+        '{decision:"block", reason:("[ハーネス保全] " + $p + " が存在しません。ハーネスが破損している可能性があります。")}'
+      exit 0
+    fi
+
+    # 各セグメントを抽出 (; && || | で分割)
+    segments=$(printf '%s' "$cmd" | awk '
+      BEGIN { RS=""; }
+      {
+        gsub(/&&|\|\||;|\|/, "\n", $0);
+        print $0;
+      }')
+
+    all_allowed="true"
+    bad_segment=""
+    while IFS= read -r seg; do
+      seg_trim=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+      [ -z "$seg_trim" ] && continue
+
+      matched="false"
+      while IFS= read -r pattern; do
+        # コメント / 空行スキップ
+        case "$pattern" in
+          ''|\#*) continue ;;
+        esac
+        if printf '%s' "$seg_trim" | grep -qE "$pattern"; then
+          matched="true"
+          break
+        fi
+      done < "$whitelist_file"
+
+      if [ "$matched" = "false" ]; then
+        all_allowed="false"
+        bad_segment="$seg_trim"
+        break
+      fi
+    done <<EOF
+$segments
+EOF
+
+    if [ "$all_allowed" = "false" ]; then
+      reason=$(printf '[Bash 委譲ルール] 未承認コマンド: %q\n\nメインエージェントは Bash 実行が原則禁止。承認済 prefix は %s を参照。\n\n**必要なら申請してください:**\n1. .claude/bash-whitelist-requests/YYYY-MM-DD-<slug>.md を REQUEST_TEMPLATE.md に従い作成\n2. user 承認 → %s に追記\n\nまたは Agent tool でサブエージェントに委譲してください (subagent は本ルール対象外)。' "$bad_segment" "$HC_BASH_WHITELIST_PATH" "$HC_BASH_WHITELIST_PATH")
+      jq -n --arg r "$reason" '{decision:"block", reason:$r}'
+      exit 0
+    fi
+
+    # --- ホワイトリスト通過後も path 検査は維持 ---
+    # 例: `git diff src/foo.ts` は git は許可されているが src/ 直接 inspect は禁止
+    # ただし PATH-AWARE セクションのコマンド (git/npm run/pnpm/yarn/vercel/supabase/gh など)
+    # の引数として src/ を扱うのは許可 (これらは本来の用途として src を指すのが普通のため)
+    #
+    # === W1.2: PATH-AWARE 例外リストを bash-whitelist.txt から動的生成 ===
+    # whitelist の `# === PATH-AWARE ===` セクション内の正規表現から literal prefix を抽出。
+    # 例: `^git (status|...)` -> `git`、`^npm run( |$)` -> `npm run`
+    exempt_prefixes=$(awk '
+      /^# === PATH-AWARE ===/ { active=1; next }
+      /^# === [A-Z]/ { if (active) { active=0 } }
+      active && /^\^/ {
+        s = substr($0, 2)
+        n = length(s)
+        end = n + 1
+        for (i = 1; i <= n; i++) {
+          c = substr(s, i, 1)
+          if (c == "(" || c == "\\" || c == "*" || c == "$" || c == "[" || c == "?" || c == "+" || c == "{" || c == "|") {
+            end = i
+            break
+          }
+        }
+        prefix = substr(s, 1, end - 1)
+        sub(/[[:space:]]+$/, "", prefix)
+        if (prefix != "") print prefix
+      }
+    ' "$whitelist_file")
+
+    is_exempt="false"
+    while IFS= read -r prefix; do
+      [ -z "$prefix" ] && continue
+      case "$cmd" in
+        "$prefix"|"$prefix "*)
+          is_exempt="true"
+          break
+          ;;
+      esac
+    done <<EOF
+$exempt_prefixes
+EOF
+
+    if [ "$is_exempt" = "false" ]; then
+      # path-leak guard: 「プロジェクトルート直下の保護パス」のみ block。
+      # 区切り文字に `/` を含めると `.claude/scripts/` のような harness 内部パスまで
+      # 誤検知するため、空白 / `=` / `$` / `(` のみを許容する。
+      # 検査対象 path 群は HC_PROTECTED_LEAK_REGEX (例: "src|tests|scripts")。
+      if printf '%s' "$cmd" | grep -qE "(^|[[:space:]=\$\(])(${HC_PROTECTED_LEAK_REGEX})/"; then
+        jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
+          '{decision:"block", reason:("[サブエージェント委譲ルール] Bash で " + $d + " のファイルを直接 read/edit/inspect できません。Agent tool でサブエージェントに委譲してください。")}'
+        exit 0
+      fi
+    fi
+    ;;
+esac
+
+echo '{}'

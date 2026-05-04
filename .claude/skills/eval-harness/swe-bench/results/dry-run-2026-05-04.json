@@ -1,0 +1,137 @@
+{
+  "summary": {
+    "started_at": "2026-05-04T12:03:17.305895Z",
+    "finished_at": "2026-05-04T12:09:08.454609Z",
+    "model": "claude-sonnet-4-6",
+    "tasks_total": 5,
+    "tasks_run": 5,
+    "patch_generated_count": 5,
+    "patch_applied_count": 2,
+    "cumulative_cost_usd": 1.078716,
+    "cost_cap_usd": 5.0,
+    "cost_cap_hit": false,
+    "apply_only": true
+  },
+  "results": [
+    {
+      "instance_id": "astropy__astropy-12907",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "invoke_duration_sec": 22.08,
+      "claude_meta": {
+        "cost_usd": 0.2031471,
+        "duration_ms": 15913,
+        "rc": 0
+      },
+      "diff_chars": 502,
+      "score": {
+        "task_id": "astropy__astropy-12907",
+        "patch_generated": true,
+        "patch_applies": true,
+        "apply_error": null,
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 34.81418800354004
+      },
+      "cumulative_cost_usd": 0.203147
+    },
+    {
+      "instance_id": "astropy__astropy-14182",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "invoke_duration_sec": 69.55,
+      "claude_meta": {
+        "cost_usd": 0.26644005000000004,
+        "duration_ms": 63218,
+        "rc": 0
+      },
+      "diff_chars": 723,
+      "score": {
+        "task_id": "astropy__astropy-14182",
+        "patch_generated": true,
+        "patch_applies": false,
+        "apply_error": "error: corrupt patch at line 20\n",
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 34.200101137161255
+      },
+      "cumulative_cost_usd": 0.469587
+    },
+    {
+      "instance_id": "astropy__astropy-14365",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "invoke_duration_sec": 26.39,
+      "claude_meta": {
+        "cost_usd": 0.204381,
+        "duration_ms": 19687,
+        "rc": 0
+      },
+      "diff_chars": 619,
+      "score": {
+        "task_id": "astropy__astropy-14365",
+        "patch_generated": true,
+        "patch_applies": true,
+        "apply_error": null,
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 34.33369493484497
+      },
+      "cumulative_cost_usd": 0.673968
+    },
+    {
+      "instance_id": "astropy__astropy-14995",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "invoke_duration_sec": 36.01,
+      "claude_meta": {
+        "cost_usd": 0.23951505,
+        "duration_ms": 29714,
+        "rc": 0
+      },
+      "diff_chars": 607,
+      "score": {
+        "task_id": "astropy__astropy-14995",
+        "patch_generated": true,
+        "patch_applies": false,
+        "apply_error": "error: corrupt patch at line 13\n",
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 37.10083317756653
+      },
+      "cumulative_cost_usd": 0.913483
+    },
+    {
+      "instance_id": "astropy__astropy-6938",
+      "repo": "astropy/astropy",
+      "model": "claude-sonnet-4-6",
+      "invoke_duration_sec": 20.26,
+      "claude_meta": {
+        "cost_usd": 0.1652331,
+        "duration_ms": 13698,
+        "rc": 0
+      },
+      "diff_chars": 439,
+      "score": {
+        "task_id": "astropy__astropy-6938",
+        "patch_generated": true,
+        "patch_applies": false,
+        "apply_error": "error: corrupt patch at line 9\n",
+        "tests_run": false,
+        "tests_passed": 0,
+        "tests_failed": 0,
+        "test_log_excerpt": "",
+        "duration_sec": 35.93537998199463
+      },
+      "cumulative_cost_usd": 1.078716
+    }
+  ]
+}

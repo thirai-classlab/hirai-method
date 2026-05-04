@@ -1,0 +1,29 @@
+# SWE-bench Lite runner config (Phase C-1.6 hybrid mode)
+# 編集後は runner.py の起動引数で上書き可能。
+
+# モデル選択
+model: claude-sonnet-4-6
+fallback_model: claude-haiku-4-5
+
+# Cost / 時間制御
+cost_cap_usd: 5.00          # 累計超過で task ループ break
+per_task_cost_cap_usd: 1.00 # 1 task の上限 (claude --max-budget-usd)
+per_task_timeout_sec: 900   # 15 min / task (C-1.6 で 900s に拡張)
+
+# task 集合
+tasks_file: tasks/lite-50.json
+default_limit: 5            # dry-run 件数
+
+# Docker
+docker_image: swe-bench-sandbox
+docker_workdir: /work
+
+# scoring
+apply_patch_only: true      # dry-run は patch 適用のみで signal を取る
+run_fail_to_pass_tests: false
+
+# Phase C-1.6 (hybrid)
+patch_mode: hybrid          # hybrid: whole-file → unified-diff fallback
+whole_file_timeout_sec: 600 # hybrid Step A timeout (残時間が unified-diff fallback)
+parallel: 1                 # dry-run は逐次。本番は 2-4 を推奨
+save_raw: true              # raw claude output と生成 patch を results/raw/ に保存

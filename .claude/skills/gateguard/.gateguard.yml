@@ -1,0 +1,47 @@
+# GateGuard 設定 - .gateguard.yml
+#
+# Edit/Write/Bash の事実検証ゲート対象を制御する。
+# このファイルが存在しなくても hook は動作する（既定値あり）。
+
+# Edit/Write の事前ブロックを有効化
+edit_gate: true
+write_gate: true
+
+# 破壊的 Bash の事前ブロックを有効化
+destructive_bash_gate: true
+
+# 破壊的とみなすコマンドの正規表現（| 区切り）
+destructive_bash_patterns: |
+  rm -rf
+  rm -fr
+  git reset --hard
+  git push --force
+  git push -f
+  git branch -D
+  drop table
+  DROP TABLE
+  truncate table
+  TRUNCATE TABLE
+  DELETE FROM .* WHERE
+  supabase db reset
+
+# Gate を恒久的に除外するパス（Glob 風）
+ignore_paths:
+  - .gitignore
+  - .dockerignore
+  - .env.example
+  - .gitmessage
+  - "**/CLAUDE.md"
+  - "**/README.md"
+  - "**/*.lock"
+  - "**/.claude/.agent-markers/**"
+  - "**/.claude/.gateguard-state/**"
+
+# State directory（cleared marker の保存先）
+state_dir: .claude/.gateguard-state
+
+# サブエージェント中は Gate を pass する
+pass_through_for_subagents: true
+
+# Bypass 用環境変数の名前
+bypass_env_var: ECC_GATEGUARD

@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Bash(rm -rf:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git branch -D:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Edit(./CLAUDE.md)",
+      "Write(./CLAUDE.md)",
+      "Edit(./.claude/settings.json)",
+      "Write(./.claude/settings.json)",
+      "Edit(./.claude/rules/**)",
+      "Write(./.claude/rules/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/delegation-guard.sh Edit",
+            "timeout": 5,
+            "statusMessage": "開発プロセスルール確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/gateguard.sh Edit",
+            "timeout": 5,
+            "statusMessage": "GateGuard 事実検証中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/task-rule-guard.sh Edit",
+            "timeout": 5,
+            "statusMessage": "タスクルール検証中..."
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/delegation-guard.sh Read",
+            "timeout": 5,
+            "statusMessage": "サブエージェント委譲ルール確認中..."
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/delegation-guard.sh Grep",
+            "timeout": 5,
+            "statusMessage": "サブエージェント委譲ルール確認中..."
+          }
+        ]
+      },
+      {
+        "matcher": "Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/delegation-guard.sh Glob",
+            "timeout": 5,
+            "statusMessage": "サブエージェント委譲ルール確認中..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/delegation-guard.sh Bash",
+            "timeout": 5,
+            "statusMessage": "サブエージェント委譲ルール確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/gateguard.sh Bash",
+            "timeout": 5,
+            "statusMessage": "GateGuard 破壊的コマンド検査中..."
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/agent-marker-set.sh",
+            "timeout": 5,
+            "statusMessage": "サブエージェント起動マーカー設定中..."
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "timeout": 3,
+            "statusMessage": "観察記録中..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/agent-marker-clear.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-md-mermaid.sh",
+            "timeout": 90,
+            "statusMessage": "Mermaid 構文チェック中..."
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "timeout": 3,
+            "statusMessage": "観察記録中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/failure-loop-detect.sh",
+            "timeout": 3,
+            "statusMessage": "失敗ループ検出中..."
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/notify.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/stop.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/confidence-gate.sh",
+            "timeout": 10,
+            "statusMessage": "Confidence gate 検証中..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/init-tasks-on-start.sh",
+            "timeout": 5,
+            "statusMessage": "タスクテンプレ初期化中..."
+          }
+        ]
+      }
+    ]
+  }
+}

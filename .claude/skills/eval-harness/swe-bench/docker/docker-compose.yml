@@ -1,0 +1,18 @@
+# Phase C-1 dry-run 用 compose。runner.py からは ad-hoc `docker run` で十分だが
+# 手動デバッグ用に残す。
+services:
+  sandbox:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: swe-bench-sandbox
+    container_name: swe-bench-sandbox-debug
+    working_dir: /work
+    volumes:
+      - ../tasks:/work/tasks:ro
+    network_mode: bridge
+    # 隔離: host filesystem への副作用を最小化
+    read_only: false  # repo clone のため書き込み許可
+    tmpfs:
+      - /tmp
+    command: ["sleep", "infinity"]
