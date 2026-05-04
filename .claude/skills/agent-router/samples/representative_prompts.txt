@@ -1,0 +1,24 @@
+# Representative subagent prompts sampled from 90-day general-purpose history.
+# Used by tests/test_router.py and as router tuning reference.
+# Format: one prompt per line; empty lines and # comments ignored.
+
+review the auth module for security issues
+debug the failing payment webhook
+write a react component with hooks and tsx for the dashboard
+write terraform hcl for our aws infrastructure with iac best practices
+kubectl apply the helm chart and inspect the failing pod logs
+optimize this postgres query and add the right index
+write a tutorial guide and update the documentation
+add pytest tests with TDD and verify coverage
+dockerize this node service and add a healthcheck endpoint
+write a next.js app router page with server components
+add a stripe payment endpoint and handle the webhook
+write a prd for the new feature and break it into milestones
+research competitor pricing pages and summarize differentiators
+review this typescript module for type safety and refactor opportunities
+analyze the slack notification flow and suggest improvements
+write a cli command in python with argparse and unit tests
+debug a hydration error in the next.js app router
+add cypress e2e tests for the checkout flow
+audit the open source license footprint of our package.json
+draft a system prompt for an internal llm-powered triage bot

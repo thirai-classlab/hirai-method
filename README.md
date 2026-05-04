@@ -46,7 +46,7 @@
 
 - **100 active agents**（10 カテゴリ別、44 件は `docs/archive/agents/` に履歴保持して archive 済）
 - **43 skills**（eval-harness / continuous-learning-v2 / verification-loop / agent-router / repo-map ほか）
-- **agent-router**: prompt → named agent 自動推薦（300+ keywords、84.1% dispatch rate）
+- **agent-router**: prompt → named agent 自動推薦（300+ keywords、84.1% dispatch rate、Phase 2 Hybrid mode で低信頼 prompt に LLM selector）
 - **repo-map**: Aider 風シンボル抽出による context 圧縮
 
 ### 評価機構
@@ -258,7 +258,10 @@ C-1.5 の whole-file 方式は適用率を 1.5× にしつつコストを下げ�
 
 | 指標 | 値 | 備考 |
 |---|---|---|
-| agent-router dispatch rate (90日サンプル) | 84.1% (991/1,178 prompts) | 目標 70% を超過、ただし dormant 指標と同様に再測定推奨 |
+| Phase 1 (keyword only) — 90 日サンプル | 84.1% (991/1,178 prompts) | 目標 70% を超過、ただし dormant 指標と同様に再測定推奨 |
+| Phase 1 (keyword only) — 20 representative prompts | 100% (20/20) | tests/test_router.py 内 fixture |
+| Phase 2 (Hybrid mock) — 15 low-/subtle-signal prompts | 100% (15/15) | mock selector で wiring 検証。live 計測は `AGENT_ROUTER_LLM_FALLBACK=on` を有効化後 |
+| Phase 2 — LLM selector per-call cap | $0.05 / call (default) | `--llm-budget-usd` で調整可、cumulative cost は `llm_cost_usd` に出力 |
 
 公式 `swebench` harness 統合済 (opt-in)。`apply_only=false` モードで FAIL_TO_PASS pytest 実行可。本番 200 task (50 × F1/F2 on/off) は約 $45-60 / 3.5h（parallel=4）見込み。
 
@@ -279,7 +282,7 @@ python3 .claude/skills/eval-harness/swe-bench/runner.py \
 
 | OSS | Dispatch 方式 | SSoT | LLM 利用 | Fallback | star数 |
 |---|---|---|---|---|---:|
-| **平井メソッド** | keyword 一段（agent-router skill）+ UserPromptSubmit hint | dispatch-table.yml + .claude/agents/*.md | No（純粋 keyword） | general-purpose | (本リポ) |
+| **平井メソッド** | Phase 1: keyword 一段 / Phase 2: Hybrid (keyword → LLM selector for conf < 0.5) + UserPromptSubmit hint | dispatch-table.yml + .claude/agents/*.md | Phase 2 で Hybrid 化（claude-haiku-4-5 selector、$0.05/call cap） | keyword fallback → general-purpose / cycle detection | (本リポ) |
 | Claude Code 公式 sub-agents | 親 LLM が description を読み Agent tool で起動 | Markdown frontmatter | Yes（親 LLM） | general-purpose | Anthropic 純正 |
 | AutoGen SelectorGroupChat | LLM が selector で次話者選定 | Python class + description | Yes | 3 回 retry → previous → first | 54k |
 | LangGraph supervisor | handoff tool 呼出で routing | create_supervisor([agents]) | Yes | END node | 24.8k+ |

@@ -1,0 +1,352 @@
+# agent-router dispatch table
+# version: 1
+# Last updated: 2026-05-04
+#
+# Format:
+#   threshold: <float>           # Minimum confidence to return a non-fallback agent (0.0–1.0)
+#   saturation: <float>          # Score above this saturates confidence at 1.0
+#   specialty_boost: <float>     # Bonus per extra keyword that hits the same agent
+#   fallback: <agent_name>       # Returned when no candidate clears threshold
+#   keywords:
+#     <keyword>: <agent_name>    # Word-boundary match, lowercased
+#     <keyword>: { agent: <name>, weight: <float> }
+#
+# Keywords are lowercased and matched on word boundaries (\b<keyword>\b).
+# Multi-word keywords (e.g. "code review") are matched as the literal phrase.
+# Hyphens / underscores are treated as part of the token.
+#
+# When you ARCHIVE an agent under docs/archive/agents/, REMOVE its keywords here
+# so the router degrades to general-purpose instead of returning a dead agent.
+
+threshold: 0.25
+saturation: 3.0
+specialty_boost: 0.6
+fallback: general-purpose
+
+keywords:
+  # ---------- 04-quality-security: review / audit / test ----------
+  review: code-reviewer
+  reviewer: code-reviewer
+  "code review": code-reviewer
+  "pr review": code-reviewer
+  refactor: refactoring-specialist
+  refactoring: refactoring-specialist
+  cleanup: refactoring-specialist
+  audit: security-auditor
+  auditor: security-auditor
+  security: security-auditor
+  vulnerability: security-auditor
+  vulnerabilities: security-auditor
+  exploit: security-auditor
+  pentest: penetration-tester
+  pen-test: penetration-tester
+  penetration: penetration-tester
+  owasp: penetration-tester
+  csrf: penetration-tester
+  xss: penetration-tester
+  injection: security-auditor
+  "sql injection": security-auditor
+  auth: security-auditor
+  authentication: security-auditor
+  authorization: security-auditor
+  oauth: security-auditor
+  jwt: security-auditor
+  rbac: security-auditor
+  secrets: security-auditor
+  credentials: security-auditor
+  compliance: compliance-auditor
+  gdpr: compliance-auditor
+  hipaa: compliance-auditor
+  pci: compliance-auditor
+  test: test-automator
+  tests: test-automator
+  testing: test-automator
+  tdd: test-automator
+  unittest: test-automator
+  pytest: test-automator
+  jest: test-automator
+  vitest: test-automator
+  qa: qa-expert
+  e2e: ui-ux-tester
+  playwright: ui-ux-tester
+  cypress: ui-ux-tester
+  accessibility: accessibility-tester
+  a11y: accessibility-tester
+  wcag: accessibility-tester
+  aria: accessibility-tester
+  debug: debugger
+  debugger: debugger
+  debugging: debugger
+  trace: debugger
+  stacktrace: debugger
+  exception: error-detective
+  error: error-detective
+  failure: error-detective
+  crash: error-detective
+  performance: performance-engineer
+  optimization: performance-engineer
+  profiling: performance-engineer
+  bottleneck: performance-engineer
+  architecture: architect-reviewer
+  architect: architect-reviewer
+  "architecture review": architect-reviewer
+  "ai writing": ai-writing-auditor
+  "ai-generated": ai-writing-auditor
+
+  # ---------- 01-core-development ----------
+  api: api-designer
+  endpoint: api-designer
+  rest: api-designer
+  openapi: api-designer
+  swagger: api-designer
+  graphql: graphql-architect
+  microservice: microservices-architect
+  microservices: microservices-architect
+  websocket: websocket-engineer
+  socket.io: websocket-engineer
+  realtime: websocket-engineer
+  fullstack: fullstack-developer
+  full-stack: fullstack-developer
+  backend: backend-developer
+  frontend: frontend-developer
+  ui: ui-designer
+  "ui design": ui-designer
+  "user interface": ui-designer
+  mobile: mobile-developer
+  electron: electron-pro
+
+  # ---------- 02-language-specialists (active subset only) ----------
+  python: python-pro
+  py: python-pro
+  django: python-pro          # django-developer is archived; route to python-pro
+  fastapi: python-pro         # fastapi-developer is archived; route to python-pro
+  typescript: typescript-pro
+  ts: typescript-pro
+  tsx: typescript-pro
+  javascript: javascript-pro
+  js: javascript-pro
+  esm: javascript-pro
+  node: node-specialist
+  node.js: node-specialist
+  nodejs: node-specialist
+  npm: node-specialist
+  pnpm: node-specialist
+  golang: golang-pro
+  go: golang-pro
+  goroutine: golang-pro
+  next: nextjs-developer
+  next.js: nextjs-developer
+  nextjs: nextjs-developer
+  "app router": nextjs-developer
+  rsc: nextjs-developer
+  "server component": nextjs-developer
+  react: react-specialist
+  jsx: react-specialist
+  hook: react-specialist
+  hooks: react-specialist
+  usestate: react-specialist
+  useeffect: react-specialist
+  sql: sql-pro
+  query: sql-pro
+
+  # ---------- 03-infrastructure ----------
+  cloud: cloud-architect
+  aws: cloud-architect
+  gcp: cloud-architect
+  s3: cloud-architect
+  ec2: cloud-architect
+  lambda: cloud-architect
+  cloudfront: cloud-architect
+  database: database-administrator
+  db: database-administrator
+  schema: database-administrator
+  migration: database-administrator
+  deploy: deployment-engineer
+  deployment: deployment-engineer
+  release: deployment-engineer
+  rollout: deployment-engineer
+  devops: devops-engineer
+  ci: devops-engineer
+  cd: devops-engineer
+  "ci/cd": devops-engineer
+  pipeline: devops-engineer
+  github-actions: devops-engineer
+  docker: docker-expert
+  dockerfile: docker-expert
+  container: docker-expert
+  compose: docker-expert
+  kubernetes: kubernetes-specialist
+  k8s: kubernetes-specialist
+  kubectl: kubernetes-specialist
+  helm: kubernetes-specialist
+  pod: kubernetes-specialist
+  network: network-engineer
+  dns: network-engineer
+  vpn: network-engineer
+  tcp: network-engineer
+  platform: platform-engineer
+  internal-tooling: platform-engineer
+  sre: sre-engineer
+  reliability: sre-engineer
+  slo: sre-engineer
+  sli: sre-engineer
+  terraform: terraform-engineer
+  hcl: terraform-engineer
+  iac: terraform-engineer
+  pulumi: terraform-engineer
+  "security engineering": security-engineer
+  hardening: security-engineer
+
+  # ---------- 05-data-ai ----------
+  llm: llm-architect
+  "llm architecture": llm-architect
+  rag: llm-architect
+  embedding: llm-architect
+  embeddings: llm-architect
+  prompt: prompt-engineer
+  "prompt engineering": prompt-engineer
+  "system prompt": prompt-engineer
+  ml: ml-engineer
+  machine-learning: machine-learning-engineer
+  classifier: machine-learning-engineer
+  regression: machine-learning-engineer
+  mlops: mlops-engineer
+  nlp: nlp-engineer
+  tokenizer: nlp-engineer
+  data: data-engineer
+  etl: data-engineer
+  pipeline-ingest: data-engineer
+  airflow: data-engineer
+  dbt: data-engineer
+  parquet: data-engineer
+  pandas: data-analyst
+  dataframe: data-analyst
+  notebook: data-scientist
+  jupyter: data-scientist
+  postgres: postgres-pro
+  postgresql: postgres-pro
+  pgsql: postgres-pro
+  index: database-optimizer
+  "query plan": database-optimizer
+  explain: database-optimizer
+
+  # ---------- 06-developer-experience ----------
+  build: build-engineer
+  webpack: build-engineer
+  vite: build-engineer
+  rollup: build-engineer
+  turbopack: build-engineer
+  cli: cli-developer
+  command-line: cli-developer
+  argparse: cli-developer
+  dependency: dependency-manager
+  dependencies: dependency-manager
+  "package update": dependency-manager
+  documentation: documentation-engineer
+  docs: documentation-engineer
+  doc: documentation-engineer
+  tutorial: documentation-engineer
+  guide: documentation-engineer
+  readme: readme-generator
+  changelog: documentation-engineer
+  legacy: legacy-modernizer
+  modernize: legacy-modernizer
+  "code modernization": legacy-modernizer
+  mcp: mcp-developer
+  "mcp server": mcp-developer
+  slack: slack-expert
+  "slack workflow": slack-expert
+  "slack bot": slack-expert
+  git-workflow: git-workflow-manager
+  rebase: git-workflow-manager
+  cherry-pick: git-workflow-manager
+  branch: git-workflow-manager
+  commit: git-workflow-manager
+  dx: dx-optimizer
+  "developer experience": dx-optimizer
+  tooling: tooling-engineer
+
+  # ---------- 07-specialized-domains ----------
+  "api docs": api-documenter
+  "api reference": api-documenter
+  "openapi spec": api-documenter
+  ios: mobile-app-developer
+  android: mobile-app-developer
+  "react native": mobile-app-developer
+  payment: payment-integration
+  stripe: payment-integration
+  paypal: payment-integration
+  billing: payment-integration
+  seo: seo-specialist
+  sitemap: seo-specialist
+  metadata: seo-specialist
+  opengraph: seo-specialist
+
+  # ---------- 08-business-product ----------
+  "business analysis": business-analyst
+  "requirements analysis": business-analyst
+  "content marketing": content-marketer
+  "blog post": content-marketer
+  newsletter: content-marketer
+  "customer success": customer-success-manager
+  "user retention": customer-success-manager
+  legal: legal-advisor
+  contract: legal-advisor
+  tos: legal-advisor
+  privacy: legal-advisor
+  license: license-engineer
+  "open source license": license-engineer
+  "product manager": product-manager
+  prd: product-manager
+  "product spec": product-manager
+  roadmap: product-manager
+  "project manager": project-manager
+  "project plan": project-manager
+  gantt: project-manager
+  "sales engineering": sales-engineer
+  rfp: sales-engineer
+  scrum: scrum-master
+  sprint: scrum-master
+  retrospective: scrum-master
+  technical-writing: technical-writer
+  "technical writing": technical-writer
+  whitepaper: technical-writer
+  "ux research": ux-researcher
+  "user interview": ux-researcher
+  usability: ux-researcher
+  wordpress: wordpress-master
+  wp-admin: wordpress-master
+  woocommerce: wordpress-master
+
+  # ---------- 09-meta-orchestration ----------
+  "agent install": agent-installer
+  "agent organize": agent-organizer
+  "agent organizer": agent-organizer
+  orchestrate: workflow-orchestrator
+  workflow: workflow-orchestrator
+  multi-agent: multi-agent-coordinator
+  "context manager": context-manager
+  "error coordinator": error-coordinator
+  "error coordination": error-coordinator
+  "knowledge synthesis": knowledge-synthesizer
+  "task distribution": task-distributor
+  it-ops: it-ops-orchestrator
+  "performance monitor": performance-monitor
+  "codebase orchestrator": codebase-orchestrator
+
+  # ---------- 10-research-analysis ----------
+  research: research-analyst
+  "research analyst": research-analyst
+  "deep research": research-analyst
+  competitive: competitive-analyst
+  "competitive analysis": competitive-analyst
+  competitor: competitive-analyst
+  "data research": data-researcher
+  "market research": market-researcher
+  market: market-researcher
+  trend: trend-analyst
+  trends: trend-analyst
+  "idea validation": project-idea-validator
+  validate: project-idea-validator
+  search-specialist: search-specialist
+  "advanced search": search-specialist
