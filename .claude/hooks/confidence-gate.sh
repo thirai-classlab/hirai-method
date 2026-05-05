@@ -15,6 +15,7 @@
 #     "session_id": "...",
 #     "transcript_path": "/path/to/.jsonl",
 #     "agent_type": "general-purpose" / "Explore" / etc.,
+#     "tool_response": { ... }   # optional, contains subagent reply payload
 #     ...
 #   }
 #
@@ -88,6 +89,19 @@ mkdir -p "$state_dir" 2>/dev/null
 bypass_marker="${state_dir}/bypass.cleared"
 bypass_log="${state_dir}/bypass.log"
 
+# bypass.log 拡張: 失敗理由を構造化ログ。
+#   引数: $1 = phase (regex_no_match / no_transcript / file_not_found / extract_failed
+#                     / below_threshold / below_threshold_via_tool_response)
+#         $2 = detail (任意 free text、200 char 上限、改行/タブは空白に置換)
+log_failure() {
+  local phase="$1"
+  local detail="${2:-}"
+  local ts
+  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  detail=$(printf '%s' "$detail" | tr '\n\t' '  ' | cut -c1-200)
+  printf '%s\tfailed: %s\t%s\n' "$ts" "$phase" "$detail" >> "$bypass_log" 2>/dev/null
+}
+
 if [ -f "$bypass_marker" ]; then
   bypass_reason=""
   if [ -s "$bypass_marker" ]; then
@@ -100,20 +114,98 @@ if [ -f "$bypass_marker" ]; then
   exit 0
 fi
 
+# === 抽出ヘルパー: confidence 数値を文字列から抜く ===
+# 対応 variant:
+#   confidence: 0.85
+#   Confidence: 0.85
+#   confidence_score: 0.85
+#   confidence score: 0.85
+#   信頼度: 0.85
+#   信頼度 0.85
+# 数値レンジ: 0(.0..) / 1(.0..)
+# 区切り: 半角 ":" / 全角 "："（記号のみ env-portable な POSIX class で）
+extract_confidence() {
+  local text="$1"
+  local m
+  # 英語 variant — confidence / confidence_score / confidence score
+  m=$(printf '%s' "$text" | grep -ioE '(confidence([_[:space:]]*score)?)[[:space:]]*[:：][[:space:]]*(0(\.[0-9]+)?|1(\.0+)?)' | tail -n 1)
+  if [ -z "$m" ]; then
+    # 日本語 variant — 信頼度: 0.X / 信頼度 0.X
+    m=$(printf '%s' "$text" | grep -ioE '信頼度[[:space:]]*[:：]?[[:space:]]*(0(\.[0-9]+)?|1(\.0+)?)' | tail -n 1)
+  fi
+  printf '%s' "$m"
+}
+
+# === fallback: hook input の tool_response から最終 reply text を構築 ===
+extract_tool_response_text() {
+  printf '%s' "$1" | jq -r '
+    (.tool_response // {})
+    | if type == "string" then .
+      elif type == "object" then
+        (.content // .text // "")
+        | if type == "array" then
+            [ .[] | (.text // (if type == "string" then . else "" end)) ] | join("\n")
+          elif type == "string" then .
+          else "" end
+      else "" end
+  ' 2>/dev/null
+}
+
 # === transcript path 取得 ===
 transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
+
+# === sidechain 判定 ===
+# Claude Code のサブエージェント transcript は path に "/subagents/" を含むか
+# 各レコード内 "isSidechain": true を持つ。判定して bypass.log に記録するが、
+# 動作上は: sidechain でも親 transcript でも、与えられた path をそのまま読む
+# (= 親 transcript への遡上はしない)。
+is_sidechain="unknown"
+case "$transcript" in
+  */subagents/*) is_sidechain="path_subagents" ;;
+esac
+
+emit_block() {
+  local r="$1"
+  jq -n --arg r "$r" '{decision:"block", reason:$r}'
+}
+
+# transcript 不在 / null / 不存在 → tool_response fallback を試す
 if [ -z "$transcript" ] || [ "$transcript" = "null" ] || [ ! -f "$transcript" ]; then
-  # transcript なし → fail-open（hook 自体が無効化されないよう）
+  fallback_text=$(extract_tool_response_text "$input")
+  if [ -n "$fallback_text" ]; then
+    fb_match=$(extract_confidence "$fallback_text")
+    if [ -n "$fb_match" ]; then
+      threshold="${HC_CONFIDENCE_THRESHOLD:-0.6}"
+      score=$(printf '%s' "$fb_match" | sed -E 's/.*[:：][[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+      ok=$(awk -v s="$score" -v t="$threshold" 'BEGIN { print (s+0 >= t+0) ? "1" : "0" }')
+      if [ "$ok" = "1" ]; then
+        echo '{}'
+        exit 0
+      fi
+      log_failure "below_threshold_via_tool_response" "score=${score} threshold=${threshold}"
+      reason_block="[confidence-gate] tool_response 経由で抽出した confidence ${score} が閾値 ${threshold} 未満です。"
+      emit_block "$reason_block"
+      exit 0
+    fi
+  fi
+
+  if [ -z "$transcript" ] || [ "$transcript" = "null" ]; then
+    log_failure "no_transcript" "transcript_path missing or null"
+  else
+    log_failure "file_not_found" "path=${transcript}"
+  fi
   echo '{}'
   exit 0
 fi
 
 # === 最終 assistant text を抽出 ===
-# transcript は JSONL。末尾 200 行から assistant role のメッセージを集める。
+# transcript は JSONL。末尾 500 行から assistant role のメッセージを集める
+# (元 200 行では subagent の長い summary が境界をまたぎ confidence を見落とす
+# ケースが頻発したため拡大)。
 # Claude Code transcript schema 新旧両対応:
 #   旧: {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
 #   新: {"role":"assistant","content":[{"type":"text","text":"..."}]} 等
-final_text=$(tail -n 200 "$transcript" 2>/dev/null | jq -rs '
+final_text=$(tail -n 500 "$transcript" 2>/dev/null | jq -rs '
   [
     .[]
     | select(
@@ -135,24 +227,39 @@ final_text=$(tail -n 200 "$transcript" 2>/dev/null | jq -rs '
   | join("\n")
 ' 2>/dev/null)
 
+# transcript 内の sidechain 判定補強 (path だけでは判別できない場合)
+if [ "$is_sidechain" = "unknown" ]; then
+  if grep -q '"isSidechain"[[:space:]]*:[[:space:]]*true' "$transcript" 2>/dev/null; then
+    is_sidechain="record_isSidechain"
+  else
+    is_sidechain="no"
+  fi
+fi
+
 if [ -z "$final_text" ]; then
+  log_failure "extract_failed" "transcript=${transcript} sidechain=${is_sidechain}"
   # 抽出失敗 → fail-open
   echo '{}'
   exit 0
 fi
 
-# === confidence: 0.X を grep ===
-# 大文字小文字無視、`confidence` の後に 0.0〜1.0 の数値を期待
-match=$(printf '%s' "$final_text" | grep -ioE 'confidence[[:space:]]*:[[:space:]]*(0(\.[0-9]+)?|1(\.0+)?)' | tail -n 1)
+# === confidence: 0.X を抽出 (variant 対応) ===
+match=$(extract_confidence "$final_text")
 
 threshold="${HC_CONFIDENCE_THRESHOLD:-0.6}"
 
-emit_block() {
-  local r="$1"
-  jq -n --arg r "$r" '{decision:"block", reason:$r}'
-}
+if [ -z "$match" ]; then
+  # === fallback: tool_response からの救済 ===
+  # transcript には summary 全文があったが confidence variant が不在の場合、
+  # hook input の tool_response (subagent 最終 reply) を最後にもう一度確認。
+  fallback_text=$(extract_tool_response_text "$input")
+  if [ -n "$fallback_text" ]; then
+    match=$(extract_confidence "$fallback_text")
+  fi
+fi
 
 if [ -z "$match" ]; then
+  log_failure "regex_no_match" "transcript_chars=${#final_text} sidechain=${is_sidechain}"
   reason="[confidence-gate] サブエージェントの completion summary に confidence 自己評価が見つかりません。
 
 期待 format:
@@ -177,7 +284,7 @@ Bypass:
 fi
 
 # === 数値抽出 + 閾値比較 ===
-score=$(printf '%s' "$match" | sed -E 's/.*[Cc][Oo][Nn][Ff][Ii][Dd][Ee][Nn][Cc][Ee][[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+score=$(printf '%s' "$match" | sed -E 's/.*[:：][[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
 
 # awk で浮動小数比較（bash native は浮動小数非対応）
 ok=$(awk -v s="$score" -v t="$threshold" 'BEGIN { print (s+0 >= t+0) ? "1" : "0" }')
@@ -189,6 +296,7 @@ if [ "$ok" = "1" ]; then
 fi
 
 # block — 閾値未満
+log_failure "below_threshold" "score=${score} threshold=${threshold} sidechain=${is_sidechain}"
 reason="[confidence-gate] confidence ${score} が閾値 ${threshold} 未満です。
 
 サブエージェントの自己評価が低い状態で完了宣言を返しています。

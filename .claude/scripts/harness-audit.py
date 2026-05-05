@@ -89,6 +89,24 @@ def _cfg(key: str) -> str:
 HOMUNCULUS = Path(_cfg("homunculus_root"))
 
 
+def _normalize_remote_url(url: str) -> str:
+    """observe.sh と同じ正規化: ssh→https + 末尾 .git strip。
+
+    observe.sh 内では `sed -E 's|^git@([^:]+):|https://\\1/|; s|\\.git$||'` 相当。
+    両者の hash を一致させないと harness-audit.py が observations.jsonl を
+    project-scoped で発見できず global fallback すら空になる。
+    """
+    s = url.strip()
+    # git@host:owner/repo  →  https://host/owner/repo
+    m = re.match(r"^git@([^:]+):(.*)$", s)
+    if m:
+        s = f"https://{m.group(1)}/{m.group(2)}"
+    # 末尾 .git を strip
+    if s.endswith(".git"):
+        s = s[:-4]
+    return s
+
+
 def project_hash() -> str | None:
     """git remote URL から project hash を導出（observe.sh と同じロジック）。"""
     try:
@@ -99,7 +117,8 @@ def project_hash() -> str | None:
         ).strip()
         if not out:
             return None
-        return hashlib.sha256(out.encode()).hexdigest()[:12]
+        canon = _normalize_remote_url(out)
+        return hashlib.sha256(canon.encode()).hexdigest()[:12]
     except Exception:
         return None
 
