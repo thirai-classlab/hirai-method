@@ -19,6 +19,15 @@ session_id="$(printf '%s' "$input" | jq -r '.session_id // empty')"
 ts="$(date +%s)"
 suffix="${session_id:-$$}-$(date +%N)"
 
+
+# foreground subagent 起動を warn (block ではない)
+# development-process.md "サブエージェント委譲の必須要件" §1 に基づき
+# run_in_background != true の起動を stderr に通知する。
+bg=$(printf '%s' "$input" | jq -r '.tool_input.run_in_background // empty' 2>/dev/null)
+if [ "$bg" != "true" ]; then
+  printf '[agent-marker] WARNING: subagent launched without run_in_background=true. main エージェントが ブロックされ user 対話が中断します (rules/development-process.md §サブエージェント委譲の必須要件)。\n' >&2
+fi
+
 mkdir -p "$HC_AGENT_MARKER_DIR"
 printf '%s\n' "$ts" > "${HC_AGENT_MARKER_DIR}/${suffix}.lock"
 
