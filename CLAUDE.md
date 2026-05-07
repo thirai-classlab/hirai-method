@@ -16,11 +16,12 @@
 ## Development Policy
 
 - **TDD**: テスト先行（テスト専門エージェント or `/sc:test` で観点出し → Red → Green → Refactor）
-- **サブエージェント委譲（Hook 強制 + 背景起動 + 順序整合性 + Task 登録）**:
+- **サブエージェント委譲（Hook 強制 + 背景起動 + 順序整合性 + Task 登録 + Bash deny 反射）**:
   - メインは `src/` `tests/` `scripts/` の Read/Write/Edit/Bash 禁止 → すべて Agent tool 経由
   - **Agent tool は `run_in_background: true` 必須**（メインを user 対話に常時開放）
   - **タスク順序整合性はメインが保証**（依存解決 / 並行判定 / commit conflict 防止）
   - **サブエージェント起動時は必ず TaskCreate**（subagent_id を metadata に記録、Claude Code 内蔵タスクリストに表示）
+  - **Bash deny / whitelist 不在 / 委譲ガード block は loop 停止理由にしない**(自動的に Agent 委譲で再試行 — `development-process.md` §5)
   - 詳細は [`.claude/rules/development-process.md`](.claude/rules/development-process.md)
 - **指摘対応**: 根本原因 → 修正 → 再発防止策を `.claude/rules/` に追加提案
 - **タスク管理（メイン専任）**: `docs/tasks/list.md` で一元管理、サブエージェントに委譲しない

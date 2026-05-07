@@ -121,6 +121,42 @@ paths:
 - **責任の明確化**: メインの orchestration 義務（§3）を Claude Code 標準機構に裏付ける
 - **再開性**: セッション再起動時もタスクリストから現状を復元可能
 
+### 5. Bash deny / whitelist 不在時の subagent 委譲反射（必須）
+
+メインエージェントが Bash 実行で deny / whitelist 不在 / 委譲ガード block を受けた場合、
+**自動的に Agent tool で subagent に委譲して再試行する**ことを必須とする。
+
+#### 禁止事項
+
+- **Bash deny を loop 停止理由にしてはならない**
+- 「これ以上進めない」と user に報告して止まる前に、必ず Agent tool で subagent に振り出す
+- whitelist への 1 行追加申請は user の選択肢として提示してよいが、提示する前に subagent 委譲を試行する
+
+#### 委譲反射の手順
+
+1. **Bash が deny された** → tool error / hook block / whitelist 不在を検知
+2. **直ちに Agent tool 起動**(`run_in_background: true` 必須 — §1)
+3. subagent に「メインで block された Bash 操作」を委譲
+4. **TaskCreate でタスク登録**(§4 ルール)
+
+#### 違反例
+
+- メインが「Bash 全面 block でこれ以上進めません。loop 停止します」と発言
+  → これは誤動作。Agent 委譲で進められる
+- whitelist 1 行追加申請のみ提案して subagent 委譲を試みない
+  → 申請は user 検討事項。**まずは委譲反射**を試行する
+
+#### 例外
+
+- subagent も deny で進められない場合(極稀) → user に状況報告 + permission 設定変更を依頼
+- 委譲先が無いタスク(例: メインの memory 操作) → そもそも Bash 不要なはず
+
+#### 理由
+
+- Bash whitelist は **メインからの直接 Bash** 許可リスト。subagent 経由は別経路
+- 委譲ガード(`delegation-guard.sh`)は「メインが直接コードを触る」ことを防ぐためで、subagent はその対象外
+- 「Bash deny = 進行不能」と短絡判断するとハーネス本来の目的(メイン → subagent 委譲)を裏切る
+
 ### Hook による補助（soft warning）
 
 `.claude/hooks/agent-marker-set.sh` は PreToolUse(Agent) で foreground 起動を検出した場合、stderr に WARN を出す（block ではない）。`tool_input.run_in_background != true` のときに発火。
