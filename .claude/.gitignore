@@ -15,3 +15,5 @@ homunculus-cache/
 
 # Confidence Gate state (F3) — bypass marker + bypass log
 .confidence-gate-state/
+# Improvement proposal dedup state (SessionStart hook)
+.improvement-proposal-state/
