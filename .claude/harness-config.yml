@@ -97,3 +97,23 @@ confidence_state_dir: .claude/.confidence-gate-state
 #
 # required_env: ["ANTHROPIC_API_KEY|error|Claude API access", "DOCKER_HOST|warn|swebench official harness", "SUPABASE_URL|info|DB access (optional in dev)"]
 required_env: []
+
+# === 改善提案 (SessionStart hook で自動提示) ===
+# 直近 N 日の observations / hook state を集計して、誤動作パターンと改善案を 1〜N 件提示する。
+# 「無視可能な提案」: block しない fail-open 設計。session 起動を遅らせず、stderr に短く出すだけ。
+# data 駆動なのでセッション間で内容が変動する（同じ提案は dedup_hours 以内に再度出さない）。
+#
+# - improvement_proposal_enabled: false で全 SessionStart 提案を停止（hook 自体は exit 0）。
+# - improvement_proposal_lookback_days: observations.jsonl を遡って読む日数。
+# - improvement_proposal_max_count:  提示する最大件数。多すぎると noisy になる。
+# - improvement_proposal_state_dir:  dedup 用の last_shown.json 保管場所（.gitignore 推奨）。
+# - improvement_proposal_dedup_hours: 同一提案を再出力するまでの最小時間。
+#
+# env 上書き例:
+#   export HC_IMPROVEMENT_PROPOSAL_ENABLED=false   # 一時的に黙らせる
+#   export ECC_IMPROVEMENT_PROPOSAL=off            # hook 内で見る別系統 kill switch
+improvement_proposal_enabled: true
+improvement_proposal_lookback_days: 7
+improvement_proposal_max_count: 3
+improvement_proposal_state_dir: .claude/.improvement-proposal-state
+improvement_proposal_dedup_hours: 24

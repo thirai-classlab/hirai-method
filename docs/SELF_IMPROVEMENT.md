@@ -167,3 +167,72 @@ python3 .claude/skills/continuous-learning-v2/instinct-cli.py observe-analyze
 - 各 hook の timeout 発生件数
 
 「+2.25 ポイント」を**自リポ実測値**に置き換えるための入口。
+
+### Self-Improvement Proposals (W2 監査自動化)
+
+`.claude/hooks/improvement-proposal.sh` が **SessionStart hook** として配線されており、
+直近 N 日（既定 7）の observations / hook state を自動集計し、誤動作パターンに対する
+**無視可能な改善提案**を 1〜N 件（既定上限 3）stderr に提示する。
+
+#### 集計ソース
+
+| ソース | 用途 |
+|---|---|
+| `~/.claude/homunculus/projects/<hash>/observations.jsonl` | tool 別の error / permission deny / timeout 集計 |
+| `.claude/.gateguard-state/*.cleared` (mtime ≥ cutoff) | F1 block 頻度 |
+| `.claude/.taskguard-state/*.cleared` | TaskGuard bypass 累計 |
+| `.claude/.confidence-gate-state/bypass.log` | F3 bypass 件数 + 直近 reason |
+| `.claude/.failure-window/*.log` | active failure-loop 数 |
+| `~/.claude/agent-router-history.json` | agent-router の dispatch fallback 比率 |
+
+#### 提案 heuristics（抜粋）
+
+| トリガ | 提案内容 |
+|---|---|
+| Bash deny ≥ 5 件 | Agent tool 経由の委譲漏れ → run_in_background:true で Agent 起動 |
+| Edit/Write deny ≥ 3 件 | 保護パスでの直接編集 → Agent 委譲 / protected_paths 確認 |
+| GateGuard cleared ≥ 5 件 | 事実材料 (importer/caller/data/quote) 提示忘れ |
+| Confidence bypass ≥ 5 件 | F3 抽出ロジック改善 / subagent prompt に confidence:0.X 明記 |
+| failure-window active ≥ 1 | `/agent-introspect` で 4-phase Capture-Audit-Diff-Fix 実行 |
+| router fallback ≥ 60% (n≥5) | dispatch-table 拡張 or LLM fallback 検討 |
+| TaskGuard bypass ≥ 5 件 | bypass 常用化 → draft/task 同期ルール再確認 |
+| hook timeouts ≥ 3 件 | hook 処理が重い → timeout 設定 / hook ロジック見直し |
+| tool error rate ≥ 10% (n≥50) | tool 利用前提誤り → /harness-audit で詳細確認 |
+
+#### 設計ポリシー
+
+- **block しない fail-open**: jq / python3 不在、observations 不在、ファイル読み取り失敗のいずれも exit 0
+- **noisy にしない**: 提案 0 件なら一切無出力。dedup で `dedup_hours` 以内の同一提案 ID は再表示しない
+- **data 駆動**: 同じ提案 ID でも閾値変更や heuristics 追加は `improvement-proposal.sh` 側で完結
+- **kill switches**:
+  - `ECC_IMPROVEMENT_PROPOSAL=off` （session 単位で env 渡し）
+  - `improvement_proposal_enabled: false` または `HC_IMPROVEMENT_PROPOSAL_ENABLED=false`
+
+#### 出力例
+
+```
+[harness] 💡 Improvement proposals (last 7 days):
+[harness]   1. Bash deny 12 件 → Agent tool 経由の委譲が漏れている可能性。次回は run_in_background:true で必ず Agent 起動を。
+[harness]   2. GateGuard cleared 8 件 → Edit/Write 直前の事実材料提示忘れ。importer/caller/data/quote の 4 点を summary に。
+[harness]   3. Confidence bypass 22 件 → 抽出ロジック改善の余地。docs/CONFIDENCE-GATE.md 参照、subagent prompt に confidence:0.X 明記を。
+[harness] (これらは提案であり block しません。無視して進めて構いません。/harness-audit で詳細確認可)
+```
+
+#### dedup 仕様
+
+- state file: `.claude/.improvement-proposal-state/last_shown.json`
+- 内容: `{ proposal_id: ISO8601_timestamp }` の dict
+- 提案 ID 単位で `dedup_hours` 以内に再表示済みなら抑制
+- session が長く続いて再 SessionStart した場合も、前回提示から `dedup_hours` 以上経過すれば再表示
+
+#### 設定キー (`harness-config.yml`)
+
+| key | 既定 | 用途 |
+|---|---|---|
+| `improvement_proposal_enabled` | `true` | false で完全無効化 |
+| `improvement_proposal_lookback_days` | `7` | observations 集計範囲 |
+| `improvement_proposal_max_count` | `3` | 1 回の提示で出す最大件数 |
+| `improvement_proposal_state_dir` | `.claude/.improvement-proposal-state` | dedup state 保管位置 |
+| `improvement_proposal_dedup_hours` | `24` | 同提案 ID の再表示禁止期間 |
+
+env override 形式: `HC_IMPROVEMENT_PROPOSAL_ENABLED` 等。

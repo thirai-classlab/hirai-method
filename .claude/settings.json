@@ -209,6 +209,12 @@
             "command": "bash .claude/hooks/check-required-env.sh",
             "timeout": 3,
             "statusMessage": "必須 env 確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/improvement-proposal.sh",
+            "timeout": 5,
+            "statusMessage": "改善提案を生成中..."
           }
         ]
       }
