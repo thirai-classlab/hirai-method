@@ -434,6 +434,8 @@ def swe_bench_breakdown() -> dict:
             "cost_cap_usd": s.get("cost_cap_usd"),
             "cost_cap_hit": s.get("cost_cap_hit"),
             "started_at": s.get("started_at"),
+            "by_gate_combo": s.get("by_gate_combo") or {},
+            "official_harness": data.get("official_harness") or {},
         })
     out["total_runs"] = len(out["runs"])
     return out
@@ -463,6 +465,40 @@ def fmt_swe_bench(sb: dict) -> str:
             f"{r.get('avg_invoke_duration_sec',0):.1f} | "
             f"${r.get('cost_cap_usd',0):.1f} | {hit} |"
         )
+
+    # F1/F2 gate-combo breakdown (only emitted for runs that used --gates-grid).
+    grid_runs = [r for r in sb["runs"] if r.get("by_gate_combo")]
+    if grid_runs:
+        lines.append("")
+        lines.append("## F1/F2 Gate Grid")
+        for r in grid_runs:
+            lines.append(f"### {r['file']}")
+            lines.append("")
+            lines.append("| combo | selected | applied | rate | resolved | resolved% | cost$ | wall(s) |")
+            lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+            for combo, slot in sorted(r["by_gate_combo"].items()):
+                lines.append(
+                    f"| {combo} | {slot.get('selected',0)} | {slot.get('applied',0)} | "
+                    f"{slot.get('applied_rate',0):.0%} | {slot.get('resolved',0)} | "
+                    f"{slot.get('resolved_rate',0):.0%} | "
+                    f"${slot.get('cost_usd',0):.3f} | {slot.get('wall_time_sec',0):.1f} |"
+                )
+            # defensive impact: F1 on vs F1 off, F2 on vs F2 off
+            bgc = r["by_gate_combo"]
+            def _avg(keys: list[str], field: str) -> float:
+                vals = [bgc[k].get(field, 0) for k in keys if k in bgc]
+                return round(sum(vals) / len(vals), 3) if vals else 0.0
+
+            f1_on_rate = _avg(["f1_on_f2_on", "f1_on_f2_off"], "applied_rate")
+            f1_off_rate = _avg(["f1_off_f2_on", "f1_off_f2_off"], "applied_rate")
+            f2_on_rate = _avg(["f1_on_f2_on", "f1_off_f2_on"], "applied_rate")
+            f2_off_rate = _avg(["f1_on_f2_off", "f1_off_f2_off"], "applied_rate")
+            if any(k in bgc for k in ("f1_on_f2_on", "f1_off_f2_on", "f1_on_f2_off", "f1_off_f2_off")):
+                lines.append("")
+                lines.append("#### Defensive impact (applied rate)")
+                lines.append(f"- F1 on→off: {f1_on_rate:.0%} → {f1_off_rate:.0%} (delta {f1_on_rate - f1_off_rate:+.0%})")
+                lines.append(f"- F2 on→off: {f2_on_rate:.0%} → {f2_off_rate:.0%} (delta {f2_on_rate - f2_off_rate:+.0%})")
+
     return "\n".join(lines)
 
 
