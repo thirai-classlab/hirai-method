@@ -61,13 +61,17 @@ if [ "$is_subagent" = "true" ]; then
 fi
 
 # --- main agent path enforcement ---
+# Bash deny / 委譲ガード block を受けた際の必須アクション (development-process.md §5)。
+# 全 block message に共通フッタとして付与する。
+reflex_footer=$'\n\n【次のアクション】\n1. Agent tool で subagent を起動 (run_in_background: true 必須)\n2. その subagent に本作業を委譲\n3. TaskCreate でタスク登録\n\nBash deny / whitelist 不在 / 委譲ガード block は loop 停止理由にしないこと (development-process.md §5)。'
+
 # メッセージは harness-config.yml の protected_paths を反映 (例: "src/ tests/ scripts/")
-block_path_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
-  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " を直接操作できません。Agent tool でサブエージェントに委譲してください。")}')
-block_read_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
-  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " のファイルを直接読み取れません。Agent tool(Explore等)でサブエージェントに調査を委譲してください。")}')
-block_search_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
-  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " を直接検索できません。Agent tool(Explore等)でサブエージェントに調査を委譲してください。")}')
+block_path_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" --arg f "$reflex_footer" \
+  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " を直接操作できません。Agent tool でサブエージェントに委譲してください。" + $f)}')
+block_read_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" --arg f "$reflex_footer" \
+  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " のファイルを直接読み取れません。Agent tool(Explore等)でサブエージェントに調査を委譲してください。" + $f)}')
+block_search_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" --arg f "$reflex_footer" \
+  '{decision:"block", reason:("[サブエージェント委譲ルール] メインエージェントは " + $d + " を直接検索できません。Agent tool(Explore等)でサブエージェントに調査を委譲してください。" + $f)}')
 
 # protected paths を case パターンに展開 (HC_PROTECTED_GLOB_FILE / HC_PROTECTED_GLOB_DIR)
 # task 配下の絶対 path 部分一致パターン
@@ -167,7 +171,7 @@ $segments
 EOF
 
     if [ "$all_allowed" = "false" ]; then
-      reason=$(printf '[Bash 委譲ルール] 未承認コマンド: %q\n\nメインエージェントは Bash 実行が原則禁止。承認済 prefix は %s を参照。\n\n**必要なら申請してください:**\n1. .claude/bash-whitelist-requests/YYYY-MM-DD-<slug>.md を REQUEST_TEMPLATE.md に従い作成\n2. user 承認 → %s に追記\n\nまたは Agent tool でサブエージェントに委譲してください (subagent は本ルール対象外)。' "$bad_segment" "$HC_BASH_WHITELIST_PATH" "$HC_BASH_WHITELIST_PATH")
+      reason=$(printf '[Bash 委譲ルール] 未承認コマンド: %q\n\nメインエージェントは Bash 実行が原則禁止。承認済 prefix は %s を参照。\n\n【次のアクション】\n1. Agent tool で subagent を起動 (run_in_background: true 必須) — subagent は本ルール対象外\n2. その subagent に本コマンドを委譲\n3. TaskCreate でタスク登録\n\nBash deny / whitelist 不在 / 委譲ガード block は loop 停止理由にしないこと (development-process.md §5)。\n\n**whitelist 1 行追加が妥当な場合の申請手順 (subagent 委譲を試した上で user 検討):**\n1. .claude/bash-whitelist-requests/YYYY-MM-DD-<slug>.md を REQUEST_TEMPLATE.md に従い作成\n2. user 承認 → %s に追記' "$bad_segment" "$HC_BASH_WHITELIST_PATH" "$HC_BASH_WHITELIST_PATH")
       jq -n --arg r "$reason" '{decision:"block", reason:$r}'
       exit 0
     fi
@@ -219,8 +223,8 @@ EOF
       # 誤検知するため、空白 / `=` / `$` / `(` のみを許容する。
       # 検査対象 path 群は HC_PROTECTED_LEAK_REGEX (例: "src|tests|scripts")。
       if printf '%s' "$cmd" | grep -qE "(^|[[:space:]=\$\(])(${HC_PROTECTED_LEAK_REGEX})/"; then
-        jq -nc --arg d "$HC_PROTECTED_DISPLAY" \
-          '{decision:"block", reason:("[サブエージェント委譲ルール] Bash で " + $d + " のファイルを直接 read/edit/inspect できません。Agent tool でサブエージェントに委譲してください。")}'
+        jq -nc --arg d "$HC_PROTECTED_DISPLAY" --arg f "$reflex_footer" \
+          '{decision:"block", reason:("[サブエージェント委譲ルール] Bash で " + $d + " のファイルを直接 read/edit/inspect できません。Agent tool でサブエージェントに委譲してください。" + $f)}'
         exit 0
       fi
     fi
