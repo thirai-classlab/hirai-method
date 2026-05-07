@@ -95,6 +95,32 @@ paths:
 - TaskCreate / TaskUpdate（または `docs/tasks/list.md`）で依存関係をトラッキング
 - サブエージェント完了通知後の判断（go/no-go / 次タスク起動 / user 判断要請）はメインの責務であり、サブエージェントに委譲してはならない
 
+### 4. サブエージェント起動の Task 登録（必須）
+
+メインエージェントは Agent tool でサブエージェントを起動する **前** または **直後** に、
+**必ず TaskCreate** で Claude Code 内蔵タスクリストに登録する。
+
+#### 必須項目
+- **subject**: サブエージェントに振り出した作業の概要（例: 「config-loader env override 汎用化」）
+- **description**: 委譲スコープ / 完了条件 / 想定 cost / 並行可否
+- **metadata.subagent_id**: Agent tool 起動時に得られる `agentId`（追跡可能性）
+- **status 遷移**: `pending` → `in_progress`（起動直後）→ `completed`（完了通知受信時）
+
+#### 依存関係の明示
+- 並行可能なタスクは独立に作成（依存なし）
+- 逐次タスクは `addBlockedBy` / `addBlocks` で依存関係を明示
+- メインは TaskList でいつでも全状態を確認可能にする
+
+#### 違反例
+- TaskCreate せずに subagent 起動 → ユーザーが何が走っているか不明、進捗確認不可
+- 完了通知を受けたのに TaskUpdate で `completed` にしない → 古いタスクが残留
+- subagent_id を metadata に記録しない → 後追いトレース不能
+
+#### 理由
+- **可観測性**: ユーザーが `TaskList` でいつでも進捗を確認できる
+- **責任の明確化**: メインの orchestration 義務（§3）を Claude Code 標準機構に裏付ける
+- **再開性**: セッション再起動時もタスクリストから現状を復元可能
+
 ### Hook による補助（soft warning）
 
 `.claude/hooks/agent-marker-set.sh` は PreToolUse(Agent) で foreground 起動を検出した場合、stderr に WARN を出す（block ではない）。`tool_input.run_in_background != true` のときに発火。
