@@ -100,7 +100,8 @@ NOTIFY_SOUND \
 STOP_SOUND \
 CONFIDENCE_THRESHOLD \
 CONFIDENCE_REQUIRED \
-CONFIDENCE_STATE_DIR"
+CONFIDENCE_STATE_DIR \
+REQUIRED_ENV"
 
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
@@ -136,6 +137,7 @@ HC_STOP_SOUND="/System/Library/Sounds/Glass.aiff"
 HC_CONFIDENCE_THRESHOLD="0.6"
 HC_CONFIDENCE_REQUIRED="true"
 HC_CONFIDENCE_STATE_DIR=".claude/.confidence-gate-state"
+HC_REQUIRED_ENV=""
 
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
@@ -198,18 +200,24 @@ else
         _hc_inner="${_hc_val#\[}"
         _hc_inner="${_hc_inner%\]}"
         _hc_list=""
-        # `,` で分割
-        IFS=',' read -ra _hc_items <<< "$_hc_inner"
-        for _hc_item in "${_hc_items[@]}"; do
-          _hc_norm=$(_hc_normalize "$_hc_item")
-          if [ -n "$_hc_norm" ]; then
-            if [ -z "$_hc_list" ]; then
-              _hc_list="$_hc_norm"
-            else
-              _hc_list="$_hc_list"$'\n'"$_hc_norm"
+        # 空配列 `[]` は中身なしで eval (set -u 下で _hc_items[@] unbound を回避)
+        # 内側を trim して空判定
+        _hc_inner_trim="${_hc_inner#"${_hc_inner%%[![:space:]]*}"}"
+        _hc_inner_trim="${_hc_inner_trim%"${_hc_inner_trim##*[![:space:]]}"}"
+        if [ -n "$_hc_inner_trim" ]; then
+          # `,` で分割
+          IFS=',' read -ra _hc_items <<< "$_hc_inner"
+          for _hc_item in "${_hc_items[@]}"; do
+            _hc_norm=$(_hc_normalize "$_hc_item")
+            if [ -n "$_hc_norm" ]; then
+              if [ -z "$_hc_list" ]; then
+                _hc_list="$_hc_norm"
+              else
+                _hc_list="$_hc_list"$'\n'"$_hc_norm"
+              fi
             fi
-          fi
-        done
+          done
+        fi
         eval "HC_${_hc_key_upper}=\"\$_hc_list\""
         ;;
       *)
@@ -287,7 +295,8 @@ export HC_AGENT_MARKER_DIR HC_FAILURE_WINDOW_DIR
 export HC_HOMUNCULUS_ROOT
 export HC_NOTIFY_SOUND HC_STOP_SOUND
 export HC_CONFIDENCE_THRESHOLD HC_CONFIDENCE_REQUIRED HC_CONFIDENCE_STATE_DIR
+export HC_REQUIRED_ENV
 
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper
-unset _hc_val _hc_inner _hc_list _hc_items _hc_item _hc_norm _hc_p
+unset _hc_val _hc_inner _hc_inner_trim _hc_list _hc_items _hc_item _hc_norm _hc_p

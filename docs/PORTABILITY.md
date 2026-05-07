@@ -42,6 +42,8 @@
 | `homunculus_root` | `~/.claude/homunculus` | continuous-learning v2.1 観察ログ root（tilde 展開対応） |
 | `notify_sound` | `/System/Library/Sounds/Hero.aiff` | macOS 通知音 |
 | `stop_sound` | `/System/Library/Sounds/Glass.aiff` | macOS セッション終了音 |
+| `confidence_threshold` / `confidence_required` / `confidence_state_dir` | `0.6` / `true` / `.claude/.confidence-gate-state` | F3 confidence gate（SubagentStop） |
+| `required_env` | `[]` | SessionStart hook が未設定 env を WARN 通知（後述） |
 
 ## 移植チェックリスト
 
@@ -139,6 +141,7 @@ echo '{"tool_input":{"file_path":"/some/repo/<your-protected-path>/foo.ts"}}' \
 | `confidence_threshold` | `HC_CONFIDENCE_THRESHOLD` | `0.6` |
 | `confidence_required` | `HC_CONFIDENCE_REQUIRED` | `true` |
 | `confidence_state_dir` | `HC_CONFIDENCE_STATE_DIR` | `.claude/.confidence-gate-state` |
+| `required_env` | `HC_REQUIRED_ENV` | `""` (空) |
 
 ### 設定例
 
@@ -218,6 +221,91 @@ HC_PROTECTED_PATHS=$'app\nlib' bash -c '
   (リスト未掲載のキーは YAML から動的に load されるが env override 不可)。
 - bash 3.2 (macOS 標準) でも動作する。`declare -g` `${!var}` 等の
   bash 4+ 機能は使用していない。
+
+
+## Required env チェック (SessionStart hook)
+
+`harness-config.yml` の `required_env` キーで、プロジェクトが必要とする環境変数を宣言できる。
+SessionStart 時に `.claude/hooks/check-required-env.sh` が走り、未設定エントリを stderr に通知する。
+**fail-open 設計**: 未設定であってもセッション起動は継続する（ブロックしない）。
+
+### 設定方法
+
+`harness-config.yml` で配列として宣言する。各エントリは `"NAME|severity|purpose"` のパイプ区切り文字列:
+
+```yaml
+required_env: [
+  "ANTHROPIC_API_KEY|error|Claude API access",
+  "DOCKER_HOST|warn|swebench official harness",
+  "SUPABASE_URL|info|DB access (optional in dev)"
+]
+```
+
+> パーサ仕様の都合で**インライン配列**で書く必要がある（複数行配列は非対応）。
+> 1 行が長くなるなら 1 行 1 エントリのまま `[ "...", "..." ]` で並べる。
+
+### severity の使い分け
+
+| severity | 出力 | 用途 |
+|---|---|---|
+| `error` | `❌ MISSING required env: <NAME> (<purpose>)` | 主機能に必須（API key 等） |
+| `warn`  | `⚠️  Recommended env not set: <NAME> (<purpose>)` | 推奨だが無くても基本機能は動く |
+| `info`  | `ℹ️  Optional env not set: <NAME> (<purpose>)` | dev では不要 / 環境依存 |
+
+severity 表記なし / 不明な値は `warn` として扱う（fail-safe）。
+
+### 設定との連携 (shell rc / .env / direnv)
+
+宣言したキーは以下のいずれかで実体を提供する:
+
+#### `.env` (dotenv 方式 — Vercel 等の慣習)
+```bash
+# プロジェクトルート/.env (gitignore 必須)
+ANTHROPIC_API_KEY=sk-ant-...
+SUPABASE_URL=https://xxx.supabase.co
+```
+
+#### shell rc (`~/.zshrc` / `~/.bashrc`)
+```bash
+# マシン共通の secret
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+#### direnv (`.envrc` プロジェクトルート — 自動 load)
+```bash
+# .envrc
+export ANTHROPIC_API_KEY=sk-ant-...
+export DOCKER_HOST=unix:///var/run/docker.sock
+```
+
+### 出力サンプル
+
+```
+[harness] ❌ MISSING required env: ANTHROPIC_API_KEY (Claude API access)
+[harness] ⚠️  Recommended env not set: DOCKER_HOST (swebench official harness)
+[harness] ℹ️  Optional env not set: SUPABASE_URL (DB access (optional in dev))
+[harness] Set them via shell rc, .env, or direnv. See docs/PORTABILITY.md
+```
+
+### 動作確認
+
+```bash
+# 一時的に required_env を渡して run（stderr に出力されるか確認）
+HC_REQUIRED_ENV=$'FOO|error|test' bash .claude/hooks/check-required-env.sh </dev/null
+# → "[harness] ❌ MISSING required env: FOO (test)" が stderr に出る
+
+# 実体が export されていれば沈黙する
+HC_REQUIRED_ENV=$'FOO|error|test' FOO=value \
+  bash .claude/hooks/check-required-env.sh </dev/null
+# → 出力なし、exit 0
+```
+
+### 設計上の注意
+
+- **fail-open**: error severity であっても hook は exit 0 を返す。env 未設定で session が起動不可能になることは無い
+- **配列形式の制約**: `harness-config.yml` パーサがインライン配列のみ対応のため、複数行配列 `required_env:\n  - FOO\n  - BAR` 形式は使えない
+- **env 値の `|` 文字**: `purpose` フィールドに `|` が含まれていても、`severity` の次の `|` までを cut するため後ろの `|` は purpose に残る
+- **severity 記号**: `❌ ⚠️ ℹ️` は UTF-8 で stderr に出るため、絵文字非対応 terminal では文字化けする可能性あり
 
 ## Env override（gate disable）
 

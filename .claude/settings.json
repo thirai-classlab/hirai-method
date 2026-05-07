@@ -203,6 +203,12 @@
             "command": "bash .claude/hooks/init-tasks-on-start.sh",
             "timeout": 5,
             "statusMessage": "タスクテンプレ初期化中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-required-env.sh",
+            "timeout": 3,
+            "statusMessage": "必須 env 確認中..."
           }
         ]
       }

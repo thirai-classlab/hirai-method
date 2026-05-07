@@ -79,3 +79,21 @@ stop_sound: /System/Library/Sounds/Glass.aiff
 confidence_threshold: 0.6
 confidence_required: true
 confidence_state_dir: .claude/.confidence-gate-state
+
+# === 必須環境変数（プロジェクト固有）===
+# SessionStart hook (.claude/hooks/check-required-env.sh) が読み、未設定があれば
+# stderr に WARN を出してユーザーに通知する（fail-open: 未設定でも session 起動継続）。
+#
+# 形式: 各エントリは "NAME|severity|purpose" のパイプ区切り文字列。
+#   - NAME:     env 変数名（大文字推奨）
+#   - severity: error / warn / info
+#       error → ❌ MISSING required env: <NAME>（プロジェクト動作に必須）
+#       warn  → ⚠️  Recommended env not set: <NAME>（一部機能のみで必要）
+#       info  → ℹ️  Optional env not set: <NAME>（dev では optional 等）
+#   - purpose:  人間向けの用途説明（日本語可）
+#
+# パーサ仕様の都合で「フラットなインライン配列」とする。
+# プロジェクトで使用する場合は example を参考に編集（既定は空）:
+#
+# required_env: ["ANTHROPIC_API_KEY|error|Claude API access", "DOCKER_HOST|warn|swebench official harness", "SUPABASE_URL|info|DB access (optional in dev)"]
+required_env: []
