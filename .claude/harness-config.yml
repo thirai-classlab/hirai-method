@@ -6,6 +6,18 @@
 # 直接ハードコードは禁止 (delegation-guard.sh / gateguard.sh / task-rule-guard.sh /
 # failure-loop-detect.sh / init-tasks-on-start.sh はすべて config-loader.sh 経由で本値を読む)。
 #
+# === 環境変数による上書き (env override) ===
+# 全キーは `HC_<UPPER_SNAKE>` 形式の環境変数で上書き可能。
+# 値解決の優先順 (高 → 低): env > YAML > defaults
+#
+# 例 (yaml を編集せずに `.env` / shell rc / direnv で切替):
+#   export HC_TASK_DIR=docs/tickets
+#   export HC_PROTECTED_PATHS=$'app\nlib\nscripts'    # 改行区切り
+#   export HC_HOMUNCULUS_ROOT=~/work/homunculus         # tilde 展開対応
+#   export HC_CONFIDENCE_REQUIRED=false                 # gate を無効化
+#
+# 上書き対象キー: docs/PORTABILITY.md の "Env override" セクション参照。
+#
 # パーサ仕様 (`.claude/hooks/lib/config-loader.sh`):
 #   - フラットな key: value
 #   - フラットな key: [a, b, c] (インライン JSON-like 配列)
@@ -19,6 +31,7 @@
 #  3. bash_whitelist_path  → bash-whitelist.txt の置き場所を変える場合
 #  4. homunculus_root      → 個人別ストレージ位置 (~/.claude/homunculus 既定)
 #  5. その他 path 系       → 非標準の .claude/ 配置を使う場合のみ
+#  → 一時的な切替なら yaml を触らず env で済ませる選択肢もある (上記 env override)
 
 # === 委譲ガードの保護パス ===
 # delegation-guard.sh が「メインエージェント直接操作禁止」とみなす path 部分一致リスト。

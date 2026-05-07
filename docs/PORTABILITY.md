@@ -114,9 +114,114 @@ echo '{"tool_input":{"file_path":"/some/repo/<your-protected-path>/foo.ts"}}' \
 - `.gitignore` で state dir 群（`.gateguard-state/` `.taskguard-state/` 等）を除外済み — `harness-config.yml` で配置を変えた場合は `.gitignore` も更新する
 
 
+## Env override（プロジェクト切替 — 全キー対応）
+
+`harness-config.yml` の全キーは `HC_<UPPER_SNAKE>` 形式の環境変数で上書きできる。
+`config-loader.sh` が `env > YAML > defaults` の優先順で解決する。
+
+これにより、**yaml を編集せずにプロジェクトごとに挙動を切り替えられる**。
+
+### 上書き対象キー
+
+| YAML キー | 環境変数 | 既定値 |
+|---|---|---|
+| `task_dir` | `HC_TASK_DIR` | `docs/tasks` |
+| `draft_dir` | `HC_DRAFT_DIR` | `docs/draft` |
+| `protected_paths` | `HC_PROTECTED_PATHS` | `src tests scripts` (改行区切り) |
+| `bash_whitelist_path` | `HC_BASH_WHITELIST_PATH` | `.claude/bash-whitelist.txt` |
+| `gateguard_state_dir` | `HC_GATEGUARD_STATE_DIR` | `.claude/.gateguard-state` |
+| `taskguard_state_dir` | `HC_TASKGUARD_STATE_DIR` | `.claude/.taskguard-state` |
+| `agent_marker_dir` | `HC_AGENT_MARKER_DIR` | `.claude/.agent-markers` |
+| `failure_window_dir` | `HC_FAILURE_WINDOW_DIR` | `.claude/.failure-window` |
+| `homunculus_root` | `HC_HOMUNCULUS_ROOT` | `~/.claude/homunculus` |
+| `notify_sound` | `HC_NOTIFY_SOUND` | `/System/Library/Sounds/Hero.aiff` |
+| `stop_sound` | `HC_STOP_SOUND` | `/System/Library/Sounds/Glass.aiff` |
+| `confidence_threshold` | `HC_CONFIDENCE_THRESHOLD` | `0.6` |
+| `confidence_required` | `HC_CONFIDENCE_REQUIRED` | `true` |
+| `confidence_state_dir` | `HC_CONFIDENCE_STATE_DIR` | `.claude/.confidence-gate-state` |
+
+### 設定例
+
+#### shell rc (`~/.zshrc` / `~/.bashrc`)
+
+```bash
+# このマシンで開く全リポ共通の設定
+export HC_HOMUNCULUS_ROOT=~/work/.homunculus
+export HC_NOTIFY_SOUND=/System/Library/Sounds/Tink.aiff
+```
+
+#### `.env` + direnv (`.envrc`)
+
+プロジェクト固有の env を `direnv allow` で自動読込する想定:
+
+```bash
+# .envrc (プロジェクトルート)
+export HC_TASK_DIR=docs/tickets
+export HC_DRAFT_DIR=docs/proposals
+export HC_PROTECTED_PATHS=$'app\nlib\nmiddleware.ts'    # 改行区切り
+```
+
+#### 一時切替 (1 セッション)
+
+```bash
+# confidence-gate を 1 セッション分だけ disable
+HC_CONFIDENCE_REQUIRED=false claude
+```
+
+### 配列値 (`HC_PROTECTED_PATHS`) の渡し方
+
+YAML 側は `protected_paths: [a, b, c]` 形式だが、env 経由では bash の
+`$'a\nb\nc'` リテラル (改行区切り) で渡す:
+
+```bash
+export HC_PROTECTED_PATHS=$'app\nlib\nscripts'
+# 別解 (printf 経由): export HC_PROTECTED_PATHS=$(printf 'app\nlib\nscripts')
+```
+
+派生値 (`HC_PROTECTED_DISPLAY` / `HC_PROTECTED_GLOB_FILE` / `HC_PROTECTED_LEAK_REGEX`)
+は env override 後に再生成されるため、env で渡しただけで全 guard hook が
+新しい protected_paths を反映する。
+
+### tilde 展開
+
+env 経由で渡された値も `~` / `~/foo` は `$HOME` に展開される。
+yaml と同じ仕様:
+
+```bash
+export HC_HOMUNCULUS_ROOT=~/foo    # $HOME/foo に展開される
+```
+
+### 動作確認
+
+```bash
+# env override が効いているか確認
+HC_TASK_DIR=docs/foo bash -c '
+  source .claude/hooks/lib/config-loader.sh
+  echo "TASK_DIR=$HC_TASK_DIR"        # → docs/foo
+'
+
+# 派生値も再生成されているか
+HC_PROTECTED_PATHS=$'app\nlib' bash -c '
+  source .claude/hooks/lib/config-loader.sh
+  echo "DISPLAY=$HC_PROTECTED_DISPLAY"   # → app/ lib/
+  echo "GLOB=$HC_PROTECTED_GLOB_FILE"    # → */app/*|*/lib/*
+'
+```
+
+### 設計上の注意
+
+- env 値が **空文字列** で export されている場合 (`export HC_FOO=""`) は
+  「空で上書きしたい」意図とみなし YAML より優先される。defaults に
+  戻したいときは `unset HC_FOO` する。
+- env override の対象キーは `config-loader.sh` 内の `_HC_KNOWN_KEYS`
+  リストで定義されている。新規キーを追加した場合はリストにも追加すること
+  (リスト未掲載のキーは YAML から動的に load されるが env override 不可)。
+- bash 3.2 (macOS 標準) でも動作する。`declare -g` `${!var}` 等の
+  bash 4+ 機能は使用していない。
+
 ## Env override（gate disable）
 
-以下の環境変数で gate を一時 disable 可能（fail-open）:
+専用の env で個別 gate を一時 disable 可能（fail-open）:
 
 | Env Var | 対象 | 用途 |
 |---|---|---|

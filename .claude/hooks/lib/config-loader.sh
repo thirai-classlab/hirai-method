@@ -5,6 +5,16 @@
 #   harness-config.yml を読み、shell 変数として export する。
 #   外部依存 (yq / python / jq) ゼロ。
 #
+# 値解決の優先順 (高 → 低):
+#   1. 呼び出し時に既に export されている `HC_*` 環境変数  (env override)
+#   2. `.claude/harness-config.yml` の値                    (YAML)
+#   3. 本ファイル内のハードコード defaults                 (fallback)
+#
+#   これにより、プロジェクト切替は `.env` / shell rc / direnv で
+#     export HC_TASK_DIR=docs/tickets
+#     export HC_PROTECTED_PATHS=$'app\nlib\nscripts'
+#   と書くだけで完結する (yaml を編集する必要が無い)。
+#
 # 使い方:
 #   source .claude/hooks/lib/config-loader.sh
 #   echo "$HC_TASK_DIR"                  # docs/tasks
@@ -27,11 +37,16 @@
 #
 # tilde 展開:
 #   `~` および `~/` で始まる値は $HOME に展開する (例: ~/.claude/homunculus → /Users/.../.claude/homunculus)。
+#   env override 経由で渡す場合も同様に展開される (`HC_HOMUNCULUS_ROOT=~/foo` → `$HOME/foo`)。
 #
 # fail-open 設計:
 #   - config 不在: WARN を stderr に出して既定値を export する
 #   - parse 失敗 1 行: その行のみスキップ
 #   - 必須キー欠如: 既定値 fallback (hook が動作不能にならないよう)
+#
+# bash 互換性:
+#   bash 3.2 (macOS 標準) でも動作する。`declare -g` `${var:-}` 等の
+#   bash 4+ 機能は使用しない。env preserve は eval ベースで実装。
 
 # --- 設定ファイルパス決定 ---
 # 優先順:
@@ -66,7 +81,45 @@ _hc_resolve_config() {
 HC_CONFIG_PATH=$(_hc_resolve_config)
 unset -f _hc_resolve_config
 
-# --- 既定値 (fallback) ---
+# --- 既知キー一覧 (env override の対象) ---
+# YAML の key を _ 区切り大文字化したものを並べる。
+# ここに無いキーは YAML から動的に load されるが、env override は適用されない
+# (= 既存の挙動: env で先行設定してあっても YAML が上書きする)。
+# 新規キーを追加した場合は本リストにも追加すること。
+_HC_KNOWN_KEYS="\
+TASK_DIR \
+DRAFT_DIR \
+PROTECTED_PATHS \
+BASH_WHITELIST_PATH \
+GATEGUARD_STATE_DIR \
+TASKGUARD_STATE_DIR \
+AGENT_MARKER_DIR \
+FAILURE_WINDOW_DIR \
+HOMUNCULUS_ROOT \
+NOTIFY_SOUND \
+STOP_SOUND \
+CONFIDENCE_THRESHOLD \
+CONFIDENCE_REQUIRED \
+CONFIDENCE_STATE_DIR"
+
+# --- Step 1: 呼び出し時 env をスナップショット ---
+# bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
+# preset key 一覧は _HC_PRESET_KEYS に保持し、step 4 で復元時に参照する。
+_HC_PRESET_KEYS=""
+for _hc_k in $_HC_KNOWN_KEYS; do
+  eval "_hc_v=\${HC_${_hc_k}-}"
+  eval "_hc_set=\${HC_${_hc_k}+set}"
+  # 「未設定」 と 「空文字列で設定済」 を区別するため `+set` を使う。
+  # env で `export HC_FOO=""` しているケースは「空で上書きしたい」意図とみなし
+  # YAML 値より優先する (YAML 側もシンプルに defaults へ戻すには unset すべき)。
+  if [ "$_hc_set" = "set" ]; then
+    _HC_PRESET_KEYS="$_HC_PRESET_KEYS $_hc_k"
+    eval "_HC_PRESET_${_hc_k}=\$_hc_v"
+  fi
+done
+unset _hc_k _hc_v _hc_set
+
+# --- Step 2: 既定値 (fallback) ---
 # config 不在時 / 該当 key 欠如時にこの値が採用される。
 # 旧来の hardcode と同等の振る舞いを保つ。
 HC_PROTECTED_PATHS=$'src\ntests\nscripts'
@@ -108,7 +161,7 @@ _hc_normalize() {
   printf '%s' "$v"
 }
 
-# --- 設定 parse ---
+# --- Step 3: YAML parse ---
 # config 不在は warning のみ (fail-open)。
 if [ ! -f "$HC_CONFIG_PATH" ]; then
   printf '[config-loader] WARN: %s not found, using defaults\n' "$HC_CONFIG_PATH" >&2
@@ -166,6 +219,23 @@ else
     esac
   done < "$HC_CONFIG_PATH"
 fi
+
+# --- Step 4: env preset を復元 (env > YAML > defaults) ---
+# Step 1 で snapshot した preset key について、env 値を強制適用する。
+# tilde 展開は env override 値に対しても適用する (homunculus_root 等で
+# `~/foo` を export している場合に展開される)。
+for _hc_k in $_HC_PRESET_KEYS; do
+  eval "_hc_v=\$_HC_PRESET_${_hc_k}"
+  _hc_v=$(_hc_normalize "$_hc_v")
+  eval "HC_${_hc_k}=\$_hc_v"
+done
+
+# --- Step 5: preset 一時変数を unset (caller を汚染しない) ---
+for _hc_k in $_HC_PRESET_KEYS; do
+  unset "_HC_PRESET_${_hc_k}"
+done
+unset _HC_PRESET_KEYS _HC_KNOWN_KEYS
+unset _hc_k _hc_v
 
 # --- protected_paths 派生値 ---
 # delegation-guard が case glob で使うパターン (例: "*/src/*|*/tests/*|*/scripts/*")

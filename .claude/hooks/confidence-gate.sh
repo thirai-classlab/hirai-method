@@ -35,21 +35,12 @@
 
 set -u
 
-# config を source する前に env 値を退避（config-loader.sh は YAML 値で
-# 上書きしてしまうため、env による override を効かせるには事前 capture が必要）
-_env_required="${HC_CONFIDENCE_REQUIRED-}"
-_env_threshold="${HC_CONFIDENCE_THRESHOLD-}"
-_env_state_dir="${HC_CONFIDENCE_STATE_DIR-}"
-
-# config 読み込み (HC_* 変数 export)
+# config 読み込み (HC_* 変数 export)。
+# config-loader.sh は呼び出し時に既に export されている HC_* env 値を
+# preset として保持し、YAML 値より優先して再適用する (env > YAML > defaults)。
+# したがって confidence-gate 側で個別の env preservation を行う必要は無い。
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
-
-# env で明示指定された値で再上書き（env > YAML の優先順）
-if [ -n "$_env_required" ];  then HC_CONFIDENCE_REQUIRED="$_env_required";   fi
-if [ -n "$_env_threshold" ]; then HC_CONFIDENCE_THRESHOLD="$_env_threshold"; fi
-if [ -n "$_env_state_dir" ]; then HC_CONFIDENCE_STATE_DIR="$_env_state_dir"; fi
-unset _env_required _env_threshold _env_state_dir
 
 # Phase β: F3 disable for SWE-bench grid evaluation (fail-open)
 # ECC_F{1,2,3}_OFF env vars allow runner.py to bypass gates per-task
