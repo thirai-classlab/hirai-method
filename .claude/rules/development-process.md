@@ -9,6 +9,22 @@ paths:
 
 # 開発プロセスルール
 
+## コーディング指針（必読）
+
+実装・レビュー・リファクタの前に [`.claude/skills/karpathy-guidelines/SKILL.md`](../skills/karpathy-guidelines/SKILL.md) を参照すること。LLM コーディング特有の落とし穴（過剰実装・想定の隠蔽・周辺コードの勝手な改変・曖昧な完了宣言など）を抑える行動規約。
+
+主要原則の要点（詳細は SKILL.md）:
+- **Think Before Coding**: 想定は明示し、不明点は黙って解釈せず質問する
+- **Simplicity First**: 依頼範囲を超える機能・抽象・エラーハンドリングを足さない
+- **Surgical Changes**: 触らなければいけない箇所だけを編集する。隣接コードの「ついで改善」禁止
+- **Verifiable Success Criteria**: 完了条件を実測可能な形（test pass / build green / 出力一致など）で定義する
+
+サブエージェントへ作業を委譲する際は、プロンプトに本ガイドラインへの遵守を明記する。
+
+## 出力フォーマット（必読）
+
+メインエージェントは各作業ステップで「Why × 5 階層 / 現在行っていること / 他の選択肢を取らなかった理由」の 3 点を必ず明示する。詳細は [`why-x5-output.md`](./why-x5-output.md)。`.claude/hooks/why-x5-reminder.sh` が UserPromptSubmit hook で本ルールを毎ターン強制する。
+
 ## TDD（テスト駆動開発）
 
 すべての実装はTDDで進める。

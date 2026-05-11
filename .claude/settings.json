@@ -218,6 +218,18 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/why-x5-reminder.sh",
+            "timeout": 3,
+            "statusMessage": "Why × 5 出力ルール注入中..."
+          }
+        ]
+      }
     ]
   }
 }
