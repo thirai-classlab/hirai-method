@@ -21,6 +21,10 @@
       "Write(./.claude/settings.json)",
       "Edit(./.claude/rules/**)",
       "Write(./.claude/rules/**)"
+    ],
+    "allow": [
+      "Edit(./.claude/mode.yml)",
+      "Write(./.claude/mode.yml)"
     ]
   },
   "hooks": {
@@ -215,6 +219,12 @@
             "command": "bash .claude/hooks/improvement-proposal.sh",
             "timeout": 5,
             "statusMessage": "改善提案を生成中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/mode-session-start.sh",
+            "timeout": 3,
+            "statusMessage": "HIRAI メソッド モード確認中..."
           }
         ]
       }
@@ -227,6 +237,12 @@
             "command": "bash .claude/hooks/why-x5-reminder.sh",
             "timeout": 3,
             "statusMessage": "Why × 5 出力ルール注入中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/mode-enforce.sh",
+            "timeout": 3,
+            "statusMessage": "モードルール注入中..."
           }
         ]
       }
