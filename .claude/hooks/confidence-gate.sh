@@ -145,6 +145,21 @@ extract_tool_response_text() {
 # === transcript path 取得 ===
 transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
 
+# === subagent transcript 解決 ===
+# SubagentStop hook に渡される transcript_path は親セッションの JSONL を指すことがある。
+# 実際のサブエージェント応答は <parent_stem>/subagents/agent-<id>.jsonl に書かれる。
+# agent_id が SubagentStop JSON に含まれる場合は subagent ファイルを優先して読む。
+_cg_agent_id=$(printf '%s' "$input" | jq -r '.agent_id // empty' 2>/dev/null)
+if [ -n "$_cg_agent_id" ] && [ -n "$transcript" ] && [ "$transcript" != "null" ]; then
+  # transcript_path の stem ディレクトリを基点に subagents/ を探す
+  _cg_stem="${transcript%.jsonl}"
+  _cg_subagent_file="${_cg_stem}/subagents/agent-${_cg_agent_id}.jsonl"
+  if [ -f "$_cg_subagent_file" ]; then
+    transcript="$_cg_subagent_file"
+  fi
+fi
+unset _cg_agent_id _cg_stem _cg_subagent_file
+
 # === sidechain 判定 ===
 # Claude Code のサブエージェント transcript は path に "/subagents/" を含むか
 # 各レコード内 "isSidechain": true を持つ。判定して bypass.log に記録するが、
