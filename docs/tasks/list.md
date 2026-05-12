@@ -20,7 +20,7 @@
 
 | # | ステータス | Phase | 概要 | 依存 | 詳細 |
 |:---:|:---:|:---|:---|:---|:---|
-| 1 | 🔄 | workflow-enforcement | W1-W5 umbrella: 設計レビュー fan-out / テスト設計 MECE / workflow 強制 / リファクタリング強制 (W1-W4 完了 @ 2026-05-12、W4 smoke 8/8 PASS @ commit `555b0ee`、W5 着手予定、W6 は `asana off` により out-of-scope) | — | [task-1-workflow-enforcement.md](task-1-workflow-enforcement.md) |
+| 1 | ✅ | workflow-enforcement | W1-W5 umbrella: 設計レビュー fan-out / テスト設計 MECE / workflow 強制 / リファクタリング強制 (W1-W5 全完了 @ 2026-05-12、W4 smoke 8/8 PASS @ commit `555b0ee`、W5 @ commit `b8084c8`+`0ff9654`、W6 は `asana off` により out-of-scope) | — | [task-1-workflow-enforcement.md](task-1-workflow-enforcement.md) |
 
 <!--
 記入ルール:
