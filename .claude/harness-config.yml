@@ -121,7 +121,7 @@ improvement_proposal_dedup_hours: 24
 # === Context Budget (Loop モード用) ===
 # UserPromptSubmit hook (.claude/hooks/context-budget.sh) が消費。
 # Loop モード稼働中、context 使用率が閾値を超えた時点で <system-reminder> を
-# 注入し、メインに `/sc:save` 実行 + セッション再開提案を強制する。Normal モードでは no-op。
+# 注入し、メインに `/save-state` 実行 + セッション再開提案を強制する。Normal モードでは no-op。
 #
 # - context_budget_enabled:   false で hook を完全停止 (Normal モードと等価動作)
 # - context_budget_limit:     context window サイズ (tokens)。

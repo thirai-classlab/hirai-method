@@ -3,7 +3,7 @@
 #
 # 役割:
 #   Loop モード稼働中、context 使用率が閾値 (default 60%) を超えた時点で
-#   <system-reminder> を注入してメインに `/sc:save` 実行 + セッション再開
+#   <system-reminder> を注入してメインに `/save-state` 実行 + セッション再開
 #   提案を強制する。Normal モードでは no-op。
 #
 # 仕組み:
@@ -167,15 +167,15 @@ used_k=$(awk -v u="$context_used" 'BEGIN { printf "%.0f", u / 1000 }')
 case "$tier" in
   "95")
     urgency="CRITICAL"
-    action_verb="**即座に** \`/sc:save\` を実行"
+    action_verb="**即座に** \`/save-state\` を実行"
     ;;
   "80")
     urgency="URGENT"
-    action_verb="**この応答内で** \`/sc:save\` を実行"
+    action_verb="**この応答内で** \`/save-state\` を実行"
     ;;
   *)
     urgency="NOTICE"
-    action_verb="\`/sc:save\` を実行"
+    action_verb="\`/save-state\` を実行"
     ;;
 esac
 
@@ -192,9 +192,9 @@ Loop モード稼働中に context limit の ${tier}% を超過しました。�
 2. 完了後、以下のフォーマットでユーザに **明示的に** 再開を提案する:
 
    > Context 使用率が ${ratio_pct}% に到達しました。Loop モード継続のため
-   > \`/sc:save\` でセッション状態を保存しました。
+   > \`/save-state\` でセッション状態を保存しました。
    >
-   > **推奨**: 新しいセッションを開始して \`/sc:load\` で復元するか、
+   > **推奨**: 新しいセッションを開始して \`/resume-state\` で復元するか、
    > このまま継続する場合は context limit 到達まで残りわずかな点に留意してください。
    >
    > 続行 / 新セッション開始 のいずれを希望しますか?
