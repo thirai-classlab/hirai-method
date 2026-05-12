@@ -237,7 +237,7 @@ fi
 | 日付 | 承認者 | 結果 |
 |---|---|---|
 | 2026-05-12 | user | inline 提案 (4 要件 + 命名候補 + Wave 構成) を「問題ありません。A」で承認 → 本 draft 物化 |
-| YYYY-MM-DD | user | (本 draft 物化 + 各 Wave 詳細を user 再確認、修正不要なら最終承認 → `/new-task 7 custom-pm-commands` 起動) |
+| 2026-05-12 | user | 物化 draft §1-§9 全体を「承認します。」で最終承認 → `/new-task 7 custom-pm-commands` 起動 → W1-W6 実装着手 |
 
 ---
 
