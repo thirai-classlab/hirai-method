@@ -56,12 +56,12 @@ case_4() {
   grep -q '/resume-state' "$hook"
 }
 
-# Case 5: 残存 /sc:(save|load|pm) が 「draft / task spec / list.md / 後継 command 自身 / .serena memories」 のみ
+# Case 5: 残存 /sc:(save|load|pm) が 「draft / task spec / list.md / 後継 command 自身 / .serena memories / workflow.md predecessor 記述」 のみ
 case_5() {
   local found
   found=$(cd "$PROJECT_ROOT" && grep -rlE '/sc:(save|load|pm)' \
     --include='*.md' --include='*.sh' --include='*.yml' . 2>/dev/null | \
-    grep -vE '(docs/draft/custom-pm-commands\.md|docs/tasks/task-7-custom-pm-commands\.md|docs/tasks/list\.md|\.claude/commands/(save-state|resume-state|pm-start)\.md|^\./\.serena/)' || true)
+    grep -vE '(docs/draft/custom-pm-commands\.md|docs/tasks/task-7-custom-pm-commands\.md|docs/tasks/list\.md|\.claude/commands/(save-state|resume-state|pm-start)\.md|\.claude/rules/workflow\.md|^\./\.serena/)' || true)
   [ -z "$found" ]
 }
 
