@@ -264,6 +264,48 @@ honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry �
 - [`.claude/tests/next-actions-hooks-smoke.sh`](../tests/next-actions-hooks-smoke.sh) (W6, 9/9 PASS)
 - 設計起源: [`docs/draft/byproduct-discharge-mechanism.md`](../../docs/draft/byproduct-discharge-mechanism.md)
 
+## Loop モード自律規律
+
+タスク実装中・Loop モード稼働中の「subagent 完了待ち停止」「破壊的操作の自律実行」を **5 層強制** で構造防止する。詳細は [`modes.md`](./modes.md) 遵守事項 7+8 参照。設計の経緯と承認履歴は採用プロジェクト側の `docs/draft/` を参照 (本ルールは `.claude/` 単独で portable)。
+
+### 5 層強制機構
+
+| 層 | 機構 | 発火 | 動作 |
+|---|---|---|---|
+| 1 | `.claude/rules/modes.md` 遵守事項 7+8 | (規範) | subagent 待ち中独立作業義務 + 自律禁止 11 カテゴリ明文化 |
+| 2 | `.claude/hooks/loop-auto-progress-reminder.sh` (UserPromptSubmit) | 毎ターン | 待ち中報告キーワード検出 + pending Agent tool_use 数集計 → `<system-reminder>` 強制注入 |
+| 3 | `.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) | Bash 実行前 | 11 カテゴリ regex 照合 → Loop なら `{"decision":"block"}` / Normal なら context 注入 |
+| 4 | `.claude/settings.json` 配線 | (機構接続) | UserPromptSubmit 末尾 + PreToolUse Bash 先頭に配置 |
+| 5 | `.claude/tests/loop-auto-progress-smoke.sh` | 検証 | 9 ケースで両 hook の動作検証 |
+
+### 禁止 11 カテゴリ (default、`HC_AUTONOMOUS_ACTION_PATTERNS` で上書き可)
+
+- remote 反映: `git push` (any branch)
+- PR / リリース: `gh pr (create|merge)` / `gh release` / `git tag <name> origin|upstream`
+- 第三者リポ: `gh repo (delete|transfer|archive)`
+- 本番 deploy: `vercel --prod` / `supabase deploy` / `supabase db (push|reset)`
+- infra apply: `kubectl (apply|delete)` / `terraform (apply|destroy)`
+- AWS 破壊操作: `aws *-delete-*|terminate-*|destroy-*`
+
+### bypass
+
+| 経路 | env | スコープ | 痕跡 |
+|---|---|---|---|
+| autonomous-action-guard 無効化 | `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` | 1 セッション | bypass.log (autonomous-action-guard 行) |
+| config レベル OFF | `HC_AUTONOMOUS_ACTION_ENABLED=false` | 1 セッション | bypass.log |
+| reminder 無効化 | `HC_LOOP_AUTO_PROGRESS_ENABLED=false` | 1 セッション | (記録なし、reminder のみ) |
+| パターン上書き | `HC_AUTONOMOUS_ACTION_PATTERNS=...` | env-set 中 | 上書き内容は env のみ |
+
+honor system: bypass 時は理由を `docs/tasks/<task-N>.md` または `ECC_BYPASS_REASON` env に記録すること。
+
+### 関連 artifact
+
+- [`.claude/rules/modes.md`](./modes.md) 遵守事項 7 (subagent 待ち独立作業) + 8 (自律禁止リスト)
+- [`.claude/hooks/loop-auto-progress-reminder.sh`](../hooks/loop-auto-progress-reminder.sh) (W2)
+- [`.claude/hooks/autonomous-action-guard.sh`](../hooks/autonomous-action-guard.sh) (W3)
+- [`.claude/tests/loop-auto-progress-smoke.sh`](../tests/loop-auto-progress-smoke.sh) (W5)
+- 設計の起源と承認履歴は採用プロジェクト側 `docs/draft/` / `docs/tasks/` を参照
+
 ## 関連ルール / skill
 
 - [`development-process.md`](./development-process.md) — TDD / サブエージェント委譲 / タスク管理 / 設計→承認→タスク追加フロー (本ルールの前段)
