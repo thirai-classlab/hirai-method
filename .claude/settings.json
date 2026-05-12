@@ -90,6 +90,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash .claude/hooks/autonomous-action-guard.sh",
+            "timeout": 5,
+            "statusMessage": "Loop モード自律実行可否検証中..."
+          },
+          {
+            "type": "command",
             "command": "bash .claude/hooks/delegation-guard.sh Bash",
             "timeout": 5,
             "statusMessage": "サブエージェント委譲ルール確認中..."
@@ -273,6 +279,12 @@
             "command": "bash .claude/hooks/context-budget.sh",
             "timeout": 5,
             "statusMessage": "Context 使用率チェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "Loop モード自律進行検証中..."
           }
         ]
       }
