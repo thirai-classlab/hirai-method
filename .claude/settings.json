@@ -225,6 +225,12 @@
             "command": "bash .claude/hooks/mode-session-start.sh",
             "timeout": 3,
             "statusMessage": "HIRAI メソッド モード確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/mode-asana-prompt.sh",
+            "timeout": 3,
+            "statusMessage": "Asana 連携モード確認中..."
           }
         ]
       }

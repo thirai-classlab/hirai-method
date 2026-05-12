@@ -13,3 +13,16 @@
 # 値解決の優先順 (高 → 低): env > YAML > default(normal)
 
 mode: loop
+
+# === Asana 利用モード ===
+# このプロジェクトで Asana 連携 (Asana タスク文脈取得 / docs/work.md 自動生成 / Slack スレ取込) を
+# 利用するかどうかを per-project で管理。
+#
+# 値:
+# - true   : Asana 連携 ON。/work-init, work-session-check.sh, Asana MCP 関連機能が有効
+# - false  : Asana 連携 OFF。上記機能は no-op、ハーネスは Asana 抜きで動作 (OSS / 個人プロジェクト向け)
+# - (unset / null) : 未決定。SessionStart hook (mode-asana-prompt.sh) が user に 1 度だけヒアリング
+#
+# 切替: slash command `/mode asana on` / `/mode asana off` でも更新可能
+# 上書き env: `HC_ASANA_ENABLED=true` / `=false`
+asana_enabled:
