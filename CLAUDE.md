@@ -59,6 +59,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 |--------------|---------|------|
 | [`development-process.md`](.claude/rules/development-process.md) | `src/**`, `scripts/**`, `tests/**`, `docs/tasks/**`, `docs/draft/**` | TDD、委譲、指摘対応、タスク管理、設計→承認フロー |
 | [`self-improvement.md`](.claude/rules/self-improvement.md) | (常時参照) | L1〜L5 自己改善 + F1/F2 事実検証の使い分け規約 |
+| [`workflow.md`](.claude/rules/workflow.md) | `docs/draft/**`, `docs/tasks/**`, `.claude/commands/**`, `.claude/hooks/workflow-guard.sh`, `.claude/.workflow-state/**` | workflow 強制 (test-design / design-review / module-review / system-review / new-feature / modify-feature / workflow-guard) |
 | `<追加ルール 1>` | `<対象 path>` | `<内容>` |
 | `<追加ルール 2>` | `<対象 path>` | `<内容>` |
 
@@ -109,6 +110,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 | 自己改善 L5 (Introspect) | `/agent-introspect` |
 | 事実検証 F1 (GateGuard) | `/gate-status` `/gate-clear` `/gate-bypass` |
 | 事実検証 F2 (Verify) | `/verify` |
+| Workflow 強制 (W1-W4) | `/test-design` `/design-review` `/module-review` `/system-review` `/new-feature` `/modify-feature` |
 | 監査 | `/harness-audit` |
 
 詳細: [`docs/SELF_IMPROVEMENT.md`](docs/SELF_IMPROVEMENT.md)
