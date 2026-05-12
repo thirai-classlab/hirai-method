@@ -243,6 +243,12 @@
             "command": "bash .claude/hooks/mode-enforce.sh",
             "timeout": 3,
             "statusMessage": "モードルール注入中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/context-budget.sh",
+            "timeout": 5,
+            "statusMessage": "Context 使用率チェック中..."
           }
         ]
       }

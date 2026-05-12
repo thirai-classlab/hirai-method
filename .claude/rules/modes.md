@@ -24,6 +24,13 @@ HIRAI メソッドは 2 つの動作モードを持つ。
    - コミットメッセージは Conventional Commits 形式（`feat:` `fix:` `refactor:` 等）
    - これにより失敗時に `git revert <sha>` や `git reset --hard <sha>` で **戻せる**
    - 巨大コミット（複数機能を 1 つに混ぜる）は禁止 — 復旧粒度が失われるため
+6. **Context 使用率の自動監視と保存**（必須）: `context-budget.sh` hook が毎ターン context 使用率を監視する
+   - 使用率が **60% / 80% / 95%** の各 tier を初めて超えた時、`<system-reminder>` で警告が注入される
+   - 警告を受けたメインは **このターン内で必ず `/sc:save` を実行** してセッション状態を永続化
+   - 続けてユーザに「新セッションで `/sc:load` で復元するか継続するか」を提案する
+   - 同一 tier は 1 セッションあたり 1 度のみ発火（spam 防止）
+   - 閾値は `.claude/harness-config.yml` の `context_budget_threshold` で変更可能
+   - 一時無効化: `HC_CONTEXT_BUDGET_ENABLED=false`
 
 **停止条件は以下 3 つのみ**:
 - ユーザの明示的な停止指示（"stop" / "ストップ" / "止めて" 等）
@@ -54,8 +61,9 @@ mode: normal  # または loop
 |---|---|---|
 | `.claude/hooks/mode-session-start.sh` | SessionStart | 現モード表示 / normal 時に切替提案 |
 | `.claude/hooks/mode-enforce.sh` | UserPromptSubmit | Loop モード時に毎ターン遵守事項を再注入 |
+| `.claude/hooks/context-budget.sh` | UserPromptSubmit | Loop モード時に context 使用率を監視し、60/80/95% 超で `/sc:save` 実行 + 再開提案を強制 |
 
-両者とも `.claude/hooks/lib/mode-loader.sh` で現モードを解決する。
+全て `.claude/hooks/lib/mode-loader.sh` で現モードを解決する（Normal モードでは全て no-op）。
 
 ## モードと既存ルールの関係
 
