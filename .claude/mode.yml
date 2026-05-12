@@ -25,4 +25,4 @@ mode: loop
 #
 # 切替: slash command `/mode asana on` / `/mode asana off` でも更新可能
 # 上書き env: `HC_ASANA_ENABLED=true` / `=false`
-asana_enabled:
+asana_enabled: false
