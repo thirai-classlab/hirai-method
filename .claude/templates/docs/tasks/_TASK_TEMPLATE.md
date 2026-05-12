@@ -1,3 +1,14 @@
+---
+# optional. format: https://app.asana.com/0/<project_id>/<task_id>
+asana_url: ""
+# optional. array of Slack permalinks (https://<workspace>.slack.com/archives/<channel>/p<timestamp>)
+slack_urls: []
+# optional. ISO-8601 date (例: 2026-06-01)
+deadline: ""
+# optional. 依頼者名 (Asana 連携 off プロジェクトでは空のままで OK)
+requester: ""
+---
+
 # Task #<ID>: <タスク名>
 
 > Status: **draft (要承認)** | **🔲 未着手** | **🔄 進行中** | **✅ 完了**
