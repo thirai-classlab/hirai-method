@@ -136,12 +136,21 @@ case "$tool" in
     fi
 
     # 各セグメントを抽出 (; && || | で分割)
-    segments=$(printf '%s' "$cmd" | awk '
-      BEGIN { RS=""; }
-      {
-        gsub(/&&|\|\||;|\|/, "\n", $0);
-        print $0;
-      }')
+    # === segment splitter ===
+    # Bash コマンドを &&, ||, ;, | で分割して各セグメントを whitelist 照合する。
+    # W1 関数化 (task #8): behavior preserving、subshell 隔離 (set -uo pipefail)。
+    # heredoc 本文 (<<EOF ... EOF) は単行解析の限界で未対応 (B フル parser 化で将来対応)。
+    # 検証: .claude/tests/delegation-guard-segment-smoke.sh Case 1-6
+    split_command_segments() (
+      set -uo pipefail
+      printf '%s' "$1" | awk '
+        BEGIN { RS=""; }
+        {
+          gsub(/&&|\|\||;|\|/, "\n", $0);
+          print $0;
+        }'
+    )
+    segments=$(split_command_segments "$cmd")
 
     all_allowed="true"
     bad_segment=""
