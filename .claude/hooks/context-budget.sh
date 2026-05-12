@@ -154,8 +154,11 @@ elif [ "$tier" = "80" ]; then
   esac
 fi
 
-# tier を marker に追記
-printf '%s|%s|' "$already_warned" "$tier" >> "$state_file" 2>/dev/null
+# tier を marker に書き出し
+# `already_warned` 末尾の `|` を保ち、`<existing>|<tier>|` 形式で **上書き** する。
+# `>>` (append) ではなく `>` (write) を使うのは、`already_warned` を再度
+# 書き出すので append すると `|60||60||80|` のように重複するため。
+printf '%s|%s|' "$already_warned" "$tier" > "$state_file" 2>/dev/null
 
 # --- 警告メッセージ生成 ---
 limit_k=$(awk -v l="$context_limit" 'BEGIN { printf "%.0f", l / 1000 }')
