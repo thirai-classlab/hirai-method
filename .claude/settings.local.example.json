@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Template for .claude/settings.local.json. Copy this file to settings.local.json and fill in real secrets. settings.local.json is gitignored. Required env keys are referenced by .mcp.json (GITHUB_PAT / ASANA_PAT / SLACK_MCP_XOXP_TOKEN / SLACK_MCP_ADD_MESSAGE_TOOL). Other keys are optional, used by additional MCP servers or tooling.",
+  "env": {
+    "GITHUB_PAT": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "SLACK_MCP_XOXB_TOKEN": "xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx",
+    "SLACK_MCP_XOXP_TOKEN": "xoxp-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "SLACK_MCP_CHANNEL_ID": "C0XXXXXXXXX",
+    "SLACK_MCP_ADD_MESSAGE_TOOL": "true",
+    "SALESFORCE_CONNECTION_TYPE": "User_Password",
+    "SALESFORCE_USERNAME": "you@example.com",
+    "SALESFORCE_PASSWORD": "REPLACE_WITH_PASSWORD",
+    "SALESFORCE_TOKEN": "REPLACE_WITH_SECURITY_TOKEN",
+    "SALESFORCE_INSTANCE_URL": "https://login.salesforce.com",
+    "ASANA_PAT": "1/xxxxxxxxxxxxxxxx:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "permissions": {
+    "allow": []
+  }
+}

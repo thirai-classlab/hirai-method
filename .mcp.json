@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PAT}"
+      }
+    },
+    "agent-browser": {
+      "command": "npx",
+      "args": ["-y", "@vercel/agent-browser", "mcp"]
+    },
+    "asana-pat": {
+      "command": "npx",
+      "args": ["-y", "@roychri/mcp-server-asana"],
+      "env": {
+        "ASANA_ACCESS_TOKEN": "${ASANA_PAT}"
+      }
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
+      "env": {
+        "SLACK_MCP_XOXP_TOKEN": "${SLACK_MCP_XOXP_TOKEN}",
+        "SLACK_MCP_ADD_MESSAGE_TOOL": "${SLACK_MCP_ADD_MESSAGE_TOOL}"
+      }
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant"
+      ]
+    }
+  }
+}
