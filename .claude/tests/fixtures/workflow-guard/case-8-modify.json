@@ -1,0 +1,23 @@
+{
+  "slug": "smoke-modify",
+  "workflow_type": "modify",
+  "current_stage": "system-review",
+  "completed_stages": [
+    "branch-decision",
+    "checkout",
+    "recover-design",
+    "pre-test",
+    "redesign",
+    "retest-design",
+    "tdd",
+    "module-review",
+    "full-test"
+  ],
+  "pending_findings": {
+    "module_review": [],
+    "system_review": []
+  },
+  "skip_log": [],
+  "created_at": "2026-05-12T09:00:00Z",
+  "updated_at": "2026-05-12T16:00:00Z"
+}
