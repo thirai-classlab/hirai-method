@@ -24,6 +24,29 @@ else
   MODE="normal"
 fi
 
+# --- Session resume prompt (W2 of task #7) ---
+# Serena memory に session/context が存在する場合、user に /resume-state 実行を提案する。
+# Serena は memory key (slash 区切り) を `.serena/memories/<key>.md` に保存する。
+# 失敗時は silent (hook 全体は exit 0)。
+SESSION_CONTEXT_FILE=".serena/memories/session/context.md"
+if [ -f "$SESSION_CONTEXT_FILE" ]; then
+  cat <<'EOF'
+<system-reminder>
+**前回セッション状態を検出しました**
+
+`.serena/memories/session/context.md` に前回 session の snapshot が保存されています。
+
+続きから作業する場合は、最初の応答で **必ず以下を 1 度だけ提案** してください:
+
+> 「前回セッション状態が見つかりました。続きから作業しますか?
+>   - はい → `/resume-state` (または `/pm-start`) を実行
+>   - いいえ → 新規 prompt で作業開始 (前回状態は破棄せず保持)」
+
+ユーザが拒否 / 無視した場合は新規 session として開始してください (再提案は不要)。
+</system-reminder>
+EOF
+fi
+
 if [ "$MODE" = "loop" ]; then
   cat <<'EOF'
 <system-reminder>
