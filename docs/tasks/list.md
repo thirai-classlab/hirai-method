@@ -5,6 +5,7 @@
 >
 > **保留・今後検討タスク**は [`parking-lot.md`](parking-lot.md) で管理。
 > **設計（未承認）**は [`../draft/`](../draft/) で管理し、承認後にここへ追加。
+> **副産物 / 派生 task 候補**（informal な TODO / 次アクション）は [`next-actions.md`](next-actions.md) で管理。設計起こし or parking-lot 移行 or 無視 の判断前段。
 
 ## 凡例
 
