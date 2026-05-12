@@ -99,6 +99,12 @@
             "command": "bash .claude/hooks/gateguard.sh Bash",
             "timeout": 5,
             "statusMessage": "GateGuard 破壊的コマンド検査中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/workflow-guard.sh Bash",
+            "timeout": 5,
+            "statusMessage": "Workflow 完了条件検証中..."
           }
         ]
       },
