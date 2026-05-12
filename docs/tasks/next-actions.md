@@ -43,10 +43,10 @@ next-actions.md からエントリ削除（移行先を「処理結果」列に�
 
 | # | 記録日 | タイトル | 発生源 | 緊急度 | 推奨処理 | 処理結果 |
 |---:|---|---|---|:---:|---|---|
-| 1 | 2026-05-12 | PR 作成 (`feat/loop-mode` → `main`) — 本セッション 18 commits の merge 動線 | 本セッション task #1 完了 (HEAD `b58bbf0`) | 🔴 | (a) draft 起こし or (c) 直 `gh pr create` | — |
-| 2 | 2026-05-12 | context-budget hook の実発火検証 — CB-verify 修正 (`5846925`) の運用効果観察 | 本セッション CB-verify (#9) | 🟡 | (a) draft 起こし `context-budget-hook-verification` | — |
-| 3 | 2026-05-12 | CLAUDE.md `Critical Operational Lessons` に教訓 2 件転載 — 並列 subagent git 競合 / `set -e` leak in sourced libs | 本セッション feedback memory 保存時 | 🟡 | (a) draft 起こし `critical-lessons-transfer` | — |
-| 4 | 2026-05-12 | **副産物 discharge 機構の本格実装** — `_TASK_TEMPLATE.md` 拡張 + `workflow-guard.sh` 拡張 + `/discharge-byproduct` command 新設 + `.claude/rules/workflow.md` セクション追加 | 本セッション「タスク管理されていない」指摘 | 🔴 | (a) draft 起こし `byproduct-discharge-mechanism` | — |
+| 1 | 2026-05-12 | PR 作成 (`feat/loop-mode` → `main`) — 本セッション 18 commits の merge 動線 | 本セッション task #1 完了 (HEAD `b58bbf0`) | 🔴 | (a) draft 起こし or (c) 直 `gh pr create` | ✅ → [`docs/draft/create-pr-feat-loop-mode.md`](../draft/create-pr-feat-loop-mode.md) → [task #2](task-2-create-pr-feat-loop-mode.md) (2026-05-12) |
+| 2 | 2026-05-12 | context-budget hook の実発火検証 — CB-verify 修正 (`5846925`) の運用効果観察 | 本セッション CB-verify (#9) | 🟡 | (a) draft 起こし `context-budget-hook-verification` | ✅ → [`docs/draft/context-budget-hook-verification.md`](../draft/context-budget-hook-verification.md) → [task #3](task-3-context-budget-hook-verification.md) (2026-05-12) |
+| 3 | 2026-05-12 | CLAUDE.md `Critical Operational Lessons` に教訓 2 件転載 — 並列 subagent git 競合 / `set -e` leak in sourced libs | 本セッション feedback memory 保存時 | 🟡 | (a) draft 起こし `critical-lessons-transfer` | ✅ → [`docs/draft/critical-lessons-transfer.md`](../draft/critical-lessons-transfer.md) → [task #4](task-4-critical-lessons-transfer.md) (2026-05-12) |
+| 4 | 2026-05-12 | **副産物 discharge 機構の本格実装** — `_TASK_TEMPLATE.md` 拡張 + `workflow-guard.sh` 拡張 + `/discharge-byproduct` command 新設 + `.claude/rules/workflow.md` セクション追加 | 本セッション「タスク管理されていない」指摘 | 🔴 | (a) draft 起こし `byproduct-discharge-mechanism` | ✅ → [`docs/draft/byproduct-discharge-mechanism.md`](../draft/byproduct-discharge-mechanism.md) → [task #5](task-5-byproduct-discharge-mechanism.md) (2026-05-12、本セッションで W1+W3+W6 着手中) |
 | 5 | 2026-05-12 | classlab_salesforce-mail 修復 — `docs/draft/mail-message-status.md` 承認 + `/new-task 2` 起動 + task #1 W8 残作業完了 | 別リポ調査結果 | 🟢 | **本リポ管理外**（別リポ側で対応） | — |
 
 ## ルール（運用）
