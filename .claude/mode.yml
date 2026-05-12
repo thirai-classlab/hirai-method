@@ -12,4 +12,4 @@
 # `HC_MODE=loop` で本ファイル値を上書き可能（一時切替向け）。
 # 値解決の優先順 (高 → 低): env > YAML > default(normal)
 
-mode: normal
+mode: loop
