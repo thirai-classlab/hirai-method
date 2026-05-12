@@ -34,6 +34,7 @@
 | **新規 command に共通 frontmatter + Phase 構造スケルトン強制** | code-arch H1 | draft 内に 7 command 共通スケルトンを追記 (description / 使い方 / 引数 / Phase 1〜N / 制約 / 関連) |
 | **W4b 統合**: `/module-review` `/system-review` は workflow command の前段 (W3) に位置付け | arch-rev H1 (W4/W4b 依存逆転) | W3 で module/system-review、W4 で workflow command。元 W4b は廃止 (内容を W3 に統合) |
 | **CRITICAL 独立 hot-fix**: `.claude/settings.local.json` の blanket `"Bash"` `"Edit"` `"Write"` 削除 | sec-rev C2 | 本 draft の scope 外だが実装前に必須。Out-of-band の 1 commit で別途修正 |
+| **Asana 利用 mode を session 開始時ヒアリング + `.claude/mode.yml` に永続化** | user 追加要件 (2026-05-12) | `.claude/mode.yml` に `asana_enabled: <true\|false\|null>` 追加。null/unset の初回 session で `/mode-init-prompt` 相当の SessionStart hook が user にヒアリング → 結果を yml に書く。Asana 非利用プロジェクトでは W6 と全 Asana/Slack 関連機能 (`/work-init`, work-session-check.sh) を自動 disable。`/mode asana on\|off` で切替可能。これにより HIRAI ハーネスは Asana 利用部署と OSS / 個人プロジェクトで同一ハーネス使用可能となる |
 
 未反映で v3 (将来) 検討対象: MEDIUM-1 (DRAFT_TEMPLATE 破壊的変更を _FEATURE_DRAFT_TEMPLATE に分離) / MEDIUM-3 (MECE 20 カテゴリのサイズ別段階適用) / その他 MEDIUM/LOW 計 24 件 — 実装中に都度判断。
 
