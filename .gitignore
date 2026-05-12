@@ -5,6 +5,8 @@
 *.pem
 *.key
 
+
+
 # Claude Code state
 .claude/.gateguard-state/
 .claude/.taskguard-state/
@@ -30,3 +32,6 @@ node_modules/
 Thumbs.db
 .vscode/
 .idea/
+
+.serena/
+.docs/
