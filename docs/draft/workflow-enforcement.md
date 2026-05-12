@@ -1,18 +1,43 @@
-# HIRAI メソッド Workflow Enforcement（設計レビュー fan-out + テスト設計 MECE + Asana/work.md 連携）
+# HIRAI メソッド Workflow Enforcement（設計レビュー fan-out + テスト設計 MECE + workflow 強制 + リファクタリング強制）
 
-**ステータス:** 🔲 **draft（2026-05-12 起案、user 承認待ち）**
+**ステータス:** 🔲 **draft v2（2026-05-12 起案 / 2026-05-12 round-2 review 反映、user 承認待ち）**
 **起点:** user 依頼「ハーネスに組み込んでテストしてください」(2026-05-12)
 **前提:**
 - HIRAI メソッド Loop/Normal モード機構が稼働中（`.claude/rules/modes.md`）
 - 設計→承認→タスク追加フロー稼働中（`.claude/rules/development-process.md`）
-- Asana MCP / Slack MCP が `.mcp.json` で wire 済み
+- confidence-gate.sh が subagent transcript path を agent_id 経由で解決できる (commit 96da878 適用済)
+- Asana MCP / Slack MCP が `.mcp.json` で wire 済み（W6 で利用、それ以外の Wave は MCP 非依存）
 
 **関連 fixture / rule:**
 - `.claude/rules/development-process.md` — 既存 TDD・委譲・タスク管理ルール
 - `.claude/rules/modes.md` — Normal/Loop モード
 - `.claude/hooks/task-rule-guard.sh` — 既存タスク命名ガード
+- `.claude/hooks/confidence-gate.sh` — F3 subagent transcript path 解決 (round-2 で要修正済)
 - `.claude/commands/new-draft.md` / `new-task.md` / `start-task.md` / `finish-task.md`
-- `.mcp.json` — Asana / Slack MCP 接続定義
+- `.mcp.json` — Asana / Slack MCP 接続定義（W6 で利用）
+
+---
+
+## 0. v2 変更点（round-2 review 反映）
+
+3 reviewer (architect-reviewer / code-architect / security-reviewer) round-2 で合計 46 findings (CRITICAL 6 / HIGH 16 / MEDIUM 15 / LOW 9) を受領。本 v2 で **CRITICAL 6 + HIGH 主要項目** を反映:
+
+| 変更 | 反映元 finding | v2 修正概要 |
+|---|---|---|
+| **work.md を W1 (最初) から W6 (最後・optional) に降格** | arch-rev C1 (二重 SSoT) / sec-rev C1 (commit 時データ露出) / sec-rev H6 (prompt injection vehicle) | 既存 task-`<id>`-`<slug>`.md frontmatter にメタ情報を載せ work.md は補助。default `.gitignore`、commit はユーザ opt-in (`HIRAI_COMMIT_WORK_MD=true`)。SessionStart 注入時は外部コンテンツを sanitize し基本情報表のみ |
+| **workflow-guard.sh を grep 依存から `.claude/.workflow-state/<slug>.json` 構造化ステートに変更** | arch-rev C2 / code-arch C2 | step 番号は JSON フィールド、pending findings も JSON 配列。発火イベントは `PreToolUse(Bash)` の `/finish-task` 検知 (既存 task-rule-guard / gateguard と同パターン) |
+| **reviewer-registry を `.claude/lib/` 新設ではなく `harness-config.yml` のフラット配列に集約** | arch-rev H4 / code-arch C1 | `reviewer_registry_design`, `_security`, `_test`, `_impl` 4 キー、config-loader 既存パーサで読める形式。新パーサ実装不要 |
+| **Wave 順序を再構成: W1 = test-design (最低依存)、Asana 連携は最後 (W6, optional)** | arch-rev H2 / code-arch C2 dependency | W1 (MECE test-design) → W2 (design-review fan-out) → W3 (module/system-review) → W4 (new-feature/modify-feature command + workflow-guard.sh) → W5 (rule 文書化) → W6 (Asana/Slack 連携 + work.md) |
+| **全 env-var bypass を `bypass.log` に audit 記録** | sec-rev H3 | `ECC_*_OFF=1` と `HC_*_ENABLED=false` の両系統で session_id + timestamp + bypass 理由を log。`harness-audit` で集計参照 |
+| **slug 引数 / URL 引数を strict validation** | sec-rev H4 (URL injection) / H5 (slug path traversal) | slug: `^[a-z0-9][a-z0-9-]{2,48}$` (git branch 規約準拠)、Asana URL: `^https://app\.asana\.com/0/[0-9]+/[0-9]+$`、Slack URL: `^https://[a-z0-9-]+\.slack\.com/archives/[A-Z0-9]+/p[0-9]+$` |
+| **設定 14/10 step を共通 stage 名で抽象化** | arch-rev H3 (MECE 違反) | `.claude/lib/workflow-stages.yml` ではなく `harness-config.yml` の `workflow_stages_new` `workflow_stages_modify` フラット配列にステージ名列挙。workflow-guard.sh は stage 名で判定し step 番号を使わない |
+| **新規 command に共通 frontmatter + Phase 構造スケルトン強制** | code-arch H1 | draft 内に 7 command 共通スケルトンを追記 (description / 使い方 / 引数 / Phase 1〜N / 制約 / 関連) |
+| **W4b 統合**: `/module-review` `/system-review` は workflow command の前段 (W3) に位置付け | arch-rev H1 (W4/W4b 依存逆転) | W3 で module/system-review、W4 で workflow command。元 W4b は廃止 (内容を W3 に統合) |
+| **CRITICAL 独立 hot-fix**: `.claude/settings.local.json` の blanket `"Bash"` `"Edit"` `"Write"` 削除 | sec-rev C2 | 本 draft の scope 外だが実装前に必須。Out-of-band の 1 commit で別途修正 |
+
+未反映で v3 (将来) 検討対象: MEDIUM-1 (DRAFT_TEMPLATE 破壊的変更を _FEATURE_DRAFT_TEMPLATE に分離) / MEDIUM-3 (MECE 20 カテゴリのサイズ別段階適用) / その他 MEDIUM/LOW 計 24 件 — 実装中に都度判断。
+
+レビュー詳細: `~/.claude/projects/.../tasks/a6bd1076559c8c7f9.output` (architect-reviewer) / `a6190636a32bd7260.output` (code-architect) / `a001d82c42672c0f8.output` (security-reviewer)。要約は `docs/tasks/` 個別 task の「設計起源」に保管予定。
 
 ---
 
@@ -57,16 +82,20 @@ flowchart LR
 
 ## 3. 採用案の詳細設計（Wave / Sub-task 分割）
 
-| Wave | 内容 | 工数 | 効果 |
-|:---:|:---|---:|:---|
-| **W1** | `docs/work.md` template + `/work-init` command + Asana/Slack MCP 取得 helper + SessionStart 確認 hook | 0.7 | タスク文脈基盤確立 |
-| **W2** | `/design-review <slug>` command + reviewer registry + parallel Agent fan-out | 0.8 | 設計レビュー自動化 |
-| **W3** | `/test-design <slug>` command + MECE テストカタログ template + ユーザスコープ決定強制 | 0.7 | テスト設計の網羅性担保 |
-| **W4** | `/new-feature <slug>` `/modify-feature <slug>` command + workflow-guard.sh hook + 既存 `_DRAFT_TEMPLATE.md` を 4 design セクションに拡張 | 1.0 | 14/10 step workflow 強制 |
-| **W4b** | `/module-review <module>` `/system-review` command + refactoring-specialist 起動規約 + workflow-guard.sh で skip block | 0.6 | 持続可能性・汎用性・非冗長化の強制 |
-| **W5** | rule 文書化 (`workflow.md`) + CLAUDE.md 表更新 + smoke test | 0.4 | ハーネス自己整合性確保 |
+**v2 構造**（§0 「v2 変更点」参照、依存順に並べ替え済）:
 
-合計: **4.2 工数**
+| Wave | 内容 | 依存 | 工数 | 効果 |
+|:---:|:---|:---|---:|:---|
+| **W1** | `/test-design <slug>` command + MECE テストカタログ template (`.claude/templates/docs/draft/_TEST_DESIGN_TEMPLATE.md`) + ユーザスコープ決定強制 (`/new-task` 連動 block) | (独立) | 0.6 | テスト設計網羅性担保。最低依存・最大価値 |
+| **W2** | `/design-review <slug>` command + reviewer registry を `harness-config.yml` フラット配列で実装 + parallel Agent fan-out + 集約レポート `docs/draft/<slug>-review.md` | (独立) | 1.0 | 設計レビュー自動化。reviewer-loader.sh で env override 対応 |
+| **W3** | `/module-review <module>` `/system-review` command + refactoring-specialist 起動規約 (持続可能性 / 汎用性 / 非冗長化 3 観点) + behavior-preserving 自動 diff チェック | W2 | 0.7 | 持続可能性・汎用性・非冗長化の強制 |
+| **W4** | `/new-feature <slug>` `/modify-feature <slug>` command + `workflow-guard.sh` (`PreToolUse(Bash) /finish-task` 検知 + `.claude/.workflow-state/<slug>.json` 参照) + `workflow_stages_new` `workflow_stages_modify` を harness-config.yml に追加 + `_TASK_TEMPLATE.md` frontmatter 拡張 (Asana URL / Slack URL / 期日 / 依頼者) | W3, _TASK_TEMPLATE | 1.2 | 14/10 step workflow 強制。step 番号でなく stage 名で判定 |
+| **W5** | `.claude/rules/workflow.md` 新設 (`development-process.md` 重複部分は参照リンクのみ) + `modes.md` に Loop 例外規約追記 + CLAUDE.md Rules/Commands 表更新 + smoke test | 全 Wave | 0.5 | ハーネス自己整合性確保 |
+| **W6** | `docs/work.md` template (default `.gitignore`、opt-in commit) + `/work-init` command (URL 厳格 validation、prompt-injection sanitize) + Asana/Slack MCP 取得 helper + work-session-check.sh (基本情報表のみ注入) | (optional) | 0.5 | タスク文脈基盤。Asana 連携任意化、core 機能は W1-W5 で完結 |
+
+合計: **4.5 工数** （v1 4.2 から +0.3、CRITICAL 修正吸収分）
+
+**重要**: 各 Wave の詳細セクション (§3 W1 詳細以下) は v1 順序のまま残存している。v2 順序適用時は **§0 変更点** の指示が優先される。次フェーズ (`/new-task` 化) で v2 順に並べ直す。
 
 ---
 
