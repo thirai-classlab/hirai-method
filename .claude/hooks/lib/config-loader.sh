@@ -114,7 +114,9 @@ CONTEXT_BUDGET_STATE_DIR \
 REVIEWER_REGISTRY_DESIGN \
 REVIEWER_REGISTRY_SECURITY \
 REVIEWER_REGISTRY_TEST \
-REVIEWER_REGISTRY_IMPL"
+REVIEWER_REGISTRY_IMPL \
+WORKFLOW_STAGES_NEW \
+WORKFLOW_STAGES_MODIFY"
 
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
@@ -164,6 +166,8 @@ HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer\ncode-architect'
 HC_REVIEWER_REGISTRY_SECURITY=$'security-auditor\nsecurity-reviewer'
 HC_REVIEWER_REGISTRY_TEST=$'tdd-guide\ntest-automator\nqa-expert'
 HC_REVIEWER_REGISTRY_IMPL=$'code-reviewer\nrefactoring-specialist'
+HC_WORKFLOW_STAGES_NEW=$'requirements\nbasic-design\ndetailed-design\ntest-design\ndesign-review\nuser-approval\ntask-creation\ntdd\nmodule-review\nlocal-test\nsystem-review\nci-cd\nscenario-test\nfinish'
+HC_WORKFLOW_STAGES_MODIFY=$'branch-decision\ncheckout\nrecover-design\npre-test\nredesign\nretest-design\ntdd\nmodule-review\nfull-test\nsystem-review'
 
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
@@ -329,6 +333,7 @@ export HC_CONTEXT_BUDGET_ENABLED HC_CONTEXT_BUDGET_LIMIT
 export HC_CONTEXT_BUDGET_THRESHOLD HC_CONTEXT_BUDGET_STATE_DIR
 export HC_REVIEWER_REGISTRY_DESIGN HC_REVIEWER_REGISTRY_SECURITY
 export HC_REVIEWER_REGISTRY_TEST HC_REVIEWER_REGISTRY_IMPL
+export HC_WORKFLOW_STAGES_NEW HC_WORKFLOW_STAGES_MODIFY
 
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper

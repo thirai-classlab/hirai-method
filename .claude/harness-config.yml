@@ -158,3 +158,21 @@ reviewer_registry_design: [architect, architect-reviewer, code-architect, api-de
 reviewer_registry_security: [security-auditor, security-reviewer, penetration-tester]
 reviewer_registry_test: [tdd-guide, test-automator, qa-expert, pr-test-analyzer]
 reviewer_registry_impl: [code-reviewer, refactoring-specialist, typescript-reviewer, python-reviewer, go-reviewer, rust-reviewer, csharp-reviewer, java-reviewer, kotlin-reviewer, cpp-reviewer, flutter-reviewer]
+
+# === Workflow Stages (W4 new-feature / modify-feature 強制用) ===
+# workflow-guard.sh が読み、`/finish-task <slug>` 時に
+# `.claude/.workflow-state/<slug>.json` の current_stage が以下配列の最終要素に達しているかを判定する。
+# stage 名はフラット配列で並べる (step 番号でなく stage 名で判定 — round-2 arch-rev H3 反映)。
+#
+# - workflow_stages_new:    /new-feature 14-stage オーケストレータ
+#   要件定義 → 基本設計 → 詳細設計 → テスト設計 → design-review fan-out →
+#   user 承認 → タスク化 → TDD → module-review → ローカルテスト →
+#   system-review → CI/CD → シナリオテスト → /finish-task
+# - workflow_stages_modify: /modify-feature 10-stage オーケストレータ
+#   ブランチ確定 → checkout → 既存設計回収 → pre-test → 設計改修 →
+#   テスト改修 → TDD → module-review → 全テスト → system-review
+#
+# env 上書き例:
+#   export HC_WORKFLOW_STAGES_NEW=$'requirements\nbasic-design\n...'   # 改行区切り
+workflow_stages_new: [requirements, basic-design, detailed-design, test-design, design-review, user-approval, task-creation, tdd, module-review, local-test, system-review, ci-cd, scenario-test, finish]
+workflow_stages_modify: [branch-decision, checkout, recover-design, pre-test, redesign, retest-design, tdd, module-review, full-test, system-review]
