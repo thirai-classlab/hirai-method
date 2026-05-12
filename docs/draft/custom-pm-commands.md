@@ -11,7 +11,7 @@
 **関連 fixture / rule:**
 - `.claude/commands/save-state.md` (新規予定)
 - `.claude/commands/resume-state.md` (新規予定)
-- `.claude/commands/orchestrate.md` (新規予定)
+- `.claude/commands/pm-start.md` (新規予定)
 - `.claude/hooks/mode-session-start.sh` (拡張対象)
 - `.claude/hooks/context-budget.sh` (`/sc:save` 言及置換対象)
 - `.claude/rules/modes.md` (context-budget 警告文の `/sc:save` 言及置換)
@@ -66,7 +66,7 @@ flowchart LR
 
 | Wave | 内容 | 工数 | 効果 |
 |:---:|:---|---:|:---|
-| **W1** | 3 markdown command 新設: `.claude/commands/save-state.md` / `resume-state.md` / `orchestrate.md` (Serena MCP 直接呼び出し含む) | 1.0 | 自前実装の core |
+| **W1** | 3 markdown command 新設: `.claude/commands/save-state.md` / `resume-state.md` / `pm-start.md` (Serena MCP 直接呼び出し含む) | 1.0 | 自前実装の core |
 | **W2** | `.claude/hooks/mode-session-start.sh` 拡張: Serena `list_memories` で `session/context` 存在確認 + resume prompt 注入 | 0.5 | UX 改善 |
 | **W3** | Serena 必須化: `.mcp.json` に required marker 追加 (Claude Code 仕様確認後、不可なら command 内 onboarding check で代用) + 全 command 内で `check_onboarding_performed` → `activate_project` 強制 | 0.5 | portability 完成 |
 | **W4** | 既存参照置換: `CLAUDE.md` / `.claude/rules/modes.md` / `.claude/hooks/context-budget.sh` / docs/* / memory/* の `/sc:save` `/sc:load` `/sc:pm` を 1:1 置換 | 0.7 | 全 SSoT 同期 |
@@ -81,7 +81,7 @@ flowchart LR
 - 対象ファイル (新規 3 件):
   - `.claude/commands/save-state.md`
   - `.claude/commands/resume-state.md`
-  - `.claude/commands/orchestrate.md`
+  - `.claude/commands/pm-start.md`
 
 #### 各 command の役割 (markdown body 仕様)
 
@@ -99,7 +99,7 @@ flowchart LR
 - 存在する key を逐次 `read_memory` で復元
 - 復元レポート: 前回 / 進捗 / 次アクション / 課題 の 4 項目
 
-**`/orchestrate` (`/sc:pm` 後継)**:
+**`/pm-start` (`/sc:pm` 後継)**:
 - Session Start Protocol (PM Agent と同等) を実行:
   1. `mcp__serena__check_onboarding_performed`
   2. `mcp__serena__list_memories` → `session/context` `session/last` 復元
@@ -108,7 +108,7 @@ flowchart LR
 - PDCA cycle の Plan / Do / Check / Act 各段階で `write_memory` を実行
 
 #### コマンド名衝突確認
-- `/save-state` `/resume-state` `/orchestrate` は既存 commands 一覧と非衝突 (確認方法: `Glob .claude/commands/*.md`)
+- `/save-state` `/resume-state` `/pm-start` は既存 commands 一覧と非衝突 (確認方法: `Glob .claude/commands/*.md`)
 
 ### W2 詳細
 
@@ -161,7 +161,7 @@ fi
 - `.claude/hooks/context-budget.sh`:
   - heredoc 内 `/sc:save` (4 箇所)
 - `docs/draft/*.md` / `docs/tasks/*.md` / memory/*.md:
-  - 言及多数、`/sc:save` → `/save-state`、`/sc:load` → `/resume-state`、`/sc:pm` → `/orchestrate` の 1:1 置換
+  - 言及多数、`/sc:save` → `/save-state`、`/sc:load` → `/resume-state`、`/sc:pm` → `/pm-start` の 1:1 置換
 
 #### 置換戦略
 - subagent に `replace_all` 委譲 (主要ファイル毎)
@@ -180,7 +180,7 @@ fi
 
 ### W6 詳細
 
-- `CLAUDE.md` Commands テーブル: `自前 PM / 永続化` row 新設、`/save-state` `/resume-state` `/orchestrate` 列挙
+- `CLAUDE.md` Commands テーブル: `自前 PM / 永続化` row 新設、`/save-state` `/resume-state` `/pm-start` 列挙
 - `.claude/rules/workflow.md`: 「Session 永続化と PM Orchestration」セクション新設 (副産物 discharge / Loop モード自律規律 と同 pattern)
 - `next-actions.md` entry #7 (`.claude/` 汎用化) の処理結果列に「→ task-7 で部分対応」追記
 
@@ -194,7 +194,7 @@ fi
 | `.mcp.json` required marker が Claude Code 仕様で未サポート | M | L | command 内 check で代用 (実装複雑度 +0.1h) |
 | 既存 `/sc:*` 参照置換漏れ → SuperClaude plugin 経由で動作するため stealth 化 | L | M | W5 smoke の grep 0 件 check で検出 |
 | Serena memory key schema (`session/*` `plan/*` 等) と新コマンドの key 不整合 | L | M | PM Agent spec の key schema を継承、CLAUDE.md に明文化 |
-| 新コマンド命名衝突 (`/orchestrate` 等) | L | L | `Glob .claude/commands/*.md` で事前確認 |
+| 新コマンド命名衝突 (`/pm-start` 等) | L | L | `Glob .claude/commands/*.md` で事前確認 |
 | SessionStart prompt の発火頻度過多 (毎セッション noise) | M | L | `session/context` 存在時のみ発火、user が「いいえ」選択時の state 記憶は実装複雑度大 → 初版は毎回表示 |
 
 ---
@@ -215,14 +215,14 @@ fi
 
 ## 6. 完了条件 (DoD)
 
-- [ ] `.claude/commands/save-state.md` / `resume-state.md` / `orchestrate.md` 3 ファイル新設
+- [ ] `.claude/commands/save-state.md` / `resume-state.md` / `pm-start.md` 3 ファイル新設
 - [ ] 各 command が Serena MCP `check_onboarding_performed` を初手で実行
 - [ ] `mode-session-start.sh` が前回 session memory 存在時に `<system-reminder>` で resume prompt 注入
 - [ ] `grep -r '/sc:save\|/sc:load\|/sc:pm' .` が 0 件 (本 draft / 完了済 task 除く)
 - [ ] `.claude/tests/custom-pm-commands-smoke.sh` 6/6 PASS
 - [ ] CLAUDE.md Commands テーブルに 3 新コマンド追加、`/sc:*` 言及削除
 - [ ] `.claude/rules/workflow.md` に「Session 永続化と PM Orchestration」セクション追加
-- [ ] 既存 PR #3 を merge 後の連続セッションで `/orchestrate` 起動 → 前 session 復元成功
+- [ ] 既存 PR #3 を merge 後の連続セッションで `/pm-start` 起動 → 前 session 復元成功
 
 ---
 

@@ -30,7 +30,7 @@ HIRAI ハーネスは `/sc:save` `/sc:load` `/sc:pm` (SuperClaude plugin 由来)
 
 | 案 | 内容 | 評価 |
 |---|---|---|
-| `/save-state` `/resume-state` `/orchestrate` | 動作が名前から自明、`/pm` 衝突回避 | **採用** (draft §3 推奨、user 承認済) |
+| `/save-state` `/resume-state` `/pm-start` | 動作が名前から自明、`/pm` 衝突回避 | **採用** (draft §3 推奨、user 承認済) |
 | `/checkpoint` `/restore` `/pm` | 短い、しかし `/pm` 衝突リスク | 却下 |
 
 ### Q2: 実装範囲
@@ -76,7 +76,7 @@ flowchart LR
 - 存在 key を逐次 `read_memory` 復元
 - 復元レポート: 前回 / 進捗 / 次アクション / 課題 の 4 項目
 
-**`.claude/commands/orchestrate.md`** (`/sc:pm` 後継):
+**`.claude/commands/pm-start.md`** (`/sc:pm` 後継):
 - Session Start Protocol 4 step (check_onboarding / list_memories / request 分析 / subagent 委譲)
 - PDCA cycle Plan/Do/Check/Act 各段階で `write_memory`
 
@@ -124,7 +124,7 @@ draft §3 W2 詳細参照。`~/.claude/projects/<hash>/memory/` の存在で res
 
 | Wave | 内容 | 工数 | 依存 | 状態 |
 |:---:|:---|---:|:---|:---:|
-| W1 | 3 markdown command 新設 (`.claude/commands/save-state.md` / `resume-state.md` / `orchestrate.md`) | 1.0h | — | 🔲 |
+| W1 | 3 markdown command 新設 (`.claude/commands/save-state.md` / `resume-state.md` / `pm-start.md`) | 1.0h | — | 🔲 |
 | W2 | `mode-session-start.sh` 拡張 (resume prompt) | 0.5h | W1 | 🔲 |
 | W3 | Serena 必須化 (onboarding check + `.mcp.json` 検証) | 0.5h | W1 | 🔲 |
 | W4 | 既存 `/sc:*` 参照置換 (CLAUDE.md / modes.md / context-budget.sh / docs / memory) | 0.7h | W1 | 🔲 |
@@ -151,7 +151,7 @@ draft §3 W2 詳細参照。`~/.claude/projects/<hash>/memory/` の存在で res
 
 | 範囲 | 詳細 |
 |---|---|
-| ファイル | `.claude/commands/save-state.md` (新規) / `.claude/commands/resume-state.md` (新規) / `.claude/commands/orchestrate.md` (新規) / `.claude/hooks/mode-session-start.sh` (拡張) / `.claude/hooks/context-budget.sh` (heredoc 置換) / `.claude/rules/modes.md` (遵守事項 6 置換) / `CLAUDE.md` (Autonomous Progression / Commands table 置換) / `.mcp.json` (required marker 検討) / `.claude/tests/custom-pm-commands-smoke.sh` (新規) / `.claude/rules/workflow.md` (Session 永続化セクション追加) / `docs/draft/*.md` / `docs/tasks/*.md` / `~/.claude/projects/.../memory/*.md` (`/sc:*` 1:1 置換) |
+| ファイル | `.claude/commands/save-state.md` (新規) / `.claude/commands/resume-state.md` (新規) / `.claude/commands/pm-start.md` (新規) / `.claude/hooks/mode-session-start.sh` (拡張) / `.claude/hooks/context-budget.sh` (heredoc 置換) / `.claude/rules/modes.md` (遵守事項 6 置換) / `CLAUDE.md` (Autonomous Progression / Commands table 置換) / `.mcp.json` (required marker 検討) / `.claude/tests/custom-pm-commands-smoke.sh` (新規) / `.claude/rules/workflow.md` (Session 永続化セクション追加) / `docs/draft/*.md` / `docs/tasks/*.md` / `~/.claude/projects/.../memory/*.md` (`/sc:*` 1:1 置換) |
 | migration | なし |
 | 環境変数 | 新規追加なし (既存 `HC_*` `ECC_*` の Serena 関連は要 verify) |
 | 互換性 | SuperClaude 未注入環境でも `.claude/` 単独動作可能に変化 (本 task の core 効果)。既存 `/sc:save` 等の Skill 呼出は merge 後 broken (代替 `/save-state` 等に置換完了するため許容) |
