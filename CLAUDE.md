@@ -103,6 +103,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 | カテゴリ | コマンド |
 |---|---|
 | タスク | `/init-tasks` `/new-draft` `/new-task` `/start-task` `/finish-task` `/task-bypass` |
+| Custom PM / Session | `/save-state` `/resume-state` `/pm-start` |
 | Git / レビュー | `/commit` `/reviewpr` |
 | 自己改善 L1 (Eval) | `/eval` |
 | 自己改善 L2 (GAN) | `/gan-design` `/gan-build` |

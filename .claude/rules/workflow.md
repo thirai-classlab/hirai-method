@@ -306,6 +306,48 @@ honor system: bypass 時は理由を `docs/tasks/<task-N>.md` または `ECC_BYP
 - [`.claude/tests/loop-auto-progress-smoke.sh`](../tests/loop-auto-progress-smoke.sh) (W5)
 - 設計の起源と承認履歴は採用プロジェクト側 `docs/draft/` / `docs/tasks/` を参照
 
+## Session 永続化と PM Orchestration
+
+`/sc:save` `/sc:load` `/sc:pm` (SuperClaude plugin) を `.claude/` 単独で portable な自前実装に置換。Serena MCP 必須化 + SessionStart resume prompt + PDCA cycle memory 永続化を統合。
+
+### 自前 command
+
+| command | 役割 | 主要 Serena tool |
+|---|---|---|
+| [`/save-state`](../commands/save-state.md) | session 状態を Serena memory に snapshot 保存 | `write_memory` |
+| [`/resume-state`](../commands/resume-state.md) | 前 session 状態を Serena memory から復元 | `list_memories` / `read_memory` |
+| [`/pm-start`](../commands/pm-start.md) | PM Agent orchestration + PDCA cycle 永続化 (Session Start Protocol 内包) | 全 memory API |
+
+### memory key schema
+
+- `session/context` — 完全 snapshot (TaskList / commits / artifact / 次アクション)
+- `session/last` — 1-2 段落要約
+- `session/checkpoint` — 進捗 checkpoint
+- `plan/<feature>/{hypothesis,architecture,rationale}` (PDCA Plan)
+- `execution/<feature>/{do,errors,solutions}` (PDCA Do)
+- `evaluation/<feature>/{check,metrics,lessons}` (PDCA Check)
+- `learning/{patterns,solutions,mistakes}/<name>` (PDCA Act)
+- `project/{context,architecture,conventions}` (project 全体理解)
+
+### Serena 必須化
+
+各 command の Phase 1 で `mcp__serena__check_onboarding_performed` を必須実行。未済時は graceful error で `/onboarding` 案内 + 終了。
+
+`.mcp.json` の `serena` entry は採用者側で個別登録 (Claude Code 標準には required marker 機構なし、command-level enforcement で代替)。
+
+### SessionStart 自動 resume
+
+`.claude/hooks/mode-session-start.sh` が `.serena/memories/session/context.md` 存在時に `<system-reminder>` で `/resume-state` 提案を自動注入 (W2)。手動入力不要で前 session からの継続が可能。
+
+### 関連 artifact
+
+- [`.claude/commands/save-state.md`](../commands/save-state.md)
+- [`.claude/commands/resume-state.md`](../commands/resume-state.md)
+- [`.claude/commands/pm-start.md`](../commands/pm-start.md)
+- [`.claude/hooks/mode-session-start.sh`](../hooks/mode-session-start.sh) (W2 拡張済)
+- [`.claude/tests/custom-pm-commands-smoke.sh`](../tests/custom-pm-commands-smoke.sh) (W5, 6/6 PASS)
+- 設計起源は採用プロジェクト側 `docs/draft/` を参照 (`.claude/` 単独で portable)
+
 ## 関連ルール / skill
 
 - [`development-process.md`](./development-process.md) — TDD / サブエージェント委譲 / タスク管理 / 設計→承認→タスク追加フロー (本ルールの前段)
