@@ -20,7 +20,7 @@
 #   ECC_WORKFLOW_GUARD_OFF=1               # 全 skip + bypass.log 記録
 #   HC_WORKFLOW_GUARD_ENABLED=false        # 全 skip + bypass.log 記録 (config 系統)
 #
-# Bypass log path: .claude/.workflow-state/bypass.log
+# Bypass log path: .claude/.workflow-state/bypass.log (lib/bypass-logger.sh 経由で append)
 #   <ISO-8601> | <session_id> | workflow-guard | <var> | <reason>
 
 set -uo pipefail  # ⚠️ set -e は使わない (mode-loader.sh の CB-verify 教訓 - 5846925 参照)
@@ -29,31 +29,23 @@ set -uo pipefail  # ⚠️ set -e は使わない (mode-loader.sh の CB-verify 
 # shellcheck source=lib/config-loader.sh
 source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/config-loader.sh"
 
-# === bypass.log 共通関数 ===
-_workflow_state_root="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/.workflow-state"
-_bypass_log="${_workflow_state_root}/bypass.log"
+# === bypass.log 共通ライブラリ ===
+# shellcheck source=lib/bypass-logger.sh
+source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/bypass-logger.sh"
 
-_log_bypass() {
-  local var="$1"
-  local reason="${ECC_BYPASS_REASON:-(not provided)}"
-  local session_id="${CLAUDE_SESSION_ID:-unknown}"
-  local ts
-  ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-  mkdir -p "$_workflow_state_root" 2>/dev/null
-  printf '%s | %s | workflow-guard | %s | %s\n' \
-    "$ts" "$session_id" "$var" "$reason" >> "$_bypass_log" 2>/dev/null
-}
+# === workflow-state root (state file 解決に使用) ===
+_workflow_state_root="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/.workflow-state"
 
 # === Bypass: ECC_WORKFLOW_GUARD_OFF ===
 if [ "${ECC_WORKFLOW_GUARD_OFF:-0}" = "1" ] || [ "${ECC_WORKFLOW_GUARD_OFF:-}" = "true" ]; then
-  _log_bypass "ECC_WORKFLOW_GUARD_OFF"
+  log_bypass "workflow-guard" "ECC_WORKFLOW_GUARD_OFF" "${ECC_BYPASS_REASON:-(not provided)}"
   echo '{}'
   exit 0
 fi
 
 # === Bypass: HC_WORKFLOW_GUARD_ENABLED=false ===
 if [ "${HC_WORKFLOW_GUARD_ENABLED:-true}" = "false" ]; then
-  _log_bypass "HC_WORKFLOW_GUARD_ENABLED"
+  log_bypass "workflow-guard" "HC_WORKFLOW_GUARD_ENABLED" "${ECC_BYPASS_REASON:-(not provided)}"
   echo '{}'
   exit 0
 fi

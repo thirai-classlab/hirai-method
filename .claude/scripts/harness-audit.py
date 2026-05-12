@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path.cwd()
@@ -260,6 +260,104 @@ def failure_window_summary() -> dict:
     return out
 
 
+def bypass_log_summary(days: int = 7) -> dict:
+    """`.claude/.workflow-state/bypass.log` を集計。
+
+    形式: `<ISO-8601> | <session_id> | <hook_name> | <env_var> | <reason>`
+    （lib/bypass-logger.sh が append する統一フォーマット）
+
+    出力:
+      - total_entries: 直近 N 日 の bypass 件数
+      - window_days:   集計対象期間 (既定 7 日)
+      - by_session:    session_id ごとの bypass 回数 (上位 10)
+      - by_hook:       hook_name ごとの bypass 回数
+      - top_env_vars:  最頻出 env_var top 3
+      - log_path:      実 path (デバッグ用)
+      - missing_or_empty: ログ不在 / 空なら True
+    """
+    log_path = ROOT / ".claude" / ".workflow-state" / "bypass.log"
+    out: dict = {
+        "log_path": str(log_path),
+        "window_days": days,
+        "total_entries": 0,
+        "by_session": {},
+        "by_hook": {},
+        "top_env_vars": [],
+        "missing_or_empty": True,
+    }
+    if not log_path.is_file():
+        return out
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    session_counts: Counter[str] = Counter()
+    hook_counts: Counter[str] = Counter()
+    env_var_counts: Counter[str] = Counter()
+    total = 0
+
+    try:
+        raw_lines = log_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+
+    for raw in raw_lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        # 期待フィールド数: 5
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 5:
+            continue
+        ts_str, session_id, hook_name, env_var, _reason = parts[0], parts[1], parts[2], parts[3], "|".join(parts[4:])
+        # ISO-8601 (Z suffix) parse → tz-aware UTC
+        try:
+            ts = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if ts < cutoff:
+            continue
+        total += 1
+        session_counts[session_id] += 1
+        hook_counts[hook_name] += 1
+        env_var_counts[env_var] += 1
+
+    out["total_entries"] = total
+    out["by_session"] = dict(session_counts.most_common(10))
+    out["by_hook"] = dict(hook_counts.most_common())
+    out["top_env_vars"] = [
+        {"env_var": v, "count": c} for v, c in env_var_counts.most_common(3)
+    ]
+    out["missing_or_empty"] = total == 0
+    return out
+
+
+def fmt_bypass_log(b: dict) -> str:
+    """Bypass log section markdown (human-readable)."""
+    lines: list[str] = []
+    lines.append("## Bypass Log Summary")
+    lines.append(f"- source: `{b['log_path']}`")
+    lines.append(f"- window: 直近 {b['window_days']} 日")
+    if b["missing_or_empty"]:
+        lines.append(f"- No bypass entries in last {b['window_days']} days")
+        return "\n".join(lines)
+    lines.append(f"- total entries: **{b['total_entries']}**")
+    if b["by_session"]:
+        lines.append("")
+        lines.append("### Bypasses by session (top 10)")
+        for sid, c in b["by_session"].items():
+            lines.append(f"  - `{sid}`: {c}")
+    if b["by_hook"]:
+        lines.append("")
+        lines.append("### Bypasses by hook")
+        for hk, c in b["by_hook"].items():
+            lines.append(f"  - `{hk}`: {c}")
+    if b["top_env_vars"]:
+        lines.append("")
+        lines.append("### Top env vars (top 3)")
+        for e in b["top_env_vars"]:
+            lines.append(f"  - `{e['env_var']}`: {e['count']}")
+    return "\n".join(lines)
+
+
 def confidence_gate_breakdown() -> dict:
     """Confidence Gate (F3) bypass.log を集計。
 
@@ -360,6 +458,11 @@ def fmt_human(report: dict) -> str:
     if cg["bypasses"] == 0 and not cg["bypass_marker_pending"]:
         lines.append("  - (まだ bypass されていない)")
     lines.append("")
+
+    # Workflow bypass log (W4)
+    if "bypass_log" in report:
+        lines.append(fmt_bypass_log(report["bypass_log"]))
+        lines.append("")
 
     # Health badge
     lines.append("## Health")
@@ -675,6 +778,7 @@ def main() -> int:
         "taskguard": count_state_dir(ROOT / _cfg("taskguard_state_dir")),
         "failure_window": failure_window_summary(),
         "confidence_gate": confidence_gate_breakdown(),
+        "bypass_log": bypass_log_summary(),
         "swe_bench": swe_bench_breakdown(),
         "router": router_breakdown(),
     }
