@@ -213,6 +213,57 @@ draft 本文を grep して以下キーワードを検出し、不要な reviewe
 
 CRITICAL / HIGH が 0 件 → draft「承認待ち」へ、1 件以上 → 「修正待ち」状態を明示。
 
+## 副産物 discharge (本セッション task #5 で実装)
+
+タスク実装中・レビュー中・セッション中に発生した「副産物 (byproduct)」を **物理的に消えない設計** で管理する。詳細は [`development-process.md`](./development-process.md) §「副産物発生時の即時 draft 起こし義務」参照。
+
+### 5 層強制機構
+
+| 層 | 機構 | 発火 | 動作 |
+|---|---|---|---|
+| 1 | `docs/tasks/next-actions.md` registry | 副産物発見時にメインが entry 追加 | informal な「TODO / 次アクション候補」を捕捉する公式 location |
+| 2 | `_TASK_TEMPLATE.md` 派生 task セクション | task 実装中・完了時 | 発生源 task に「派生 task / 次アクション候補」を明示記録 |
+| 3 | `.claude/hooks/next-actions-surface.sh` (SessionStart) | 毎セッション開始 | 未処理 entry を `<system-reminder>` で stderr 強制提示 (緊急度 🔴 強調) |
+| 4 | `.claude/hooks/byproduct-discharge-guard.sh` (Stop) | セッション終了時 | 🔴 未処理 entry が残存なら exit 2 で BLOCK + bypass.log 記録 |
+| 5 | `.claude/commands/discharge-byproduct.md` | user 任意 | entry → draft / parking-lot / 無視 の移行 helper |
+
+### 処理フロー
+
+```
+副産物発生
+  ↓ (層 1: registry 追加義務)
+docs/tasks/next-actions.md に entry 追加 (緊急度 🔴 / 🟡 / 🟢)
+  ↓ (層 5: command で移行)
+/discharge-byproduct <entry-number>
+  ↓
+[判定]
+  (a) 🔴 / 🟡 → /new-draft <slug> で draft 起こし → user 承認 → /new-task → list.md
+  (b) 🟢 + 設計済 → parking-lot.md に保留タスクとして移行
+  (c) 不要 → 無視、理由を処理結果列に明記、履歴セクションへ移動
+  ↓
+next-actions.md 処理結果列を更新
+```
+
+### bypass
+
+| 経路 | env | スコープ | 痕跡 |
+|---|---|---|---|
+| surface 無効化 | `ECC_NEXT_ACTIONS_SURFACE_OFF=1` | 1 セッション | bypass.log |
+| discharge-guard 無効化 | `ECC_BYPASS_DISCHARGE_GUARD=1` | 1 セッション | bypass.log (session_id + reason) |
+
+honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry のコメント列に記録。
+
+### 関連 artifact
+
+- [`docs/tasks/next-actions.md`](../../docs/tasks/next-actions.md) — registry 本体
+- [`.claude/templates/docs/tasks/_TASK_TEMPLATE.md`](../templates/docs/tasks/_TASK_TEMPLATE.md) — 派生 task セクション (W2 で追加)
+- [`.claude/hooks/next-actions-surface.sh`](../hooks/next-actions-surface.sh) (W1)
+- [`.claude/hooks/byproduct-discharge-guard.sh`](../hooks/byproduct-discharge-guard.sh) (W3)
+- [`.claude/hooks/lib/next-actions-parser.sh`](../hooks/lib/next-actions-parser.sh) — 共通 parser
+- [`.claude/commands/discharge-byproduct.md`](../commands/discharge-byproduct.md) (W4)
+- [`.claude/tests/next-actions-hooks-smoke.sh`](../tests/next-actions-hooks-smoke.sh) (W6, 9/9 PASS)
+- 設計起源: [`docs/draft/byproduct-discharge-mechanism.md`](../../docs/draft/byproduct-discharge-mechanism.md)
+
 ## 関連ルール / skill
 
 - [`development-process.md`](./development-process.md) — TDD / サブエージェント委譲 / タスク管理 / 設計→承認→タスク追加フロー (本ルールの前段)
