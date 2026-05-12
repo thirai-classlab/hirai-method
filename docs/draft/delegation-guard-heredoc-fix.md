@@ -1,6 +1,6 @@
 # Delegation Guard Heredoc Segment Splitter 修正 (`|` 単独文字の誤分割 bug)
 
-**ステータス:** 🔲 **draft（2026-05-12 起案、user 承認待ち）**
+**ステータス:** ✅ **draft（2026-05-12 起案、2026-05-12 承認済）**
 **起点:** 本セッション task #6 commit phase で再現された PreToolUse Bash hook 誤 BLOCK (next-actions entry #8 として記録、2026-05-12)
 **前提:**
 - task #6 (Loop Autonomous Discipline) push 待ち
@@ -276,7 +276,7 @@ extract_segments() {
 
 | 日付 | 承認者 | 結果 |
 |---|---|---|
-| 2026-05-12 | (pending) | user レビュー待ち |
+| 2026-05-12 | user | 「承認します。」明示承認 (本セッション task #7 完了後の自律 draft 起案を受けて) → `/new-task 8 delegation-guard-heredoc-fix` 起動 → W1-W4 実装着手 |
 
 ---
 

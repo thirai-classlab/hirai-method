@@ -28,6 +28,7 @@
 | 5 | ✅ | byproduct-discharge | 副産物 discharge 機構の本格実装: W1 hook surface + W2 template 派生セクション + W3 Stop guard + W4 `/discharge-byproduct` + W5 workflow.md セクション + W6 smoke 9/9 PASS (完了 @ 2026-05-12、commits `2789457` `9013404` `c88f974` `6ec3286`) | — | [task-5-byproduct-discharge-mechanism.md](task-5-byproduct-discharge-mechanism.md) |
 | 6 | ✅ | loop-auto-progress | Loop モード自律進行強制 + 自律実行禁止リスト: W1-W6 全完了 (W5 smoke **9/9 PASS** + vercel regex re-verify 3/3 PASS)、PR #3 として merge 待ち @ 2026-05-12 | #1, #5 | [task-6-loop-auto-progress-enforcement.md](task-6-loop-auto-progress-enforcement.md) |
 | 7 | ✅ | custom-pm-commands | Custom PM / Session Commands 完了 (2026-05-12): W1 `77124a9` (3 markdown command 新設) + W2 `1010b53` (mode-session-start.sh resume prompt 注入) + W3 verified (3 command 全て onboarding check 既存実装、`.mcp.json` required marker は Claude Code 仕様非サポート → command-level enforcement で代替) + W4 `f063ff3` (3 files /sc:* → 自前 command 1:1 置換) + W5 `b8c626e` + follow-up `1d63aff` (smoke 6/6 PASS) + W6 `c6fba4b` (CLAUDE.md commands table + workflow.md Session 永続化セクション + next-actions entry #7)、push 待ち @ 2026-05-12 | #6 | [task-7-custom-pm-commands.md](task-7-custom-pm-commands.md) |
+| 8 | 🔲 | delegation-guard-fix | delegation-guard.sh heredoc segment splitter 修正: awk gsub regex の `\|` 単独文字置換が quoted/heredoc 内 `\|` も separator 誤認する bug。C ハイブリッド (関数化 + quote-aware regex + smoke 6 cases + 文書) で W1-W4 = 1.0h (起案 2026-05-12、user 承認済 2026-05-12) | #6, #7 | [task-8-delegation-guard-heredoc-fix.md](task-8-delegation-guard-heredoc-fix.md) |
 
 <!--
 記入ルール:
