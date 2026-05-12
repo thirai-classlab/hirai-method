@@ -137,6 +137,8 @@ paths:
 - **責任の明確化**: メインの orchestration 義務（§3）を Claude Code 標準機構に裏付ける
 - **再開性**: セッション再起動時もタスクリストから現状を復元可能
 
+> **heredoc / quoted string 内の特殊文字は保護される**: `git commit -m "table|cell"` や `git commit -m 'A || B'` の `|` `||` `&&` `;` は quote-aware segment splitter (`split_command_segments` 関数、`.claude/hooks/delegation-guard.sh`) が separator 扱いせず単一 segment として whitelist 照合する。詳細は `.claude/tests/delegation-guard-segment-smoke.sh` Case 4-6 を参照。heredoc 本文 (`<<EOF ... EOF`) は単行解析の限界で未対応 (将来 B フル parser 化で対応)。
+
 ### 5. Bash deny / whitelist 不在時の subagent 委譲反射（必須）
 
 メインエージェントが Bash 実行で deny / whitelist 不在 / 委譲ガード block を受けた場合、
