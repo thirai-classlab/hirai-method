@@ -23,7 +23,7 @@
 |:---:|:---:|:---|:---|:---|:---|
 | 1 | ✅ | workflow-enforcement | W1-W5 umbrella: 設計レビュー fan-out / テスト設計 MECE / workflow 強制 / リファクタリング強制 (W1-W5 全完了 @ 2026-05-12、W4 smoke 8/8 PASS @ commit `555b0ee`、W5 @ commit `b8084c8`+`0ff9654`、W6 は `asana off` により out-of-scope) | — | [task-1-workflow-enforcement.md](task-1-workflow-enforcement.md) |
 | 2 | 🔲 | byproduct-discharge | PR 作成 (feat/loop-mode → main): 本セッション 19+ commits の merge 動線 (起案 2026-05-12) | — | [task-2-create-pr-feat-loop-mode.md](task-2-create-pr-feat-loop-mode.md) |
-| 3 | 🔄 | byproduct-discharge | context-budget hook 実発火検証: CB-verify (`5846925`) の運用効果観察 (W1 着手 @ 2026-05-12、観察期間 〜 2026-05-19) | — | [task-3-context-budget-hook-verification.md](task-3-context-budget-hook-verification.md) |
+| 3 | ✅ | byproduct-discharge | context-budget hook 実発火検証: CB-verify (`5846925`) の運用効果実証 (本セッション 2026-05-12 で **60% tier 発火を観測**、611K/1000K tokens、mode-loader.sh pipefail leak 修正の実証完了) | — | [task-3-context-budget-hook-verification.md](task-3-context-budget-hook-verification.md) |
 | 4 | ✅ | byproduct-discharge | CLAUDE.md Critical Operational Lessons に教訓 2 件転載: 並列 subagent git 競合 / set -e leak (完了 @ 2026-05-12) | — | [task-4-critical-lessons-transfer.md](task-4-critical-lessons-transfer.md) |
 | 5 | ✅ | byproduct-discharge | 副産物 discharge 機構の本格実装: W1 hook surface + W2 template 派生セクション + W3 Stop guard + W4 `/discharge-byproduct` + W5 workflow.md セクション + W6 smoke 9/9 PASS (完了 @ 2026-05-12、commits `2789457` `9013404` `c88f974` `6ec3286`) | — | [task-5-byproduct-discharge-mechanism.md](task-5-byproduct-discharge-mechanism.md) |
 
