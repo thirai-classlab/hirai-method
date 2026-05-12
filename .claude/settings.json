@@ -189,6 +189,12 @@
             "type": "command",
             "command": "bash .claude/hooks/stop.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/byproduct-discharge-guard.sh",
+            "timeout": 5,
+            "statusMessage": "副産物 discharge 検証中..."
           }
         ]
       }
@@ -231,6 +237,12 @@
             "command": "bash .claude/hooks/mode-session-start.sh",
             "timeout": 3,
             "statusMessage": "HIRAI メソッド モード確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/next-actions-surface.sh",
+            "timeout": 5,
+            "statusMessage": "未処理副産物 surface 中..."
           },
           {
             "type": "command",
