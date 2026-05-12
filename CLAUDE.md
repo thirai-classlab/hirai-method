@@ -126,6 +126,8 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 
 | 教訓 | 重要度 |
 |:---|:---:|
+| **並列 subagent に同一 branch で `git commit` させる際は `git add <specific files>` 限定 + `git reset` 禁止を prompt 必須記載**。`git reset --soft HEAD^` がメイン / 他 subagent の commit を巻き添えで orphan 化する事故 (2026-05-12, `2bbe079` 混在 → `deda280` orphan → `52a170f` 再 commit で復旧)。完全分離が必要なら `isolation: "worktree"` で worktree 隔離 | HIGH |
+| **`.claude/hooks/lib/*.sh` の file-top に `set -euo pipefail` を書かない**。caller の shell flags に leak し、`cmd \| head -1` で SIGPIPE → pipefail → errexit → **exit 141 サイレント終了**。`load_xxx() ( set -uo pipefail; ... )` のように subshell 関数化で局所化する (2026-05-12 CB-verify, `5846925` で根本修正、context-budget hook の未発火問題が解消) | HIGH |
 | `<例: 公開/非公開フィルタは RLS で一元化、queries.ts に .not() 禁止>` | HIGH |
 | `<例: vitest は build 制約違反を検出不可、push 前に build 必須>` | HIGH |
 | `<例: 独自 secret 認証 API は middleware PUBLIC_PATHS にも追加（3 点セット）>` | HIGH |
