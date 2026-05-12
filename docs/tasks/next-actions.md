@@ -48,6 +48,7 @@ next-actions.md からエントリ削除（移行先を「処理結果」列に�
 | 3 | 2026-05-12 | CLAUDE.md `Critical Operational Lessons` に教訓 2 件転載 — 並列 subagent git 競合 / `set -e` leak in sourced libs | 本セッション feedback memory 保存時 | 🟡 | (a) draft 起こし `critical-lessons-transfer` | ✅ → [`docs/draft/critical-lessons-transfer.md`](../draft/critical-lessons-transfer.md) → [task #4](task-4-critical-lessons-transfer.md) (2026-05-12) |
 | 4 | 2026-05-12 | **副産物 discharge 機構の本格実装** — `_TASK_TEMPLATE.md` 拡張 + `workflow-guard.sh` 拡張 + `/discharge-byproduct` command 新設 + `.claude/rules/workflow.md` セクション追加 | 本セッション「タスク管理されていない」指摘 | 🔴 | (a) draft 起こし `byproduct-discharge-mechanism` | ✅ → [`docs/draft/byproduct-discharge-mechanism.md`](../draft/byproduct-discharge-mechanism.md) → [task #5](task-5-byproduct-discharge-mechanism.md) (2026-05-12、本セッションで W1+W3+W6 着手中) |
 | 5 | 2026-05-12 | classlab_salesforce-mail 修復 — `docs/draft/mail-message-status.md` 承認 + `/new-task 2` 起動 + task #1 W8 残作業完了 | 別リポ調査結果 | 🟢 | **本リポ管理外**（別リポ側で対応） | — |
+| 6 | 2026-05-12 | Loop モード自律進行強制 + 自律実行禁止リスト — subagent 待ち中停止 / push 等の破壊的操作自律実行 を構造解決 (W1 modes.md 規範強化済、W2-W6 hook 実装 + smoke + 配線が残) | 本セッション user 指摘 (複数回「Loop モード継続中。なぜ自動で実行を続けないのか?」+「本番反映 / push 自律禁止」) | 🔴 | (a) draft 起こし済 → 次セッションで `/new-task 6` 起動 → 実装 | ✅ → [`docs/draft/loop-auto-progress-enforcement.md`](../draft/loop-auto-progress-enforcement.md) (W1 modes.md 反映済 2026-05-12)、W2-W6 は task #6 として次セッションで実装予定 |
 
 ## ルール（運用）
 
