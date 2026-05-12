@@ -102,6 +102,31 @@ flowchart LR
 | YYYY-MM-DD | 着手 | branch `feature/issue-<ID>-<slug>` |
 | YYYY-MM-DD | 完了 | commit `<sha>`、+<N> tests |
 
+## 派生 task / 次アクション候補
+
+このタスクの実装中・レビュー中・完了時に「これは別 task として管理すべき」と判断した副産物 (byproduct) を箇条書きで記入する。
+
+### 義務 (development-process.md §「副産物発生時の即時 draft 起こし義務」準拠)
+
+- 副産物発見の瞬間に **必ず本セクションに記入** (memory / 会話履歴に流すだけは禁止)
+- task 完了 (`/finish-task`) 時、本セクションのすべての entry が以下のいずれかに処理済であること:
+  - (a) `docs/draft/<slug>.md` に draft 起こし済 (緊急度 🔴 / 🟡)
+  - (b) `docs/tasks/next-actions.md` に entry 追加済 (緊急度 🟢 + 後日判断)
+  - (c) 無視 (理由を明記、commit message に記録)
+- 未処理 entry が残ったまま `/finish-task` は `workflow-guard.sh` が BLOCK する (将来 W4 拡張)
+
+### 記入例
+
+- [ ] (🔴) PR 作成 — `feat/loop-mode` → `main` の merge → [draft 起こし済](../draft/create-pr-feat-loop-mode.md) → task #2
+- [ ] (🟡) context-budget hook 実発火検証 — → [draft 起こし済](../draft/context-budget-hook-verification.md) → task #3
+- [ ] (🟢) 別リポ調査 (後日) — [next-actions.md](next-actions.md) entry #N で記録
+- [x] (🟢→無視) 旧 API のリファクタ案 — 工数過大 + 互換性破壊リスクで不採用、本 commit message に理由記載
+
+### 関連
+
+- [`next-actions.md`](next-actions.md) — 本セクションと連動する registry
+- [`.claude/rules/development-process.md`](../../.claude/rules/development-process.md) §「副産物発生時の即時 draft 起こし義務」
+
 ## 関連
 
 - Draft: [<draft file>](../draft/<file>.md)
