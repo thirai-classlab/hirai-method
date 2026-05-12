@@ -84,6 +84,7 @@ flowchart TD
 - Bash 4+, Python 3.9+, jq, git
 - Node.js 22+ / npx（Mermaid hook 用、ローカル install 推奨）
 - (任意) Docker（SWE-bench 評価機構を使う場合）
+- **(`/save-state` `/resume-state` `/pm-start` 利用時に必須)** Serena MCP — `.mcp.json` に `serena` entry 登録 (`uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant`)。Session 永続化 + PM Orchestration の memory backend として動作
 
 ### 手順
 
@@ -120,6 +121,7 @@ $EDITOR .claude/harness-config.yml
 | `/new-task <id> <slug>` | draft を承認後、タスクとして list.md に追加 |
 | `/start-task <id>` | タスク取得 + ブランチ作成 + status `in_progress` |
 | `/finish-task <id>` | 完了 3 点検証 + done 化 + commit 提案 |
+| `/discharge-byproduct <entry>` | next-actions registry の副産物を draft / parking-lot / 無視 に処理 |
 | `/commit` | git diff から conventional commit メッセージを自動生成 |
 | `/reviewpr` | GitHub PR を 8 ルール + Critical Lessons + CI 状況と照合 |
 | `/verify` | PR 直前 6-phase 検証ループ（F2）|
@@ -130,6 +132,10 @@ $EDITOR .claude/harness-config.yml
 | `/gan-design` `/gan-build` | adversarial 反復（L2）|
 | `/instinct-status` `/learn` `/promote` | continuous-learning-v2 操作（L4）|
 | `/gate-status` `/gate-clear` `/gate-bypass` | F1 GateGuard 状態管理 |
+| `/mode <normal\|loop>` | 動作モード切替 (Loop モードは自律進行、Normal モードは user 確認分岐) |
+| `/save-state` `/resume-state` `/pm-start` | **Session 永続化 + PM Orchestration** (Serena MCP 必須、SuperClaude `/sc:save\|load\|pm` 後継、`.claude/` 単独 portable) |
+| `/test-design` `/design-review` `/module-review` `/system-review` | Workflow 強制 — MECE 20 カテゴリテスト設計 / reviewer-registry fan-out / 3 観点モジュール review / システム統合 review |
+| `/new-feature <slug>` `/modify-feature <slug>` | 14-stage / 10-stage workflow orchestrator (`workflow-guard.sh` で `/finish-task` BLOCK 判定) |
 
 ### 典型的な開発フロー
 
@@ -188,18 +194,27 @@ homunculus_root: ~/.claude/homunculus
 
 | Event | Hook | 役割 |
 |---|---|---|
-| PreToolUse | `delegation-guard.sh` | メインの保護パス到達 block、Agent tool 委譲を強制 |
+| PreToolUse | `delegation-guard.sh` | メインの保護パス到達 block、Agent tool 委譲を強制 (quote-aware segment splitter、heredoc / quoted string 内特殊文字保護) |
 | PreToolUse | `gateguard.sh` (F1) | 事実材料未提示時の Edit/Write/破壊的 Bash を block |
 | PreToolUse | `task-rule-guard.sh` (F2) | draft なきタスク作成を block |
 | PreToolUse | `bash-whitelist-guard.sh` | 許可リスト外の Bash を block |
+| PreToolUse(Bash) | `autonomous-action-guard.sh` | Loop モード自律実行禁止 11 カテゴリ (`git push` / `gh pr create` / `vercel --prod` / `terraform apply` 等) を `decision:"block"` で BLOCK、Normal モードでは context warning のみ。bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` or `/mode normal` 一時切替 |
+| PreToolUse(Bash) | `workflow-guard.sh` | `/finish-task <slug>` 直前に state JSON 検証、未完 stage / pending findings 残存で BLOCK |
 | PostToolUse | `observe.sh` | 全 tool call を JSONL 記録（`~/.claude/homunculus/`）|
 | PostToolUse | `failure-loop-detect.sh` | 同種エラー 3 連続で `/agent-introspect` 提案 |
 | PostToolUse | `check-md-mermaid.sh` | `.md` / `.mdx` 内 mermaid ブロックを mermaid@11 で構文検証 |
 | SubagentStop | `confidence-gate.sh` (F3) | 完了報告 confidence (≥0.6) 検証 |
+| UserPromptSubmit | `why-x5-reminder.sh` | 各作業ステップに Why × 5 階層 + 現在行動 + 代替案理由 の 3 点出力を強制 |
+| UserPromptSubmit | `mode-enforce.sh` | Loop モード稼働中、毎ターン遵守事項 5 (粒度 commit) / 7 (subagent 並走中独立作業) / 8 (自律実行禁止リスト) を再注入 |
+| UserPromptSubmit | `context-budget.sh` | Context 使用率を監視、60% / 80% / 95% tier 突破で `/save-state` 実行 + 再開提案を強制 |
+| UserPromptSubmit | `loop-auto-progress-reminder.sh` | Loop モード subagent 待ち中の停止検出 (「完了通知待ち」keyword) で独立作業強制を `<system-reminder>` 注入 |
 | UserPromptSubmit | `agent-router-suggest.sh` | named agent 推薦 hint 注入 |
-| SessionStart | `init-tasks.sh` | タスク状態復元 |
-| Notification | `notify.sh` | macOS 通知音 (Hero.aiff) |
+| SessionStart | `init-tasks.sh` | タスク状態復元 (`list.md` / `parking-lot.md` / template 自動生成) |
+| SessionStart | `mode-session-start.sh` | 現モード表示 + Normal モード時の Loop 切替提案 + **Serena memory 存在時 `/resume-state` 自動提案** (task #7 W2) |
+| SessionStart | `next-actions-surface.sh` | 未処理 next-actions entry を `<system-reminder>` で stderr 提示 (緊急度 🔴 強調、副産物 discharge 規律) |
+| Stop | `byproduct-discharge-guard.sh` | next-actions 🔴 未処理 entry 残存時に session 終了を `exit 2` BLOCK (副産物 discharge 完遂強制) |
 | Stop | `stop.sh` | macOS 通知音 (Glass.aiff) |
+| Notification | `notify.sh` | macOS 通知音 (Hero.aiff) |
 
 bypass: `/gate-bypass <gate-name> <理由>` で 1 回限りスキップ可能、ログに記録。
 
@@ -359,6 +374,8 @@ python3 .claude/skills/eval-harness/swe-bench/runner.py \
 - [`docs/CONFIDENCE-GATE.md`](docs/CONFIDENCE-GATE.md) — Confidence Gate 仕様
 - [`docs/AGENT-ROUTER.md`](docs/AGENT-ROUTER.md) — agent-router 設計詳細
 - [`.claude/rules/development-process.md`](.claude/rules/development-process.md) — TDD / 委譲 / タスク管理ルール
+- [`.claude/rules/workflow.md`](.claude/rules/workflow.md) — Workflow 強制 (test-design / design-review / module-review / system-review / new-feature / modify-feature) + 副産物 discharge + Loop モード自律規律 + **Session 永続化 + PM Orchestration** (Serena MCP 必須、`/save-state` `/resume-state` `/pm-start` 仕様) |
+- [`.claude/rules/modes.md`](.claude/rules/modes.md) — Normal / Loop モード仕様 + 遵守事項 5 (粒度 commit) / 7 (subagent 並走中独立作業) / 8 (自律実行禁止 11 カテゴリ) + bypass 経路
 
 ## ライセンス
 
