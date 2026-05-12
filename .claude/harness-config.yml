@@ -139,3 +139,22 @@ context_budget_enabled: true
 context_budget_limit: 1000000
 context_budget_threshold: 0.60
 context_budget_state_dir: .claude/.context-budget-state
+
+# === Reviewer Registry (W2 design-review fan-out 用) ===
+# `/design-review <slug>` command が読み、カテゴリ別 agent を並列起動する。
+# 各キーは agent type name の flat 配列 (config-loader.sh の `[a, b, c]` 構文)。
+#
+# - reviewer_registry_design:   設計レビュー専門 agent (System / Code / API / UI / DB)
+# - reviewer_registry_security: セキュリティレビュー専門
+# - reviewer_registry_test:     テスト設計 / QA 専門 (W1 /test-design でも使用)
+# - reviewer_registry_impl:     実装レビュー専門 (W3 /module-review /system-review でも使用)
+#
+# 各カテゴリの実起動範囲は draft の stack heuristic で絞り込まれる
+# (例: DB タスクでなければ database-reviewer を skip)。
+#
+# env 上書き例:
+#   export HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer'  # 2 件に絞る
+reviewer_registry_design: [architect, architect-reviewer, code-architect, api-designer, ui-designer, database-reviewer, harness-optimizer]
+reviewer_registry_security: [security-auditor, security-reviewer, penetration-tester]
+reviewer_registry_test: [tdd-guide, test-automator, qa-expert, pr-test-analyzer]
+reviewer_registry_impl: [code-reviewer, refactoring-specialist, typescript-reviewer, python-reviewer, go-reviewer, rust-reviewer, csharp-reviewer, java-reviewer, kotlin-reviewer, cpp-reviewer, flutter-reviewer]

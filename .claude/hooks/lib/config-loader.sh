@@ -110,7 +110,11 @@ IMPROVEMENT_PROPOSAL_DEDUP_HOURS \
 CONTEXT_BUDGET_ENABLED \
 CONTEXT_BUDGET_LIMIT \
 CONTEXT_BUDGET_THRESHOLD \
-CONTEXT_BUDGET_STATE_DIR"
+CONTEXT_BUDGET_STATE_DIR \
+REVIEWER_REGISTRY_DESIGN \
+REVIEWER_REGISTRY_SECURITY \
+REVIEWER_REGISTRY_TEST \
+REVIEWER_REGISTRY_IMPL"
 
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
@@ -156,6 +160,10 @@ HC_CONTEXT_BUDGET_ENABLED="true"
 HC_CONTEXT_BUDGET_LIMIT="1000000"
 HC_CONTEXT_BUDGET_THRESHOLD="0.60"
 HC_CONTEXT_BUDGET_STATE_DIR=".claude/.context-budget-state"
+HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer\ncode-architect'
+HC_REVIEWER_REGISTRY_SECURITY=$'security-auditor\nsecurity-reviewer'
+HC_REVIEWER_REGISTRY_TEST=$'tdd-guide\ntest-automator\nqa-expert'
+HC_REVIEWER_REGISTRY_IMPL=$'code-reviewer\nrefactoring-specialist'
 
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
@@ -319,6 +327,8 @@ export HC_IMPROVEMENT_PROPOSAL_MAX_COUNT HC_IMPROVEMENT_PROPOSAL_STATE_DIR
 export HC_IMPROVEMENT_PROPOSAL_DEDUP_HOURS
 export HC_CONTEXT_BUDGET_ENABLED HC_CONTEXT_BUDGET_LIMIT
 export HC_CONTEXT_BUDGET_THRESHOLD HC_CONTEXT_BUDGET_STATE_DIR
+export HC_REVIEWER_REGISTRY_DESIGN HC_REVIEWER_REGISTRY_SECURITY
+export HC_REVIEWER_REGISTRY_TEST HC_REVIEWER_REGISTRY_IMPL
 
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper
