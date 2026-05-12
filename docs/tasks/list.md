@@ -24,7 +24,7 @@
 | 1 | ✅ | workflow-enforcement | W1-W5 umbrella: 設計レビュー fan-out / テスト設計 MECE / workflow 強制 / リファクタリング強制 (W1-W5 全完了 @ 2026-05-12、W4 smoke 8/8 PASS @ commit `555b0ee`、W5 @ commit `b8084c8`+`0ff9654`、W6 は `asana off` により out-of-scope) | — | [task-1-workflow-enforcement.md](task-1-workflow-enforcement.md) |
 | 2 | 🔲 | byproduct-discharge | PR 作成 (feat/loop-mode → main): 本セッション 19+ commits の merge 動線 (起案 2026-05-12) | — | [task-2-create-pr-feat-loop-mode.md](task-2-create-pr-feat-loop-mode.md) |
 | 3 | 🔲 | byproduct-discharge | context-budget hook 実発火検証: CB-verify (`5846925`) の運用効果観察 (起案 2026-05-12) | — | [task-3-context-budget-hook-verification.md](task-3-context-budget-hook-verification.md) |
-| 4 | 🔲 | byproduct-discharge | CLAUDE.md Critical Operational Lessons に教訓 2 件転載: 並列 subagent git 競合 / set -e leak (起案 2026-05-12) | — | [task-4-critical-lessons-transfer.md](task-4-critical-lessons-transfer.md) |
+| 4 | ✅ | byproduct-discharge | CLAUDE.md Critical Operational Lessons に教訓 2 件転載: 並列 subagent git 競合 / set -e leak (完了 @ 2026-05-12) | — | [task-4-critical-lessons-transfer.md](task-4-critical-lessons-transfer.md) |
 | 5 | 🔄 | byproduct-discharge | 副産物 discharge 機構の本格実装: SessionStart surface + Stop guard + workflow-guard 拡張 + `/discharge-byproduct` + workflow.md セクション (起案 2026-05-12、本セッションで W1+W3+W6 着手中) | — | [task-5-byproduct-discharge-mechanism.md](task-5-byproduct-discharge-mechanism.md) |
 
 <!--
