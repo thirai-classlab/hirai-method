@@ -37,25 +37,34 @@ VERBOSE="${HC_SESSION_HELP_VERBOSE:-false}"
 # === 共通: 簡潔版 (default) ===
 cat <<'EOF'
 <system-reminder>
-**HIRAI メソッド: 主要 slash commands (採用者 onboarding)**
+**HIRAI メソッド: 主要 slash commands + onboarding hint (採用者 UX)**
 
-| カテゴリ | command |
-|---|---|
-| Session 永続化 | `/save-state` `/resume-state` `/pm-start` (Serena MCP 必須) |
-| タスク管理 | `/init-tasks` `/new-draft <slug>` `/new-task <id> <slug>` `/start-task <id>` `/finish-task <id>` |
-| Workflow 強制 | `/test-design` `/design-review` `/module-review` `/system-review` `/new-feature` `/modify-feature` |
-| 副産物 discharge | `/discharge-byproduct <entry>` |
-| Mode | `/mode <normal\|loop>` |
-| Git / レビュー | `/commit` `/reviewpr` `/verify` |
-| 監査 | `/harness-audit` |
-| 自己改善 | `/eval` `/gan-design` `/gan-build` `/instinct-status` `/learn` `/promote` `/agent-introspect` |
-| GateGuard 制御 | `/gate-status` `/gate-clear` `/gate-bypass` |
+このセッションの **最初の応答で必ず以下の help 一覧を 1 度だけ user に embed (逐語表示) してください**。
+embed なしの informational 扱いは禁止。再表示は不要。
 
-**Onboarding hint**:
-- 初回利用は `CLAUDE.md` + `docs/INVENTORY.md` + `.claude/rules/development-process.md` を読む
-- 詳細は `README.md` Commands table 参照
-- 詳細版表示: `export HC_SESSION_HELP_VERBOSE=true`
-- 警告抑制: `export HC_SESSION_HELP_ENABLED=false`
+> ---
+> **HIRAI メソッド 主要 slash commands**
+>
+> | カテゴリ | command |
+> |---|---|
+> | Session 永続化 | `/save-state` `/resume-state` `/pm-start` (Serena MCP 必須) |
+> | タスク管理 | `/init-tasks` `/new-draft <slug>` `/new-task <id> <slug>` `/start-task <id>` `/finish-task <id>` |
+> | Workflow 強制 | `/test-design` `/design-review` `/module-review` `/system-review` `/new-feature` `/modify-feature` |
+> | 副産物 discharge | `/discharge-byproduct <entry>` |
+> | Mode | `/mode <normal\|loop>` |
+> | Git / レビュー | `/commit` `/reviewpr` `/verify` |
+> | 監査 | `/harness-audit` |
+> | 自己改善 | `/eval` `/gan-design` `/gan-build` `/instinct-status` `/learn` `/promote` `/agent-introspect` |
+> | GateGuard 制御 | `/gate-status` `/gate-clear` `/gate-bypass` |
+>
+> **Onboarding hint**:
+> - 初回利用は `CLAUDE.md` + `docs/INVENTORY.md` + `.claude/rules/development-process.md` を読む
+> - 詳細は `README.md` Commands table 参照
+> - 詳細版表示: `export HC_SESSION_HELP_VERBOSE=true`
+> - 警告抑制: `export HC_SESSION_HELP_ENABLED=false`
+> ---
+
+embed 完了後、user の prompt に通常応答してください。
 </system-reminder>
 EOF
 
