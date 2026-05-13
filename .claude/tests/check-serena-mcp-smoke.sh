@@ -21,6 +21,7 @@ set -u
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$PROJECT_ROOT/.claude/hooks/check-serena-mcp.sh"
+LIB_PROJECT_ROOT="$PROJECT_ROOT/.claude/hooks/lib/project-root.sh"
 TMP_DIR=$(mktemp -d "/tmp/check-serena-mcp-smoke.XXXXXX")
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -43,14 +44,16 @@ run_case() {
   fi
 }
 
-# 共通: fake PROJECT_ROOT を作って hook をコピーする
-# hook は `SCRIPT_DIR/../..` を PROJECT_ROOT として解決するので
-# fake_root/.claude/hooks/check-serena-mcp.sh に置けば fake_root が PROJECT_ROOT になる。
+# 共通: fake PROJECT_ROOT を作って hook + lib をコピーする
+# hook は HC_PROJECT_ROOT env override で fake_root を PROJECT_ROOT とみなす
+# (dual-mode portability: env > git > pwd) — task #12 で導入
 setup_fake_root() {
   local fake_root="$1"
-  mkdir -p "$fake_root/.claude/hooks"
+  mkdir -p "$fake_root/.claude/hooks/lib"
   cp "$HOOK" "$fake_root/.claude/hooks/check-serena-mcp.sh"
   chmod +x "$fake_root/.claude/hooks/check-serena-mcp.sh"
+  # lib/project-root.sh も同梱 (helper 依存)
+  cp "$LIB_PROJECT_ROOT" "$fake_root/.claude/hooks/lib/project-root.sh"
 }
 
 # === Case 1: .mcp.json に serena entry 存在 → silent ===
@@ -68,7 +71,7 @@ case_1() {
 }
 JSON
   local output
-  output=$(bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
+  output=$(HC_PROJECT_ROOT="$fake_root" bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
   # 期待: 出力なし
   if [ -n "$output" ]; then
     printf 'unexpected output: %s\n' "$output" >&2
@@ -91,7 +94,7 @@ case_2() {
 }
 JSON
   local output
-  output=$(bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
+  output=$(HC_PROJECT_ROOT="$fake_root" bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
   # 期待: "Serena MCP" 文言を含む
   if ! printf '%s' "$output" | grep -q 'Serena MCP'; then
     printf 'expected Serena MCP warning, got: %s\n' "$output" >&2
@@ -110,7 +113,7 @@ case_3() {
   setup_fake_root "$fake_root"
   # .mcp.json は作らない
   local output
-  output=$(bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
+  output=$(HC_PROJECT_ROOT="$fake_root" bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
   # 期待: ".mcp.json" 文言を含む
   if ! printf '%s' "$output" | grep -q '\.mcp\.json'; then
     printf 'expected .mcp.json warning, got: %s\n' "$output" >&2
@@ -128,7 +131,7 @@ case_4() {
   setup_fake_root "$fake_root"
   # .mcp.json は意図的に作らない (本来なら Case 3 と同じ警告が出るところを env で抑制)
   local output
-  output=$(HC_CHECK_SERENA_ENABLED=false bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
+  output=$(HC_PROJECT_ROOT="$fake_root" HC_CHECK_SERENA_ENABLED=false bash "$fake_root/.claude/hooks/check-serena-mcp.sh" </dev/null 2>/dev/null)
   # 期待: 出力なし
   if [ -n "$output" ]; then
     printf 'unexpected output despite disable: %s\n' "$output" >&2

@@ -32,7 +32,9 @@ if [ "${HC_CHECK_SERENA_ENABLED:-true}" = "false" ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=lib/project-root.sh
+source "$SCRIPT_DIR/lib/project-root.sh"
+PROJECT_ROOT=$(resolve_project_root)
 MCP_JSON="$PROJECT_ROOT/.mcp.json"
 
 # Case A: .mcp.json 自体が不在 → 警告 + 導入手順
