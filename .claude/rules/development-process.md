@@ -137,6 +137,8 @@ paths:
 - **責任の明確化**: メインの orchestration 義務（§3）を Claude Code 標準機構に裏付ける
 - **再開性**: セッション再起動時もタスクリストから現状を復元可能
 
+> **heredoc / quoted string 内の特殊文字は保護される**: `git commit -m "table|cell"` や `git commit -m 'A || B'` の `|` `||` `&&` `;` は quote-aware segment splitter (`split_command_segments` 関数、`.claude/hooks/delegation-guard.sh`) が separator 扱いせず単一 segment として whitelist 照合する。詳細は `.claude/tests/delegation-guard-segment-smoke.sh` Case 4-6 を参照。heredoc 本文 (`<<EOF ... EOF`) は単行解析の限界で未対応 (将来 B フル parser 化で対応)。
+
 ### 5. Bash deny / whitelist 不在時の subagent 委譲反射（必須）
 
 メインエージェントが Bash 実行で deny / whitelist 不在 / 委譲ガード block を受けた場合、
@@ -236,6 +238,29 @@ honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリ�
 - `docs/tasks/list.md` のステータス更新 → メインが必ず実行
 - 個別タスクファイルの作成・更新 → メインが必ず実行
 - サブエージェント起動前にタスクを「進行中」に、完了後に「完了」に更新
+
+## 副産物発生時の即時 draft 起こし義務（必須・再発防止）
+
+タスク実装中・レビュー中・セッション中に「これは別 task として管理すべき」と判断した副産物 (byproduct) は **memory / 会話履歴に流すだけでは禁止**。必ず以下フローを取る:
+
+1. **即時記録**: `docs/tasks/next-actions.md` に entry 追加（緊急度 / 推奨処理を明記）
+2. **当セッション内に draft 起こし**: 緊急度 🔴 (次セッション着手必須) と 🟡 (近日) の entry は当セッション中に `/new-draft <slug>` で `docs/draft/<slug>.md` を起こす
+3. **次セッション or 同セッション内に承認 + tasking**: user 承認後に `/new-task <id> <slug>` で list.md に行追加
+4. **next-actions.md の処理結果列に移行先を記入** (例: 「→ `docs/draft/<slug>.md` → task #N」)
+
+### 違反パターン (絶対禁止)
+
+- 副産物を memory (`~/.claude/projects/.../memory/`) にのみ保存して draft 化しない
+- 副産物を「次セッションで対応」とコメントだけ残してセッション終了する
+- 副産物を発生源 task の `/finish-task` 完了前に処理せず後送りする
+
+### 強制機構
+
+- `.claude/hooks/next-actions-surface.sh` (SessionStart): 未処理 entry を毎セッション開始時に `<system-reminder>` で stderr 出力（緊急度 🔴 は強調表示）— **次セッションで実装予定** (`docs/draft/byproduct-discharge-mechanism.md` W1)
+- `.claude/hooks/workflow-guard.sh` (PreToolUse Bash `/finish-task`): 発生源 task の next-actions.md 関連 entry が未処理なら BLOCK — **次セッションで実装予定** (同 draft W3)
+- `_TASK_TEMPLATE.md` の「派生 task / 次アクション候補」セクション: task 実装中に発見した副産物を本セクションに必ず記入、`/finish-task` で空 or 全件転記済を検証 — **次セッションで実装予定** (同 draft W2)
+
+詳細は [`workflow.md`](./workflow.md) の関連セクションおよび [`docs/draft/byproduct-discharge-mechanism.md`](../../docs/draft/byproduct-discharge-mechanism.md) を参照。
 
 ## 設計→承認→タスク追加フロー（必須）
 

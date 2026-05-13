@@ -1,0 +1,10 @@
+# Session-local workflow state (per-slug JSON)
+*.json
+
+# bypass.log (env-var bypass の audit ログ — session-local)
+bypass.log
+
+# Track this gitignore + schema docs + bypass log template
+!.gitignore
+!SCHEMA.md
+!bypass.log.template

@@ -5,6 +5,8 @@
 *.pem
 *.key
 
+
+
 # Claude Code state
 .claude/.gateguard-state/
 .claude/.taskguard-state/
@@ -13,6 +15,8 @@
 .claude/.confidence-bypass.cleared
 .claude/.confidence-bypass.log
 .claude/.agent-markers/
+.claude/.context-budget-state/
+.claude/.improvement-proposal-state/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/bash-whitelist-requests/
@@ -28,3 +32,5 @@ node_modules/
 Thumbs.db
 .vscode/
 .idea/
+.docs/
+.serena/

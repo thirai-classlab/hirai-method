@@ -117,3 +117,62 @@ improvement_proposal_lookback_days: 7
 improvement_proposal_max_count: 3
 improvement_proposal_state_dir: .claude/.improvement-proposal-state
 improvement_proposal_dedup_hours: 24
+
+# === Context Budget (Loop モード用) ===
+# UserPromptSubmit hook (.claude/hooks/context-budget.sh) が消費。
+# Loop モード稼働中、context 使用率が閾値を超えた時点で <system-reminder> を
+# 注入し、メインに `/save-state` 実行 + セッション再開提案を強制する。Normal モードでは no-op。
+#
+# - context_budget_enabled:   false で hook を完全停止 (Normal モードと等価動作)
+# - context_budget_limit:     context window サイズ (tokens)。
+#                             Opus 1M = 1000000 / Sonnet & Haiku 200K = 200000。
+#                             モデル切替時は手動更新。
+# - context_budget_threshold: 警告開始 ratio (0.0〜1.0)。0.60 = 60% 使用で初回警告。
+#                             tier は 60 / 80 / 95 の 3 段階で自動エスカレート。
+# - context_budget_state_dir: 警告済み tier marker の保管場所 (.gitignore 推奨)。
+#
+# env 上書き例:
+#   export HC_CONTEXT_BUDGET_LIMIT=200000      # Sonnet/Haiku 使用時
+#   export HC_CONTEXT_BUDGET_THRESHOLD=0.50    # 50% で早めに警告
+#   export HC_CONTEXT_BUDGET_ENABLED=false     # 一時的に無効化
+context_budget_enabled: true
+context_budget_limit: 1000000
+context_budget_threshold: 0.60
+context_budget_state_dir: .claude/.context-budget-state
+
+# === Reviewer Registry (W2 design-review fan-out 用) ===
+# `/design-review <slug>` command が読み、カテゴリ別 agent を並列起動する。
+# 各キーは agent type name の flat 配列 (config-loader.sh の `[a, b, c]` 構文)。
+#
+# - reviewer_registry_design:   設計レビュー専門 agent (System / Code / API / UI / DB)
+# - reviewer_registry_security: セキュリティレビュー専門
+# - reviewer_registry_test:     テスト設計 / QA 専門 (W1 /test-design でも使用)
+# - reviewer_registry_impl:     実装レビュー専門 (W3 /module-review /system-review でも使用)
+#
+# 各カテゴリの実起動範囲は draft の stack heuristic で絞り込まれる
+# (例: DB タスクでなければ database-reviewer を skip)。
+#
+# env 上書き例:
+#   export HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer'  # 2 件に絞る
+reviewer_registry_design: [architect, architect-reviewer, code-architect, api-designer, ui-designer, database-reviewer, harness-optimizer]
+reviewer_registry_security: [security-auditor, security-reviewer, penetration-tester]
+reviewer_registry_test: [tdd-guide, test-automator, qa-expert, pr-test-analyzer]
+reviewer_registry_impl: [code-reviewer, refactoring-specialist, typescript-reviewer, python-reviewer, go-reviewer, rust-reviewer, csharp-reviewer, java-reviewer, kotlin-reviewer, cpp-reviewer, flutter-reviewer]
+
+# === Workflow Stages (W4 new-feature / modify-feature 強制用) ===
+# workflow-guard.sh が読み、`/finish-task <slug>` 時に
+# `.claude/.workflow-state/<slug>.json` の current_stage が以下配列の最終要素に達しているかを判定する。
+# stage 名はフラット配列で並べる (step 番号でなく stage 名で判定 — round-2 arch-rev H3 反映)。
+#
+# - workflow_stages_new:    /new-feature 14-stage オーケストレータ
+#   要件定義 → 基本設計 → 詳細設計 → テスト設計 → design-review fan-out →
+#   user 承認 → タスク化 → TDD → module-review → ローカルテスト →
+#   system-review → CI/CD → シナリオテスト → /finish-task
+# - workflow_stages_modify: /modify-feature 10-stage オーケストレータ
+#   ブランチ確定 → checkout → 既存設計回収 → pre-test → 設計改修 →
+#   テスト改修 → TDD → module-review → 全テスト → system-review
+#
+# env 上書き例:
+#   export HC_WORKFLOW_STAGES_NEW=$'requirements\nbasic-design\n...'   # 改行区切り
+workflow_stages_new: [requirements, basic-design, detailed-design, test-design, design-review, user-approval, task-creation, tdd, module-review, local-test, system-review, ci-cd, scenario-test, finish]
+workflow_stages_modify: [branch-decision, checkout, recover-design, pre-test, redesign, retest-design, tdd, module-review, full-test, system-review]

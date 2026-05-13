@@ -90,6 +90,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash .claude/hooks/autonomous-action-guard.sh",
+            "timeout": 5,
+            "statusMessage": "Loop モード自律実行可否検証中..."
+          },
+          {
+            "type": "command",
             "command": "bash .claude/hooks/delegation-guard.sh Bash",
             "timeout": 5,
             "statusMessage": "サブエージェント委譲ルール確認中..."
@@ -99,6 +105,12 @@
             "command": "bash .claude/hooks/gateguard.sh Bash",
             "timeout": 5,
             "statusMessage": "GateGuard 破壊的コマンド検査中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/workflow-guard.sh Bash",
+            "timeout": 5,
+            "statusMessage": "Workflow 完了条件検証中..."
           }
         ]
       },
@@ -183,6 +195,12 @@
             "type": "command",
             "command": "bash .claude/hooks/stop.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/byproduct-discharge-guard.sh",
+            "timeout": 5,
+            "statusMessage": "副産物 discharge 検証中..."
           }
         ]
       }
@@ -225,6 +243,18 @@
             "command": "bash .claude/hooks/mode-session-start.sh",
             "timeout": 3,
             "statusMessage": "HIRAI メソッド モード確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/next-actions-surface.sh",
+            "timeout": 5,
+            "statusMessage": "未処理副産物 surface 中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/mode-asana-prompt.sh",
+            "timeout": 3,
+            "statusMessage": "Asana 連携モード確認中..."
           }
         ]
       }
@@ -243,6 +273,18 @@
             "command": "bash .claude/hooks/mode-enforce.sh",
             "timeout": 3,
             "statusMessage": "モードルール注入中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/context-budget.sh",
+            "timeout": 5,
+            "statusMessage": "Context 使用率チェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "Loop モード自律進行検証中..."
           }
         ]
       }

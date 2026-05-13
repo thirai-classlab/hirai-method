@@ -136,12 +136,72 @@ case "$tool" in
     fi
 
     # 各セグメントを抽出 (; && || | で分割)
-    segments=$(printf '%s' "$cmd" | awk '
-      BEGIN { RS=""; }
-      {
-        gsub(/&&|\|\||;|\|/, "\n", $0);
-        print $0;
-      }')
+    # === segment splitter ===
+    # Bash コマンドを &&, ||, ;, | で分割して各セグメントを whitelist 照合する。
+    # quote-aware 実装: シングル/ダブルクォート内 + escape (\\) 後の特殊文字を保護。
+    # heredoc 本文 (<<EOF ... EOF) は単行解析の限界で未対応 (B フル parser 化で将来対応)。
+    # 検証: .claude/tests/delegation-guard-segment-smoke.sh Case 1-6
+    split_command_segments() (
+      set -uo pipefail
+      printf '%s' "$1" | awk '
+        {
+          cmd = $0
+          out = ""
+          i = 1
+          in_single = 0
+          in_double = 0
+          escape = 0
+          n = length(cmd)
+          while (i <= n) {
+            c = substr(cmd, i, 1)
+            if (escape) {
+              out = out c
+              escape = 0
+              i++
+              continue
+            }
+            if (c == "\\" && in_single == 0) {
+              out = out c
+              escape = 1
+              i++
+              continue
+            }
+            if (c == "\x27" && in_double == 0) {
+              in_single = 1 - in_single
+              out = out c
+              i++
+              continue
+            }
+            if (c == "\"" && in_single == 0) {
+              in_double = 1 - in_double
+              out = out c
+              i++
+              continue
+            }
+            if (in_single == 0 && in_double == 0) {
+              if (c == "&" && substr(cmd, i+1, 1) == "&") {
+                out = out "\n"
+                i += 2
+                continue
+              }
+              if (c == "|" && substr(cmd, i+1, 1) == "|") {
+                out = out "\n"
+                i += 2
+                continue
+              }
+              if (c == ";" || c == "|") {
+                out = out "\n"
+                i++
+                continue
+              }
+            }
+            out = out c
+            i++
+          }
+          print out
+        }'
+    )
+    segments=$(split_command_segments "$cmd")
 
     all_allowed="true"
     bad_segment=""

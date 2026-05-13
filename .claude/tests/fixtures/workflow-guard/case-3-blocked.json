@@ -1,0 +1,33 @@
+{
+  "slug": "smoke-blocked",
+  "workflow_type": "new",
+  "current_stage": "finish",
+  "completed_stages": [
+    "requirements",
+    "basic-design",
+    "detailed-design",
+    "test-design",
+    "design-review",
+    "user-approval",
+    "task-creation",
+    "tdd",
+    "module-review",
+    "local-test",
+    "system-review",
+    "ci-cd",
+    "scenario-test"
+  ],
+  "pending_findings": {
+    "module_review": [
+      {
+        "id": "MR-001",
+        "severity": "CRITICAL",
+        "summary": "smoke fixture: simulated unresolved CRITICAL finding"
+      }
+    ],
+    "system_review": []
+  },
+  "skip_log": [],
+  "created_at": "2026-05-12T09:00:00Z",
+  "updated_at": "2026-05-12T15:30:00Z"
+}

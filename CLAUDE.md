@@ -59,6 +59,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 |--------------|---------|------|
 | [`development-process.md`](.claude/rules/development-process.md) | `src/**`, `scripts/**`, `tests/**`, `docs/tasks/**`, `docs/draft/**` | TDD、委譲、指摘対応、タスク管理、設計→承認フロー |
 | [`self-improvement.md`](.claude/rules/self-improvement.md) | (常時参照) | L1〜L5 自己改善 + F1/F2 事実検証の使い分け規約 |
+| [`workflow.md`](.claude/rules/workflow.md) | `docs/draft/**`, `docs/tasks/**`, `.claude/commands/**`, `.claude/hooks/workflow-guard.sh`, `.claude/.workflow-state/**` | workflow 強制 (test-design / design-review / module-review / system-review / new-feature / modify-feature / workflow-guard) |
 | `<追加ルール 1>` | `<対象 path>` | `<内容>` |
 | `<追加ルール 2>` | `<対象 path>` | `<内容>` |
 
@@ -102,6 +103,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 | カテゴリ | コマンド |
 |---|---|
 | タスク | `/init-tasks` `/new-draft` `/new-task` `/start-task` `/finish-task` `/task-bypass` |
+| Custom PM / Session | `/save-state` `/resume-state` `/pm-start` |
 | Git / レビュー | `/commit` `/reviewpr` |
 | 自己改善 L1 (Eval) | `/eval` |
 | 自己改善 L2 (GAN) | `/gan-design` `/gan-build` |
@@ -109,6 +111,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 | 自己改善 L5 (Introspect) | `/agent-introspect` |
 | 事実検証 F1 (GateGuard) | `/gate-status` `/gate-clear` `/gate-bypass` |
 | 事実検証 F2 (Verify) | `/verify` |
+| Workflow 強制 (W1-W4) | `/test-design` `/design-review` `/module-review` `/system-review` `/new-feature` `/modify-feature` |
 | 監査 | `/harness-audit` |
 
 詳細: [`docs/SELF_IMPROVEMENT.md`](docs/SELF_IMPROVEMENT.md)
@@ -124,6 +127,10 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 
 | 教訓 | 重要度 |
 |:---|:---:|
+| **並列 subagent に同一 branch で `git commit` させる際は `git add <specific files>` 限定 + `git reset` 禁止を prompt 必須記載**。`git reset --soft HEAD^` がメイン / 他 subagent の commit を巻き添えで orphan 化する事故 (2026-05-12, `2bbe079` 混在 → `deda280` orphan → `52a170f` 再 commit で復旧)。完全分離が必要なら `isolation: "worktree"` で worktree 隔離 | HIGH |
+| **`.claude/hooks/lib/*.sh` の file-top に `set -euo pipefail` を書かない**。caller の shell flags に leak し、`cmd \| head -1` で SIGPIPE → pipefail → errexit → **exit 141 サイレント終了**。`load_xxx() ( set -uo pipefail; ... )` のように subshell 関数化で局所化する (2026-05-12 CB-verify, `5846925` で根本修正、context-budget hook の未発火問題が解消) | HIGH |
+| **Loop モード稼働中、subagent 起動後にメインが `completion 通知の受動待ち` で停止しない**。`run_in_background: true` 必須 + 待ち中は別 task / メイン専任作業 / 規範文書化 / memory 整理 を並行進行する。違反例: subagent #13-#15 起動後にメインがターン区切り報告で停止 → user 「Loop モード継続中。なぜ自動で実行を続けないのか?」を **複数回**指摘 (2026-05-12)。`.claude/hooks/loop-auto-progress-reminder.sh` (UserPromptSubmit) が「待ち中報告」キーワード検出で `<system-reminder>` 強制注入、`modes.md` 遵守事項 7 で機械防止化 | HIGH |
+| **Loop モードの「中間確認禁止」を盾に `git push` / `gh pr create` / production deploy 等の破壊的操作を自律実行しない**。準備 (draft / 設計 / 実装 / ローカル commit) のみ自律、撤回不可な操作は user 明示承認必須。違反例: 2026-05-12 セッション中、`git push origin feat/loop-mode` を **5 回以上**自律実行。`.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) が 11 カテゴリ (push / PR / release / 本番 deploy / DB push / k8s apply / terraform apply 等) を `{"decision":"block"}` で機械防止化、bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` + bypass.log 記録、`modes.md` 遵守事項 8 | HIGH |
 | `<例: 公開/非公開フィルタは RLS で一元化、queries.ts に .not() 禁止>` | HIGH |
 | `<例: vitest は build 制約違反を検出不可、push 前に build 必須>` | HIGH |
 | `<例: 独自 secret 認証 API は middleware PUBLIC_PATHS にも追加（3 点セット）>` | HIGH |
