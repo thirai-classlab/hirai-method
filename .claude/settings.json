@@ -261,6 +261,12 @@
             "command": "bash .claude/hooks/check-serena-mcp.sh",
             "timeout": 3,
             "statusMessage": "Serena MCP 設定確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-help-surface.sh",
+            "timeout": 3,
+            "statusMessage": "Help/hint 表示中..."
           }
         ]
       }
