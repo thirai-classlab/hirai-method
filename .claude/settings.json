@@ -255,6 +255,12 @@
             "command": "bash .claude/hooks/mode-asana-prompt.sh",
             "timeout": 3,
             "statusMessage": "Asana 連携モード確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-serena-mcp.sh",
+            "timeout": 3,
+            "statusMessage": "Serena MCP 設定確認中..."
           }
         ]
       }
