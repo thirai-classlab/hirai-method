@@ -7,8 +7,9 @@ requester: ""
 
 # Task #13: Subagent `.claude/` 配下 permission denied 回避 staging 戦略の規範化
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了 (2026-05-13)**
 > 起案: 2026-05-13
+> 完了: 2026-05-13 (commits `3423e40` W0 / `9473657` W1+W2 / `4a6f007` W3 + sync commit 続)
 > 関連: #12 / Phase byproduct-discharge
 > 設計起源: [`subagent-claude-permission-staging-doc.md`](../draft/subagent-claude-permission-staging-doc.md)
 
@@ -81,13 +82,14 @@ W3: `docs/tasks/next-actions.md` entry #12 行を Edit で処理結果列のみ�
 
 ## Wave 構成
 
-| Wave | 内容 | 工数 | 依存 |
-|:---:|:---|---:|:---|
-| W1 | `.claude/rules/development-process.md` に新セクション「サブエージェント `.claude/` 編集の staging 戦略 (必須)」追加 (4 サブセクション) | 0.2h | — |
-| W2 | 同 file §関連 セクションに Serena memory リンク追加 (W1 と同 commit 同梱) | 0.05h | W1 |
-| W3 | `docs/tasks/next-actions.md` entry #12 処理結果列を「✅ → docs/draft/... → task #13」更新 (別 commit、sync) | 0.05h | W1+W2 |
+| Wave | 内容 | 工数 | 依存 | 状態 |
+|:---:|:---|---:|:---|:---:|
+| W0 | draft 承認反映 + task #13 spawn (3 file commit) | 0.1h | — | ✅ `3423e40` |
+| W1 | `.claude/rules/development-process.md` に新セクション「サブエージェント `.claude/` 編集の staging 戦略 (必須)」追加 (5 サブセクション: 強制プロンプト雛型 / 検出パターン / 例外 / 起源 / 再発検出時の昇格判定) | 0.2h | W0 | ✅ `9473657` |
+| W2 | §関連 Serena memory リンク — W1 §起源 sub-section に merge 充足、別 Edit 不要 | 0.05h | W1 | ✅ W1 commit に同梱 |
+| W3 | `docs/tasks/next-actions.md` entry #12 処理結果列 sync | 0.05h | W1+W2 | ✅ `4a6f007` |
 
-合計工数: 0.3h (= 約 18 分)
+合計工数: 0.3h (= 約 18 分、実績 0.3h ジャスト)
 
 ## 完了条件
 
@@ -127,7 +129,9 @@ W3: `docs/tasks/next-actions.md` entry #12 行を Edit で処理結果列のみ�
 | 日付 | 状態 | 備考 |
 |---|---|---|
 | 2026-05-13 | 起案 | 設計 draft 起こし `docs/draft/subagent-claude-permission-staging-doc.md` |
-| 2026-05-13 | 承認 | user 承認、`list.md` に追加 |
+| 2026-05-13 | 承認 | user 「承認」逐語受領 (Loop モード)、`list.md` row 13 追加 |
+| 2026-05-13 | 着手 | W0 commit `3423e40` (3 files: draft / task file / list.md) |
+| 2026-05-13 | 完了 | W1+W2 commit `9473657` + W3 commit `4a6f007`、DoD 全項目実証 (新 section / 5 sub-sections / Serena memory link / next-actions ✅ 化 / 2 atomic commits / hash 実証) |
 
 ## 派生 task / 次アクション候補
 
