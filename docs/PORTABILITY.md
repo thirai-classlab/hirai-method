@@ -1,6 +1,126 @@
-# Portability — 別リポへの移植手順
+# Portability — 別リポへの移植手順 + dual-mode install
 
-> **TL;DR**: `.claude/harness-config.yml` 1 枚を編集すれば、3 つの guard hook + audit script の挙動が連動変化する。**ハードコード編集は不要**。
+> **TL;DR**: `.claude/harness-config.yml` 1 枚を編集すれば、3 つの guard hook + audit script の挙動が連動変化する。**ハードコード編集は不要**。さらに task #12 (dual-mode-portability) で **project-level install** (`<project>/.claude/`) と **user-level install** (`~/.claude/`) の両モードをサポートし、hook の PROJECT_ROOT 解決は `lib/project-root.sh` の `resolve_project_root()` (env > git > pwd の 3 段優先) で hook 物理位置から独立化されている。
+
+## Dual-mode install (PROJECT_ROOT resolution)
+
+ハーネスは **project-level install** と **user-level install** の両方をサポートする。両モードの違いは「hook の物理配置」と「settings.json の path 書式」だけで、内部ロジックは共通。
+
+| 観点 | project-level (既定) | user-level |
+|---|---|---|
+| hook 物理位置 | `<project>/.claude/hooks/` | `~/.claude/hooks/` |
+| settings.json | `<project>/.claude/settings.json` | `~/.claude/settings.json` (`.claude/templates/settings.user-level.json.template` から copy) |
+| hook command path | `bash .claude/hooks/X.sh` (cwd-relative) | `bash ${HOME}/.claude/hooks/X.sh` (絶対) |
+| PROJECT_ROOT 解決 | `HC_PROJECT_ROOT` > `git rev-parse` > `pwd` | 同左 |
+| project file (`docs/tasks/list.md` 等) の参照 | hook 内で `$PROJECT_ROOT/docs/...` | 同左 |
+| repo に commit するファイル | `<project>/.claude/` を repo 配下に commit (推奨) | `~/.claude/` は個人環境、commit しない |
+| 複数 project 共有 | 各 project に `.claude/` を独立配置 | 1 つの `~/.claude/` を全 project が共有 |
+
+### PROJECT_ROOT 解決の優先順 (`.claude/hooks/lib/project-root.sh`)
+
+```bash
+resolve_project_root() (
+  set -uo pipefail
+  # 1. env override
+  if [ -n "${HC_PROJECT_ROOT:-}" ]; then printf '%s' "$HC_PROJECT_ROOT"; return 0; fi
+  # 2. git rev-parse --show-toplevel
+  if command -v git >/dev/null 2>&1; then
+    local root; root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [ -n "$root" ] && [ -d "$root" ]; then printf '%s' "$root"; return 0; fi
+  fi
+  # 3. pwd fallback
+  pwd
+)
+```
+
+| 優先順 | source | 用途 |
+|:---:|---|---|
+| 1 | `HC_PROJECT_ROOT` env | CI / test / 明示的な project 切替 |
+| 2 | `git rev-parse --show-toplevel` | git 配下の通常 case (user-level / project-level 共通) |
+| 3 | `pwd` fallback | git 不在 dir / git 管理外 |
+
+### user-level install 手順
+
+```bash
+# 1. リポを clone
+git clone https://github.com/thirai-classlab/hirai-method.git ~/hirai-method
+
+# 2. user home に hooks / skills / rules / commands をコピー
+mkdir -p ~/.claude
+cp -R ~/hirai-method/.claude/hooks   ~/.claude/hooks
+cp -R ~/hirai-method/.claude/skills  ~/.claude/skills
+cp -R ~/hirai-method/.claude/rules   ~/.claude/rules
+cp -R ~/hirai-method/.claude/commands ~/.claude/commands
+cp    ~/hirai-method/.claude/harness-config.yml ~/.claude/harness-config.yml
+cp    ~/hirai-method/.claude/bash-whitelist.txt ~/.claude/bash-whitelist.txt
+
+# 3. user-level settings template を install
+cp ~/hirai-method/.claude/templates/settings.user-level.json.template \
+   ~/.claude/settings.json
+
+# 4. (option) project ごとに HC_PROJECT_ROOT を export (git 配下なら省略可)
+#    例: direnv の .envrc に書く
+echo 'export HC_PROJECT_ROOT="$PWD"' > /path/to/your-project/.envrc
+direnv allow /path/to/your-project
+
+# 5. 動作確認
+cd /path/to/your-project
+claude  # Claude Code 起動
+#   - hook は ~/.claude/hooks/ から発火
+#   - PROJECT_ROOT は git rev-parse か HC_PROJECT_ROOT で /path/to/your-project に解決
+#   - CLAUDE.md / docs/tasks/list.md 等の project file は project 配下から読まれる
+```
+
+### PROJECT_ROOT を使う hook (現状 4 件)
+
+W2 で `lib/project-root.sh` 経由に統一済:
+
+| hook | 用途 |
+|---|---|
+| `check-serena-mcp.sh` | `$PROJECT_ROOT/.mcp.json` の serena entry 確認 |
+| `check-md-mermaid.sh` | `cd $project_root` して `.claude/scripts/check-md-mermaid.mjs` 起動 |
+| `byproduct-discharge-guard.sh` | `$_project_dir/docs/tasks/next-actions.md` を解析 (Stop hook) |
+| `next-actions-surface.sh` | 同上 (SessionStart hook) |
+
+`byproduct-discharge-guard.sh` と `next-actions-surface.sh` は後方互換のため `CLAUDE_PROJECT_DIR` env が明示設定されている場合はそれを優先する。
+
+### dual-mode 動作保証 smoke
+
+`.claude/tests/dual-mode-portability-smoke.sh` (4 case):
+
+```
+Case 1: HC_PROJECT_ROOT=/tmp/<fake> → resolve_project_root returns /tmp/<fake>
+Case 2: env unset + in git repo → returns git rev-parse --show-toplevel
+Case 3: env unset + non-git dir → returns pwd
+Case 4: hook simulated from user-level path + HC_PROJECT_ROOT → hook reads target project's .mcp.json
+```
+
+実行:
+```bash
+bash .claude/tests/dual-mode-portability-smoke.sh
+# → PASS: 4 / 4
+```
+
+### lib/project-root.sh の strict mode 局所化 (重要)
+
+`lib/project-root.sh` は **file-top に `set -euo pipefail` を書かない**。caller hook の shell flags に leak すると、後段の pipeline (例: `cmd | jq | head -1`) が SIGPIPE で **exit 141 silent 終了** する事故が context-budget.sh で実発生 (commit `5846925` で修正)。
+
+```bash
+# 正: 関数の subshell 内で局所化
+resolve_project_root() (
+  set -uo pipefail
+  ...
+)
+
+# 誤: file-top に書くと caller に leak する
+set -euo pipefail   # ← 絶対書かない
+```
+
+詳細は memory `feedback_set_e_in_sourced_libs.md` 規範を参照。
+
+---
+
+## 既存セクション (project-level install 中心)
 
 ## アーキテクチャ
 

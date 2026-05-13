@@ -86,7 +86,16 @@ flowchart TD
 - (任意) Docker（SWE-bench 評価機構を使う場合）
 - **(`/save-state` `/resume-state` `/pm-start` 利用時に必須)** Serena MCP — `.mcp.json` に `serena` entry 登録 (`uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant`)。Session 永続化 + PM Orchestration の memory backend として動作
 
-### 手順
+### 2 つの install モード (task #12 dual-mode-portability)
+
+ハーネスは **project-level install** (`<project>/.claude/`) と **user-level install** (`~/.claude/`) の両方をサポートする。hook の PROJECT_ROOT 解決は `.claude/hooks/lib/project-root.sh` が `HC_PROJECT_ROOT` env → `git rev-parse --show-toplevel` → `pwd` の 3 段優先で行う。
+
+| モード | settings.json | hook path | 対象 project の解決 | 用途 |
+|---|---|---|---|---|
+| **project-level** (既定) | `<project>/.claude/settings.json` | `bash .claude/hooks/X.sh` (cwd-relative) | cwd = project root 前提 | 1 project 専用、`.claude/` を repo に commit |
+| **user-level** | `~/.claude/settings.json` (templates から copy) | `bash ${HOME}/.claude/hooks/X.sh` | `HC_PROJECT_ROOT` env or `git rev-parse` | 複数 project で hooks 共有 |
+
+### 手順 A: project-level install (既定)
 
 ```bash
 # 1. リポを clone
@@ -106,6 +115,33 @@ $EDITOR .claude/harness-config.yml
 # 4. .claude/bash-whitelist.txt をパッケージマネージャ / CLI に合わせて調整
 # 5. CLAUDE.md.template の <...> プレースホルダを実値で埋めて CLAUDE.md にリネーム
 # 6. 動作確認: 任意のファイルを Read してみる、保護パス配下を Edit して block されることを確認
+```
+
+### 手順 B: user-level install (複数 project 共有)
+
+```bash
+# 1. リポを clone
+git clone https://github.com/thirai-classlab/hirai-method.git ~/hirai-method
+
+# 2. hooks と skills を user home にコピー
+mkdir -p ~/.claude
+cp -R ~/hirai-method/.claude/hooks ~/.claude/hooks
+cp -R ~/hirai-method/.claude/skills ~/.claude/skills
+cp -R ~/hirai-method/.claude/rules ~/.claude/rules
+cp -R ~/hirai-method/.claude/commands ~/.claude/commands
+
+# 3. user-level settings template を install
+cp ~/hirai-method/.claude/templates/settings.user-level.json.template \
+   ~/.claude/settings.json
+
+# 4. 各 project は CLAUDE.md / .mcp.json / docs/ をそのまま管理
+#    project root は git 配下なら自動解決 (git rev-parse --show-toplevel)
+#    git 外で動かす場合は env で明示:
+export HC_PROJECT_ROOT=/path/to/your-project
+
+# 5. 動作確認: cd /path/to/your-project して Claude Code を起動、hook が
+#    ${HOME}/.claude/hooks/ から発火し、project file (CLAUDE.md / docs/tasks/) を
+#    HC_PROJECT_ROOT または git rev-parse 経由で参照することを確認
 ```
 
 詳細は [`docs/PORTABILITY.md`](docs/PORTABILITY.md) 参照。
