@@ -34,7 +34,38 @@ fi
 
 VERBOSE="${HC_SESSION_HELP_VERBOSE:-false}"
 
-# === 共通: 簡潔版 (default) ===
+# === stderr: terminal 直接表示 banner (Claude Code が SessionStart stderr を terminal に流す挙動を期待) ===
+# stdout だけだと agent の first response 経由でしか visible にならず、
+# 「何も入力しないと help が見えない」問題が生じる。stderr 経路で session 起動直後の
+# terminal に直接 banner を流すことで、user 入力ゼロでも help が visible になる可能性を確保。
+cat >&2 <<'EOF'
+
+═══════════════════════════════════════════════════════════════════
+  HIRAI メソッド — 主要 slash commands
+═══════════════════════════════════════════════════════════════════
+  Session 永続化 : /save-state  /resume-state  /pm-start  (Serena MCP 必須)
+  タスク管理    : /init-tasks  /new-draft <slug>  /new-task <id> <slug>
+                  /start-task <id>  /finish-task <id>
+  Workflow 強制  : /test-design  /design-review  /module-review
+                  /system-review  /new-feature  /modify-feature
+  副産物         : /discharge-byproduct <entry>
+  Mode           : /mode <normal|loop>
+  Git / レビュー : /commit  /reviewpr  /verify
+  監査           : /harness-audit
+  自己改善       : /eval  /gan-design  /gan-build  /instinct-status
+                  /learn  /promote  /agent-introspect
+  GateGuard      : /gate-status  /gate-clear  /gate-bypass
+
+  Onboarding     : CLAUDE.md  +  docs/INVENTORY.md  +  .claude/rules/development-process.md
+  詳細版         : export HC_SESSION_HELP_VERBOSE=true
+  抑制           : export HC_SESSION_HELP_ENABLED=false
+═══════════════════════════════════════════════════════════════════
+
+EOF
+
+# === stdout: agent への context (MANDATORY embed directive 付き) ===
+# stderr が claude-code で表示されない環境向けの fallback。
+# stderr で表示されている場合でも agent が response 内に embed することで再確認可能。
 cat <<'EOF'
 <system-reminder>
 **HIRAI メソッド: 主要 slash commands + onboarding hint (採用者 UX)**
