@@ -29,7 +29,7 @@ paths:
 
 すべての実装はTDDで進める。
 
-1. テスト専門エージェント（`/sc:test`）にテスト観点・テストパターンを洗い出させる
+1. テスト専門エージェント (`Agent(tdd-guide)` / `Agent(test-automator)` / `Agent(qa-expert)`) にテスト観点・テストパターンを洗い出させる
 2. テストを設計・実装する（Red: テストが失敗する状態）
 3. プロダクションコードを実装してテストを通す（Green）
 4. リファクタリング（Refactor）
@@ -54,9 +54,9 @@ paths:
 
 **サブエージェントに委譲する作業（すべて Agent tool 経由）:**
 - コード調査・読み取り → `Agent(subagent_type=Explore)`
-- テスト設計 → Agent 内で `/sc:test`
+- テスト設計 → `Agent(tdd-guide)` / `Agent(test-automator)` / `Agent(qa-expert)` (MECE 観点は `/test-design <slug>` command で並列 fan-out)
 - コード実装 → `Agent(general-purpose)` or `Agent(isolation=worktree)`
-- ビルド確認 → Agent 内で `/sc:build`
+- ビルド確認 → 言語別 `/go-build` / `/rust-build` / `/cpp-build` / `/kotlin-build` / `/flutter-build` / `/java-build` 等の build command、または `verification-loop` skill (`/verify` command)
 - Web 調査 → Agent 内で WebSearch/WebFetch
 - プログラム実行（Bash） → Agent 内で実行
 - 独立したタスクは並列で複数サブエージェントを同時起動すること
