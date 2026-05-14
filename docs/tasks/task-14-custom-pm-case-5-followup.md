@@ -7,7 +7,7 @@ requester: ""
 
 # Task #14: Custom-PM Case 5 follow-up — `/sc:` 残存解消
 
-> Status: **🔄 進行中**
+> Status: **✅ 完了** (2026-05-14、5 commits: W0 `f3f64ba` / W1 `9b1545e` / W2 `90fdebb` / W3 `bdbcbb0` / sync、smoke 42/42 PASS、subagent confidence W1 0.95 + W3 0.97)
 > 起案: 2026-05-14
 > 関連: #7 (custom-pm-commands), #10 (sc-removal-serena-warning)
 > 設計起源: [`docs/draft/custom-pm-case-5-followup.md`](../draft/custom-pm-case-5-followup.md) (2026-05-14 user 承認)
@@ -178,6 +178,7 @@ subagent 件数: 2 (W1 + W3、逐次 dispatch、合計約 70-100 秒想定)
 | 2026-05-14 | 起案 | 設計 draft 起こし (`docs/draft/custom-pm-case-5-followup.md`) |
 | 2026-05-14 | 承認 | user 承認 (逐語: 「承認します。」)、`list.md` row 14 追加、W0 開始 |
 | 2026-05-14 | 進行中 | W0 spawn (本 file + list row + memory plan + commit) |
+| 2026-05-14 | 完了 | 5 commits: W0 `f3f64ba` + W1 `9b1545e` (subagent 0.95, smoke 6/6) + W2 `90fdebb` (Grep verify 0 matches) + W3 `bdbcbb0` (subagent 0.97, smoke 42/42 PASS, regression 0) + sync (本 commit、task-14 ✅ + list.md ✅ + 履歴処理結果 + memory evaluation)。Critical Operational Lessons + Loop 自律実行禁止リスト 全項目 0 違反、F1 4 事実 + F3 confidence-gate 全件通過、Serena memory 3 件永続化 (plan/hypothesis + execution/do + evaluation/check)。DoD 11/11 達成。 |
 
 ## 派生 task / 次アクション候補
 

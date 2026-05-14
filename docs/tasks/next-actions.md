@@ -69,7 +69,7 @@ next-actions.md からエントリ削除（移行先を「処理結果」列に�
 
 | # | 記録日 | タイトル | 発生源 | 緊急度 | 推奨処理 | 処理結果 |
 |---:|---|---|---|:---:|---|---|
-| 9 | 2026-05-13 | **旧 SuperClaude command 後継 smoke の事後監視 failure** — `custom-pm-commands-smoke.sh` Case 5 (allowed file 以外で旧 SuperClaude session/PM command 言及残存を検出) が pre-existing fail。真因 = 2 file (本 next-actions.md entry #9 自体 + `README.md`) が allowlist 外。task #7 W4 (`f063ff3` 旧 command 後継置換) の事後監視 smoke の残存検出。**該当箇所**: `.claude/tests/custom-pm-commands-smoke.sh` Case 5 | task #9 subagent 検証 (2026-05-13) | 🟡 | (a) draft 起こし `custom-pm-case-5-followup` | ✅ → [`docs/draft/custom-pm-case-5-followup.md`](../draft/custom-pm-case-5-followup.md) → [task #14](task-14-custom-pm-case-5-followup.md) (2026-05-14、Case 5 6/6 PASS @ commit `9b1545e`) |
+| 9 | 2026-05-13 | **旧 SuperClaude command 後継 smoke の事後監視 failure** — `custom-pm-commands-smoke.sh` Case 5 (allowed file 以外で旧 SuperClaude session/PM command 言及残存を検出) が pre-existing fail。真因 = 2 file (本 next-actions.md entry #9 自体 + `README.md`) が allowlist 外。task #7 W4 (`f063ff3` 旧 command 後継置換) の事後監視 smoke の残存検出。**該当箇所**: `.claude/tests/custom-pm-commands-smoke.sh` Case 5 | task #9 subagent 検証 (2026-05-13) | 🟡 | (a) draft 起こし `custom-pm-case-5-followup` | ✅ → [`docs/draft/custom-pm-case-5-followup.md`](../draft/custom-pm-case-5-followup.md) → [task #14](task-14-custom-pm-case-5-followup.md) (2026-05-14 完了、5 commits: W0 `f3f64ba` / W1 `9b1545e` / W2 `90fdebb` / W3 `bdbcbb0` / sync、合計 smoke 42/42 PASS、catch-22 解消、案 C ハイブリッド) |
 
 ## 関連
 
