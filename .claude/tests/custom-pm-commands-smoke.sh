@@ -56,12 +56,12 @@ case_4() {
   grep -q '/resume-state' "$hook"
 }
 
-# Case 5: 残存 /sc:(save|load|pm) が 「draft / task spec / list.md / 後継 command 自身 / .serena memories / workflow.md predecessor 記述 / README migration doc / next-actions catch-22 暫定 / case-5-followup draft 逐語引用」 のみ
+# Case 5: 残存 /sc:(save|load|pm) が 「draft / task spec / list.md / 後継 command 自身 / .serena memories / workflow.md predecessor 記述 / README migration doc / case-5-followup draft 逐語引用」 のみ
 case_5() {
   local found
   found=$(cd "$PROJECT_ROOT" && grep -rlE '/sc:(save|load|pm)' \
     --include='*.md' --include='*.sh' --include='*.yml' . 2>/dev/null | \
-    grep -vE '(docs/draft/custom-pm-commands\.md|docs/tasks/task-7-custom-pm-commands\.md|docs/tasks/list\.md|\.claude/commands/(save-state|resume-state|pm-start)\.md|\.claude/rules/workflow\.md|^\./\.serena/|^\./README\.md|^\./docs/tasks/next-actions\.md|^\./docs/draft/custom-pm-case-5-followup\.md)' || true)
+    grep -vE '(docs/draft/custom-pm-commands\.md|docs/tasks/task-7-custom-pm-commands\.md|docs/tasks/list\.md|\.claude/commands/(save-state|resume-state|pm-start)\.md|\.claude/rules/workflow\.md|^\./\.serena/|^\./README\.md|^\./docs/draft/custom-pm-case-5-followup\.md)' || true)
   [ -z "$found" ]
 }
 
