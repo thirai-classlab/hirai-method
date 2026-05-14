@@ -69,7 +69,7 @@ git switch -c feature/issue-41-snapshot 2>/dev/null || git switch feature/issue-
 - ...
 
 ### 着手推奨
-1. (TDD) Wave 1 のテスト観点出し → `Agent(/sc:test)`
+1. (TDD) Wave 1 のテスト観点出し → `Agent(tdd-guide)` (or `Agent(test-automator)` / `Agent(qa-expert)`)
 2. その後 Red → Green → Refactor
 ```
 

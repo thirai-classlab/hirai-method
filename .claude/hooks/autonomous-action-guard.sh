@@ -207,6 +207,15 @@ case "$MODE" in
     exit 0
     ;;
   *)
+    # Normal モード: warning context 注入のみ。ただし禁止パターン match 時は
+    # log_bypass で監査残し (W2, task #9)。「Loop 規律から外れた可能性ある cmd」を
+    # bypass.log に記録し /harness-audit でトレース可能にする。
+    # bypass: HC_AUTONOMOUS_LOG_NORMAL_RESTRICTED=false で OFF。
+    if [ "${HC_AUTONOMOUS_LOG_NORMAL_RESTRICTED:-true}" != "false" ]; then
+      if declare -f log_bypass >/dev/null 2>&1; then
+        log_bypass "autonomous-action-guard" "mode-normal-restricted-cmd" "matched=${matched_pattern} segment=${matched_segment}"
+      fi
+    fi
     jq -n --arg r "$reason_normal" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$r}}'
     exit 0
     ;;

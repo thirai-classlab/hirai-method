@@ -40,9 +40,11 @@ if ! grep -qE '^[[:space:]]*(\`{3,}|~{3,})[[:space:]]*mermaid' "$file_path" 2>/d
   exit 0
 fi
 
-# Resolve project root
+# Resolve project root (dual-mode portability: HC_PROJECT_ROOT > git > pwd)
 script_dir=$(cd "$(dirname "$0")" && pwd)
-project_root=$(cd "$script_dir/../.." && pwd)
+# shellcheck source=lib/project-root.sh
+source "$script_dir/lib/project-root.sh"
+project_root=$(resolve_project_root)
 cd "$project_root"
 
 if [ ! -f .claude/scripts/check-md-mermaid.mjs ]; then

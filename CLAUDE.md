@@ -15,7 +15,7 @@
 
 ## Development Policy
 
-- **TDD**: テスト先行（テスト専門エージェント or `/sc:test` で観点出し → Red → Green → Refactor）
+- **TDD**: テスト先行（テスト専門エージェント `tdd-guide` / `test-automator` / `qa-expert` で観点出し → Red → Green → Refactor）
 - **サブエージェント委譲（Hook 強制 + 背景起動 + 順序整合性 + Task 登録 + Bash deny 反射）**:
   - メインは `src/` `tests/` `scripts/` の Read/Write/Edit/Bash 禁止 → すべて Agent tool 経由
   - **Agent tool は `run_in_background: true` 必須**（メインを user 対話に常時開放）

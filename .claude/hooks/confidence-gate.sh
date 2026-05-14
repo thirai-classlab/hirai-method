@@ -142,6 +142,14 @@ extract_tool_response_text() {
   ' 2>/dev/null
 }
 
+# === agent_type 抽出 (W1, task #9) ===
+# SubagentStop hook は agent_type を問わず全 stop event で fire するため、
+# 軽量 sidechain (Task tool query / tool-use only) で 96 件の regex_no_match
+# が累積する事故があった (/harness-audit 2026-05-13 観察)。
+# major subagent (general-purpose 等の allowlist or path_subagents) 以外は
+# fail-open で通過させ、major subagent only に confidence 自己評価を強制する。
+agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null)
+
 # === transcript path 取得 ===
 transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
 
@@ -169,6 +177,19 @@ is_sidechain="unknown"
 case "$transcript" in
   */subagents/*) is_sidechain="path_subagents" ;;
 esac
+
+# === major subagent 判定 (W1, task #9) ===
+# allowlist match (agent_type が general-purpose / Explore / Task) または
+# is_sidechain==path_subagents なら major subagent (confidence 必須)。
+# それ以外 (軽量 sidechain / Task tool query etc.) は extract_confidence 失敗時に fail-open。
+# bypass: HC_CONFIDENCE_MAJOR_AGENT_ONLY=false で従来動作 (全 stop event で block 判定)。
+is_major_subagent="false"
+case "$agent_type" in
+  general-purpose|Explore|Task) is_major_subagent="true" ;;
+esac
+if [ "$is_sidechain" = "path_subagents" ]; then
+  is_major_subagent="true"
+fi
 
 emit_block() {
   local r="$1"
@@ -265,6 +286,17 @@ if [ -z "$match" ]; then
 fi
 
 if [ -z "$match" ]; then
+  # === major subagent でなければ fail-open (W1, task #9) ===
+  # 軽量 sidechain (Task tool query / tool-use only sidechain 等) は confidence
+  # 自己評価を含めない設計のため、ここで block すると 96 件規模の noise が
+  # bypass.log に堆積する (/harness-audit 2026-05-13 観察)。
+  # bypass: HC_CONFIDENCE_MAJOR_AGENT_ONLY=false で従来動作復帰。
+  if [ "$is_major_subagent" = "false" ] && [ "${HC_CONFIDENCE_MAJOR_AGENT_ONLY:-true}" != "false" ]; then
+    log_failure "skipped_minor_sidechain" "agent_type=${agent_type} sidechain=${is_sidechain} transcript_chars=${#final_text}"
+    echo '{}'
+    exit 0
+  fi
+
   log_failure "regex_no_match" "transcript_chars=${#final_text} sidechain=${is_sidechain}"
   reason="[confidence-gate] サブエージェントの completion summary に confidence 自己評価が見つかりません。
 

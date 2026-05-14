@@ -22,8 +22,12 @@
 
 set -uo pipefail   # set -e は使わない (mode-loader.sh 教訓)
 
-# CLAUDE_PROJECT_DIR 解決
-_project_dir="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+# project root 解決 (dual-mode portability: HC_PROJECT_ROOT > git > pwd)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/project-root.sh
+source "$SCRIPT_DIR/lib/project-root.sh"
+# 後方互換: CLAUDE_PROJECT_DIR が明示設定されている場合はそれを優先
+_project_dir="${CLAUDE_PROJECT_DIR:-$(resolve_project_root)}"
 
 # stdin を消費 (SessionStart hook は使わないが、消費しないと caller 側で残ることがある)
 cat > /dev/null 2>&1 || true

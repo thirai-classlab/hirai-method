@@ -1,5 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "User-level install template for hirai-method harness. Place at ~/.claude/settings.json. All hook paths use ${HOME}/.claude/hooks/. The PROJECT_ROOT used inside hooks resolves via HC_PROJECT_ROOT env > git rev-parse > pwd (see .claude/hooks/lib/project-root.sh). For project-level install (paths relative to cwd), use the in-repo .claude/settings.json instead.",
   "permissions": {
     "deny": [
       "Read(./.env)",
@@ -34,19 +35,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Edit",
+            "command": "bash ${HOME}/.claude/hooks/delegation-guard.sh Edit",
             "timeout": 5,
             "statusMessage": "開発プロセスルール確認中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/gateguard.sh Edit",
+            "command": "bash ${HOME}/.claude/hooks/gateguard.sh Edit",
             "timeout": 5,
             "statusMessage": "GateGuard 事実検証中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/task-rule-guard.sh Edit",
+            "command": "bash ${HOME}/.claude/hooks/task-rule-guard.sh Edit",
             "timeout": 5,
             "statusMessage": "タスクルール検証中..."
           }
@@ -57,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Read",
+            "command": "bash ${HOME}/.claude/hooks/delegation-guard.sh Read",
             "timeout": 5,
             "statusMessage": "サブエージェント委譲ルール確認中..."
           }
@@ -68,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Grep",
+            "command": "bash ${HOME}/.claude/hooks/delegation-guard.sh Grep",
             "timeout": 5,
             "statusMessage": "サブエージェント委譲ルール確認中..."
           }
@@ -79,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Glob",
+            "command": "bash ${HOME}/.claude/hooks/delegation-guard.sh Glob",
             "timeout": 5,
             "statusMessage": "サブエージェント委譲ルール確認中..."
           }
@@ -90,25 +91,25 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/autonomous-action-guard.sh",
+            "command": "bash ${HOME}/.claude/hooks/autonomous-action-guard.sh",
             "timeout": 5,
             "statusMessage": "Loop モード自律実行可否検証中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Bash",
+            "command": "bash ${HOME}/.claude/hooks/delegation-guard.sh Bash",
             "timeout": 5,
             "statusMessage": "サブエージェント委譲ルール確認中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/gateguard.sh Bash",
+            "command": "bash ${HOME}/.claude/hooks/gateguard.sh Bash",
             "timeout": 5,
             "statusMessage": "GateGuard 破壊的コマンド検査中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/workflow-guard.sh Bash",
+            "command": "bash ${HOME}/.claude/hooks/workflow-guard.sh Bash",
             "timeout": 5,
             "statusMessage": "Workflow 完了条件検証中..."
           }
@@ -119,7 +120,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/agent-marker-set.sh",
+            "command": "bash ${HOME}/.claude/hooks/agent-marker-set.sh",
             "timeout": 5,
             "statusMessage": "サブエージェント起動マーカー設定中..."
           }
@@ -130,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "command": "bash ${HOME}/.claude/skills/continuous-learning-v2/hooks/observe.sh",
             "timeout": 3,
             "statusMessage": "観察記録中..."
           }
@@ -143,7 +144,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/agent-marker-clear.sh",
+            "command": "bash ${HOME}/.claude/hooks/agent-marker-clear.sh",
             "timeout": 5
           }
         ]
@@ -153,7 +154,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/check-md-mermaid.sh",
+            "command": "bash ${HOME}/.claude/hooks/check-md-mermaid.sh",
             "timeout": 90,
             "statusMessage": "Mermaid 構文チェック中..."
           }
@@ -164,13 +165,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "command": "bash ${HOME}/.claude/skills/continuous-learning-v2/hooks/observe.sh",
             "timeout": 3,
             "statusMessage": "観察記録中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/failure-loop-detect.sh",
+            "command": "bash ${HOME}/.claude/hooks/failure-loop-detect.sh",
             "timeout": 3,
             "statusMessage": "失敗ループ検出中..."
           }
@@ -182,7 +183,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/notify.sh",
+            "command": "bash ${HOME}/.claude/hooks/notify.sh",
             "timeout": 5
           }
         ]
@@ -193,12 +194,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/stop.sh",
+            "command": "bash ${HOME}/.claude/hooks/stop.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/byproduct-discharge-guard.sh",
+            "command": "bash ${HOME}/.claude/hooks/byproduct-discharge-guard.sh",
             "timeout": 5,
             "statusMessage": "副産物 discharge 検証中..."
           }
@@ -210,7 +211,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/confidence-gate.sh",
+            "command": "bash ${HOME}/.claude/hooks/confidence-gate.sh",
             "timeout": 10,
             "statusMessage": "Confidence gate 検証中..."
           }
@@ -222,49 +223,49 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/init-tasks-on-start.sh",
+            "command": "bash ${HOME}/.claude/hooks/init-tasks-on-start.sh",
             "timeout": 5,
             "statusMessage": "タスクテンプレ初期化中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/check-required-env.sh",
+            "command": "bash ${HOME}/.claude/hooks/check-required-env.sh",
             "timeout": 3,
             "statusMessage": "必須 env 確認中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/improvement-proposal.sh",
+            "command": "bash ${HOME}/.claude/hooks/improvement-proposal.sh",
             "timeout": 5,
             "statusMessage": "改善提案を生成中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/mode-session-start.sh",
+            "command": "bash ${HOME}/.claude/hooks/mode-session-start.sh",
             "timeout": 3,
             "statusMessage": "HIRAI メソッド モード確認中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/next-actions-surface.sh",
+            "command": "bash ${HOME}/.claude/hooks/next-actions-surface.sh",
             "timeout": 5,
             "statusMessage": "未処理副産物 surface 中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/mode-asana-prompt.sh",
+            "command": "bash ${HOME}/.claude/hooks/mode-asana-prompt.sh",
             "timeout": 3,
             "statusMessage": "Asana 連携モード確認中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/check-serena-mcp.sh",
+            "command": "bash ${HOME}/.claude/hooks/check-serena-mcp.sh",
             "timeout": 3,
             "statusMessage": "Serena MCP 設定確認中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/session-help-surface.sh",
+            "command": "bash ${HOME}/.claude/hooks/session-help-surface.sh",
             "timeout": 3,
             "statusMessage": "Help/hint 表示中..."
           }
@@ -276,25 +277,25 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/why-x5-reminder.sh",
+            "command": "bash ${HOME}/.claude/hooks/why-x5-reminder.sh",
             "timeout": 3,
             "statusMessage": "Why × 5 出力ルール注入中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/mode-enforce.sh",
+            "command": "bash ${HOME}/.claude/hooks/mode-enforce.sh",
             "timeout": 3,
             "statusMessage": "モードルール注入中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/context-budget.sh",
+            "command": "bash ${HOME}/.claude/hooks/context-budget.sh",
             "timeout": 5,
             "statusMessage": "Context 使用率チェック中..."
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
+            "command": "bash ${HOME}/.claude/hooks/loop-auto-progress-reminder.sh",
             "timeout": 5,
             "statusMessage": "Loop モード自律進行検証中..."
           }

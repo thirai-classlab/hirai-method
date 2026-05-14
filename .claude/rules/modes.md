@@ -60,6 +60,8 @@ HIRAI メソッドは 2 つの動作モードを持つ。
 
    違反検出時の hook 強制 (W3 で実装予定): `.claude/hooks/autonomous-action-guard.sh` が PreToolUse(Bash) で対象コマンドを `exit 2` BLOCK。bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` (user の明示承認をセッション env で表明)、`.claude/.workflow-state/bypass.log` に記録。
 
+   - **mode-switch bypass の log** (2026-05-13、task #9): Normal モードで禁止パターン match した cmd 実行は `.claude/.workflow-state/bypass.log` に `mode-normal-restricted-cmd` として記録される。env `HC_AUTONOMOUS_LOG_NORMAL_RESTRICTED=false` で OFF 可。「Loop モード規律を一時的に外して破壊的操作を実行した」事実が audit log に残るため `/harness-audit` でトレース可能。
+
    honor system (hook 実装前): メインは自律実行せず、user に「実行を承認しますか?」と提示してから実行する。
 
 **停止条件は以下 3 つのみ**:
