@@ -191,7 +191,7 @@ run_case "env threshold override (0.40 over 50pct)" "fire" "60" \
 # 11. regression guard: mode-loader must not leak set -e / pipefail to caller
 {
   out=$(
-    bash -c '
+    env HC_MODE=loop bash -c '
       set -u
       source .claude/hooks/lib/mode-loader.sh
       m=$(load_mode)
