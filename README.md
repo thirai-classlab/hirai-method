@@ -57,7 +57,7 @@
 
 ### 移植性
 
-`.claude/harness-config.yml` 1 ファイルを編集するだけで、別リポへ全 hook と全 rule の挙動が連動して移植可能。`protected_paths` `task_dir` `draft_dir` `bash_whitelist_path` 等を YAML で SSoT 管理し、3 つの guard hook + audit + init 全てから共通参照される設計。
+`.claude/harness-config.yml` 1 ファイルを編集するだけで、別リポへ全 hook と全 rule の挙動が連動して移植可能。`protected_paths` `task_dir` `draft_dir` `bash_whitelist_path` 等を YAML で SSoT 管理し、3 つの guard hook + audit + init 全てから共通参照される設計。Hook の PROJECT_ROOT 解決は 4 段 fallback (`HC_PROJECT_ROOT` env / `git rev-parse --show-toplevel` / `CLAUDE_PROJECT_DIR` env / `pwd`) で submodule 内 / git 管理外 / Claude Code session 外 のいずれでも信頼性確保 (詳細 [`docs/PORTABILITY.md`](docs/PORTABILITY.md))。
 
 ## アーキテクチャ
 
@@ -88,12 +88,12 @@ flowchart TD
 
 ### 2 つの install モード (task #12 dual-mode-portability)
 
-ハーネスは **project-level install** (`<project>/.claude/`) と **user-level install** (`~/.claude/`) の両方をサポートする。hook の PROJECT_ROOT 解決は `.claude/hooks/lib/project-root.sh` が `HC_PROJECT_ROOT` env → `git rev-parse --show-toplevel` → `pwd` の 3 段優先で行う。
+ハーネスは **project-level install** (`<project>/.claude/`) と **user-level install** (`~/.claude/`) の両方をサポートする。hook の PROJECT_ROOT 解決は `.claude/hooks/lib/project-root.sh` が `HC_PROJECT_ROOT` env → `git rev-parse --show-toplevel` → `CLAUDE_PROJECT_DIR` env → `pwd` の **4 段優先**で行う (2026-05-18 `CLAUDE_PROJECT_DIR` を 3 段目に追加、Claude Code hook 標準注入で git 管理外 / submodule 内 hook の信頼性向上、`.claude/tests/project-root-smoke.sh` で 5/5 PASS 検証)。
 
 | モード | settings.json | hook path | 対象 project の解決 | 用途 |
 |---|---|---|---|---|
 | **project-level** (既定) | `<project>/.claude/settings.json` | `bash .claude/hooks/X.sh` (cwd-relative) | cwd = project root 前提 | 1 project 専用、`.claude/` を repo に commit |
-| **user-level** | `~/.claude/settings.json` (templates から copy) | `bash ${HOME}/.claude/hooks/X.sh` | `HC_PROJECT_ROOT` env or `git rev-parse` | 複数 project で hooks 共有 |
+| **user-level** | `~/.claude/settings.json` (templates から copy) | `bash ${HOME}/.claude/hooks/X.sh` | `HC_PROJECT_ROOT` env / `git rev-parse` / `CLAUDE_PROJECT_DIR` env / `pwd` の 4 段 fallback | 複数 project で hooks 共有 |
 
 ### 手順 A: project-level install (既定)
 
@@ -230,10 +230,9 @@ homunculus_root: ~/.claude/homunculus
 
 | Event | Hook | 役割 |
 |---|---|---|
-| PreToolUse | `delegation-guard.sh` | メインの保護パス到達 block、Agent tool 委譲を強制 (quote-aware segment splitter、heredoc / quoted string 内特殊文字保護) |
+| PreToolUse | `delegation-guard.sh` | メインの保護パス到達 block、Agent tool 委譲を強制 (quote-aware segment splitter、heredoc / quoted string 内特殊文字保護)。Bash branch は **3 layers を統合**: (a) **bash-whitelist** (`.claude/bash-whitelist.txt`、main 用 git 非破壊全許可 `^git( \|$)`)、(b) **git destructive deny** (push --force / push -f / reset --hard / branch -D / clean -f / checkout -- / restore --worktree\|--source / stash drop\|clear / tag -d\|-f / reflog expire / gc --prune=now、bypass `ECC_ALLOW_DESTRUCTIVE_GIT=1`、`.claude/tests/git-destructive-deny-smoke.sh` 32/32 PASS)、(c) **protected branch push deny** (main 完全一致 / stg 部分一致、明示 refspec + refspec 省略時の current branch fallback の 2 段 check、bypass `ECC_ALLOW_PROTECTED_BRANCH_PUSH=1`) |
 | PreToolUse | `gateguard.sh` (F1) | 事実材料未提示時の Edit/Write/破壊的 Bash を block |
 | PreToolUse | `task-rule-guard.sh` (F2) | draft なきタスク作成を block |
-| PreToolUse | `bash-whitelist-guard.sh` | 許可リスト外の Bash を block |
 | PreToolUse(Bash) | `autonomous-action-guard.sh` | Loop モード自律実行禁止 11 カテゴリ (`git push` / `gh pr create` / `vercel --prod` / `terraform apply` 等) を `decision:"block"` で BLOCK、Normal モードでは context warning のみ。bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` or `/mode normal` 一時切替 |
 | PreToolUse(Bash) | `workflow-guard.sh` | `/finish-task <slug>` 直前に state JSON 検証、未完 stage / pending findings 残存で BLOCK |
 | PostToolUse | `observe.sh` | 全 tool call を JSONL 記録（`~/.claude/homunculus/`）|
@@ -392,6 +391,14 @@ python3 .claude/skills/eval-harness/swe-bench/runner.py \
 ### "confidence-gate.sh: BLOCKED" が出る
 
 → サブエージェント完了 summary に `confidence: 0.X` (0.0-1.0) を含めてください。閾値 0.6 未満は block。bypass: `/gate-bypass confidence <理由>`。
+
+### "git destructive guard: BLOCKED" が出る
+
+→ メインの Bash で破壊的 git 操作 (`push --force` / `push -f` / `reset --hard` / `branch -D` / `clean -f` / `checkout -- <file>` / `restore --worktree|--source` / `stash drop|clear` / `tag -d|-f` / `reflog expire` / `gc --prune=now`) を試みた。data loss / history rewrite 不可逆のため `delegation-guard.sh` が常時 block (Normal/Loop 両モード共通)。本当に必要なら `export ECC_ALLOW_DESTRUCTIVE_GIT=1` で 1 セッション bypass。代替の非破壊操作 (`git revert <sha>` / `git stash pop` 等) を優先検討。
+
+### "protected branch push deny: BLOCKED" が出る
+
+→ メインの Bash で `git push origin main` / `git push origin stg-v1` / `git push origin release/stg-prod` 等、main 完全一致または `stg` を含む branch への push を試みた (明示 refspec + refspec 省略時の `git rev-parse --abbrev-ref HEAD` による current branch fallback の 2 段 check)。production / staging への暴発防止のため `delegation-guard.sh` が常時 block。本当に必要なら `export ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` で 1 セッション bypass、または feature branch へ push 後 PR 経由で merge を推奨。
 
 ### "agent-router suggestion" が出ない
 
