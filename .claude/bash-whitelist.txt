@@ -32,11 +32,20 @@
 # === PATH-AWARE ===
 # (これらのコマンドは引数として src/ tests/ scripts/ を受け取りうる)
 
-# git: 全 subcommand / global option 許可。破壊的 patterns (push --force / reset --hard /
-# branch -D / clean -f / checkout -- / restore --worktree / stash drop|clear / tag -d|-f /
-# reflog expire / gc --prune=now) は delegation-guard.sh の "git destructive deny" layer で
-# 常時 block。bypass: ECC_ALLOW_DESTRUCTIVE_GIT=1 (1 セッション)。
-# 設計起源: 2026-05-18 user 指示「mainAgentでgitコマンドは基本的(破壊的変更以外)に実行できるようにしてください」。
+# git: 全 subcommand / global option 許可。以下 2 layer で delegation-guard.sh が常時 block:
+#
+#   1. git destructive deny: push --force / push -f / reset --hard / branch -D / clean -f /
+#      checkout -- / restore --worktree|--source / stash drop|clear / tag -d|-f / reflog expire /
+#      gc --prune=now
+#      bypass: ECC_ALLOW_DESTRUCTIVE_GIT=1 (1 セッション)
+#
+#   2. protected branch push deny: main / stg を含む branch への push (明示 refspec + current
+#      branch fallback の 2 段 check)
+#      bypass: ECC_ALLOW_PROTECTED_BRANCH_PUSH=1 (1 セッション)
+#
+# 設計起源:
+#   - 2026-05-18 user 指示「mainAgentでgitコマンドは基本的(破壊的変更以外)に実行可能」(destructive deny)
+#   - 2026-05-18 user 指示「gitの許可はmainとstgと含むブランチに対するpush、破壊的変更以外に対してを許可」(protected branch deny)
 ^git( |$)
 
 # パッケージマネージャ系の run/scripts 経路 (build/test/lint 等)
