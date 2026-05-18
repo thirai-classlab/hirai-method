@@ -262,7 +262,7 @@ honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry �
 - [`.claude/hooks/lib/next-actions-parser.sh`](../hooks/lib/next-actions-parser.sh) — 共通 parser
 - [`.claude/commands/discharge-byproduct.md`](../commands/discharge-byproduct.md) (W4)
 - [`.claude/tests/next-actions-hooks-smoke.sh`](../tests/next-actions-hooks-smoke.sh) (W6, 9/9 PASS)
-- 設計起源: [`docs/draft/byproduct-discharge-mechanism.md`](../../docs/draft/byproduct-discharge-mechanism.md)
+- 設計起源は採用プロジェクト側 `docs/draft/` を参照 (`.claude/` 単独で portable)
 
 ## Loop モード自律規律
 
@@ -357,6 +357,6 @@ honor system: bypass 時は理由を `docs/tasks/<task-N>.md` または `ECC_BYP
 - [`git-workflow.md`](./git-workflow.md) — branch 命名規約 (`/modify-feature` Stage 2 `checkout` の検証基準)
 - skill: `salesforce-e2e-testing` — Wave / Phase 完了時の E2E シナリオ設計 (Stage 13 `scenario-test` / Stage 9 `full-test` で参照)
 - skill: `karpathy-guidelines` — surgical changes 原則 (`/module-review` / `/system-review` の behavior-preserving 原則と整合)
-- 設計 draft: [`workflow-enforcement.md`](../../docs/draft/workflow-enforcement.md) v2 §3 — 本ルール群の元設計
+- 設計 draft の元設計は採用プロジェクト側 `docs/draft/` を参照 (`.claude/` 単独で portable)
 - state schema: [`.workflow-state/SCHEMA.md`](../.workflow-state/SCHEMA.md) — workflow-guard.sh が参照する JSON 仕様
 - audit: `harness-audit.py` の `bypass_log_summary()` / `fmt_bypass_log()` — `/harness-audit` での bypass 集計
