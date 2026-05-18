@@ -131,7 +131,11 @@ case "$tool" in
     if [ "${ECC_ALLOW_DESTRUCTIVE_GIT:-}" != "1" ]; then
       git_destructive_re='^git[[:space:]]+([^|;&]*[[:space:]])?('
       git_destructive_re="${git_destructive_re}push[[:space:]]+[^|;&]*--force"
-      git_destructive_re="${git_destructive_re}|push[[:space:]]+[^|;&]*[[:space:]]-f([[:space:]]|$)"
+      # Note: `-f` の検出は intervening args の有無を optional group で許容
+      # (旧 regex `[^|;&]*[[:space:]]-f` は effectively 2-space required で
+      # `git push -f` single-space を取りこぼした、`.claude/tests/git-destructive-deny-smoke.sh`
+      # で発見、2026-05-18 修正)。
+      git_destructive_re="${git_destructive_re}|push[[:space:]]+([^|;&]*[[:space:]])?-f([[:space:]]|$)"
       git_destructive_re="${git_destructive_re}|reset[[:space:]]+([^|;&]*[[:space:]])?--hard"
       git_destructive_re="${git_destructive_re}|branch[[:space:]]+([^|;&]*[[:space:]])?-D"
       git_destructive_re="${git_destructive_re}|clean[[:space:]]+-[A-Za-z]*f"
