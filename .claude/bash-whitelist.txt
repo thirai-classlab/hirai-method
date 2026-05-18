@@ -32,8 +32,12 @@
 # === PATH-AWARE ===
 # (これらのコマンドは引数として src/ tests/ scripts/ を受け取りうる)
 
-# git: subcommand を限定
-^git (status|diff|log|show|branch|tag|fetch|remote|rev-parse|symbolic-ref|switch|checkout|add|commit|push|pull|stash|cherry-pick|merge|rebase)( |$)
+# git: 全 subcommand / global option 許可。破壊的 patterns (push --force / reset --hard /
+# branch -D / clean -f / checkout -- / restore --worktree / stash drop|clear / tag -d|-f /
+# reflog expire / gc --prune=now) は delegation-guard.sh の "git destructive deny" layer で
+# 常時 block。bypass: ECC_ALLOW_DESTRUCTIVE_GIT=1 (1 セッション)。
+# 設計起源: 2026-05-18 user 指示「mainAgentでgitコマンドは基本的(破壊的変更以外)に実行できるようにしてください」。
+^git( |$)
 
 # パッケージマネージャ系の run/scripts 経路 (build/test/lint 等)
 ^npm run( |$)

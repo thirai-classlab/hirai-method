@@ -124,6 +124,32 @@ case "$tool" in
       exit 0
     fi
 
+    # --- git destructive deny (常時、Normal/Loop 両モード共通) ---
+    # 破壊的 git 操作は user 明示承認なしに実行禁止 (data loss / history rewrite 不可逆)。
+    # 設計起源: 2026-05-18 user 指示「mainAgentでgitコマンドは基本的(破壊的変更以外)に実行できるようにしてください」。
+    # bypass: ECC_ALLOW_DESTRUCTIVE_GIT=1 (1 セッション)。
+    if [ "${ECC_ALLOW_DESTRUCTIVE_GIT:-}" != "1" ]; then
+      git_destructive_re='^git[[:space:]]+([^|;&]*[[:space:]])?('
+      git_destructive_re="${git_destructive_re}push[[:space:]]+[^|;&]*--force"
+      git_destructive_re="${git_destructive_re}|push[[:space:]]+[^|;&]*[[:space:]]-f([[:space:]]|$)"
+      git_destructive_re="${git_destructive_re}|reset[[:space:]]+([^|;&]*[[:space:]])?--hard"
+      git_destructive_re="${git_destructive_re}|branch[[:space:]]+([^|;&]*[[:space:]])?-D"
+      git_destructive_re="${git_destructive_re}|clean[[:space:]]+-[A-Za-z]*f"
+      git_destructive_re="${git_destructive_re}|checkout[[:space:]]+--[[:space:]]"
+      git_destructive_re="${git_destructive_re}|restore[[:space:]]+([^|;&]*[[:space:]])?(--worktree|--source)"
+      git_destructive_re="${git_destructive_re}|stash[[:space:]]+(drop|clear)"
+      git_destructive_re="${git_destructive_re}|tag[[:space:]]+([^|;&]*[[:space:]])?-[df]([[:space:]]|$)"
+      git_destructive_re="${git_destructive_re}|reflog[[:space:]]+expire"
+      git_destructive_re="${git_destructive_re}|gc[[:space:]]+--prune=now"
+      git_destructive_re="${git_destructive_re})"
+
+      if printf '%s' "$cmd" | grep -qE "$git_destructive_re"; then
+        destructive_reason=$(printf '[git destructive guard] 破壊的 git 操作は禁止: %s\n\n破壊的操作の例:\n  - push --force / push -f (force push)\n  - reset --hard (history 破壊)\n  - branch -D <name> (force delete)\n  - clean -f / -fd / -fdx (untracked 削除)\n  - checkout -- <file> (file 復元)\n  - restore --worktree|--source (file 復元)\n  - stash drop|clear (stash 破壊)\n  - tag -d|-f (tag 削除/上書き)\n  - reflog expire (reflog 破壊)\n  - gc --prune=now (orphan commit gc)\n\nbypass (1 セッション): export ECC_ALLOW_DESTRUCTIVE_GIT=1\n\n設計起源: 2026-05-18 user 指示「mainAgentでgitコマンドは基本的(破壊的変更以外)に実行できるようにしてください」' "$cmd")
+        jq -n --arg r "$destructive_reason" '{decision:"block", reason:$r}'
+        exit 0
+      fi
+    fi
+
     # --- ホワイトリスト判定 ---
     # bash-whitelist の各行を正規表現として「コマンド先頭」でマッチさせる。
     # パイプ/&&/;/|| の連結を含む場合は最初のセグメントを抽出して判定し、
