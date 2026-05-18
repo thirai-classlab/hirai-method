@@ -14,7 +14,8 @@
 # 優先順位:
 #   1. ${HC_PROJECT_ROOT}              ... env override (CI / test 用)
 #   2. git rev-parse --show-toplevel   ... 標準的な project root 解決
-#   3. pwd                             ... fallback (git 不在 / git 管理外)
+#   3. ${CLAUDE_PROJECT_DIR}           ... Claude Code hook 標準注入 (git 管理外でも有効)
+#   4. pwd                             ... fallback (上記全て不在時)
 #
 # bash flags の方針 (重要):
 #   本ファイルを source する caller の shell options を汚染しないため、
@@ -27,13 +28,13 @@
 resolve_project_root() (
   set -uo pipefail
 
-  # 1. env override
+  # 1. env override (HIRAI 固有、CI / test 用)
   if [ -n "${HC_PROJECT_ROOT:-}" ]; then
     printf '%s' "$HC_PROJECT_ROOT"
     return 0
   fi
 
-  # 2. git rev-parse
+  # 2. git rev-parse (標準的な project root 解決)
   if command -v git >/dev/null 2>&1; then
     local root
     root=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -43,7 +44,13 @@ resolve_project_root() (
     fi
   fi
 
-  # 3. pwd fallback
+  # 3. CLAUDE_PROJECT_DIR (Claude Code hook 標準注入、git 管理外 / submodule 内でも有効)
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+    printf '%s' "$CLAUDE_PROJECT_DIR"
+    return 0
+  fi
+
+  # 4. pwd fallback (git 不在 / git 管理外 / CLAUDE_PROJECT_DIR 不在)
   pwd
 )
 
