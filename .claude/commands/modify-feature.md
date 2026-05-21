@@ -103,6 +103,17 @@ TDD red-green-refactor。修正部の新規テストを **書いてから** 実�
 4. モジュール単位の段階的 commit を推奨(Loop モード遵守事項 §5)
 5. State 更新: `current_stage=tdd` → 完了で `completed_stages` 追加
 
+#### Wave Pre-check
+
+Wave / sub-task 分解後、各 Wave 着手前にメインが以下を **subagent dispatch の前** に必ず実施する (2026-05-21 TM 修正での no-op 重複起動を防ぐため):
+
+1. メインが `git log --all --grep <finding>` で既存 commit を確認 (別 repo は `git -C <abs path> log --all --grep <finding>`)
+2. 解消済 finding は task ファイルの Wave 表から「[no-op、commit <sha>]」とマーク
+3. 未解消 finding のみ subagent dispatch
+4. subagent prompt に「事前確認 step」を明示 (現状ファイルを Read → 解消済なら no-op 報告)
+
+省略時のリスク: 既存 commit で解消済の finding に対して subagent を起動し、token / 時間の二重消費 + Wave 再計画コストが発生する。modify-feature では gap-review report 起点の修正で特に発生しやすい (report 作成時点から本実装着手までに別 commit で解消されている場合)。
+
 ### Stage 8: `module-review`
 
 `/module-review <module>` を実行 (W3)。3 観点 (持続可能性 / 汎用性 / 非冗長化) レビュー。

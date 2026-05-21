@@ -111,6 +111,17 @@ related: [/test-design, /design-review, /new-task, /start-task, /module-review, 
 - 完了条件: モジュール毎の単体テストが全 PASS
 - 完了したら state JSON を更新し `module-review` に進む
 
+#### Wave Pre-check
+
+Wave / sub-task 分解後、各 Wave 着手前にメインが以下を **subagent dispatch の前** に必ず実施する (2026-05-21 TM 修正での no-op 重複起動を防ぐため):
+
+1. メインが `git log --all --grep <finding>` で既存 commit を確認 (別 repo は `git -C <abs path> log --all --grep <finding>`)
+2. 解消済 finding は task ファイルの Wave 表から「[no-op、commit <sha>]」とマーク
+3. 未解消 finding のみ subagent dispatch
+4. subagent prompt に「事前確認 step」を明示 (現状ファイルを Read → 解消済なら no-op 報告)
+
+省略時のリスク: 既存 commit で解消済の finding に対して subagent を起動し、token / 時間の二重消費 + Wave 再計画コストが発生する。
+
 ### Stage 9: `module-review` — モジュール単位レビュー (W3)
 
 このコマンドが呼ばれたら、メインエージェントは以下の手順を実行してください:
