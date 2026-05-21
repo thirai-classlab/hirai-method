@@ -61,6 +61,17 @@ flowchart LR
 
 ## Wave 構成
 
+### Wave 計画前の事前確認 (必須)
+
+別 repo 作業 / 既存 gap-review report 起点の Wave 計画では、各 finding に対し以下を**着手前に**実施:
+
+1. `git log --all --grep <finding-id-or-keyword> --oneline` で既存 commit を確認 (別 repo は `git -C <abs path> log --all --grep ...`)
+2. 該当 file を Read で現状確認
+3. 解消済 finding は Wave list から除外し、本テンプレに「[no-op、commit <sha> で解消済]」と記録
+4. 未解消 finding のみ subagent dispatch 対象に残す
+
+省略時: 重複 subagent 起動 / no-op 発覚での Wave 再計画コスト
+
 | Wave | 内容 | 工数 | 依存 |
 |:---:|:---|---:|:---|
 | W1 | … | 0.5h | — |
