@@ -111,20 +111,16 @@ expect_pass_protected  "push origin feature/test"        "git push origin featur
 
 **完了条件:** `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` 実行で 5 cases 全 PASS (destructive 32 件 + protected 7 件 = 39/39、iteration 2 で force-with-lease + bypass=0 negative 追加済)、`grep -c 'expect_block.*main' .claude/tests/delegation-guard-deny-layers-smoke.sh` ≥ 1。
 
-#### Step 1.3: Bypass case 追加 (refspec 省略の current branch = main 判定 + bypass)
+#### Step 1.3: Bypass case 追加 (protected bypass via ECC_ALLOW_PROTECTED_BRANCH_PUSH=1)
 
-**内容:** 既存「Bypass cases (3, ECC_ALLOW_DESTRUCTIVE_GIT=1)」を「Bypass cases (4)」に拡張、末尾に refspec 省略パターン + protected branch bypass を追加:
+**内容:** 既存「Bypass cases (3, ECC_ALLOW_DESTRUCTIVE_GIT=1)」を「Bypass cases (4)」に拡張、末尾に protected branch bypass を追加:
 
 ```bash
-# (d) refspec 省略 + current branch = main → block (要前提: HEAD が main)
-#   (本 case は smoke 実行時の current branch が main である場合のみ意味を持つ。
-#    smoke 実行 context で current branch を保証できないため、git rev-parse の代わりに
-#    `expect_block` を `current_branch=main` 環境で起動する wrapper を用意するか、
-#    pure-cmd 検証として "git push" (引数なし) が hook L108 fallback を発動するかを検証する。
-#    実装方針は §3 末尾「実装上の注意」参照)
-# (e) ECC_ALLOW_PROTECTED_BRANCH_PUSH=1 で main push が通過
+# protected branch push bypass: ECC_ALLOW_PROTECTED_BRANCH_PUSH=1 で main push が通過
 expect_bypass_pass_protected "push origin main bypass" "git push origin main"
 ```
+
+> **Phase 2 iteration 2 反映**: case ラベル (d) は当初 draft で refspec 省略 case を想定していたが、Phase 1 で skip (HEAD 制御困難)、Phase 2 iter2 で security-reviewer MEDIUM 指摘起源の `--force-with-lease origin main` block case が (d) として再割当 (実装: smoke L304 `expect_block_protected`)。同時に case (f) として `expect_block_with_explicit_bypass_zero` (bypass=0 negative) を追加。refspec 省略 case は §6 DoD「skip 妥当性 確定記録」と §派生 task で別 task 候補として保持。
 
 新規 helper `expect_bypass_pass_protected` を追加 (`expect_bypass_pass` を複製し env を `ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` に変更)。
 
