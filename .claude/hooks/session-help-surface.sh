@@ -7,11 +7,22 @@
 #   `Hint や help コマンドについてもセッション開始時に記載してください`
 #   (user ask 2026-05-13) を満たす実装。
 #
+#   Wave 1.6 (2026-05-23): 初回 session のみ表示。`.claude/.session-help-shown`
+#   marker で再表示抑止 (attention dilution 削減)。
+#   起源: docs/draft/system-reminder-attention-fix.md W1.6
+#   env override:
+#     HC_SESSION_HELP_FORCE=1            ... marker 無視で強制表示
+#     HC_SESSION_HELP_FIRST_ONLY=false   ... 旧挙動 (毎回表示) に戻す
+#     HC_SESSION_HELP_MARKER_PATH=<path> ... marker file path 上書き
+#
 # 失敗時の挙動: 常に exit 0 (fail-open — セッションをブロックしない)。
 #
 # 環境変数:
 #   HC_SESSION_HELP_ENABLED=false   ... 一時無効化
 #   HC_SESSION_HELP_VERBOSE=true    ... 詳細版 (全 command 列挙)、default は要点のみ
+#   HC_SESSION_HELP_FORCE=1         ... marker 無視で常時表示 (test / debug 用)
+#   HC_SESSION_HELP_FIRST_ONLY=false ... 旧 default (毎回表示) に戻す
+#   HC_SESSION_HELP_MARKER_PATH=... ... marker file path 上書き
 #
 # Stdin:  SessionStart hook JSON (読み捨て)
 # Stdout: 主要 commands + hint の <system-reminder> ブロック
@@ -33,6 +44,26 @@ if [ "${HC_SESSION_HELP_ENABLED:-true}" = "false" ]; then
 fi
 
 VERBOSE="${HC_SESSION_HELP_VERBOSE:-false}"
+
+# === Wave 1.6: 初回 session のみ表示 (marker check) ===
+# marker file 位置の解決 (env override 可、default は .claude/.session-help-shown)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# project root: CLAUDE_PROJECT_DIR > script の 2 階層上 (.claude/hooks → repo root)
+_project_root="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+MARKER_PATH="${HC_SESSION_HELP_MARKER_PATH:-${_project_root}/.claude/.session-help-shown}"
+
+# first-only モード判定 (default true、旧挙動は HC_SESSION_HELP_FIRST_ONLY=false で復元)
+FIRST_ONLY="${HC_SESSION_HELP_FIRST_ONLY:-true}"
+
+# HC_SESSION_HELP_FORCE=1 なら marker 無視で強制表示
+if [ "${HC_SESSION_HELP_FORCE:-0}" = "1" ] || [ "${HC_SESSION_HELP_FORCE:-}" = "true" ]; then
+  : # marker check skip (force 表示)
+elif [ "$FIRST_ONLY" != "false" ]; then
+  # first-only モード: marker 存在なら silent skip
+  if [ -f "$MARKER_PATH" ]; then
+    exit 0
+  fi
+fi
 
 # === stderr: terminal 直接表示 banner (Claude Code が SessionStart stderr を terminal に流す挙動を期待) ===
 # stdout だけだと agent の first response 経由でしか visible にならず、
@@ -59,6 +90,7 @@ cat >&2 <<'EOF'
   Onboarding     : CLAUDE.md  +  docs/INVENTORY.md  +  .claude/rules/development-process.md
   詳細版         : export HC_SESSION_HELP_VERBOSE=true
   抑制           : export HC_SESSION_HELP_ENABLED=false
+  再表示         : export HC_SESSION_HELP_FORCE=1  (or rm .claude/.session-help-shown)
 ═══════════════════════════════════════════════════════════════════
 
 EOF
@@ -93,6 +125,7 @@ embed なしの informational 扱いは禁止。再表示は不要。
 > - 詳細は `README.md` Commands table 参照
 > - 詳細版表示: `export HC_SESSION_HELP_VERBOSE=true`
 > - 警告抑制: `export HC_SESSION_HELP_ENABLED=false`
+> - 再表示 (Wave 1.6 以降は初回 session のみ表示): `export HC_SESSION_HELP_FORCE=1` または `rm .claude/.session-help-shown`
 > ---
 
 embed 完了後、user の prompt に通常応答してください。
@@ -124,6 +157,13 @@ if [ "$VERBOSE" = "true" ]; then
 `.mcp.json` に serena entry 不在時は `check-serena-mcp.sh` が SessionStart で警告。
 </system-reminder>
 EOF
+fi
+
+# === Wave 1.6: marker 作成 (silent 失敗で fail-open) ===
+# force モード or 旧挙動 (FIRST_ONLY=false) では marker 不要
+if [ "${HC_SESSION_HELP_FORCE:-0}" != "1" ] && [ "${HC_SESSION_HELP_FORCE:-}" != "true" ] && [ "$FIRST_ONLY" != "false" ]; then
+  mkdir -p "$(dirname "$MARKER_PATH")" 2>/dev/null || true
+  : > "$MARKER_PATH" 2>/dev/null || true
 fi
 
 exit 0

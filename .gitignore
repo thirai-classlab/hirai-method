@@ -17,6 +17,7 @@
 .claude/.agent-markers/
 .claude/.context-budget-state/
 .claude/.improvement-proposal-state/
+.claude/.session-help-shown
 .claude/settings.local.json
 .claude/worktrees/
 .claude/bash-whitelist-requests/

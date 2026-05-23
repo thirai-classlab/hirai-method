@@ -8,7 +8,10 @@
 # テストケース:
 #   1. case-clean        : 全 entry 処理済    → surface silent / discharge exit 0
 #   2. case-with-red     : 🔴 未処理 2 件     → surface に "🔴 2 件" 文言 / discharge exit 2
-#   3. case-with-yellow-only : 🟡 未処理 1 件 → surface WARN / discharge exit 0 (WARN)
+#   3. case-with-yellow-only : 🟡 未処理 1 件
+#        - W1.5 default (RED_ONLY=true): surface silent (🟡 のみは attention dilution 削減)
+#        - W1.5 RED_ONLY=false override : surface に「🟡 1 件 / 🔴 0 件」表示 (旧挙動 regression)
+#        - discharge は exit 0 + WARN (緊急度 🔴 が無いので block しない)
 #   4. case-bypass       : 🔴 残存 + bypass env → discharge exit 0 + bypass.log 確認
 #   5. case-missing-file : next-actions.md 不在 → 両 hook exit 0 silent
 #
@@ -157,21 +160,37 @@ case_with_red() {
   fi
 }
 
-# Case 3: yellow only → surface WARN(stderr 出力) / discharge exit 0 (WARN)
+# Case 3: yellow only
+#   W1.5 仕様: surface は default silent (🔴 0 件なら出力しない)
+#   旧挙動 (HC_NEXT_ACTIONS_SURFACE_RED_ONLY=false) では「🟡 1 件 / 🔴 0 件」表示
+#   discharge は exit 0 + WARN (🔴 が無いので block しない)
 case_with_yellow_only() {
   _reset_state_dir
   _place_md "case-with-yellow-only.md"
 
+  # W1.5 default: surface silent
   _run_hook "$SURFACE_HOOK"
   local s_code=$LAST_CODE
-  if [ "$s_code" = "0" ] \
+  local s_err_len=${#LAST_ERR}
+  if [ "$s_code" = "0" ] && [ "$s_err_len" = "0" ]; then
+    _record "Case 3a [yellow W1.5 default]: surface silent (🔴 0 件)" "PASS" \
+      "exit=0 stderr empty" "exit=${s_code} stderr_len=${s_err_len}"
+  else
+    _record "Case 3a [yellow W1.5 default]: surface silent (🔴 0 件)" "FAIL" \
+      "exit=0 stderr empty" "exit=${s_code} stderr='$(printf '%s' "$LAST_ERR" | head -c 80)'"
+  fi
+
+  # 旧挙動 (RED_ONLY=false) で 🟡 出力されること
+  _run_hook "$SURFACE_HOOK" HC_NEXT_ACTIONS_SURFACE_RED_ONLY=false
+  local s2_code=$LAST_CODE
+  if [ "$s2_code" = "0" ] \
      && printf '%s' "$LAST_ERR" | grep -q "🟡 1" \
      && printf '%s' "$LAST_ERR" | grep -q "🔴 0"; then
-    _record "Case 3a [yellow]: surface reports 🟡 1件" "PASS" \
-      "exit=0 stderr~'🟡 1 件' 🔴 0 件" "exit=${s_code} stderr_match=yes"
+    _record "Case 3a' [yellow RED_ONLY=false]: 旧挙動で 🟡 1 件出力" "PASS" \
+      "exit=0 stderr~'🟡 1 件' 🔴 0 件" "exit=${s2_code} stderr_match=yes"
   else
-    _record "Case 3a [yellow]: surface reports 🟡 1件" "FAIL" \
-      "exit=0 stderr~'🟡 1 件' 🔴 0 件" "exit=${s_code} stderr='$(printf '%s' "$LAST_ERR" | head -c 80)'"
+    _record "Case 3a' [yellow RED_ONLY=false]: 旧挙動で 🟡 1 件出力" "FAIL" \
+      "exit=0 stderr~'🟡 1 件' 🔴 0 件" "exit=${s2_code} stderr='$(printf '%s' "$LAST_ERR" | head -c 80)'"
   fi
 
   _run_hook "$DISCHARGE_HOOK"

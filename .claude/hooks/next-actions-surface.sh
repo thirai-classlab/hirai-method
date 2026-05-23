@@ -9,7 +9,9 @@
 # 設計:
 #   - 不在なら exit 0 silent (fail-open、新規 repo を block しない)
 #   - 未処理 entry 0 件なら silent (noise 削減)
-#   - 🔴 / 🟡 / 🟢 を別々に集計
+#   - 🔴 entry がある時のみ注入 (Wave 1.5、🟡 / 🟢 のみは silent)
+#     起源: docs/draft/system-reminder-attention-fix.md W1.5
+#     env override で旧挙動に戻せる: HC_NEXT_ACTIONS_SURFACE_RED_ONLY=false
 #   - 🔴 entry のタイトルを最大 5 件まで stderr に列挙
 #   - 必ず exit 0 (SessionStart は block しない設計)
 #
@@ -67,6 +69,17 @@ fi
 # === 未処理 0 件なら silent ===
 if [ "${NA_RED_COUNT:-0}" = "0" ] && [ "${NA_YELLOW_COUNT:-0}" = "0" ] && [ "${NA_GREEN_COUNT:-0}" = "0" ]; then
   exit 0
+fi
+
+# === Wave 1.5 frequency filter: 🔴 entry がある時のみ注入 ===
+# 🟡 / 🟢 のみは attention dilution 削減のため completely silent (env で revert 可)
+# 起源: docs/draft/system-reminder-attention-fix.md W1.5
+# env override:
+#   HC_NEXT_ACTIONS_SURFACE_RED_ONLY=false  ... 旧挙動 (🟡 / 🟢 でも発火) に戻す
+if [ "${HC_NEXT_ACTIONS_SURFACE_RED_ONLY:-true}" != "false" ]; then
+  if [ "${NA_RED_COUNT:-0}" = "0" ]; then
+    exit 0
+  fi
 fi
 
 # === <system-reminder> 構築 ===

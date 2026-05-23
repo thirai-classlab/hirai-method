@@ -6,6 +6,11 @@
 #   <system-reminder> を注入してメインに `/save-state` 実行 + セッション再開
 #   提案を強制する。Normal モードでは no-op。
 #
+# Wave 1.4 (2026-05-23): 60% 未満では完全 silent kill switch を確実化。
+#   既存 logic も silent だったが、early-exit comment と env override
+#   `HC_CONTEXT_BUDGET_SILENT_BELOW_THRESHOLD` (default true) で明示化。
+#   起源: docs/draft/system-reminder-attention-fix.md W1.4
+#
 # 仕組み:
 #   1. mode-loader.sh で現モード解決。loop でなければ exit 0。
 #   2. stdin JSON から transcript_path / session_id を取得。
@@ -27,6 +32,7 @@
 #   HC_CONTEXT_BUDGET_LIMIT=200000   ... context window サイズ (tokens)
 #   HC_CONTEXT_BUDGET_THRESHOLD=0.60 ... 警告開始 ratio (0.0〜1.0)
 #   HC_CONTEXT_BUDGET_STATE_DIR=...  ... 警告済み marker 保管先
+#   HC_CONTEXT_BUDGET_SILENT_BELOW_THRESHOLD=false ... 閾値未満でも debug 出力 (default true で完全 silent)
 
 set -u
 
@@ -70,6 +76,7 @@ fi
 context_limit="${HC_CONTEXT_BUDGET_LIMIT:-1000000}"
 threshold="${HC_CONTEXT_BUDGET_THRESHOLD:-0.60}"
 state_dir="${HC_CONTEXT_BUDGET_STATE_DIR:-.claude/.context-budget-state}"
+silent_below="${HC_CONTEXT_BUDGET_SILENT_BELOW_THRESHOLD:-true}"
 
 # --- stdin parse ---
 transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
@@ -116,9 +123,18 @@ fi
 ratio=$(awk -v u="$context_used" -v l="$context_limit" 'BEGIN { if (l > 0) printf "%.4f", u / l; else print "0" }')
 ratio_pct=$(awk -v r="$ratio" 'BEGIN { printf "%.1f", r * 100 }')
 
-# 閾値判定 (awk で比較)
+# === Wave 1.4 kill switch: 閾値未満は完全 silent ===
+# 60% 未満では <system-reminder> 注入を一切しない (attention dilution 削減)。
+# 起源: docs/draft/system-reminder-attention-fix.md W1.4
+# 既存 logic も silent だが、ここで明示的に early-exit して可読性を上げる。
+# env で revert 可: HC_CONTEXT_BUDGET_SILENT_BELOW_THRESHOLD=false
 crossed=$(awk -v r="$ratio" -v t="$threshold" 'BEGIN { print (r >= t) ? 1 : 0 }')
 if [ "$crossed" != "1" ]; then
+  # 閾値未満: completely silent (default true)
+  # debug 用に stderr へ ratio を出したい場合は SILENT_BELOW_THRESHOLD=false にする
+  if [ "$silent_below" = "false" ]; then
+    printf '[context-budget] ratio=%s%% below threshold (silent)\n' "$ratio_pct" >&2
+  fi
   exit 0
 fi
 
