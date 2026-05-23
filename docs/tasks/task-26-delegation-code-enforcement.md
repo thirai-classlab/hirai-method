@@ -1,9 +1,20 @@
 # Task #26: Delegation Code Enforcement — `.claude/hooks/` `.claude/skills/` `.claude/scripts/` の直接 Edit を hook 強制 + 規範 DRY 化
 
-> Status: **draft (要承認)** | **🔲 未着手**
+> Status: **✅ 完了** (2026-05-23 W6 user manual install 完了で全 Wave 完遂)
 > 起案: 2026-05-23
+> 完了: 2026-05-23
 > 関連: 規範違反 commit `6ed9337` `6561475` `17c493e` (本 session メイン直接編集)
 > 設計起源: [delegation-code-enforcement.md](../draft/delegation-code-enforcement.md)
+
+## 完遂サマリ (2026-05-23)
+
+- W1 `368e1f0` harness-config.yml に `protected_paths_code` + `code_file_extensions` 追加
+- W2+W3 `43bf0e8` delegation-guard.sh 拡張 + smoke 7/7 PASS (dogfooding 成功、subagent 経由で実装)
+- W4 `aa744e5` 規範 4 file 重複セクション SSoT 集約 + link reference 置換 (+114/-126 net -12 行、anchor 整合性 0 破綻、smoke 6/6 PASS 34 cases regression 0、subagent a7a2c6e6c8b3a4868 confidence 0.9)
+- W5 部分 `4f73d47` CLAUDE.md Critical Lessons に違反事例追加
+- **W6 完遂 (2026-05-23)** user manual `bash install.sh --update` 3 リポ (recall_poc / taskManageSystem / classlab-weekly-news) 全反映完了。cross-repo write は Claude Code sandbox + delegation-guard 二重制約で agent 実行不能と確定済 (task-24 W1 調査結果)、user manual normative pattern が運用上の解決策
+
+番外: heredoc bug fix `8397d65` (split_command_segments を heredoc-aware 化、smoke 9/9 PASS)。
 
 ## 背景・目的
 
@@ -75,10 +86,10 @@
 
 ## 完了条件
 
-- [ ] メイン直接で `.claude/hooks/foo.sh` Write が BLOCK
-- [ ] subagent 経由で同 Write が PASS
-- [ ] `.claude/rules/*.md` `.claude/harness-config.yml` 等は引き続きメイン可
-- [ ] 規範 4 file の重複が SSoT 1 箇所に集約
-- [ ] CLAUDE.md Critical Lessons に本 session 違反事例 1 件追加
-- [ ] 既存 smoke 全件 regression 0
-- [ ] 3 リポ (recall_poc / taskManageSystem / classlab-weekly-news) に反映
+- [x] メイン直接で `.claude/hooks/foo.sh` Write が BLOCK (W2 `43bf0e8` 実証)
+- [x] subagent 経由で同 Write が PASS (W2 dogfooding 実証)
+- [x] `.claude/rules/*.md` `.claude/harness-config.yml` 等は引き続きメイン可 (W2 smoke 7/7)
+- [x] 規範 4 file の重複が SSoT 1 箇所に集約 (W4 `aa744e5`)
+- [x] CLAUDE.md Critical Lessons に本 session 違反事例 1 件追加 (W5 部分 `4f73d47`)
+- [x] 既存 smoke 全件 regression 0 (W4 6/6 PASS 34 cases)
+- [x] 3 リポ (recall_poc / taskManageSystem / classlab-weekly-news) に反映 (W6 user manual 完了 2026-05-23)
