@@ -1,7 +1,7 @@
 <!--
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-05-23
+approved_by: user
 retroactive: false
 -->
 

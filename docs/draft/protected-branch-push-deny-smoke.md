@@ -1,8 +1,8 @@
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-05-23
+approved_by: user
 retroactive: false
 -->
 
