@@ -47,6 +47,17 @@ _CASCADE_THRESHOLD_DEFAULT = 5
 
 
 def _cascade_threshold() -> int:
+    """Resolve cascade fail 検出閾値 from env `HC_CASCADE_THRESHOLD` with safe fallback.
+
+    Parsing 規約 (default `_CASCADE_THRESHOLD_DEFAULT` = 5):
+      - env 未設定 → default
+      - 正整数 (`"3"`, `"10"`) → そのまま採用
+      - 非正整数 (`"0"`, `"-1"`) → default fallback (threshold は >=1 必須)
+      - 非数値 (`"abc"`) → `int()` が `ValueError` → default fallback
+      - float 文字列 (`"3.5"`) → `int("3.5")` は `ValueError` で default fallback
+        (Python の `int()` は `"3.5"` を直接 parse できない、`float()` 経由を意図的に行わない)
+      - `None` を str に変換した形 → `TypeError` 防御で fallback
+    """
     raw = os.environ.get("HC_CASCADE_THRESHOLD")
     if raw is None:
         return _CASCADE_THRESHOLD_DEFAULT
@@ -154,50 +165,52 @@ def find_observations() -> Path | None:
     return None
 
 
-def tail_jsonl(path: Path, n: int) -> dict:
-    """末尾 N 行を JSON parse。壊れた行はスキップ + 健全性指標を expose (task-32)。
+def _read_tail_chunk(path: Path, n: int) -> bytes:
+    """末尾 N 行を含むのに十分な chunk を読み込む (近似 heuristic)。
 
-    返り値 dict:
-      records: list[dict]            — 正常 parse できた record 群 (旧 schema 互換は caller 1 箇所のみ修正)
-      skipped_lines: int             — JSONDecodeError でスキップした行数
-      total_lines: int               — 試行した非空行数
-      cascade_suspected: bool        — 連続 JSONDecodeError が閾値超過したか (Phase 2)
-      max_consecutive_skips: int     — 観察された最大連続 skip 数 (heuristic 補助)
+    n*4096 と 65536 の大きい方を上限 chunk として末尾を seek。
+    file が chunk より小さければ全 byte を返す。OSError / IOError は呼び出し側へ伝播。
+    """
+    with path.open("rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        chunk = min(size, max(n * 4096, 65536))
+        f.seek(size - chunk)
+        return f.read()
+
+
+_EMPTY_TAIL_RESULT: dict = {
+    "records": [],
+    "skipped_lines": 0,
+    "total_lines": 0,
+    "cascade_suspected": False,
+    "max_consecutive_skips": 0,
+}
+
+
+def tail_jsonl(path: Path, n: int) -> dict:
+    """末尾 N 行 JSON parse + observation pipeline 健全性指標 (task-32)。
+
+    返り値 dict 各 key の意味は `_EMPTY_TAIL_RESULT` (skipped/total/cascade/max_consec) を参照。
     """
     threshold = _cascade_threshold()
-    result: dict = {
-        "records": [],
-        "skipped_lines": 0,
-        "total_lines": 0,
-        "cascade_suspected": False,
-        "max_consecutive_skips": 0,
-    }
     if not path.exists():
-        return result
+        return dict(_EMPTY_TAIL_RESULT)
     try:
-        with path.open("rb") as f:
-            f.seek(0, os.SEEK_END)
-            size = f.tell()
-            chunk = min(size, max(n * 4096, 65536))
-            f.seek(size - chunk)
-            data = f.read().decode("utf-8", errors="replace")
-    except Exception:
-        return result
-    lines = data.splitlines()[-n:]
+        raw_bytes = _read_tail_chunk(path, n)
+    except (OSError, PermissionError, MemoryError):
+        return dict(_EMPTY_TAIL_RESULT)
+    data = raw_bytes.decode("utf-8", errors="replace")
     out: list[dict] = []
-    skipped = 0
-    total = 0
-    consecutive_skips = 0
-    max_consecutive = 0
+    skipped = total = consecutive_skips = max_consecutive = 0
     cascade = False
-    for line in lines:
+    for line in data.splitlines()[-n:]:
         line = line.strip()
         if not line:
             continue
         total += 1
         try:
             out.append(json.loads(line))
-            # 成功 → consecutive counter reset
             consecutive_skips = 0
         except json.JSONDecodeError:
             skipped += 1
@@ -206,45 +219,54 @@ def tail_jsonl(path: Path, n: int) -> dict:
                 max_consecutive = consecutive_skips
             if consecutive_skips >= threshold:
                 cascade = True
-    result["records"] = out
-    result["skipped_lines"] = skipped
-    result["total_lines"] = total
-    result["cascade_suspected"] = cascade
-    result["max_consecutive_skips"] = max_consecutive
-    return result
+    return {
+        "records": out,
+        "skipped_lines": skipped,
+        "total_lines": total,
+        "cascade_suspected": cascade,
+        "max_consecutive_skips": max_consecutive,
+    }
+
+
+def _classify_raw_field(raw_val: object) -> str:
+    """observation record の `raw` field を schema 種別に分類 (task-32)。
+
+    返り値: `"object"` (dict) / `"string"` (str) / `"other"` (それ以外、list / None / 数値等)。
+    task-27 W1 (`c25f3ee`) で観察 schema は raw=object に統一済、本判定は実測継続のため。
+    """
+    if isinstance(raw_val, dict):
+        return "object"
+    if isinstance(raw_val, str):
+        return "string"
+    return "other"
+
+
+_EMPTY_SUMMARY: dict = {
+    "total": 0,
+    "tools": {},
+    "errors": 0,
+    "error_rate": 0.0,
+    "timeouts": 0,
+    "first_ts": None,
+    "last_ts": None,
+    "raw_object_count": 0,
+    "raw_string_count": 0,
+    "raw_other_count": 0,
+    "raw_present_count": 0,
+    "raw_object_rate": 0.0,
+}
 
 
 def summarize_observations(records: list[dict]) -> dict:
-    """observations から指標を抽出。
-
-    task-32 追加: raw field の object (dict) / string 判定で `raw_object_rate` を集計。
-    観察 schema は task-27 W1 (`c25f3ee`) で raw=object に統一済、本指標で実測継続。
-    """
+    """observations から指標を抽出 (task-32: raw object rate も併記、schema 統一の実測継続)。"""
     if not records:
-        return {
-            "total": 0,
-            "tools": {},
-            "errors": 0,
-            "error_rate": 0.0,
-            "timeouts": 0,
-            "first_ts": None,
-            "last_ts": None,
-            "raw_object_count": 0,
-            "raw_string_count": 0,
-            "raw_other_count": 0,
-            "raw_present_count": 0,
-            "raw_object_rate": 0.0,
-        }
+        return dict(_EMPTY_SUMMARY)
     total = len(records)
     tool_counts: Counter[str] = Counter()
     tool_errors: Counter[str] = Counter()
-    timeouts = 0
-    errors = 0
     timestamps: list[str] = []
-    raw_object = 0
-    raw_string = 0
-    raw_other = 0
-    raw_present = 0
+    raw_counts: Counter[str] = Counter()
+    timeouts = errors = raw_present = 0
 
     for r in records:
         tool = r.get("tool_name") or r.get("tool") or "unknown"
@@ -252,7 +274,6 @@ def summarize_observations(records: list[dict]) -> dict:
         ts = r.get("timestamp") or r.get("ts")
         if ts:
             timestamps.append(str(ts))
-        # error detection (best-effort)
         resp = r.get("tool_response") or {}
         if isinstance(resp, dict):
             if resp.get("is_error") or resp.get("decision") == "block":
@@ -261,20 +282,13 @@ def summarize_observations(records: list[dict]) -> dict:
             err_str = json.dumps(resp).lower() if resp else ""
             if "timeout" in err_str or "timed out" in err_str:
                 timeouts += 1
-        # task-32: raw field schema 判定
         if "raw" in r:
             raw_present += 1
-            raw_val = r.get("raw")
-            if isinstance(raw_val, dict):
-                raw_object += 1
-            elif isinstance(raw_val, str):
-                raw_string += 1
-            else:
-                raw_other += 1
+            raw_counts[_classify_raw_field(r.get("raw"))] += 1
 
+    raw_object = raw_counts.get("object", 0)
     # rate は raw field 存在 record を分母とする (raw 欠如 record は分母から除外)
     raw_rate = round(raw_object / raw_present, 3) if raw_present else 0.0
-
     return {
         "total": total,
         "tools": dict(tool_counts.most_common()),
@@ -285,8 +299,8 @@ def summarize_observations(records: list[dict]) -> dict:
         "first_ts": min(timestamps) if timestamps else None,
         "last_ts": max(timestamps) if timestamps else None,
         "raw_object_count": raw_object,
-        "raw_string_count": raw_string,
-        "raw_other_count": raw_other,
+        "raw_string_count": raw_counts.get("string", 0),
+        "raw_other_count": raw_counts.get("other", 0),
         "raw_present_count": raw_present,
         "raw_object_rate": raw_rate,
     }
@@ -681,7 +695,7 @@ def fmt_observation_health(report: dict) -> str:
     Phase 1: parse-skipped 行数 / raw object rate
     Phase 2: cascade fail 検出時 🔴 warning
     """
-    obs = report["observations"]
+    obs = report.get("observations") or {}
     health = report.get("observation_health") or {}
     threshold = health.get("cascade_threshold", _cascade_threshold())
     total_lines = health.get("total_lines", 0)

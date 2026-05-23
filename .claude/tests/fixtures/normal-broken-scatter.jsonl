@@ -1,0 +1,5 @@
+{"tool_name": "Read", "raw": {"path": "/tmp/a"}, "timestamp": "2026-05-24T00:00:00Z"}
+broken-line-1-not-json
+{"tool_name": "Edit", "raw": {"path": "/tmp/b"}, "timestamp": "2026-05-24T00:00:01Z"}
+broken-line-2-not-json
+{"tool_name": "Write", "raw": {"path": "/tmp/c"}, "timestamp": "2026-05-24T00:00:02Z"}
