@@ -24,6 +24,8 @@
 - taskManageSystem 側 `.claude/harness-config.yml` に `docs_approved_dir: design` (または `docs/design` の `docs/` 削った値) 設定 → 別途 user manual
 - `bash install.sh --update /Users/t.hirai/タスクマネジメント/taskManageSystem` で本 W3 の hook + config-loader 同期 → 別途 user manual
 
+> **cross-repo 注意**: 上記 cross-repo blocker は task-31 で規範化済 (commit `f90d194`)。Claude Code sandbox + `delegation-guard.sh` 二重制約で agent 経路完全 denied、`bash install.sh --update <target>` は **user manual (terminal) 実行のみ可能** (subagent foreground / background / `isolation: "worktree"` いずれも回避不可)。詳細は `.claude/rules/development-process.md` §「cross-repo write 例外」参照。
+
 ### 残作業
 
 - W5: taskManageSystem 内 root tasks.md を `docs/archive/tasks-root-2026-05-23.md` に move + README 案内 (cross-repo user manual)

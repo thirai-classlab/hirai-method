@@ -14,6 +14,8 @@
 - W5 部分 `4f73d47` CLAUDE.md Critical Lessons に違反事例追加
 - **W6 完遂 (2026-05-23)** user manual `bash install.sh --update` 3 リポ (recall_poc / taskManageSystem / classlab-weekly-news) 全反映完了。cross-repo write は Claude Code sandbox + delegation-guard 二重制約で agent 実行不能と確定済 (task-24 W1 調査結果)、user manual normative pattern が運用上の解決策
 
+> **cross-repo 注意**: 上記 W6 の cross-repo write 制約は task-31 で規範化済 (commit `f90d194`)。`bash install.sh --update <target>` は **user manual (terminal) 実行のみ可能** (agent / subagent / `isolation: "worktree"` いずれも sandbox + `delegation-guard.sh` 二重制約で denied)。詳細は `.claude/rules/development-process.md` §「cross-repo write 例外」参照。
+
 番外: heredoc bug fix `8397d65` (split_command_segments を heredoc-aware 化、smoke 9/9 PASS)。
 
 ## 背景・目的
