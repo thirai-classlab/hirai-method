@@ -81,70 +81,93 @@ flowchart TD
 ### 前提条件
 
 - Claude Code CLI (claude.ai)
-- Bash 4+, Python 3.9+, jq, git
+- Bash 4+, Python 3.9+, jq, git, **rsync** (install.sh 必須)
 - Node.js 22+ / npx（Mermaid hook 用、ローカル install 推奨）
 - (任意) Docker（SWE-bench 評価機構を使う場合）
 - **(`/save-state` `/resume-state` `/pm-start` 利用時に必須)** Serena MCP — `.mcp.json` に `serena` entry 登録 (`uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant`)。Session 永続化 + PM Orchestration の memory backend として動作
 
-### 2 つの install モード (task #12 dual-mode-portability)
+### Quick Start (install.sh)
 
-ハーネスは **project-level install** (`<project>/.claude/`) と **user-level install** (`~/.claude/`) の両方をサポートする。hook の PROJECT_ROOT 解決は `.claude/hooks/lib/project-root.sh` が `HC_PROJECT_ROOT` env → `git rev-parse --show-toplevel` → `CLAUDE_PROJECT_DIR` env → `pwd` の **4 段優先**で行う (2026-05-18 `CLAUDE_PROJECT_DIR` を 3 段目に追加、Claude Code hook 標準注入で git 管理外 / submodule 内 hook の信頼性向上、`.claude/tests/project-root-smoke.sh` で 5/5 PASS 検証)。
-
-| モード | settings.json | hook path | 対象 project の解決 | 用途 |
-|---|---|---|---|---|
-| **project-level** (既定) | `<project>/.claude/settings.json` | `bash .claude/hooks/X.sh` (cwd-relative) | cwd = project root 前提 | 1 project 専用、`.claude/` を repo に commit |
-| **user-level** | `~/.claude/settings.json` (templates から copy) | `bash ${HOME}/.claude/hooks/X.sh` | `HC_PROJECT_ROOT` env / `git rev-parse` / `CLAUDE_PROJECT_DIR` env / `pwd` の 4 段 fallback | 複数 project で hooks 共有 |
-
-### 手順 A: project-level install (既定)
+新規 project への install / 既存 project への update / dry-run を 1 script で完結:
 
 ```bash
-# 1. リポを clone
+# 1. ハーネス本体を clone
 git clone https://github.com/thirai-classlab/hirai-method.git ~/hirai-method
 
-# 2. 任意の対象プロジェクトに .claude/ をコピー
-cp -R ~/hirai-method/.claude /path/to/your-project/.claude
-cp ~/hirai-method/CLAUDE.md /path/to/your-project/CLAUDE.md.template
+# 2. 対象 project に install (新規)
+cd ~/hirai-method
+bash install.sh /path/to/your-project
 
-# 3. 対象プロジェクトに合わせて harness-config.yml を編集
+# 3. project root で次を実施 (install.sh が案内する)
 cd /path/to/your-project
-$EDITOR .claude/harness-config.yml
-#   - protected_paths: [src, tests, scripts]   # ← 自リポに合わせる
-#   - task_dir / draft_dir
-#   - bash_whitelist_path
-
-# 4. .claude/bash-whitelist.txt をパッケージマネージャ / CLI に合わせて調整
-# 5. CLAUDE.md.template の <...> プレースホルダを実値で埋めて CLAUDE.md にリネーム
-# 6. 動作確認: 任意のファイルを Read してみる、保護パス配下を Edit して block されることを確認
+$EDITOR .claude/harness-config.yml         # protected_paths / task_dir / ...
+$EDITOR .claude/bash-whitelist.txt         # 使う CLI (pnpm/poetry/cargo/...) を追記
+mv CLAUDE.md.template CLAUDE.md && $EDITOR CLAUDE.md   # <...> placeholders を埋める
+git init                                   # observe.sh の project hash 検出を有効化
+# Claude Code session 起動 → /init-tasks → /mode loop
 ```
 
-### 手順 B: user-level install (複数 project 共有)
+install.sh は **冪等** で、既存 `.claude/` は `.claude.bak.<timestamp>` に退避してから新規 install する (data loss なし)。
+
+### install.sh モード
+
+| flag | 用途 |
+|---|---|
+| (default) | 新規 install。既存 `.claude` / `CLAUDE.md` は `.bak.<timestamp>` 退避、CLAUDE.md は `.template` として配置 |
+| `--update` | 既存 `.claude/` を rsync 増分上書き。state dir (`.gateguard-state/` `.workflow-state/` 等) と `settings.local.json` を保持、CLAUDE.md / .mcp.json / .gitignore は不変 |
+| `--force` | 既存 `.claude` / `CLAUDE.md` を **backup なしで** 上書き (危険、新規 install 用) |
+| `--dry-run` | 実行内容を表示のみ (rsync -n + 各 cp / mkdir を echo) |
+| `--no-mcp` | `.mcp.json` を配置しない (Serena MCP 不要な project) |
+| `--no-docs` | `docs/tasks/` `docs/draft/` の templates 配置を skip |
+
+state dir 除外: `.gateguard-state/` `.taskguard-state/` `.confidence-gate-state/` `.failure-window/` `.agent-markers/` `.context-budget-state/` `.improvement-proposal-state/` `.workflow-state/` `settings.local.json` `bash-whitelist-requests/` `worktrees/`
+
+### Update 運用 (複数 project)
+
+ハーネス本体に修正が入ったら、各 target で update を回す:
 
 ```bash
-# 1. リポを clone
-git clone https://github.com/thirai-classlab/hirai-method.git ~/hirai-method
+cd ~/hirai-method && git pull
+bash install.sh --update /path/to/project-a
+bash install.sh --update /path/to/project-b
+bash install.sh --update /path/to/project-c
+```
 
-# 2. hooks と skills を user home にコピー
+> ⚠️  **cross-repo write は Claude Code sandbox + delegation-guard 二重制約で agent 実行不能**。`bash install.sh --update <target>` は **user manual 実行のみ可能** で、agent task として subagent / main から呼び出すと sandbox deny される (詳細 memory `feedback_cross_repo_write_sandbox_block.md`)。3 リポ反映系 task は user manual を default 経路とする。
+
+### 2 つの install モード (project-level / user-level)
+
+ハーネスは **project-level install** (`<project>/.claude/`) と **user-level install** (`~/.claude/`) の両方をサポート。hook の PROJECT_ROOT 解決は `.claude/hooks/lib/project-root.sh` が `HC_PROJECT_ROOT` env → `git rev-parse --show-toplevel` → `CLAUDE_PROJECT_DIR` env → `pwd` の **4 段 fallback** で行う (2026-05-18 `CLAUDE_PROJECT_DIR` を 3 段目に追加、`.claude/tests/project-root-smoke.sh` 5/5 PASS)。
+
+| モード | settings.json | hook path | 対象 project 解決 | 用途 |
+|---|---|---|---|---|
+| **project-level** (既定、install.sh の対象) | `<project>/.claude/settings.json` | `bash .claude/hooks/X.sh` (cwd-relative) | cwd = project root 前提 | 1 project 専用、`.claude/` を repo に commit |
+| **user-level** | `~/.claude/settings.json` (templates から copy) | `bash ${HOME}/.claude/hooks/X.sh` | 4 段 fallback | 複数 project で hooks 共有 |
+
+**user-level install** は install.sh ではなく手動 setup:
+
+```bash
 mkdir -p ~/.claude
-cp -R ~/hirai-method/.claude/hooks ~/.claude/hooks
-cp -R ~/hirai-method/.claude/skills ~/.claude/skills
-cp -R ~/hirai-method/.claude/rules ~/.claude/rules
-cp -R ~/hirai-method/.claude/commands ~/.claude/commands
-
-# 3. user-level settings template を install
-cp ~/hirai-method/.claude/templates/settings.user-level.json.template \
-   ~/.claude/settings.json
-
-# 4. 各 project は CLAUDE.md / .mcp.json / docs/ をそのまま管理
-#    project root は git 配下なら自動解決 (git rev-parse --show-toplevel)
-#    git 外で動かす場合は env で明示:
+cp -R ~/hirai-method/.claude/{hooks,skills,rules,commands} ~/.claude/
+cp ~/hirai-method/.claude/templates/settings.user-level.json.template ~/.claude/settings.json
+# git 外で動かす場合のみ:
 export HC_PROJECT_ROOT=/path/to/your-project
-
-# 5. 動作確認: cd /path/to/your-project して Claude Code を起動、hook が
-#    ${HOME}/.claude/hooks/ から発火し、project file (CLAUDE.md / docs/tasks/) を
-#    HC_PROJECT_ROOT または git rev-parse 経由で参照することを確認
 ```
 
 詳細は [`docs/PORTABILITY.md`](docs/PORTABILITY.md) 参照。
+
+### 動作確認
+
+install 完了後、以下で動作を確認:
+
+```bash
+cd /path/to/your-project
+bash .claude/hooks/lib/config-loader.sh && echo "config-loader OK"   # env 読み込み確認
+# Claude Code session 起動後:
+#   - 任意の Read で hook 発火、observe.sh が ~/.claude/homunculus/projects/<hash>/ に記録
+#   - 保護パス配下の Edit が delegation-guard.sh で BLOCK されること
+#   - /harness-audit で hook 発火率 / GateGuard 状況を確認
+```
 
 ## 使い方
 
