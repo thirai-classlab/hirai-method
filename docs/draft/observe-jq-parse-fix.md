@@ -1,7 +1,7 @@
 <!--
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-05-23
+approved_by: user (「順次実行してください」発言で Loop モード自律承認、優先 priority 2 として明示)
 retroactive: false
 -->
 
