@@ -20,6 +20,23 @@
 #   settings.local.json settings.local.example.json bash-whitelist-requests/ worktrees/
 #
 # Dependencies: rsync, bash 4+
+#
+# ============================================================
+# WARNING: cross-repo execution restriction
+# ============================================================
+# This script is a cross-repo write operation
+# (writes from this repo into an external target project directory).
+# Claude Code agent context cannot execute this — sandbox + delegation-guard
+# 二重制約 により cross-repo write は denied される。
+#
+# **user manual (terminal) 実行のみ可能** です。
+# (agent / subagent / hook bypass env いずれも回避不可)
+#
+# 同様に `--update <target>` mode (既存 .claude/ への増分上書き) も
+# user manual (terminal) 実行のみ可能 です。
+#
+# 詳細: .claude/rules/development-process.md §「cross-repo write 例外」を参照
+# ============================================================
 
 set -euo pipefail
 

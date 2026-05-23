@@ -87,6 +87,16 @@ flowchart LR
 
 省略時: 重複 subagent 起動 / no-op 発覚での Phase 再計画コスト
 
+### cross-repo write を含む Phase の注意 (必須)
+
+cross-repo write (本 repo → 外部 repo への Write / cp / mv / heredoc redirect) を含む Phase は、Phase description に **user manual 注意書きを必ず明記**:
+
+> 例: `Phase N (cross-repo): user manual `bash install.sh --update <target>` 案内`
+
+理由: cross-repo write は Claude Code sandbox + `delegation-guard.sh` 二重制約で agent 経路完全 denied、user manual (terminal) 実行のみ可能 (詳細: `.claude/rules/development-process.md` §「cross-repo write 例外」)。Phase 計画段で明記しないと、subagent dispatch 時に sandbox deny で進行不能 / loop 停止の誤判断リスクあり (development-process.md §5 と同種の反射パターン)。
+
+省略時: subagent 起動 → 即時 deny → 「進められない」誤報告 → loop 停止のコスト
+
 ### Phase / Step schema (採用 5 条)
 
 各 Phase に **ゴール (1 文、観察可能)** + **作業概要 (箇条書き 3-5 件)** + **Step リスト** を必ず記載する。
