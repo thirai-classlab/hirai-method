@@ -246,63 +246,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/init-tasks-on-start.sh",
-            "timeout": 5,
-            "statusMessage": "タスクテンプレ初期化中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/check-required-env.sh",
-            "timeout": 3,
-            "statusMessage": "必須 env 確認中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/improvement-proposal.sh",
-            "timeout": 5,
-            "statusMessage": "改善提案を生成中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/mode-session-start.sh",
-            "timeout": 3,
-            "statusMessage": "HIRAI メソッド モード確認中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/mode-enforce.sh",
-            "timeout": 3,
-            "statusMessage": "Loop モード遵守事項を初期注入..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/why-x5-reminder.sh",
-            "timeout": 3,
-            "statusMessage": "Why × 5 出力ルールを初期注入..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/next-actions-surface.sh",
-            "timeout": 5,
-            "statusMessage": "未処理副産物 surface 中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/mode-asana-prompt.sh",
-            "timeout": 3,
-            "statusMessage": "Asana 連携モード確認中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/check-serena-mcp.sh",
-            "timeout": 3,
-            "statusMessage": "Serena MCP 設定確認中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/session-help-surface.sh",
-            "timeout": 3,
-            "statusMessage": "Help/hint 表示中..."
+            "command": "bash .claude/hooks/session-start-wrapper.sh",
+            "timeout": 15,
+            "statusMessage": "SessionStart hooks 並列実行中 (task-25 A2)..."
           }
         ]
       }
