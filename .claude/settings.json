@@ -49,6 +49,12 @@
             "command": "bash .claude/hooks/task-rule-guard.sh Edit",
             "timeout": 5,
             "statusMessage": "タスクルール検証中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/draft-flow-guard.sh",
+            "timeout": 5,
+            "statusMessage": "draft フロー検証中..."
           }
         ]
       },
