@@ -176,65 +176,63 @@ _record() {
 }
 
 # tests ------------------------------------------------------------------------
+#
+# 注意: task-21 W0.1 (2026-05-23) で reminder hook の event が
+#   UserPromptSubmit → SubagentStop + Stop に再配置された。
+#   そのため Case 1-3 の挙動は以下に変更:
+#     Case 1: Loop + SubagentStop event 受信 → reminder fires (fail-early)
+#     Case 2: Loop + Stop event 受信 → reminder fires (fail-early)
+#     Case 3: Normal + SubagentStop/Stop event 受信 → silent (mode 判定)
+#   旧仕様の transcript ベースキーワード検出は廃止 (簡略化、将来精度向上の余地)。
 
-# Case 1: Loop + waiting keyword + pending Agent → reminder fires
+# Case 1: Loop + SubagentStop event → reminder fires (fail-early)
 case1() {
   _reset_state_dir
   _set_mode "loop"
-  local transcript="${TMP_ROOT}/transcript-c1.jsonl"
-  # キーワード「subagent 完了を待」を含む直前 assistant + pending Agent tool_use
-  _make_transcript "$transcript" "subagent 完了を待っています。次セッションで対応します。" "true"
 
-  local stdin_json
-  stdin_json=$(jq -nc --arg p "$transcript" '{transcript_path: $p}')
+  local stdin_json='{"hook_event_name":"SubagentStop","session_id":"smoke-c1"}'
 
   _run_hook "$REMINDER_HOOK" "$stdin_json"
 
-  local expected="exit=0, stdout~'<system-reminder>' + 'matched keyword'"
-  local actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 60)'"
+  local expected="exit=0, stdout~'<system-reminder>' + 'SubagentStop'"
+  local actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 80)'"
 
   if [ "$LAST_CODE" = "0" ] \
      && printf '%s' "$LAST_OUT" | grep -q "<system-reminder>" \
-     && printf '%s' "$LAST_OUT" | grep -q "matched keyword"; then
-    _record "Case 1: Loop+waiting+pending → reminder fires" "PASS" "$expected" "$actual"
+     && printf '%s' "$LAST_OUT" | grep -q "SubagentStop"; then
+    _record "Case 1: Loop+SubagentStop → reminder fires" "PASS" "$expected" "$actual"
   else
-    _record "Case 1: Loop+waiting+pending → reminder fires" "FAIL" "$expected" "$actual"
+    _record "Case 1: Loop+SubagentStop → reminder fires" "FAIL" "$expected" "$actual"
   fi
 }
 
-# Case 2: Loop + no keyword → reminder silent
+# Case 2: Loop + Stop event → reminder fires (fail-early)
 case2() {
   _reset_state_dir
   _set_mode "loop"
-  local transcript="${TMP_ROOT}/transcript-c2.jsonl"
-  # 通常の作業報告のみ。「待」「完了次第」「次セッション」等を含まない
-  _make_transcript "$transcript" "ファイル A を編集し、テストを実行しました。" "false"
 
-  local stdin_json
-  stdin_json=$(jq -nc --arg p "$transcript" '{transcript_path: $p}')
+  local stdin_json='{"hook_event_name":"Stop","session_id":"smoke-c2"}'
 
   _run_hook "$REMINDER_HOOK" "$stdin_json"
 
-  local expected="exit=0, stdout empty"
-  local actual="exit=${LAST_CODE} stdout_len=${#LAST_OUT}"
+  local expected="exit=0, stdout~'<system-reminder>' + 'Stop'"
+  local actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 80)'"
 
-  if [ "$LAST_CODE" = "0" ] && [ -z "$LAST_OUT" ]; then
-    _record "Case 2: Loop+no-keyword → reminder silent" "PASS" "$expected" "$actual"
+  if [ "$LAST_CODE" = "0" ] \
+     && printf '%s' "$LAST_OUT" | grep -q "<system-reminder>" \
+     && printf '%s' "$LAST_OUT" | grep -q "Stop"; then
+    _record "Case 2: Loop+Stop → reminder fires" "PASS" "$expected" "$actual"
   else
-    _record "Case 2: Loop+no-keyword → reminder silent" "FAIL" "$expected" "$actual"
+    _record "Case 2: Loop+Stop → reminder fires" "FAIL" "$expected" "$actual"
   fi
 }
 
-# Case 3: Normal mode → reminder silent (mode-loader が loop でないので即 exit)
+# Case 3: Normal mode + SubagentStop/Stop → reminder silent (mode-loader 判定で no-op)
 case3() {
   _reset_state_dir
   _set_mode "normal"
-  local transcript="${TMP_ROOT}/transcript-c3.jsonl"
-  # キーワード含むが Normal mode なので無視されるべき
-  _make_transcript "$transcript" "subagent 完了を待っています。" "true"
 
-  local stdin_json
-  stdin_json=$(jq -nc --arg p "$transcript" '{transcript_path: $p}')
+  local stdin_json='{"hook_event_name":"SubagentStop","session_id":"smoke-c3"}'
 
   _run_hook "$REMINDER_HOOK" "$stdin_json"
 

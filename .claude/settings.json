@@ -207,6 +207,12 @@
             "command": "bash .claude/hooks/byproduct-discharge-guard.sh",
             "timeout": 5,
             "statusMessage": "副産物 discharge 検証中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "Loop モード自律進行検証中 (Stop)..."
           }
         ]
       }
@@ -219,6 +225,12 @@
             "command": "bash .claude/hooks/confidence-gate.sh",
             "timeout": 10,
             "statusMessage": "Confidence gate 検証中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "Loop モード自律進行検証中 (SubagentStop)..."
           }
         ]
       }
@@ -297,12 +309,6 @@
             "command": "bash .claude/hooks/context-budget.sh",
             "timeout": 5,
             "statusMessage": "Context 使用率チェック中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
-            "timeout": 5,
-            "statusMessage": "Loop モード自律進行検証中..."
           }
         ]
       }
