@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# delegation-guard-segment-smoke.sh — task #8 smoke test
-# 6 ケースで delegation-guard.sh の segment splitter (split_command_segments) を検証
+# delegation-guard-segment-smoke.sh — task #8 smoke test (Case 1-6) + heredoc fix (Case 7-9, 2026-05-23)
+# 9 ケースで delegation-guard.sh の segment splitter (split_command_segments) を検証
 # file-top に set -euo pipefail を書かない (feedback memory `set_e_in_sourced_libs` 規範)
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -44,7 +44,7 @@ PASS=0
 FAIL=0
 FAILED_CASES=()
 
-echo "===== task #8 delegation-guard segment splitter smoke ====="
+echo "===== task #8 delegation-guard segment splitter smoke (9 cases) ====="
 
 # Case 1-3: 基本セパレータ (既存挙動)
 assert_segment_count 1 "&& separator" 'git status && git diff' 2
@@ -58,10 +58,40 @@ assert_segment_count 5 'single-quote || protected' "git commit -m 'A || B'" 1
 # Case 6: escape 後の && 保護 + ; 分割
 assert_segment_count 6 'escaped && + ; separator' 'echo \&& bar; echo foo' 2
 
+# === Case 7-9: heredoc 対応 (2026-05-23 修正、heredoc-aware splitter) ===
+
+# Case 7: heredoc 本文に日本語含む (実 use case: git commit -m "$(cat <<'EOF' ... 日本語 ... EOF)")
+# 期待: 1 segment (heredoc 全体が string literal として保持される)
+read -r -d '' case7_input <<'CASE7_EOF' || true
+git commit -m "$(cat <<'EOF'
+feat: 日本語コミット
+EOF
+)"
+CASE7_EOF
+assert_segment_count 7 'heredoc with japanese body' "$case7_input" 1
+
+# Case 8: heredoc 本文に複数行 + 特殊文字 (| & ; || &&) 含む
+# 期待: 1 segment (heredoc 中の | & ; などは segment separator として誤検知しない)
+read -r -d '' case8_input <<'CASE8_EOF' || true
+git commit -m "$(cat <<'EOF'
+body|with|pipes
+A && B
+C || D
+end;line
+EOF
+)"
+CASE8_EOF
+assert_segment_count 8 'heredoc with pipes and special chars' "$case8_input" 1
+
+# Case 9: <<- (タブ ignore) 形式 — 先頭タブ付き delimiter line でも終了検出
+# 期待: 1 segment
+case9_input=$'git commit -m "$(cat <<-EOF\n\tindented body line\n\tEOF\n)"'
+assert_segment_count 9 'heredoc dash form (<<- with tab-indented delim)' "$case9_input" 1
+
 echo ""
 echo "===== Result ====="
-echo "PASS: $PASS / 6"
-echo "FAIL: $FAIL / 6"
+echo "PASS: $PASS / 9"
+echo "FAIL: $FAIL / 9"
 if [ $FAIL -gt 0 ]; then
   echo "Failed cases: ${FAILED_CASES[*]}"
   exit 1

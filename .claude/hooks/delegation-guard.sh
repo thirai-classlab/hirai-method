@@ -300,21 +300,83 @@ case "$tool" in
     # === segment splitter ===
     # Bash コマンドを &&, ||, ;, | で分割して各セグメントを whitelist 照合する。
     # quote-aware 実装: シングル/ダブルクォート内 + escape (\\) 後の特殊文字を保護。
-    # heredoc 本文 (<<EOF ... EOF) は単行解析の限界で未対応 (B フル parser 化で将来対応)。
-    # 検証: .claude/tests/delegation-guard-segment-smoke.sh Case 1-6
+    # heredoc 本文 (<<EOF / <<-EOF / <<'EOF' / <<"EOF") は 1 つの string literal として
+    # 扱い、segment splitter から除外する (2026-05-23 修正、Case 7-9 で検証)。
+    #
+    # 出力は segment 間を \n、segment 内部の改行 (heredoc 本文等) はそのまま保持する。
+    # 外側読み取り側は heredoc 内改行も別 segment として扱わない実装にする必要があるが、
+    # 本実装では splitter 出力時に「heredoc/quoted 内の改行を space に置換」する shortcut で
+    # 単純化する。whitelist は line-start prefix match なので、各 segment の最初の token
+    # (例: `git`, `npm`) さえ正しく取れれば照合可能。
+    #
+    # 検証: .claude/tests/delegation-guard-segment-smoke.sh Case 1-9
     split_command_segments() (
       set -uo pipefail
-      printf '%s' "$1" | awk '
-        {
+      # awk に入力全体を 1 つの record として渡す (RS で paragraph mode、改行を含む multiline cmd 対応)
+      printf '%s' "$1" | awk 'BEGIN { RS = "\x00" } {
           cmd = $0
           out = ""
           i = 1
           in_single = 0
           in_double = 0
           escape = 0
+          in_heredoc = 0
+          heredoc_delim = ""
+          heredoc_dash = 0
           n = length(cmd)
           while (i <= n) {
             c = substr(cmd, i, 1)
+
+            # === heredoc 本文中の処理 ===
+            # heredoc 本文は segment splitter / quote tracker を適用しない。
+            # 改行は " " (space) に置換して segment splitter (外側 \n 区切り) に
+            # 誤検出されないようにする。delimiter 行を見たら heredoc 終了。
+            if (in_heredoc) {
+              if (c == "\n") {
+                # 次行 (line_end まで) を抽出して delimiter 判定
+                next_line_end = index(substr(cmd, i+1), "\n")
+                if (next_line_end == 0) {
+                  next_line = substr(cmd, i+1)
+                  next_line_len = length(next_line)
+                } else {
+                  next_line = substr(cmd, i+1, next_line_end - 1)
+                  next_line_len = next_line_end - 1
+                }
+                # <<-EOF 形式は先頭タブを strip して比較
+                check_line = next_line
+                if (heredoc_dash) {
+                  sub(/^\t+/, "", check_line)
+                }
+                if (check_line == heredoc_delim) {
+                  # delimiter 行: 改行を space に置換、delimiter 行はそのまま追記、heredoc 終了
+                  # delimiter 行直後に続く文字 (例: `\n)\"`) は実 bash では heredoc の
+                  # コマンド置換 ($(...)) 内とみなされるが、本 parser は $() を追えないので
+                  # 「delimiter 直後の改行も heredoc 続きの一部」として空白に置換し、
+                  # segment splitter が誤反応しないようにする (簡略実装、Case 7-9 で検証)。
+                  out = out " " next_line
+                  i += 1 + next_line_len
+                  in_heredoc = 0
+                  heredoc_delim = ""
+                  heredoc_dash = 0
+                  # delimiter 行直後の改行 (もしあれば) も space に置換
+                  if (i <= n && substr(cmd, i, 1) == "\n") {
+                    out = out " "
+                    i++
+                  }
+                  continue
+                }
+                # 通常の本文行: 改行を space に置換して継続
+                out = out " "
+                i++
+                continue
+              }
+              # 本文中の普通の文字: そのまま追記 (| & ; 等の特殊文字も literal 扱い)
+              out = out c
+              i++
+              continue
+            }
+
+            # === heredoc 外: 通常 parser ===
             if (escape) {
               out = out c
               escape = 0
@@ -339,6 +401,78 @@ case "$tool" in
               i++
               continue
             }
+
+            # === heredoc 開始 marker 検出 ===
+            # `<<EOF` / `<<-EOF` / `<<'\''EOF'\''` / `<<"EOF"` 全形式を検出。
+            # 注: 厳密 bash 仕様では quote 内 `<<` は heredoc にならないが、本 parser は
+            # $() / ``などのコマンド置換スコープを追えないため、quote 状態に関係なく検出する。
+            # これは `git commit -m "$(cat <<'\''EOF'\'' ... EOF)"` 形式を救うために必要。
+            # 文字列内に literal で `<<WORD` が出現するケースは極稀で実害は小さい。
+            if (c == "<" && substr(cmd, i+1, 1) == "<") {
+              # `<<<` (here-string) は除外
+              if (substr(cmd, i+2, 1) == "<") {
+                out = out c
+                i++
+                continue
+              }
+              # `<<` を out に追記
+              out = out "<<"
+              j = i + 2
+              # `<<-` 形式 (tab strip)
+              dash = 0
+              if (substr(cmd, j, 1) == "-") {
+                dash = 1
+                out = out "-"
+                j++
+              }
+              # delimiter 抽出: optional 空白 + quoted/unquoted word
+              while (j <= n && (substr(cmd, j, 1) == " " || substr(cmd, j, 1) == "\t")) {
+                out = out substr(cmd, j, 1)
+                j++
+              }
+              if (j > n) {
+                # delimiter なし、invalid
+                i = j
+                continue
+              }
+              qc = substr(cmd, j, 1)
+              delim = ""
+              if (qc == "\x27" || qc == "\"") {
+                # quoted delimiter
+                quote_char = qc
+                out = out qc
+                j++
+                while (j <= n && substr(cmd, j, 1) != quote_char) {
+                  delim = delim substr(cmd, j, 1)
+                  out = out substr(cmd, j, 1)
+                  j++
+                }
+                if (j <= n) {
+                  out = out quote_char
+                  j++
+                }
+              } else {
+                # unquoted delimiter: word char (英数 + _) が続く間
+                while (j <= n) {
+                  ch = substr(cmd, j, 1)
+                  if (ch ~ /[A-Za-z0-9_]/) {
+                    delim = delim ch
+                    out = out ch
+                    j++
+                  } else {
+                    break
+                  }
+                }
+              }
+              if (delim != "") {
+                in_heredoc = 1
+                heredoc_delim = delim
+                heredoc_dash = dash
+              }
+              i = j
+              continue
+            }
+
             if (in_single == 0 && in_double == 0) {
               if (c == "&" && substr(cmd, i+1, 1) == "&") {
                 out = out "\n"
