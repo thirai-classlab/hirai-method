@@ -237,6 +237,12 @@
             "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
             "timeout": 5,
             "statusMessage": "Loop モード自律進行検証中 (SubagentStop)..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "timeout": 3,
+            "statusMessage": "観察記録中 (SubagentStop)..."
           }
         ]
       }

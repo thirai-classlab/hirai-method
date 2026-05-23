@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# observe.sh — PreToolUse / PostToolUse hook for continuous-learning v2.1
+# observe.sh — PreToolUse / PostToolUse / SubagentStop hook for continuous-learning v2.1
 #
 # 役割:
 #   - Hook JSON を stdin から受け取り、ローカルに観察記録を蓄積
@@ -15,6 +15,14 @@
 #   HOMUNCULUS_DIR (default: $HOME/.claude/homunculus)
 #   CLAUDE_PROJECT_DIR (Claude Code が注入する project root)
 #   CLAUDE_OBSERVE_DEBUG=1  → /tmp/claude-observe-debug.log にダンプ
+#
+# 拡張履歴:
+#   - 2026-05-23 task-28 W1: SubagentStop event 配線追加 (Phase 1)
+#     - subagent 完了 metric (agent_id / agent_type / duration_ms / total_tokens) を
+#       top-level の subagent field に抽出
+#     - 既存 PreToolUse / PostToolUse の挙動は完全維持 (behavior-preserving)
+#     - 起源: docs/draft/observe-subagent-stop-instrumentation.md §3 W1
+#     - 目的: task-21 W3 採用判定基準 4 (true handoff latency 秒オーダー) の真値計測 unblock
 
 set -u
 
@@ -93,6 +101,32 @@ ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 event=$(printf '%s' "$input" | jq -r '.hook_event_name // "unknown"' 2>/dev/null)
 tool=$(printf '%s' "$input" | jq -r '.tool_name // "unknown"' 2>/dev/null)
 
+# === task-28 W1: SubagentStop 固有 payload 抽出 ===
+#
+# SubagentStop event の場合、subagent 完了の metric を top-level field に抽出する。
+# 既存 raw field (全 payload) との二重持ちで観察 / 検索の柔軟性を確保する。
+#
+# 抽出 fields:
+#   - agent_id: subagent の ID (handoff latency 計測 + 個別 subagent 追跡用)
+#   - agent_type: subagent_type (e.g., "general-purpose" / "Explore" / "Task")
+#   - duration_ms: subagent 起動から完了までの実時間 (available なら)
+#   - total_tokens: subagent が消費した token 数 (available なら)
+#   - session_id / transcript_path: 後続 cross-reference 用
+#
+# default は null literal (jq object form)。SubagentStop 以外の event では
+# top-level subagent field が null になるため既存 schema 互換を保てる。
+subagent_payload="null"
+if [ "$event" = "SubagentStop" ]; then
+  subagent_payload=$(printf '%s' "$input" | jq -c '{
+    agent_id: (.agent_id // .subagent_id // null),
+    agent_type: (.agent_type // .subagent_type // null),
+    duration_ms: (.duration_ms // null),
+    total_tokens: (.total_tokens // null),
+    session_id: (.session_id // null),
+    transcript_path: (.transcript_path // null)
+  }' 2>/dev/null || echo 'null')
+fi
+
 # raw は --rawfile 経由で安全に passthrough する。
 # --argjson は nested string escape (literal control char / parse 失敗 raw_safe) で
 # 56% の records が破損していた (docs/draft/observe-jq-parse-fix.md §1)。
@@ -107,6 +141,7 @@ obs=$(jq -nc \
   --arg pid "$project_id" \
   --arg pname "$project_name" \
   --arg scope "$scope" \
+  --argjson subagent "$subagent_payload" \
   --rawfile raw <(printf '%s' "$raw_safe") \
   '{
      ts: $ts,
@@ -115,6 +150,7 @@ obs=$(jq -nc \
      project_id: $pid,
      project_name: $pname,
      scope: $scope,
+     subagent: $subagent,
      raw: ($raw | fromjson? // {})
    }' 2>/dev/null) || obs=""
 
