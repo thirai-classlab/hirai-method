@@ -29,6 +29,77 @@ python3 .claude/scripts/harness-audit.py
 
 - `--json` — JSON 出力（CI / 後段処理向け）
 - `--window=N` — 観察ログの集計件数（default 100）
+- `--compare PATH` — 他リポの `.claude/` と structural diff を取る（task-25 B3、複数指定可）
+- `--compare-format {summary,detail,json}` — `--compare` の出力 format（default: `summary`）
+- `--compare-include {hooks,rules,skills,commands,templates,settings,all}` — 比較対象 category 絞り込み（default: `all`、複数指定可）
+- `--compare-source PATH` — `--compare` の source root（default: cwd）
+
+## クロスリポ drift 検出 (`--compare`, task-25 B3)
+
+複数リポ (hirai-method / recall_poc / classlab-weekly-news 等) で `.claude/` ハーネスが drift していないかを構造的に検出する。
+
+### 比較指標
+
+- **file presence diff**: 一方にあって他方にない file 一覧 (path 単位)
+- **content diff**: 両方にある file の sha256 hash 比較、不一致なら「drift あり」mark + size delta / mtime delta 付き
+- **clean**: 両方に存在 + hash 一致の file 一覧
+
+### 無視 path (runtime-only)
+
+`.claude/.workflow-state/<slug>.json` / `.claude/.gateguard-state/*.cleared` / `.claude/.taskguard-state/*` / `.claude/.failure-window/*` / `.claude/.confidence-gate-state/*` / `.claude/.session-help-shown` / `.claude/.compaction-state/` / `.claude/logs/` / `.DS_Store` は default で除外。ただし `SCHEMA.md` / `bypass.log.template` / `.gitignore` は track 対象として比較される。
+
+### 実行例
+
+```bash
+# 単一リポ比較
+python3 .claude/scripts/harness-audit.py --compare /Users/t.hirai/recall_poc
+
+# 複数リポを並列比較
+python3 .claude/scripts/harness-audit.py \
+    --compare /Users/t.hirai/recall_poc \
+    --compare /Users/t.hirai/classlab-weekly-news
+
+# 全 file path を列挙 (大規模 drift 用)
+python3 .claude/scripts/harness-audit.py --compare /path/to/other-repo --compare-format detail
+
+# hooks/rules のみ比較
+python3 .claude/scripts/harness-audit.py --compare /path/to/other-repo \
+    --compare-include hooks --compare-include rules
+
+# CI / 後段処理向け JSON
+python3 .claude/scripts/harness-audit.py --compare /path/to/other-repo --compare-format json
+```
+
+### 出力例 (summary mode)
+
+```
+[harness-audit --compare]
+Source: /Users/t.hirai/work/hirai-method/.claude (X files, Y KB)
+Target: /Users/t.hirai/recall_poc/.claude (Z files, W KB)
+Includes: all
+
+## Missing in target (source only): N files
+  - .claude/hooks/draft-flow-guard.sh
+  - .claude/evals/system-reminder-attention.md
+  ...
+
+## Missing in source (target only): M files
+  - .claude/<recall_poc specific>
+
+## Content drift (same path, different hash): K files
+  - .claude/rules/task-management.md (source: X B / target: Y B / size delta: +10B / mtime delta: 3d)
+  ...
+
+## Summary
+  - install.sh --update sync 推奨 file 数: N (missing in target が新規追加対象)
+  - 真の drift (両 repo で独立進化): K (要 manual review)
+  - clean: P files (両 repo identical)
+```
+
+### 終了コード
+
+- `0` — 比較成功 (drift 件数に関わらず)
+- `2` — `--compare` 引数 path 不在 / source `.claude/` 不在 / argparse error
 
 ## メインエージェントの動作
 

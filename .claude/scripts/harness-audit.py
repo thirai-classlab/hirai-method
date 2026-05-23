@@ -8,6 +8,8 @@ Usage:
     python3 .claude/scripts/harness-audit.py            # default: human-readable
     python3 .claude/scripts/harness-audit.py --json     # machine-readable
     python3 .claude/scripts/harness-audit.py --window=N # 直近 N 件のみ集計（default 100）
+    python3 .claude/scripts/harness-audit.py --compare /path/to/other-repo
+                                                        # 他リポの .claude/ と構造比較 (task-25 B3)
 
 外部依存なし（標準ライブラリのみ）。
 """
@@ -739,6 +741,251 @@ def fmt_router(r: dict) -> str:
     return "\n".join(lines)
 
 
+# === task-25 B3: cross-repo harness diff =====================================
+#
+# `--compare <other-repo>` で他リポの `.claude/` と structural diff を取る。
+# 設計の前提:
+#   - read-only (両 repo を absolute に書き換えない)
+#   - 標準 library のみ (hashlib / os / pathlib)
+#   - default で runtime-only file (state / cache / .gitignore'd marker) を除外
+#
+# 出力 mode:
+#   summary (default): 件数 + 代表 file 列挙 (top 20)
+#   detail:           全 file path を列挙 (大規模 diff 用)
+#   json:             machine-readable
+#
+# include filter:
+#   {hooks,rules,skills,commands,templates,settings,all} default=all
+#   all 以外を選んだ場合は `.claude/<category>/...` 配下のみ比較
+
+# 比較対象から外す path pattern (runtime-only / state / cache)。
+# `.claude/<root>` からの相対 path で match する。
+_IGNORE_PATTERNS: tuple[str, ...] = (
+    ".session-help-shown",  # SessionStart marker
+    ".workflow-state/",     # workflow_guard state (SCHEMA.md 除く全 json/cleared)
+    ".gateguard-state/",
+    ".taskguard-state/",
+    ".failure-window/",
+    ".confidence-gate-state/",
+    ".compaction-state/",
+    "logs/",                # session logs
+    ".DS_Store",            # macOS
+)
+
+# `--compare-include` で許可される category と `.claude/` 配下 path の対応。
+_INCLUDE_MAP: dict[str, tuple[str, ...]] = {
+    "hooks": ("hooks/",),
+    "rules": ("rules/",),
+    "skills": ("skills/",),
+    "commands": ("commands/",),
+    "templates": ("templates/",),
+    "settings": ("settings.json", "settings.local.json", "harness-config.yml", "mode.yml"),
+    "all": (),  # 全 path
+}
+
+
+def _is_ignored_relpath(rel: str) -> bool:
+    """`.claude/` 相対 path が runtime-only path か判定。"""
+    for pat in _IGNORE_PATTERNS:
+        if pat.endswith("/"):
+            if rel.startswith(pat):
+                # SCHEMA.md / bypass.log.template / .gitignore は track 対象なので残す
+                if rel.endswith("/SCHEMA.md") or rel.endswith("/bypass.log.template") or rel.endswith("/.gitignore"):
+                    return False
+                return True
+        else:
+            if rel == pat or rel.endswith("/" + pat):
+                return True
+    return False
+
+
+def _is_included(rel: str, includes: set[str]) -> bool:
+    """`--compare-include` 指定された category に rel path が該当するか。"""
+    if "all" in includes or not includes:
+        return True
+    for cat in includes:
+        prefixes = _INCLUDE_MAP.get(cat, ())
+        for pre in prefixes:
+            if pre.endswith("/"):
+                if rel.startswith(pre):
+                    return True
+            else:
+                if rel == pre:
+                    return True
+    return False
+
+
+def _scan_claude_tree(claude_root: Path, includes: set[str]) -> dict[str, dict]:
+    """`<claude_root>/.claude/` 配下を再帰探索し file metadata dict を返す。
+
+    返り値: {rel_path: {sha256, size, mtime}}
+      rel_path は `.claude/` を含まない (例: `hooks/observe.sh`)。
+    """
+    out: dict[str, dict] = {}
+    base = claude_root / ".claude"
+    if not base.is_dir():
+        return out
+    for dirpath, dirnames, filenames in os.walk(base):
+        # symlink loops / .git 系を念のため除外
+        dirnames[:] = [d for d in dirnames if not d.startswith(".git")]
+        for fn in filenames:
+            full = Path(dirpath) / fn
+            try:
+                rel = str(full.relative_to(base))
+            except ValueError:
+                continue
+            if _is_ignored_relpath(rel):
+                continue
+            if not _is_included(rel, includes):
+                continue
+            try:
+                st = full.stat()
+                # 大きすぎる file (>5MB) は size/mtime のみ、hash は skip
+                if st.st_size > 5 * 1024 * 1024:
+                    h = "(skipped: large file)"
+                else:
+                    h = hashlib.sha256(full.read_bytes()).hexdigest()
+            except OSError:
+                continue
+            out[rel] = {
+                "sha256": h,
+                "size": st.st_size,
+                "mtime": st.st_mtime,
+            }
+    return out
+
+
+def compare_harness(
+    source_root: Path,
+    target_root: Path,
+    includes: set[str],
+) -> dict:
+    """source / target の `.claude/` を比較し structural diff dict を返す。
+
+    出力 key:
+      source_path / target_path: 実 path (絶対)
+      source_count / target_count / source_kb / target_kb
+      missing_in_target: source のみに存在する file list
+      missing_in_source: target のみに存在する file list
+      content_drift: 両方に存在するが hash 不一致 (size / mtime delta 付き)
+      clean: 両方に存在し hash 一致
+      total_clean / total_drift / total_missing_target / total_missing_source
+    """
+    src_files = _scan_claude_tree(source_root, includes)
+    tgt_files = _scan_claude_tree(target_root, includes)
+
+    src_keys = set(src_files.keys())
+    tgt_keys = set(tgt_files.keys())
+
+    missing_in_target = sorted(src_keys - tgt_keys)
+    missing_in_source = sorted(tgt_keys - src_keys)
+    common = sorted(src_keys & tgt_keys)
+
+    drift: list[dict] = []
+    clean: list[str] = []
+    for rel in common:
+        s = src_files[rel]
+        t = tgt_files[rel]
+        if s["sha256"] != t["sha256"]:
+            mtime_delta_sec = abs(s["mtime"] - t["mtime"])
+            mtime_delta_days = round(mtime_delta_sec / 86400, 2)
+            drift.append({
+                "path": rel,
+                "source_size": s["size"],
+                "target_size": t["size"],
+                "size_delta": t["size"] - s["size"],
+                "mtime_delta_days": mtime_delta_days,
+            })
+        else:
+            clean.append(rel)
+
+    src_kb = round(sum(f["size"] for f in src_files.values()) / 1024, 1)
+    tgt_kb = round(sum(f["size"] for f in tgt_files.values()) / 1024, 1)
+
+    return {
+        "source_path": str((source_root / ".claude").resolve()),
+        "target_path": str((target_root / ".claude").resolve()),
+        "source_count": len(src_files),
+        "target_count": len(tgt_files),
+        "source_kb": src_kb,
+        "target_kb": tgt_kb,
+        "includes": sorted(includes),
+        "missing_in_target": missing_in_target,
+        "missing_in_source": missing_in_source,
+        "content_drift": drift,
+        "clean": clean,
+        "total_clean": len(clean),
+        "total_drift": len(drift),
+        "total_missing_target": len(missing_in_target),
+        "total_missing_source": len(missing_in_source),
+    }
+
+
+def fmt_compare(result: dict, fmt: str = "summary") -> str:
+    """compare_harness の result を human-readable markdown に format。"""
+    lines: list[str] = []
+    lines.append("[harness-audit --compare]")
+    lines.append(
+        f"Source: {result['source_path']} "
+        f"({result['source_count']} files, {result['source_kb']} KB)"
+    )
+    lines.append(
+        f"Target: {result['target_path']} "
+        f"({result['target_count']} files, {result['target_kb']} KB)"
+    )
+    if result["includes"]:
+        lines.append(f"Includes: {', '.join(result['includes'])}")
+    lines.append("")
+
+    # default top 20、detail mode で全件表示
+    list_limit = None if fmt == "detail" else 20
+
+    # Missing in target
+    lines.append(f"## Missing in target (source only): {result['total_missing_target']} files")
+    missing_t = result["missing_in_target"]
+    shown = missing_t if list_limit is None else missing_t[:list_limit]
+    for p in shown:
+        lines.append(f"  - .claude/{p}")
+    if list_limit is not None and len(missing_t) > list_limit:
+        lines.append(f"  ... and {len(missing_t) - list_limit} more (use --compare-format detail)")
+    lines.append("")
+
+    # Missing in source
+    lines.append(f"## Missing in source (target only): {result['total_missing_source']} files")
+    missing_s = result["missing_in_source"]
+    shown = missing_s if list_limit is None else missing_s[:list_limit]
+    for p in shown:
+        lines.append(f"  - .claude/{p}")
+    if list_limit is not None and len(missing_s) > list_limit:
+        lines.append(f"  ... and {len(missing_s) - list_limit} more (use --compare-format detail)")
+    lines.append("")
+
+    # Content drift
+    lines.append(f"## Content drift (same path, different hash): {result['total_drift']} files")
+    drift = result["content_drift"]
+    shown_drift = drift if list_limit is None else drift[:list_limit]
+    for d in shown_drift:
+        delta = d["size_delta"]
+        sign = "+" if delta >= 0 else ""
+        lines.append(
+            f"  - .claude/{d['path']} "
+            f"(source: {d['source_size']}B / target: {d['target_size']}B / "
+            f"size delta: {sign}{delta}B / mtime delta: {d['mtime_delta_days']}d)"
+        )
+    if list_limit is not None and len(drift) > list_limit:
+        lines.append(f"  ... and {len(drift) - list_limit} more (use --compare-format detail)")
+    lines.append("")
+
+    # Summary
+    lines.append("## Summary")
+    lines.append(f"  - install.sh --update sync 推奨 file 数: {result['total_missing_target']} "
+                 "(missing in target が新規追加対象)")
+    lines.append(f"  - 真の drift (両 repo で独立進化): {result['total_drift']} (要 manual review)")
+    lines.append(f"  - clean: {result['total_clean']} files (両 repo identical)")
+
+    return "\n".join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true", help="出力を JSON にする")
@@ -746,7 +993,76 @@ def main() -> int:
     ap.add_argument("--swe-bench", action="store_true", help="SWE-bench Lite leaderboard markdown のみ出力")
     ap.add_argument("--router", action="store_true", help="Agent-router dispatch.jsonl leaderboard markdown のみ出力")
     ap.add_argument("--router-homunculus-root", default=None, help="Override homunculus_root for the --router subcommand (mainly for tests)")
+    # task-25 B3: cross-repo compare
+    ap.add_argument(
+        "--compare",
+        action="append",
+        default=None,
+        help="他リポの .claude/ root と structural diff を取る (task-25 B3、複数指定可)",
+    )
+    ap.add_argument(
+        "--compare-format",
+        choices=["summary", "detail", "json"],
+        default="summary",
+        help="--compare の出力 format (default: summary)",
+    )
+    ap.add_argument(
+        "--compare-include",
+        action="append",
+        choices=list(_INCLUDE_MAP.keys()),
+        default=None,
+        help="--compare の比較対象 category (default: all、複数指定可)",
+    )
+    ap.add_argument(
+        "--compare-source",
+        default=None,
+        help="--compare の source root (default: cwd)",
+    )
     args = ap.parse_args()
+
+    # --compare branch (task-25 B3)
+    if args.compare:
+        source_root = Path(args.compare_source).resolve() if args.compare_source else ROOT
+        if not (source_root / ".claude").is_dir():
+            print(
+                f"error: source .claude/ not found at {source_root}/.claude",
+                file=sys.stderr,
+            )
+            return 2
+
+        includes = set(args.compare_include) if args.compare_include else {"all"}
+        results: list[dict] = []
+        had_error = False
+        for tgt_arg in args.compare:
+            target_root = Path(tgt_arg).expanduser().resolve()
+            if not target_root.exists():
+                print(f"error: target path does not exist: {tgt_arg}", file=sys.stderr)
+                had_error = True
+                continue
+            if not (target_root / ".claude").is_dir():
+                print(
+                    f"error: target .claude/ not found at {target_root}/.claude",
+                    file=sys.stderr,
+                )
+                had_error = True
+                continue
+            results.append(compare_harness(source_root, target_root, includes))
+
+        if had_error and not results:
+            return 2
+
+        # output
+        if args.compare_format == "json" or args.json:
+            payload = results[0] if len(results) == 1 else {"comparisons": results}
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            for i, r in enumerate(results):
+                if i > 0:
+                    print("")
+                    print("---")
+                    print("")
+                print(fmt_compare(r, fmt=args.compare_format))
+        return 0 if not had_error else 2
 
     if args.router:
         rr = router_breakdown(
