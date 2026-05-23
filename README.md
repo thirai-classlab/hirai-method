@@ -404,9 +404,25 @@ python3 .claude/skills/eval-harness/swe-bench/runner.py \
 
 → confidence < 0.5 で hint 抑制、または fallback=true（general-purpose 推奨）。`python3 .claude/skills/agent-router/router.py --explain "<prompt>"` で手動確認可。
 
-### Mermaid hook が遅い
+### Mermaid hook が遅い / オフラインで動かない
 
-→ 初回 npx 実行は 30MB ダウンロードで 10〜20 秒。`npm i -D mermaid@11.13.0 jsdom` でローカル install すれば高速化。
+`check-md-mermaid.sh` は `.md` / `.mdx` 内の `mermaid` block を mermaid@11 で構文検証する hook。Library の解決は 3 段 fallback (task-25 A1):
+
+1. **project-local**: `./node_modules/{mermaid,jsdom}` を最優先
+2. **global install**: `$(npm root -g)/{mermaid,jsdom}` を fallback
+3. **npx fallback**: 上記いずれもなければ `npx --yes --package=mermaid@11.13.0 --package=jsdom node ...` で network 取得 (初回 30MB ダウンロードで 10〜20 秒)
+
+オフライン環境 / レート制限環境 / cold start 高速化のため、**事前 install を推奨**:
+
+```bash
+# 推奨 1: global install (複数 project で共有)
+npm install -g mermaid@11.13.0 jsdom
+
+# 推奨 2: project-local install
+npm install --save-dev mermaid@11.13.0 jsdom
+```
+
+`node` と `jq` が見つからない / 全 fallback 失敗時は hook は `fail-open` (session を止めず stderr に install hint を表示するのみ、検証 skip)。手動検証は `.claude/skills/check-md-mermaid/SKILL.md` 参照。
 
 ## ドキュメント
 
