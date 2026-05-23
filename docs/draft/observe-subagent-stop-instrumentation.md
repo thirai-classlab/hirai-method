@@ -1,7 +1,7 @@
 <!--
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-05-23
+approved_by: user (「タスク化して実行」発言で Loop モード自律承認、副産物 #19 → task-28 化)
 retroactive: false
 -->
 
