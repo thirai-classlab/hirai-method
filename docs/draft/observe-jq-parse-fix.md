@@ -96,6 +96,27 @@ flowchart LR
 - L4 学習側 (`.claude/skills/continuous-learning-v2/`) の instinct 抽出ロジックで `raw` を `fromjson?` で展開
 - 既存 instinct の confidence 再計算は option (実装 cost 高い場合は skip)
 
+### W3 判定 (2026-05-23 不要判定、subagent a1f1341b281d0ace2 confidence 0.92)
+
+W2 実測 finding (`fd5f6e5`、Python decoder で 11/28583 = 0.04%、本 draft §1 の 56% 前提は jq stream cascade fail の誤認、5600x off) を受け、L4 学習側の現状を read-only 検証した結果:
+
+- **L4 学習側 (`.claude/skills/continuous-learning-v2/`) は `raw` field を全く参照していない**
+  - `instinct-cli.py` `cmd_observe_analyze` (line 311-359) は `rec.get("tool", "")` のみ参照
+  - bigram pattern detection / top tools 集計も `tool` field only
+  - Haiku background observer は `config.json observer.enabled: false` で **無効化中**
+- **新 schema (raw=object) は jq 側で `($raw | fromjson? // {})` 変換済**で保存される (W1 commit `c25f3ee`)
+  - production 最新 record で `jq -r '.raw | type'` = `object` を実測確認
+  - 将来 L4 学習側が `.raw.X` 参照を実装しても新旧 schema で同一 object として扱える
+- **W3 影響面積 ≈ 0**: 「破損率 0.04% × 学習側が raw 未参照」のため、W3 fromjson 適用は **存在しない問題に対する解決策**
+
+→ **task-27 を W1+W2 完遂で close**、W3 は実装不要。
+
+### 副次 finding (別 task 候補)
+
+- `/harness-audit` の jq-valid 率指標も同じ cascade fail に汚染されている可能性
+- 別 task `harness-audit-jq-valid-metric-fix` (slug 案) として draft 起こしの上で進めるべき
+- 本 task-27 内 W3 とは異なる問題 (学習側 vs harness-audit) のため別管理
+
 ---
 
 ## 4. リスクと緩和
@@ -121,12 +142,12 @@ flowchart LR
 
 ## 6. 完了条件 (DoD)
 
-- [ ] observe.sh が `--rawfile` 経路で raw 処理
-- [ ] 新 smoke `observe-jq-parse-smoke.sh` 4/4 PASS
-- [ ] 既存 smoke (`observe-rotate-smoke.sh` 6/6 / その他) regression 0
-- [ ] `/harness-audit` の jq-valid 率: 44% → 95%+ (新規 observation のみで計測)
-- [ ] W2 repair script 配備、pre-existing invalid 行を修復可能
-- [ ] docs/SELF_IMPROVEMENT.md に「observation schema 健全性」セクション追加
+- [x] observe.sh が `--rawfile` 経路で raw 処理 (W1 `c25f3ee`)
+- [x] 新 smoke `observe-jq-parse-smoke.sh` 4/4 PASS (W1)
+- [x] 既存 smoke (`observe-rotate-smoke.sh` 6/6 / その他) regression 0 (W1+W2 両完遂)
+- [x] ~~`/harness-audit` の jq-valid 率: 44% → 95%+~~ → **誤前提に基づく数値、実測 99.96% (invalid 11/28583 = 0.04%)、本 DoD 項目は cascade fail 由来の推定値で意味なし。harness-audit 指標自体の見直しは別 task `harness-audit-jq-valid-metric-fix` で扱う**
+- [x] W2 repair script 配備、pre-existing invalid 行を修復可能 (W2 `fd5f6e5`、observe-repair.sh 437 LOC、smoke 6/6 PASS)
+- [ ] ~~docs/SELF_IMPROVEMENT.md に「observation schema 健全性」セクション追加~~ → **不要 (W3 不要判定により、L4 学習側互換性が既に保たれていることが確認済、観察 schema 健全性 doc は新規 finding 系の別 doc として扱う方が適切)**
 
 ---
 
@@ -142,7 +163,8 @@ W1 が最 critical (L4 学習データの新規健全化)、W2 が高価値 (既
 
 | 日付 | 承認者 | 結果 |
 |---|---|---|
-| YYYY-MM-DD | user | 承認 → `docs/tasks/task-<ID>-observe-jq-parse-fix.md` 作成 |
+| 2026-05-23 | user (「順次実行してください」発言、frontmatter approved_at) | 承認 → list.md row 50 task-27 として inline 管理 (task ファイル独立化なし、hot-fix `--no-draft` 互換 style) |
+| 2026-05-23 | user (本 session「進めてください」承認 + Loop モード自律進行範囲) | W1+W2 完遂 → W3 不要判定で task-27 close、副次 finding は別 task として next-actions entry #20 へ |
 
 ---
 
