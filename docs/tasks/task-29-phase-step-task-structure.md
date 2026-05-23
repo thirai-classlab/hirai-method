@@ -7,7 +7,7 @@ requester: ""
 
 # Task #29: Phase→Step 強制タスク構造規範
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-05-23、3 commits `60be3c4` / `c7f0bf6` / `341dde9`、DoD 全 6 項目達成)
 > 起案: 2026-05-23
 > 関連: task-20 (`wave-precheck-template`、テンプレ拡張系の先行 task) / task-22 (`hook-reliability-uplift`、smoke 拡充の先行) / Phase: harness-foundation 系の structure 規範拡張
 > 設計起源: [phase-step-task-structure.md](../draft/phase-step-task-structure.md) (2026-05-23 user 承認、W3 判断点 A: 規範のみ採用)
