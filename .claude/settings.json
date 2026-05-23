@@ -219,6 +219,12 @@
             "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
             "timeout": 5,
             "statusMessage": "Loop モード自律進行検証中 (Stop)..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "timeout": 3,
+            "statusMessage": "観察記録中 (Stop)..."
           }
         ]
       }
@@ -255,6 +261,12 @@
             "command": "bash .claude/hooks/session-start-wrapper.sh",
             "timeout": 15,
             "statusMessage": "SessionStart hooks 並列実行中 (task-25 A2)..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "timeout": 3,
+            "statusMessage": "観察記録中 (SessionStart)..."
           }
         ]
       }
@@ -267,6 +279,12 @@
             "command": "bash .claude/hooks/context-budget.sh",
             "timeout": 5,
             "statusMessage": "Context 使用率チェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "timeout": 3,
+            "statusMessage": "観察記録中 (UserPromptSubmit)..."
           }
         ]
       }

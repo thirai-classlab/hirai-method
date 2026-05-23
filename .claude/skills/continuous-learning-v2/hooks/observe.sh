@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# observe.sh — PreToolUse / PostToolUse / SubagentStop hook for continuous-learning v2.1
+# observe.sh — PreToolUse / PostToolUse / SubagentStop / Stop / UserPromptSubmit / SessionStart hook for continuous-learning v2.1
 #
 # 役割:
 #   - Hook JSON を stdin から受け取り、ローカルに観察記録を蓄積
@@ -17,12 +17,19 @@
 #   CLAUDE_OBSERVE_DEBUG=1  → /tmp/claude-observe-debug.log にダンプ
 #
 # 拡張履歴:
-#   - 2026-05-23 task-28 W1: SubagentStop event 配線追加 (Phase 1)
+#   - 2026-05-23 task-28 W1 (Phase 1): SubagentStop event 配線追加
 #     - subagent 完了 metric (agent_id / agent_type / duration_ms / total_tokens) を
 #       top-level の subagent field に抽出
 #     - 既存 PreToolUse / PostToolUse の挙動は完全維持 (behavior-preserving)
 #     - 起源: docs/draft/observe-subagent-stop-instrumentation.md §3 W1
 #     - 目的: task-21 W3 採用判定基準 4 (true handoff latency 秒オーダー) の真値計測 unblock
+#   - 2026-05-23 task-28 W3 (Phase 2): Stop / UserPromptSubmit / SessionStart 3 event 追加配線
+#     - Stop event: session 終了時の最終状態 (session_id / stop_hook_active / transcript_path)
+#     - UserPromptSubmit event: user prompt 到来 (prompt 内容長 / system_reminder 検出 / session_id)
+#     - SessionStart event: session 開始 (source = startup/resume/clear、cwd、mode)
+#     - 既存 SubagentStop / PreToolUse / PostToolUse の挙動は完全維持
+#     - 起源: docs/draft/observe-subagent-stop-instrumentation.md §3 W3
+#     - 目的: session lifecycle 全 event 捕捉 + Loop モード規律後追い分析 + 注入数 audit
 
 set -u
 
@@ -127,6 +134,50 @@ if [ "$event" = "SubagentStop" ]; then
   }' 2>/dev/null || echo 'null')
 fi
 
+# === task-28 W3 (Phase 2): Stop / UserPromptSubmit / SessionStart 固有 payload 抽出 ===
+#
+# 既存 SubagentStop と同パターン: event 固有 metric を top-level field に抽出し
+# raw との二重持ちで観察柔軟性を確保。default は null literal。
+#
+# event_payload 抽出 schema:
+#   - Stop: session_id / stop_hook_active / transcript_path
+#       (session 終了時の最終状態、Loop モード遵守事項 7 違反の後追い分析素材)
+#   - UserPromptSubmit: session_id / prompt_length / has_system_reminder / cwd
+#       (注入数 audit 用、has_system_reminder で system-reminder 注入数集計)
+#       prompt_length は content の長さ (privacy: 内容そのものは raw に保持、抽出は長さのみ)
+#   - SessionStart: session_id / source / cwd / transcript_path
+#       (source = "startup" / "resume" / "clear"、resume 比率分析素材)
+#
+# Stop / UserPromptSubmit / SessionStart 以外の event では event_payload が null literal で
+# 既存 schema 互換維持。
+event_payload="null"
+case "$event" in
+  Stop)
+    event_payload=$(printf '%s' "$input" | jq -c '{
+      session_id: (.session_id // null),
+      stop_hook_active: (.stop_hook_active // null),
+      transcript_path: (.transcript_path // null)
+    }' 2>/dev/null || echo 'null')
+    ;;
+  UserPromptSubmit)
+    # prompt 内容自体は raw に保持。top-level には privacy 配慮で長さ + system-reminder 検出のみ。
+    event_payload=$(printf '%s' "$input" | jq -c '{
+      session_id: (.session_id // null),
+      prompt_length: ((.prompt // "") | length),
+      has_system_reminder: (((.prompt // "") | contains("<system-reminder>"))),
+      cwd: (.cwd // null)
+    }' 2>/dev/null || echo 'null')
+    ;;
+  SessionStart)
+    event_payload=$(printf '%s' "$input" | jq -c '{
+      session_id: (.session_id // null),
+      source: (.source // null),
+      cwd: (.cwd // null),
+      transcript_path: (.transcript_path // null)
+    }' 2>/dev/null || echo 'null')
+    ;;
+esac
+
 # raw は --rawfile 経由で安全に passthrough する。
 # --argjson は nested string escape (literal control char / parse 失敗 raw_safe) で
 # 56% の records が破損していた (docs/draft/observe-jq-parse-fix.md §1)。
@@ -142,6 +193,7 @@ obs=$(jq -nc \
   --arg pname "$project_name" \
   --arg scope "$scope" \
   --argjson subagent "$subagent_payload" \
+  --argjson event_payload "$event_payload" \
   --rawfile raw <(printf '%s' "$raw_safe") \
   '{
      ts: $ts,
@@ -151,6 +203,7 @@ obs=$(jq -nc \
      project_name: $pname,
      scope: $scope,
      subagent: $subagent,
+     event_payload: $event_payload,
      raw: ($raw | fromjson? // {})
    }' 2>/dev/null) || obs=""
 
