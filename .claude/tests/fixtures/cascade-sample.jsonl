@@ -1,0 +1,9 @@
+{"tool_name": "Bash", "raw": {"cmd": "ls"}, "timestamp": "2026-05-24T00:00:00Z"}
+{"tool_name": "Read", "raw": {"path": "/tmp/foo"}, "timestamp": "2026-05-24T00:00:01Z"}
+broken-line-1-not-json
+broken-line-2-not-json
+broken-line-3-not-json
+broken-line-4-not-json
+broken-line-5-not-json
+{"tool_name": "Edit", "raw": {"file": "/tmp/x"}, "timestamp": "2026-05-24T00:00:08Z"}
+{"tool_name": "Write", "raw": {"file": "/tmp/y"}, "timestamp": "2026-05-24T00:00:09Z"}

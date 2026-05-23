@@ -9,7 +9,7 @@ Usage:
     python3 .claude/scripts/harness-audit.py --json     # machine-readable
     python3 .claude/scripts/harness-audit.py --window=N # 直近 N 件のみ集計（default 100）
     python3 .claude/scripts/harness-audit.py --compare /path/to/other-repo
-                                                        # 他リポの .claude/ と構造比較 (task-25 B3)
+                                                        # 他リポの .claude/ と structural diff (task-25 B3)
 
 外部依存なし（標準ライブラリのみ）。
 """
@@ -39,6 +39,22 @@ DEFAULTS: dict[str, str] = {
     "confidence_state_dir": ".claude/.confidence-gate-state",
     "homunculus_root": str(Path.home() / ".claude" / "homunculus"),
 }
+
+# === task-32: observation pipeline 健全性指標 ===
+# cascade fail 検出の閾値: N 連続 JSONDecodeError で cascade_suspected: True
+# env `HC_CASCADE_THRESHOLD` で override 可、default 5
+_CASCADE_THRESHOLD_DEFAULT = 5
+
+
+def _cascade_threshold() -> int:
+    raw = os.environ.get("HC_CASCADE_THRESHOLD")
+    if raw is None:
+        return _CASCADE_THRESHOLD_DEFAULT
+    try:
+        v = int(raw)
+        return v if v > 0 else _CASCADE_THRESHOLD_DEFAULT
+    except (TypeError, ValueError):
+        return _CASCADE_THRESHOLD_DEFAULT
 
 
 def _expand_tilde(value: str) -> str:
@@ -138,10 +154,26 @@ def find_observations() -> Path | None:
     return None
 
 
-def tail_jsonl(path: Path, n: int) -> list[dict]:
-    """末尾 N 行を JSON parse。壊れた行はスキップ。"""
+def tail_jsonl(path: Path, n: int) -> dict:
+    """末尾 N 行を JSON parse。壊れた行はスキップ + 健全性指標を expose (task-32)。
+
+    返り値 dict:
+      records: list[dict]            — 正常 parse できた record 群 (旧 schema 互換は caller 1 箇所のみ修正)
+      skipped_lines: int             — JSONDecodeError でスキップした行数
+      total_lines: int               — 試行した非空行数
+      cascade_suspected: bool        — 連続 JSONDecodeError が閾値超過したか (Phase 2)
+      max_consecutive_skips: int     — 観察された最大連続 skip 数 (heuristic 補助)
+    """
+    threshold = _cascade_threshold()
+    result: dict = {
+        "records": [],
+        "skipped_lines": 0,
+        "total_lines": 0,
+        "cascade_suspected": False,
+        "max_consecutive_skips": 0,
+    }
     if not path.exists():
-        return []
+        return result
     try:
         with path.open("rb") as f:
             f.seek(0, os.SEEK_END)
@@ -150,22 +182,44 @@ def tail_jsonl(path: Path, n: int) -> list[dict]:
             f.seek(size - chunk)
             data = f.read().decode("utf-8", errors="replace")
     except Exception:
-        return []
+        return result
     lines = data.splitlines()[-n:]
-    out = []
+    out: list[dict] = []
+    skipped = 0
+    total = 0
+    consecutive_skips = 0
+    max_consecutive = 0
+    cascade = False
     for line in lines:
         line = line.strip()
         if not line:
             continue
+        total += 1
         try:
             out.append(json.loads(line))
+            # 成功 → consecutive counter reset
+            consecutive_skips = 0
         except json.JSONDecodeError:
-            continue
-    return out
+            skipped += 1
+            consecutive_skips += 1
+            if consecutive_skips > max_consecutive:
+                max_consecutive = consecutive_skips
+            if consecutive_skips >= threshold:
+                cascade = True
+    result["records"] = out
+    result["skipped_lines"] = skipped
+    result["total_lines"] = total
+    result["cascade_suspected"] = cascade
+    result["max_consecutive_skips"] = max_consecutive
+    return result
 
 
 def summarize_observations(records: list[dict]) -> dict:
-    """observations から指標を抽出。"""
+    """observations から指標を抽出。
+
+    task-32 追加: raw field の object (dict) / string 判定で `raw_object_rate` を集計。
+    観察 schema は task-27 W1 (`c25f3ee`) で raw=object に統一済、本指標で実測継続。
+    """
     if not records:
         return {
             "total": 0,
@@ -175,6 +229,11 @@ def summarize_observations(records: list[dict]) -> dict:
             "timeouts": 0,
             "first_ts": None,
             "last_ts": None,
+            "raw_object_count": 0,
+            "raw_string_count": 0,
+            "raw_other_count": 0,
+            "raw_present_count": 0,
+            "raw_object_rate": 0.0,
         }
     total = len(records)
     tool_counts: Counter[str] = Counter()
@@ -182,6 +241,10 @@ def summarize_observations(records: list[dict]) -> dict:
     timeouts = 0
     errors = 0
     timestamps: list[str] = []
+    raw_object = 0
+    raw_string = 0
+    raw_other = 0
+    raw_present = 0
 
     for r in records:
         tool = r.get("tool_name") or r.get("tool") or "unknown"
@@ -198,6 +261,19 @@ def summarize_observations(records: list[dict]) -> dict:
             err_str = json.dumps(resp).lower() if resp else ""
             if "timeout" in err_str or "timed out" in err_str:
                 timeouts += 1
+        # task-32: raw field schema 判定
+        if "raw" in r:
+            raw_present += 1
+            raw_val = r.get("raw")
+            if isinstance(raw_val, dict):
+                raw_object += 1
+            elif isinstance(raw_val, str):
+                raw_string += 1
+            else:
+                raw_other += 1
+
+    # rate は raw field 存在 record を分母とする (raw 欠如 record は分母から除外)
+    raw_rate = round(raw_object / raw_present, 3) if raw_present else 0.0
 
     return {
         "total": total,
@@ -208,6 +284,11 @@ def summarize_observations(records: list[dict]) -> dict:
         "timeouts": timeouts,
         "first_ts": min(timestamps) if timestamps else None,
         "last_ts": max(timestamps) if timestamps else None,
+        "raw_object_count": raw_object,
+        "raw_string_count": raw_string,
+        "raw_other_count": raw_other,
+        "raw_present_count": raw_present,
+        "raw_object_rate": raw_rate,
     }
 
 
@@ -594,6 +675,62 @@ def confidence_gate_breakdown() -> dict:
     return out
 
 
+def fmt_observation_health(report: dict) -> str:
+    """task-32: Observation Pipeline 健全性セクション markdown。
+
+    Phase 1: parse-skipped 行数 / raw object rate
+    Phase 2: cascade fail 検出時 🔴 warning
+    """
+    obs = report["observations"]
+    health = report.get("observation_health") or {}
+    threshold = health.get("cascade_threshold", _cascade_threshold())
+    total_lines = health.get("total_lines", 0)
+    skipped_lines = health.get("skipped_lines", 0)
+    cascade = bool(health.get("cascade_suspected", False))
+    max_consec = health.get("max_consecutive_skips", 0)
+
+    lines: list[str] = []
+    lines.append("## Observation Pipeline 健全性")
+    if total_lines == 0:
+        lines.append("- (集計対象 line なし、observation 未発生 or window 外)")
+        return "\n".join(lines)
+
+    jq_valid = total_lines - skipped_lines
+    parse_rate_pct = (jq_valid / total_lines * 100) if total_lines else 0.0
+    skip_rate_pct = (skipped_lines / total_lines * 100) if total_lines else 0.0
+    lines.append(
+        f"- parse-skipped: **{skipped_lines}** / {total_lines} lines "
+        f"({skip_rate_pct:.2f}% skipped, jq-valid {parse_rate_pct:.2f}%)"
+    )
+
+    raw_present = obs.get("raw_present_count", 0)
+    raw_object = obs.get("raw_object_count", 0)
+    raw_string = obs.get("raw_string_count", 0)
+    raw_other = obs.get("raw_other_count", 0)
+    raw_rate_pct = (obs.get("raw_object_rate", 0.0) * 100)
+    if raw_present > 0:
+        lines.append(
+            f"- raw object rate: **{raw_rate_pct:.2f}%** "
+            f"(object {raw_object} / string {raw_string} / other {raw_other} / "
+            f"present {raw_present})"
+        )
+    else:
+        lines.append("- raw object rate: (no `raw` field observed in window)")
+
+    lines.append(f"- cascade threshold: {threshold} (env `HC_CASCADE_THRESHOLD` で override)")
+    lines.append(f"- max consecutive skips observed: {max_consec}")
+
+    if cascade:
+        lines.append("")
+        lines.append(
+            f"🔴 **CASCADE FAIL SUSPECTED**: {max_consec} 連続行で JSONDecodeError 発生。"
+            "observe.sh write 経路 regression の可能性 (`.claude/skills/continuous-learning-v2/hooks/observe.sh` "
+            "の `--rawfile` + `fromjson?` 経路確認)。"
+        )
+
+    return "\n".join(lines)
+
+
 def fmt_human(report: dict) -> str:
     obs = report["observations"]
     gg = report["gateguard"]
@@ -628,6 +765,11 @@ def fmt_human(report: dict) -> str:
                 marker = " ⚠️" if rate >= 0.3 and c >= 5 else ""
                 lines.append(f"  - `{t}`: {c} calls / {err} errors ({rate:.0%}){marker}")
     lines.append("")
+
+    # task-32: Observation Pipeline 健全性 (observations セクション直後)
+    if "observation_health" in report:
+        lines.append(fmt_observation_health(report))
+        lines.append("")
 
     # GateGuard
     lines.append("## GateGuard state (F1)")
@@ -700,6 +842,12 @@ def fmt_human(report: dict) -> str:
         health.append(f"🔴 {fw['active_loops']} active failure loop(s)")
     if obs["timeouts"] > 5:
         health.append(f"🟡 {obs['timeouts']} timeouts in window")
+    # task-32: cascade fail を Health に昇格
+    oh = report.get("observation_health") or {}
+    if oh.get("cascade_suspected"):
+        health.append(
+            f"🔴 cascade fail suspected ({oh.get('max_consecutive_skips', 0)} consecutive parse errors)"
+        )
     if not health:
         health.append("🟢 no issues detected")
     for h in health:
@@ -1320,13 +1468,29 @@ def main() -> int:
         return 0
 
     obs_path = find_observations()
-    records = tail_jsonl(obs_path, args.window) if obs_path else []
+    # task-32: tail_jsonl 返り値 dict 化に対応 (caller 1 箇所のみ修正)
+    tj = tail_jsonl(obs_path, args.window) if obs_path else {
+        "records": [],
+        "skipped_lines": 0,
+        "total_lines": 0,
+        "cascade_suspected": False,
+        "max_consecutive_skips": 0,
+    }
+    records = tj["records"]
     report = {
         "generated": datetime.now().isoformat(timespec="seconds"),
         "project_hash": project_hash(),
         "observations_path": str(obs_path) if obs_path else None,
         "window": args.window,
         "observations": summarize_observations(records),
+        # task-32: observation pipeline 健全性指標
+        "observation_health": {
+            "skipped_lines": tj["skipped_lines"],
+            "total_lines": tj["total_lines"],
+            "cascade_suspected": tj["cascade_suspected"],
+            "max_consecutive_skips": tj["max_consecutive_skips"],
+            "cascade_threshold": _cascade_threshold(),
+        },
         "gateguard": gateguard_breakdown(),
         "taskguard": count_state_dir(ROOT / _cfg("taskguard_state_dir")),
         "failure_window": failure_window_summary(),
