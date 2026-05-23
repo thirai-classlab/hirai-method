@@ -264,6 +264,12 @@
           },
           {
             "type": "command",
+            "command": "bash .claude/hooks/mode-enforce.sh",
+            "timeout": 3,
+            "statusMessage": "Loop モード遵守事項を初期注入..."
+          },
+          {
+            "type": "command",
             "command": "bash .claude/hooks/next-actions-surface.sh",
             "timeout": 5,
             "statusMessage": "未処理副産物 surface 中..."
@@ -297,12 +303,6 @@
             "command": "bash .claude/hooks/why-x5-reminder.sh",
             "timeout": 3,
             "statusMessage": "Why × 5 出力ルール注入中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/mode-enforce.sh",
-            "timeout": 3,
-            "statusMessage": "モードルール注入中..."
           },
           {
             "type": "command",
