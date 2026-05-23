@@ -31,13 +31,26 @@
 - `.claude/evals/system-reminder-attention.md` (capability eval、124 lines、draft §3 W3.1 SSoT 準拠、10 prompts + code-based grader + pass@k targets)
 - `.claude/evals/loop-mode-autonomy.md` (regression eval、122 lines、draft §3 W3.2 SSoT 準拠、4 regression tests + baseline 観察 + handoff latency 副次指標)
 
+### W3 case A 実行素材完備 (commit `0db9889`、subagent a5109ff50a06066c0 confidence 0.94)
+
+user manual 42 sessions 実行を支援する 5 ファイル新規:
+
+- `.claude/evals/system-reminder-attention.runner.md` (353 行、playbook)
+- `.claude/evals/system-reminder-attention.results.template.md` (93 行、capability 用 results 雛型)
+- `.claude/evals/loop-mode-autonomy.results.template.md` (133 行、regression 用 results 雛型)
+- `.claude/evals/grader-system-reminder-attention.sh` (99 行、+x、deterministic 4 sub-criteria 判定)
+- `.claude/evals/grader-loop-mode-autonomy.sh` (165 行、+x、Test 1-4 判定)
+
+既存 eval 仕様 2 ファイル (`system-reminder-attention.md` / `loop-mode-autonomy.md`) は不変。staging 戦略遵守 (`/tmp` Write → `mv` → `chmod +x`)。
+
 ### 残作業
 
-- W3 capability eval 実行: 10 prompts × 3 trials = 30 runs で `pass@3 ≥ 0.95` 確認
-- W3 regression eval 実行: 4 tests × 3 trials = 12 runs で `pass^3 = 1.00` 維持確認
+- **W3 case A 実行** (user manual): 30 sessions capability + 12 sessions regression = 42 sessions (推定 90-130 分、user 任意タイミング)
 - W3 採用判定: 4 基準 (capability pass@3 / regression pass^3 / 注入数 / latency) 全達成判定
-- observe.sh `SubagentStop` matcher 拡張 (Phase B 真値計測のため、別 task 化検討)
-- 採用後の 3 リポ反映 (本 session 既に user manual で 1 度実施済、再反映要否は採用判定後決定)
+  - 基準 3 (注入数 4→0) **既達** (Phase A audit)
+  - 基準 4 (handoff latency 36s) **既達** (Phase B audit proxy)
+  - 基準 1, 2 は本 case A 実行で測定
+- 採用後の 3 リポ反映 (user manual `bash install.sh --update`、本 session 既に W2 で 1 度実施済、再反映要否は採用判定後決定)
 
 ## 背景・目的
 
