@@ -9,9 +9,14 @@
 #   - fail-open: jq / python3 が無くても、または読み取り失敗でも exit 0
 #   - noisy にしない: 提案 0 件なら何も出さない、dedup で同提案を 24h 以内に再表示しない
 #   - data 駆動: heuristics は Python 側に集約（このシェルは I/O glue のみ）
+#   - cache (task-22 W5): 集計結果を TTL 1h で cache し SessionStart 時間を短縮
+#       cache 不在 / 期限切れ → 集計実行 → cache 保存 → stderr
+#       cache hit → cache の payload を stderr に流して exit 0
+#       空集計も cache する (JSONL 不在環境で都度 fullscan を防ぐ)
 #   - kill switch:
 #       ECC_IMPROVEMENT_PROPOSAL=off          → 全 skip
 #       HC_IMPROVEMENT_PROPOSAL_ENABLED=false → 全 skip
+#       HC_IMPROVEMENT_PROPOSAL_CACHE_ENABLED=false → cache skip (常に再集計)
 #
 # Stdin:  SessionStart hook JSON（読むが現状未使用）
 # Stdout: 空
@@ -54,6 +59,51 @@ esac
 
 mkdir -p "$ABS_STATE_DIR" 2>/dev/null || true
 
+# === cache layer (task-22 W5) =================================================
+# cache TTL は秒指定 (default 3600 = 1h)。テスト用に env で短縮可能。
+CACHE_TTL_SECONDS="${HC_IMPROVEMENT_PROPOSAL_CACHE_TTL:-3600}"
+# 整数値検証 (非数値なら default 3600 に fallback)
+case "$CACHE_TTL_SECONDS" in
+  ''|*[!0-9]*) CACHE_TTL_SECONDS=3600 ;;
+esac
+CACHE_FILE="$ABS_STATE_DIR/cache.json"
+CACHE_ENABLED="${HC_IMPROVEMENT_PROPOSAL_CACHE_ENABLED:-true}"
+
+# stat の cross-platform 互換 (macOS: -f %m / Linux: -c %Y)
+_file_mtime() {
+  local f="$1"
+  local m
+  m=$(stat -f %m "$f" 2>/dev/null) || m=$(stat -c %Y "$f" 2>/dev/null) || m=""
+  printf '%s' "$m"
+}
+
+# cache hit 判定 (jq 不在環境では cache skip, fail-open で再集計)
+_cache_hit() {
+  case "$CACHE_ENABLED" in
+    false|False|FALSE|0|no|off) return 1 ;;
+  esac
+  command -v jq >/dev/null 2>&1 || return 1
+  [ -f "$CACHE_FILE" ] || return 1
+
+  local mtime now age
+  mtime=$(_file_mtime "$CACHE_FILE")
+  [ -n "$mtime" ] || return 1
+  now=$(date +%s)
+  age=$((now - mtime))
+  [ "$age" -lt "$CACHE_TTL_SECONDS" ] || return 1
+
+  # JSON validity 確認 (corrupt なら fallback)
+  jq -e '.payload' "$CACHE_FILE" >/dev/null 2>&1 || return 1
+  return 0
+}
+
+# cache hit → payload を stderr に流して exit 0 (集計 skip)
+if _cache_hit; then
+  jq -r '.payload' "$CACHE_FILE" >&2 2>/dev/null || true
+  exit 0
+fi
+
+# === 集計実行 (cache miss or expired or corrupt) ==============================
 # Python 側に集計を委譲（標準ライブラリのみ使用）
 # 環境変数経由で設定を渡す
 export HC_IMPROVEMENT_PROPOSAL_LOOKBACK_DAYS
@@ -68,7 +118,12 @@ export ECC_IMPROVEMENT_PROPOSAL_TEST_NOW
 export ABS_STATE_DIR
 export PROJ_ROOT
 
-python3 - <<'PYEOF'
+# Python の stderr を一旦 tmp に捕捉、終了後に cache 書き込み + stderr に流す。
+CACHE_TMP="$(mktemp 2>/dev/null || printf '%s' "$ABS_STATE_DIR/.cache.tmp.$$")"
+# observations count を Python 側から拾うための tmp path (cache metadata 用)
+export HC_IMPROVEMENT_PROPOSAL_OBS_COUNT_FILE="$ABS_STATE_DIR/.obs-count.tmp.$$"
+
+python3 - <<'PYEOF' 2>"$CACHE_TMP"
 import hashlib
 import json
 import os
@@ -144,6 +199,13 @@ def project_hash():
         return None
 
 def find_observations():
+    # test override: HC_OBSERVE_PATH で直接指定可能 (smoke test 用)
+    override = os.environ.get("HC_OBSERVE_PATH")
+    if override:
+        p = Path(override)
+        if p.exists() and p.stat().st_size > 0:
+            return p
+        return None
     ph = project_hash()
     candidates = []
     if ph:
@@ -425,7 +487,7 @@ def generate_proposals():
         selected.append((pid, msg))
         if len(selected) >= MAX_COUNT:
             break
-    return selected
+    return selected, len(records)
 
 # === dedup state ===
 DEDUP_PATH = STATE_DIR / "last_shown.json"
@@ -459,9 +521,20 @@ def filter_dedup(props, dedup_state):
         new_state[pid] = NOW.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return keep, new_state
 
+# observations count を保存先 file に書き出し (cache metadata 用)
+def _emit_obs_count(n):
+    p = os.environ.get("HC_IMPROVEMENT_PROPOSAL_OBS_COUNT_FILE")
+    if not p:
+        return
+    try:
+        Path(p).write_text(str(n))
+    except Exception:
+        pass
+
 # === main ===
 try:
-    proposals = generate_proposals()
+    proposals, obs_count = generate_proposals()
+    _emit_obs_count(obs_count)
     if not proposals:
         sys.exit(0)
 
@@ -487,5 +560,43 @@ except Exception:
     # fail-open: traceback は出さずに静かに終わる
     pass
 PYEOF
+
+# === cache 書き込み (集計結果を保存、空集計も含めて TTL 1h で fullscan を防ぐ) ==
+# 集計 stderr 内容を cache.json に保存 → stderr へ流す
+_write_cache() {
+  case "$CACHE_ENABLED" in
+    false|False|FALSE|0|no|off) return 0 ;;
+  esac
+  command -v jq >/dev/null 2>&1 || return 0
+  [ -d "$ABS_STATE_DIR" ] || mkdir -p "$ABS_STATE_DIR" 2>/dev/null || return 0
+
+  local payload generated_at obs_count obs_count_int
+  payload=$(cat "$CACHE_TMP" 2>/dev/null || printf '')
+  generated_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+  obs_count=$(cat "$HC_IMPROVEMENT_PROPOSAL_OBS_COUNT_FILE" 2>/dev/null || printf '0')
+  # obs_count を整数化 (jq --argjson は数値必須、空文字 / 非数字なら 0)
+  case "$obs_count" in
+    ''|*[!0-9]*) obs_count_int=0 ;;
+    *) obs_count_int="$obs_count" ;;
+  esac
+
+  local tmp_out
+  tmp_out="$ABS_STATE_DIR/.cache.json.tmp.$$"
+  jq -n \
+    --arg ga "$generated_at" \
+    --argjson ttl "$CACHE_TTL_SECONDS" \
+    --arg pl "$payload" \
+    --argjson oc "$obs_count_int" \
+    '{generated_at: $ga, ttl_seconds: $ttl, payload: $pl, source_observations_count: $oc}' \
+    > "$tmp_out" 2>/dev/null && mv "$tmp_out" "$CACHE_FILE" 2>/dev/null || rm -f "$tmp_out" 2>/dev/null
+}
+
+_write_cache
+
+# 集計結果 stderr を実際に流す (cache hit 時と同じ挙動を保証)
+cat "$CACHE_TMP" >&2 2>/dev/null || true
+
+# クリーンアップ
+rm -f "$CACHE_TMP" "$HC_IMPROVEMENT_PROPOSAL_OBS_COUNT_FILE" 2>/dev/null || true
 
 exit 0
