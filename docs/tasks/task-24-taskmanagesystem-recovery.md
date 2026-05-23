@@ -1,9 +1,34 @@
 # Task #24: taskManageSystem Recovery — draft-flow-guard 同期 / PROJECT_ROOT 解決 / 二重 .claude 境界
 
-> Status: **draft (要承認)** | **🔲 未着手**
+> Status: **🔄 進行中 (~85%)** (W1+W2+W3+W4+W6 完了、W5 cross-repo user manual 残 + taskManageSystem 側 harness-config.yml 設定 user manual 残)
 > 起案: 2026-05-23
 > 関連: #12 (dual-mode-portability、subdir 配置という第三 mode を追加)
 > 設計起源: [taskmanagesystem-recovery.md](../draft/taskmanagesystem-recovery.md)
+
+## 進捗ログ (2026-05-23)
+
+### W3 完遂 (commit `7df49d7`、subagent a08c00c50b8e594bf confidence 0.95)
+
+**hirai-method 本体 docs_approved_dir 実装**:
+- `.claude/harness-config.yml`: `docs_approved_dir` key 追加 (+20 行、default 空文字、CSV 複数値対応 e.g. `design,research`、詳細コメント込み)
+- `.claude/hooks/lib/config-loader.sh`: `HC_DOCS_APPROVED_DIR` を `_HC_KNOWN_KEYS` に追加 + default 値 + env export (+5/-2 行)
+- `.claude/hooks/draft-flow-guard.sh`: `approved_dir_raw` 読み出し + 深さ 2 (`docs/<approved_dir>/foo.md`) の CSV 複数値判定 logic + bypass help message 追加 (+40/-3 行)
+- 新 `.claude/tests/draft-flow-guard-approved-dir-smoke.sh` 7 cases PASS + 既存 `draft-flow-guard-smoke.sh` 5/5 PASS (regression 0)
+
+**設計判断**:
+- 深さ仕様: `docs/<approved_dir>/foo.md` (深さ 2) のみ approved、深さ 3 以上 (`docs/<approved_dir>/sub/nested.md`) は既存 hook の素通り (BLOCK でも approved でもない) 挙動を維持
+- CSV 複数値: scope 内、`IFS=',' read -r -a` で split + trim + 各 entry 照合
+- backward compat 100%: `docs_approved_dir` default 空文字、空時は `if [ -n "$approved_dir_raw" ]` ガードで素通り、既存挙動と完全一致
+
+**cross-repo blocker (W3 範囲外、user manual 必要)**:
+- taskManageSystem 側 `.claude/harness-config.yml` に `docs_approved_dir: design` (または `docs/design` の `docs/` 削った値) 設定 → 別途 user manual
+- `bash install.sh --update /Users/t.hirai/タスクマネジメント/taskManageSystem` で本 W3 の hook + config-loader 同期 → 別途 user manual
+
+### 残作業
+
+- W5: taskManageSystem 内 root tasks.md を `docs/archive/tasks-root-2026-05-23.md` に move + README 案内 (cross-repo user manual)
+- taskManageSystem 側 `harness-config.yml` に `docs_approved_dir` 設定 (cross-repo user manual)
+- 上記 cross-repo 作業 2 件完了で task-24 → ✅ 化
 
 ## 背景・目的
 
