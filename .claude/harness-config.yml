@@ -63,6 +63,26 @@ draft_dir: docs/draft
 # delegation-guard.sh が読む allow-list ファイルの位置 (リポルートからの相対 path)。
 bash_whitelist_path: .claude/bash-whitelist.txt
 
+# === Docs 承認済 dir (task-24 W3) ===
+# draft-flow-guard.sh が `docs/<value>/foo.md` 形式の Write を pass させる対象 dir。
+# 空 (default) なら docs/draft/ 経路のみが approved。CSV 複数値対応 (e.g. "design,research")。
+# 起源: docs/draft/taskmanagesystem-recovery.md Q2 (2026-05-23)
+#
+# 動作例:
+#   docs_approved_dir: ""           → docs/foo.md は BLOCK (既存挙動)
+#   docs_approved_dir: "design"     → docs/design/foo.md は PASS、docs/foo.md は依然 BLOCK
+#   docs_approved_dir: "design,research" → docs/design/foo.md + docs/research/foo.md PASS
+#
+# 注意:
+#   - 深さ 2 (docs/<approved_dir>/foo.md) のみ approved。
+#     深さ 3+ (docs/<approved_dir>/sub/nested.md) は元々 hook 対象外で素通り (block されない)。
+#   - 既存 docs/draft/ 経路は backward compat 100% (本キーと独立)。
+#
+# env 上書き例:
+#   export HC_DOCS_APPROVED_DIR=design        # 単一 dir
+#   export HC_DOCS_APPROVED_DIR=design,research  # CSV 複数値
+docs_approved_dir: ""
+
 # === Hook state ディレクトリ ===
 # 各 hook が cleared/marker 等の状態を書き出す位置。
 # プロジェクトルートからの相対 path。.gitignore で .claude/.* を除外推奨。

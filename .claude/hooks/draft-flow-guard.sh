@@ -12,15 +12,21 @@
 #   - docs/draft/system-reminder-attention-fix.md Wave 2.3 (2026-05-23)
 #   - 観察証拠: recall_poc/docs/01-03 が draft 経由なしで docs/ 直下に
 #     直接 Write された事案
+#   - docs/draft/taskmanagesystem-recovery.md Q2 (task-24 W3, 2026-05-23):
+#     HC_DOCS_APPROVED_DIR で承認済 dir を harness-config から override 可能化
 #
 # 監視対象:
 #   - tool: Edit / Write
 #   - path: <root>/docs/<basename>.md (深さ 1 のみ)
 #   - 除外: <root>/docs/draft/** / <root>/docs/tasks/** / 深さ 2 以上
 #   - 除外: 既存 file の Edit (新規 Write のみ)
+#   - 除外 (task-24 W3): HC_DOCS_APPROVED_DIR 配下 (CSV 複数値対応)
+#                        e.g. HC_DOCS_APPROVED_DIR=design で
+#                             docs/design/foo.md は深さ 2 のみ PASS
 #
 # bypass:
 #   - 対応する <root>/docs/draft/<basename>.md を先に作る (推奨)
+#   - HC_DOCS_APPROVED_DIR=<dir>[,<dir>...] を harness-config / env で設定
 #   - 環境変数 ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 (一時)
 #   - harness-config.yml の draft_flow_guard_whitelist に basename 追加
 #
@@ -76,6 +82,7 @@ fi
 task_dir="${HC_TASK_DIR:-docs/tasks}"
 draft_dir="${HC_DRAFT_DIR:-docs/draft}"
 whitelist_raw="${HC_DRAFT_FLOW_GUARD_WHITELIST:-}"
+approved_dir_raw="${HC_DOCS_APPROVED_DIR:-}"
 
 docs_root="$root/docs"
 
@@ -91,10 +98,36 @@ case "$file_path" in
   "$root/$task_dir"/*) exit 0 ;;
 esac
 
-# 深さ判定 (docs/<sub>/ 以下は対象外)
+# 深さ判定 (docs/<sub>/ 以下は対象外、ただし HC_DOCS_APPROVED_DIR 配下の
+# 深さ 2 (= approved_dir 直下) は許可)
 rel="${file_path#$docs_root/}"
 case "$rel" in
-  */*) exit 0 ;;  # docs/<sub>/<file> は深さ 2 以上で対象外
+  */*)
+    # 深さ 2 以上。HC_DOCS_APPROVED_DIR 配下の **深さ 2** (= approved_dir 直下
+    # の file) のみ PASS、それ以上は元の挙動 (対象外 = exit 0) を保つ。
+    if [ -n "$approved_dir_raw" ]; then
+      # CSV 複数値対応: design,research → "design" "research"
+      IFS=',' read -r -a approved_dirs <<< "$approved_dir_raw"
+      for ad in "${approved_dirs[@]}"; do
+        # trim spaces
+        ad_trim="${ad# }"
+        ad_trim="${ad_trim% }"
+        [ -z "$ad_trim" ] && continue
+        # rel が "<ad_trim>/<basename>" 形式 (approved_dir 直下) か
+        case "$rel" in
+          "$ad_trim"/*/*) ;;  # 深さ 3+ は対象外 (= exit 0、既存挙動と一致)
+          "$ad_trim"/*)
+            # approved_dir 直下 → .md/.mdx かどうか確認後 PASS
+            sub="${rel#$ad_trim/}"
+            case "$sub" in
+              *.md|*.mdx) exit 0 ;;  # PASS: approved_dir 直下の .md/.mdx
+            esac
+            ;;
+        esac
+      done
+    fi
+    exit 0  # 既存挙動: docs/<sub>/<file> は深さ 2 以上で対象外
+    ;;
 esac
 
 basename_md="$rel"
@@ -150,8 +183,11 @@ bypass (一時、緊急時のみ):
   - 先に touch $draft_path してから再実行
   - or ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 環境変数をセット
   - or harness-config.yml の draft_flow_guard_whitelist に "$basename_md" 追加
+  - or harness-config.yml の docs_approved_dir に承認済 dir を設定
+    (e.g. docs_approved_dir: design で docs/design/$basename_md は許可)
 
 設計起源: docs/draft/system-reminder-attention-fix.md Wave 2.3
+         docs/draft/taskmanagesystem-recovery.md Q2 (task-24 W3)
 EOF
 
 exit 2
