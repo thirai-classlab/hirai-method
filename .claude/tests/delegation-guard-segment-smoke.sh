@@ -4,16 +4,26 @@
 # file-top に set -euo pipefail を書かない (feedback memory `set_e_in_sourced_libs` 規範)
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# split_command_segments は lib/delegation-guard/bash-whitelist.sh に分離 (task-25 C1.2)
+HOOK_LIB="$PROJECT_ROOT/.claude/hooks/lib/delegation-guard/bash-whitelist.sh"
+# 旧 path (大型 hook 内 inline 定義) からの fallback 抽出経路
 HOOK="$PROJECT_ROOT/.claude/hooks/delegation-guard.sh"
 
 # split_command_segments を hook script から抽出して実行する補助関数
 extract_segments() (
   set -uo pipefail
-  # hook の split_command_segments 関数定義を抽出して実行
+  # lib 経由が default、source して関数を import
+  if [ -f "$HOOK_LIB" ]; then
+    # shellcheck source=/dev/null
+    . "$HOOK_LIB"
+    split_command_segments "$1"
+    return
+  fi
+  # legacy: hook の split_command_segments 関数定義を抽出して実行 (旧 inline 定義)
   local fn_def
   fn_def=$(awk '/^    split_command_segments\(\) \(/,/^    \)$/' "$HOOK" | sed -E 's/^    //')
   if [ -z "$fn_def" ]; then
-    echo "ERROR: split_command_segments function not found in $HOOK" >&2
+    echo "ERROR: split_command_segments function not found in $HOOK_LIB or $HOOK" >&2
     return 2
   fi
   # eval で関数を読み込んで実行
