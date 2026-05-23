@@ -23,7 +23,7 @@ total_steps: 6
 
 `check_protected_branch_push` (commit `ad2f7bc`, `.claude/hooks/lib/delegation-guard/git-deny.sh` L58-128) は 2026-05-18 user 指示「gitの許可はmainとstgと含むブランチに対するpush、破壊的変更以外に対してを許可してください」を実装した production hook だが、**動作実証は手動 `git push origin main` 1 件のみ** で、機械検証 smoke が無い状態。entry #13 で git destructive deny の smoke を実装した際、protected branch push deny は意図的に「pass case で push を使わない」アプローチで切り分けただけで、本 layer 単体の検証は積み残されていた。
 
-**真因:** entry #13 smoke 実装時に「destructive deny 単体検証」を優先し、protected branch push deny は scope 外として後送りにした (`git-destructive-deny-smoke.sh` L48-53 のコメントが明示)。結果として 5 cases (main 明示 / stg 系 / feature 通過 / refspec 省略 main / bypass) が未検証のまま 5 日経過、hook 修正時の regression 検出が手動依存のままになっている。
+**真因:** entry #13 smoke 実装時に「destructive deny 単体検証」を優先し、protected branch push deny は scope 外として後送りにした (`git-destructive-deny-smoke (旧名)` L48-53 のコメントが明示)。結果として 5 cases (main 明示 / stg 系 / feature 通過 / refspec 省略 main / bypass) が未検証のまま 5 日経過、hook 修正時の regression 検出が手動依存のままになっている。
 
 **副次:** entry #13 と本 entry の coverage が hook (`git-deny.sh`) 同一 file の 2 layer に分かれており、smoke を 2 file に分散するか 1 file に統合するかで保守性が変わる (§仕様 Q1 で比較)。
 
@@ -33,7 +33,7 @@ total_steps: 6
 
 | 案 | 内容 | 工数 | 評価 |
 |:---:|:---|---:|:---|
-| **A 既存 smoke 統合 (採用)** | `git-destructive-deny-smoke.sh` を `delegation-guard-deny-layers-smoke.sh` に rename + 拡張、両 layer を 1 file に統合 (5 cases + bypass 1 case を末尾追加) | 0.4 | 同一 hook の 2 layer を一元化、CI が 1 file で済む、helper 100% 再利用、約 280 行で許容範囲 |
+| **A 既存 smoke 統合 (採用)** | `git-destructive-deny-smoke (旧名)` を `delegation-guard-deny-layers-smoke.sh` に rename + 拡張、両 layer を 1 file に統合 (5 cases + bypass 1 case を末尾追加) | 0.4 | 同一 hook の 2 layer を一元化、CI が 1 file で済む、helper 100% 再利用、約 280 行で許容範囲 |
 | B 新規 file 分離 | `.claude/tests/protected-branch-push-deny-smoke.sh` を独立作成、helper は entry #13 から複製 | 0.5 | 既存 smoke 触らず regression 0 だが DRY 違反、helper 2 file 重複 |
 | C ハイブリッド | 共通 lib + 個別 smoke wrapper (`.claude/tests/lib/deny-layer-helpers.sh` 抽出) | 0.7 | DRY + 分離両立だが scope に対し over-engineering、将来 deny layer 追加 roadmap なし |
 
@@ -127,7 +127,7 @@ flowchart LR
 **ゴール**: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` 実行で「PASS: 38 / 38」が出力される (destructive 32 件 + protected push 6 件)。
 
 **作業概要**:
-- `.claude/tests/git-destructive-deny-smoke.sh` を `.claude/tests/delegation-guard-deny-layers-smoke.sh` に rename
+- `.claude/tests/git-destructive-deny-smoke (旧名)` を `.claude/tests/delegation-guard-deny-layers-smoke.sh` に rename
 - file 冒頭コメントを「2 layer (destructive + protected branch push) 統合 smoke」に書き換え (entry #13 + entry #14 双方を起源として明記)
 - 末尾に「Protected branch push cases (5)」セクションを追加
 - 末尾に「Bypass cases (3 + 1)」セクションに `ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` の 1 case を追加
@@ -165,7 +165,7 @@ flowchart LR
 
 ## 完了条件
 
-- [ ] `.claude/tests/delegation-guard-deny-layers-smoke.sh` 存在 (rename 完了、`git-destructive-deny-smoke.sh` は file system 上消滅)
+- [ ] `.claude/tests/delegation-guard-deny-layers-smoke.sh` 存在 (rename 完了、`git-destructive-deny-smoke (旧名)` は file system 上消滅)
 - [ ] `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` exit 0 + 38/38 PASS (destructive 32 + protected push 5 + bypass 1)
 - [ ] 5 cases (a)-(d) block + (c)/(e) pass/bypass の 6 件が標準出力に「PASS: ...」と表示
 - [ ] 既存 destructive 32 cases regression 0 (FAIL 0 件)
@@ -190,7 +190,7 @@ flowchart LR
 
 | 範囲 | 詳細 |
 |---|---|
-| ファイル | `.claude/tests/git-destructive-deny-smoke.sh` (rename → `delegation-guard-deny-layers-smoke.sh`)、`.github/workflows/` / `docs/` / `.claude/scripts/harness-audit.*` の参照箇所 |
+| ファイル | `.claude/tests/git-destructive-deny-smoke (旧名)` (rename → `delegation-guard-deny-layers-smoke.sh`)、`.github/workflows/` / `docs/` / `.claude/scripts/harness-audit.*` の参照箇所 |
 | migration | なし (test-only 変更) |
 | 環境変数 | bypass env `ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` (既存)、reviewer bypass `ECC_TEST_DESIGN_REVIEW_OFF=1` (task-29 既存) |
 | 互換性 | rename による外部参照断は Step 1.4 で grep + 追従更新で解消、production hook `git-deny.sh` は無改変 |
@@ -227,7 +227,7 @@ flowchart LR
 - Draft: [`docs/draft/protected-branch-push-deny-smoke.md`](../draft/protected-branch-push-deny-smoke.md)
 - 依存タスク: #17 (bash-whitelist-git), #18 (protected-branch-push), #19 (smoke-coverage)
 - 派生タスク: (実装中に発見次第追記)
-- 既存 smoke: `.claude/tests/git-destructive-deny-smoke.sh` (entry #13 既実装、commit `9eacc3c`、本 task で rename)
+- 既存 smoke: `.claude/tests/git-destructive-deny-smoke (旧名)` (entry #13 既実装、commit `9eacc3c`、本 task で rename)
 - 被テスト hook: `.claude/hooks/lib/delegation-guard/git-deny.sh` L44-128 (`check_protected_branch_push`)
 - 関連 commit:
   - `ad2f7bc` feat(hooks): add protected branch push deny layer (main / stg) — 本 task の被テスト対象
