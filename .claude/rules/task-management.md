@@ -9,6 +9,10 @@ CLAUDE.md の Rules table で「(常時参照)」として明示し、毎セッ�
 task-26 W4: 設計→承認→タスク追加フロー / メイン専任 / Parking Lot の
 SSoT として確立 (development-process.md / workflow.md から重複を本 file に
 集約)。
+
+task-29 Phase 2+3 (2026-05-23): Phase→Step 2 階層タスク構造規範 +
+既存 task 移行ガイド + UI 変更検出基準を新設。設計起源は
+docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
 -->
 
 # タスク管理ルール
@@ -21,6 +25,86 @@ SSoT として確立 (development-process.md / workflow.md から重複を本 fi
 - 個別タスクファイルの作成・更新 → メインが必ず実行
 - サブエージェント起動前にタスクを「進行中」に更新
 - サブエージェント完了後にタスクを「完了」に更新
+
+## タスク構造規範 (Phase→Step 強制)
+
+**起源**: `docs/draft/phase-step-task-structure.md` (user 承認 2026-05-23、task-29 Phase 2 で本規範化)。これまでの「Wave / フェーズ自由構成」を廃し、**Phase→Step の 2 階層構造**を必須とする。
+
+### 採用 5 条
+
+1. **Phase→Step 2 階層必須 (最小 1 Phase + 1 Step)** — task ファイルは少なくとも 1 つの Phase と、その Phase 内に 1 つ以上の Step を持つ。Phase / Step 以外の独自階層 (Wave / Sub-Phase / Stage 等) は禁止。Wave という名称を使っていた既存 task は次回着手時に Phase→Step へ再構造化する (後述「既存 task 移行ガイド」参照)。
+
+2. **Phase 必須項目: ゴール (1 文、観察可能) + 作業概要 (箇条書き 3-5 件)** — Phase 見出し直下に「ゴール: <1 文、観察可能な事実 or 数値>」と「作業概要: <3-5 件の箇条書き>」を記載する。「観察可能」とは PASS/FAIL or 数値 or before/after diff のように第三者が客観確認できる粒度を指す (例: 「全テスト 92/92 PASS」「list.md に新 entry 1 行追加」)。
+
+3. **Step 必須項目: 内容 (1-2 文) + 完了条件 (定量 or 観察可能な事実)** — Step 見出し直下に「内容: <1-2 文で何をやるか>」と「完了条件: <定量値 or grep -q exit 0 等の機械検証可能な事実>」を記載する。「test PASS」のような曖昧表現ではなく、「`bash .claude/tests/foo-smoke.sh` exit 0」のように再現可能な検証コマンドを書く。
+
+4. **Phase 最終 Step = テスト合格 → リファクタリング (2 段必須、UI 含 = E2E 必須、refactor 不要なら `skip: reason` 明示)** — 各 Phase の最終 2 Step は「テスト合格 Step」+「リファクタリング Step」とする。UI 変更を含む Phase (検出基準は後述) は E2E test Step を必須化。リファクタリング不要と判断した場合は Step を省略せず、完了条件欄に `skip: <理由>` を明示記録する (例: `skip: 単純な文字列追加で refactor 余地なし`)。
+
+5. **小タスク許容: 1 Phase + 1 Step OK** — hot fix / typo 修正 / config 1 行追加 等の小タスクでは「1 Phase + 1 Step (内容 + 完了条件)」で OK。条 4 の「最終 2 Step」は本ケースでは「1 Step 内に test 検証と refactor 判定を併記」で代替可。
+
+### bypass
+
+| 経路 | env | スコープ | 痕跡 |
+|---|---|---|---|
+| Phase→Step 強制無効化 | `ECC_PHASE_STEP_STRUCTURE_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` に append (hot fix 用) |
+
+honor system: bypass 時は理由を CLAUDE.md or `docs/tasks/<task-N>.md` の該当 entry に記録すること。機械強制 hook (`task-rule-guard.sh` 拡張で Phase 内容解析) は本規範採用フェーズでは未実装、効果観察後に別 task で検討する。
+
+## 既存 task 移行ガイド
+
+**適用範囲**: 本規範採用 (2026-05-23) **以降** に新規作成される task のみ Phase→Step 形式を必須とする。それ以前に作成された task は段階的に移行する。
+
+### 既存 task の扱い
+
+- **completed (task-1〜task-20 + task-22 / 25 / 26)**: 移行不要、Wave 構成のまま履歴として保持
+- **active 進行中 (task-21 / 23 / 24 / 27 / 28)**: 次回着手時に Phase→Step 形式に **再構造化を推奨** (強制ではない、honor system)
+
+### 移行優先度
+
+| task | 状態 | 優先度 | 備考 |
+|---|---|---|---|
+| task-21 (system-reminder-attention) | W3 残 | **最優先** | 規範整備系で本規範の起源とも近い、整合性確保 |
+| task-23 (recall-poc-recovery) | W4-W5 残 | 高 | 実装系、Wave 跨ぎの依存が多い |
+| task-24 (taskmanagesystem-recovery) | W5 残 | 高 | 規範整備系、本 rule との整合性確保 |
+| task-27 (observe-jq-parse-fix) | W3 残 | 中 | W3 不要判定検討中、不要なら低優先度に降格可 |
+| task-28 (observe-subagent-stop-instrumentation) | Phase 2 残 | 中 | 既に Phase 命名を採用、Step 粒度のみ要確認 |
+
+移行作業は task 着手前 (`/start-task <id>` 実行前後) の準備として実施。Phase→Step 形式に書き換えても commit 履歴・既存 Wave での完了実績は temporal record として残す (削除しない)。
+
+## UI 変更検出基準
+
+**目的**: 採用 5 条の条 4「UI 含 Phase は E2E 必須」を発動する判定基準を明文化。本規範採用フェーズでは **手動運用** とし、機械強制 hook は効果観察後に別 task で検討。
+
+### 判定基準 (OR 条件、過検知許容)
+
+以下のいずれかに該当する file が Phase 内の変更対象に含まれる場合、その Phase は **UI 変更を含む**と判定:
+
+- **拡張子**: `*.tsx` / `*.jsx` / `*.vue` / `*.svelte` / `*.html` / `*.css` / `*.scss` / `*.sass` / `*.less`
+- **path** (lowercase 案): `src/components/**` / `src/pages/**` / `src/app/**` / `apps/**/components/**` / `apps/**/pages/**` / `components/**`
+
+過検知 (誤って UI と判定) は許容、見逃し (UI なのに非 UI 判定) は不可。
+
+### 検出方法 (手動運用)
+
+```bash
+git diff --name-only <base>...HEAD | grep -E '\.(tsx|jsx|vue|svelte|html|css|scss|sass|less)$|^(src|apps/[^/]+)/(components|pages|app)/|^components/'
+```
+
+の結果が 1 件以上なら UI 変更を含む Phase と判定。Phase の最終 Step に E2E test 完了条件を必須化する。
+
+### 手動 skip format
+
+「UI 変更だが view 影響なし」(CSS 内変数 rename のみ / 未参照 component 削除 等) の例外時、Step 完了条件に以下のように明示:
+
+```
+完了条件: skip: UI 変更だが view 影響なし (CSS 変数 rename のみ、レンダリング結果同一)
+```
+
+reviewer 確認推奨 (`/module-review` or `/system-review` 時に skip 妥当性をレビュー)。
+
+### 機械強制 hook 案 (future work)
+
+本規範採用フェーズでは規範のみ (honor system)。効果観察後に別 task で `task-rule-guard.sh` 拡張により Phase 内容を parse → UI 判定 → E2E Step 存在検証を機械強制化する案を検討する (起案は `docs/draft/` 経由で別 task として起こす)。
 
 ## 設計→承認→タスク追加フロー（必須）
 
@@ -40,8 +124,8 @@ SSoT として確立 (development-process.md / workflow.md から重複を本 fi
 
 - `.claude/templates/docs/tasks/list.md` — タスク台帳ひな型（凡例・依存関係図・更新ルール込み）
 - `.claude/templates/docs/tasks/parking-lot.md` — 保留タスクひな型（必須 7 項目フォーマット込み）
-- `.claude/templates/docs/tasks/_TASK_TEMPLATE.md` — 個別タスクひな型（背景 / 仕様 / 設計 / TDD / Wave / 完了条件 / 影響範囲）
-- `.claude/templates/docs/draft/_DRAFT_TEMPLATE.md` — 設計 draft ひな型（真因 / 案比較 / Wave / リスク / DoD / 承認履歴）
+- `.claude/templates/docs/tasks/_TASK_TEMPLATE.md` — 個別タスクひな型（背景 / 仕様 / 設計 / TDD / Phase→Step / 完了条件 / 影響範囲）
+- `.claude/templates/docs/draft/_DRAFT_TEMPLATE.md` — 設計 draft ひな型（真因 / 案比較 / Phase→Step / リスク / DoD / 承認履歴）
 
 ### 自動生成のセーフティ
 
@@ -83,6 +167,7 @@ honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリ�
 - [ ] `docs/tasks/list.md` の一覧テーブルを更新したか
 - [ ] 個別タスクファイル（詳細リンク）を作成したか
 - [ ] 設計ドキュメントへのリンクを含めたか
+- [ ] task ファイルが Phase→Step 構造で記述されているか (採用 5 条準拠)
 
 ## 承認されていない設計
 

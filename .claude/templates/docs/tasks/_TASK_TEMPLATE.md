@@ -9,6 +9,13 @@ deadline: ""
 requester: ""
 ---
 
+<!--
+# task-29 Phase→Step 強制タスク構造 metadata (W5 smoke 集計用 placeholder)
+# 実 task では下記を値で埋める。
+phase_count: 0
+total_steps: 0
+-->
+
 # Task #<ID>: <タスク名>
 
 > Status: **draft (要承認)** | **🔲 未着手** | **🔄 進行中** | **✅ 完了**
@@ -44,6 +51,11 @@ flowchart LR
 
 ## TDD 戦略
 
+> **本セクションと「Phase 計画」最終 Step 2 段の関係**:
+> 本 §「TDD 戦略」は **Phase 全体に対する戦略** (RED/GREEN/REFACTOR) を記述する。
+> 一方、§「Phase 計画」の各 Phase 末尾に固定配置される **テスト合格 Step → リファクタリング Step** は **その Phase 単位の GREEN→REFACTOR** を表す。
+> 両者は **互いに補完する関係** (二重化ではない)。本 §で全体戦略を、Phase 計画で各 Phase の最終 2 Step として実行手順を書く。
+
 ### RED（先に追加するテスト）
 
 - `tests/foo.test.ts`
@@ -59,25 +71,94 @@ flowchart LR
 
 - <抽出・命名整理・重複排除の余地>
 
-## Wave 構成
+## Phase 計画
 
-### Wave 計画前の事前確認 (必須)
+> **Phase = Wave の新呼称** (task-29 Phase→Step 強制タスク構造規範、2026-05-23 採用)。
+> 旧 task で `Wave` 表記を使用していた箇所は本セクションの `Phase` と読み替える。
 
-別 repo 作業 / 既存 gap-review report 起点の Wave 計画では、各 finding に対し以下を**着手前に**実施:
+### Phase 計画前の事前確認 (必須)
+
+別 repo 作業 / 既存 gap-review report 起点の Phase 計画では、各 finding に対し以下を**着手前に**実施:
 
 1. `git log --all --grep <finding-id-or-keyword> --oneline` で既存 commit を確認 (別 repo は `git -C <abs path> log --all --grep ...`)
 2. 該当 file を Read で現状確認
-3. 解消済 finding は Wave list から除外し、本テンプレに「[no-op、commit <sha> で解消済]」と記録
+3. 解消済 finding は Phase list から除外し、本テンプレに「[no-op、commit <sha> で解消済]」と記録
 4. 未解消 finding のみ subagent dispatch 対象に残す
 
-省略時: 重複 subagent 起動 / no-op 発覚での Wave 再計画コスト
+省略時: 重複 subagent 起動 / no-op 発覚での Phase 再計画コスト
 
-| Wave | 内容 | 工数 | 依存 |
+### Phase / Step schema (採用 5 条)
+
+各 Phase に **ゴール (1 文、観察可能)** + **作業概要 (箇条書き 3-5 件)** + **Step リスト** を必ず記載する。
+各 Step に **内容 (1-2 文)** + **完了条件 (定量指標 or 観察可能な事実)** を必ず記載する。
+Phase の **最終 Step 2 段は固定**: `(テスト合格) → (リファクタリング)`。UI 含む Phase は E2E 必須。refactor 不要なら `skip: <reason>` 明示。
+
+### Phase 一覧 (サマリ表)
+
+| Phase | 名前 | 工数 | 依存 |
 |:---:|:---|---:|:---|
-| W1 | … | 0.5h | — |
-| W2 | … | 1.0h | W1 |
+| 1 | … | 0.5h | — |
+| 2 | … | 1.0h | Phase 1 |
 
 合計工数: <X> h
+
+### Phase 1: <Phase 名>
+
+**ゴール**: <完了時に何が達成されているか、1 文、観察可能な事実で記述>
+
+**作業概要**:
+- <作業項目 1>
+- <作業項目 2>
+- <作業項目 3>
+
+**Step**:
+
+- **Step 1**: <内容、1-2 文>
+  - 完了条件: <定量指標 or 観察可能な事実 (例: `pnpm test` exit 0、grep -q 'X' file)>
+- **Step 2**: <内容、1-2 文>
+  - 完了条件: <…>
+- **Step 3: (テスト合格)** <UI 含む Phase なら E2E 必須 (Playwright 等)、それ以外は unit/integration test>
+  - 完了条件: `<test command>` exit 0、全 case PASS (regression 0)
+- **Step 4: (リファクタリング)** 持続可能性 / 汎用性 / 非冗長化 の 3 観点で見直す
+  - 完了条件 (or skip): refactor 実施なら指標 (例: 関数 LOC < 50、重複削減 N 箇所) / 不要なら `skip: <理由>` を明示記録
+
+### Phase 2: <Phase 名>
+
+**ゴール**: <…>
+
+**作業概要**:
+- <…>
+
+**Step**:
+
+- **Step 1**: <…>
+  - 完了条件: <…>
+- **Step 2: (テスト合格)** <…>
+  - 完了条件: <…>
+- **Step 3: (リファクタリング)** <…>
+  - 完了条件 (or skip): <…>
+
+### 小タスクモード (1 Phase + 1 Step 完結)
+
+typo 修正 / 1 行 fix / コメント追加 / 規範文書の文言調整 等、**単一 Phase + 単一 Step で完結する作業** は以下の最小 schema で OK。
+ただし「テスト合格 (規範文書修正なら observability check で代替) + リファクタ skip 記録」は **必須**。
+
+```markdown
+### Phase 1: <短い Phase 名>
+
+**ゴール**: <完了時の観察可能な状態、1 文>
+
+**作業概要**:
+- <作業 1 件のみで OK>
+
+**Step**:
+
+- **Step 1**: <内容、1-2 文>
+  - 完了条件: <定量 or 観察可能>
+- **Step 2: (テスト合格)** <unit test or observability check (規範文書なら grep 等)>
+  - 完了条件: `<command>` exit 0
+- **Step 3: (リファクタリング)** skip: <理由 (例: 1 行 fix、refactor 対象なし)>
+```
 
 ## 完了条件
 
