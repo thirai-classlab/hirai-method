@@ -1,9 +1,43 @@
 # Task #21: System-Reminder Attention Dilution + Loop モードと draft フロー相反 修正
 
-> Status: **draft (要承認)** | **🔲 未着手**
+> Status: **🔄 進行中 (~80%)** (W0 + W1.4-1.6 + W1.7 + W2.1-W2.5 + W3 Phase A+B+C 完了、W3 capability/regression 実行 + 採用判定残)
 > 起案: 2026-05-23
 > 関連: 設計起源 — 2026-05-23 user 観察 (3 リポ比較で classlab-weekly-news の方が体感正確)、user 指摘 (hook タイミング再考)
 > 設計起源: [system-reminder-attention-fix.md](../draft/system-reminder-attention-fix.md)
+
+## 進捗ログ (2026-05-23)
+
+### W1.4-1.6 完遂 (commit `14586e5`、subagent adec02cc57179e123 confidence 0.9)
+
+- W1.4 `.claude/hooks/context-budget.sh`: 60% 未満で完全 silent kill switch を early-exit + コメント明示化、`HC_CONTEXT_BUDGET_SILENT_BELOW_THRESHOLD=false` で debug 出力 revert 可
+- W1.5 `.claude/hooks/next-actions-surface.sh`: 🔴 entry 0 件で完全 silent (🟡/🟢 のみは default 抑止)、`HC_NEXT_ACTIONS_SURFACE_RED_ONLY=false` で旧挙動 revert 可
+- W1.6 `.claude/hooks/session-help-surface.sh`: 初回 session のみ表示、`.claude/.session-help-shown` marker で再表示抑止、`HC_SESSION_HELP_FORCE=1` / `HC_SESSION_HELP_FIRST_ONLY=false` で override 可
+- 新 `.claude/tests/hook-frequency-tweaks-smoke.sh` 8 cases PASS + 既存 smoke 3 件 regression 0 (context-budget 11/11 + session-help-surface 7/7 + next-actions-hooks 10/10、合計 36/36)
+
+### W3 Phase A+B audit 完遂 (subagent a4c9b91ed72f90dcb confidence 0.75)
+
+**Phase A 注入数 audit (構造的計測、git show で W0 前 settings.json 取得 → 現 settings.json 比較)**:
+- **before (W0 commit `8397d65` 前)**: UserPromptSubmit hook **4 個** (unconditional 2: why-x5-reminder + mode-enforce、conditional 2: context-budget + loop-auto-progress-reminder)
+- **after (現在 post W0.1-W0.3)**: UserPromptSubmit hook **1 個** (conditional 1: context-budget threshold-only、unconditional 0)
+- **採用判定基準 3 (注入数 4 → 0 削減)**: **達成** (unconditional 注入 2 → 0、常時 inline 注入は完全消滅)
+
+**Phase B handoff latency 計測**:
+- `observe.sh` の event 列に `SubagentStop` 0 件 / 6594 records (matcher 未配線)、true handoff latency 直接計測不可
+- 代理計測 `PostToolUse(Agent)` → 次 main `PreToolUse`: **median 36.00 秒** (n=19 events、2026-05-23 post-W0)、p25=22s / p75=61s / min=7s / max=81s
+- **採用判定基準 4 (秒オーダー)**: 上界 36 秒で **間接達成**、真値は別途 `SubagentStop` matcher で observe.sh を拡張後に再測必要
+
+### W3 Phase C eval files 完遂 (commit `af5fa6e`)
+
+- `.claude/evals/system-reminder-attention.md` (capability eval、124 lines、draft §3 W3.1 SSoT 準拠、10 prompts + code-based grader + pass@k targets)
+- `.claude/evals/loop-mode-autonomy.md` (regression eval、122 lines、draft §3 W3.2 SSoT 準拠、4 regression tests + baseline 観察 + handoff latency 副次指標)
+
+### 残作業
+
+- W3 capability eval 実行: 10 prompts × 3 trials = 30 runs で `pass@3 ≥ 0.95` 確認
+- W3 regression eval 実行: 4 tests × 3 trials = 12 runs で `pass^3 = 1.00` 維持確認
+- W3 採用判定: 4 基準 (capability pass@3 / regression pass^3 / 注入数 / latency) 全達成判定
+- observe.sh `SubagentStop` matcher 拡張 (Phase B 真値計測のため、別 task 化検討)
+- 採用後の 3 リポ反映 (本 session 既に user manual で 1 度実施済、再反映要否は採用判定後決定)
 
 ## 背景・目的
 
