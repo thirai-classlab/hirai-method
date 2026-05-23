@@ -31,15 +31,20 @@
 
 user から **タスクと方針の承認**を得た後は、実装・commit・push・本番デプロイ・migration 適用まで自律的に進める。Wave / commit ごとに進行可否を逐一問わない。
 
-### 自律実行可（user 確認不要）
-- 承認済み設計書（`docs/tasks/task-N-*.md` or `docs/draft/` 承認済み）に基づく実装
-- テスト追加・修正、`git commit`、`git push origin <承認済みブランチ>`（main 含む）
-- `<追加のみ・破壊的変更なしの DB migration 等、プロジェクト固有の自律実行範囲>`
+### 自律実行可（user 確認不要、戦術判断のみ）
+- 承認済み設計書（`docs/tasks/task-N-*.md` or `docs/draft/<slug>.md` で frontmatter `approved_at:` 記載済）に基づく **実装** (`src/` `apps/` `packages/` 等)
+- テスト追加・修正、ローカル `git commit`（feature branch 上のみ）
+- 実装中の方式選択 / branch 命名 / commit メッセージ / build green までの試行錯誤
 - サブエージェント委譲、ローカルサーバー起動、`docs/tasks/list.md` ステータス同期
+- `<追加のみ・破壊的変更なしの DB migration 等、プロジェクト固有の自律実行範囲>`
 
-### chat で必ず確認（クリティカル）
+### chat で必ず確認（クリティカル / 戦略判断 / task-21 W2.5 拡張）
+- **設計文書 (要件 / 基本設計 / 詳細設計 / 機能一覧) の新規追加** — 必ず `docs/draft/<slug>.md` 経由で起こす。`docs/` 直下への直接 Write は `draft-flow-guard.sh` (commit `6ed9337`) で BLOCK
+- **仕様変更 / scope 拡張** — 承認済 draft の §3 採用案からの逸脱
+- **戦略的判断** — architecture 選択 / 採用技術スタック変更 / 既存 task の優先順入替
 - 承認外の設計変更、破壊的 DB 変更（DROP / 既存 RLS 削除）、データ削除
 - secrets ローテーション、`git push --force` / `git reset --hard` / `git branch -D`
+- `git push` (any branch、Loop モード自律実行禁止リスト)、`gh pr create` / `gh pr merge`
 - main 以外への push、`<外部サービス quota 超過見込み>`
 - 同一エラーで 3 回連続失敗、サブエージェントの「要判断」報告
 - security-reviewer の CRITICAL、進行不可ブロッカー
