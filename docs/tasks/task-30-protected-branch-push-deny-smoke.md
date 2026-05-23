@@ -13,9 +13,10 @@ total_steps: 6
 
 # Task #30: protected branch push deny の単体 smoke 追加
 
-> Status: **🔄 進行中** (Phase 1 着手)
+> Status: **✅ 完了** (Phase 1 + Phase 2 all steps、iter4 で 5 reviewer 全員 0 finding strict 収束)
 > 起案: 2026-05-23
 > 着手: 2026-05-23 (branch: `test/protected-branch-push-deny-smoke`)
+> 完了: 2026-05-23 (commit `7d962e5` まで、smoke 40/40 PASS、regression 0)
 > 関連: #17 (bash-whitelist-git), #18 (protected-branch-push), #19 (smoke-coverage)
 > 設計起源: [`docs/draft/protected-branch-push-deny-smoke.md`](../draft/protected-branch-push-deny-smoke.md)
 
@@ -209,6 +210,14 @@ flowchart LR
 | 2026-05-23 | 起案 | 設計 draft `docs/draft/protected-branch-push-deny-smoke.md` 起こし |
 | 2026-05-23 | 承認 | user 承認、`list.md` に追加 |
 | 2026-05-23 | 着手 | branch `test/protected-branch-push-deny-smoke`、Phase 1 着手 |
+| 2026-05-23 | Phase 1 完了 | commit `0f9432a` (8 files、smoke 38/38 PASS、subagent confidence 0.95) |
+| 2026-05-23 | Phase 2 Step 2.1 iter1 | 5 reviewer 並列起動 (tdd-guide / test-automator / qa-expert / pr-test-analyzer / security-reviewer)、累計 14 findings (HIGH 1 + MEDIUM 9 + LOW 9) |
+| 2026-05-23 | Phase 2 iter2 | commit `b7035c9` (smoke L273 + force-with-lease + bypass=0 negative 追加、40/40 PASS、subagent confidence 0.97) |
+| 2026-05-23 | Phase 2 Step 2.1 iter3 | 5 reviewer 再起動、iter1 全解消 ✅、残存「38/38→40/40」doc 数値乖離 8 件 (M 2 + L 6) |
+| 2026-05-23 | Phase 2 iter4 | commit `a90fbe0` + `7d962e5` (task file + draft 14 箇所 数値修正 + Step 1.3 case (d) 再割当履歴明記)、5 reviewer 全員 **0 finding strict 収束** (median confidence 0.95) |
+| 2026-05-23 | Phase 2 Step 2.2 | テスト合格 (smoke 40/40 PASS、iter2 実測値で確認、UI 変更なし Phase で E2E 不要) |
+| 2026-05-23 | Phase 2 Step 2.3 | リファクタリング判定 = skip (280 行は許容範囲、deny layer 追加 roadmap なし、wrapper 重複 2 件は抽象化 over-engineering) |
+| 2026-05-23 | 完了 | task-29 採用 5 条 4 第 1 段「修正提案 0 件で収束」strict 達成、`/finish-task 30` 候補 |
 
 ## 派生 task / 次アクション候補
 
