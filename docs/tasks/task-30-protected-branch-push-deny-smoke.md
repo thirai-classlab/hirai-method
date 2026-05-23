@@ -46,7 +46,7 @@ total_steps: 6
 | Phase | 内容 | 工数 | 効果 |
 |:---:|:---|---:|:---|
 | Phase 1 | smoke file の rename + protected branch push deny の 5 cases + bypass 1 case 追加 | 0.3 | 5 cases 機械検証 + bypass 検証で hook regression を 1 コマンド検出 |
-| Phase 2 | テスト設計レビュー → テスト合格 (smoke 38/38 PASS) → リファクタリング判定 | 0.2 | task-29 採用 5 条 4 準拠 (Phase 最終 Step 3 段) |
+| Phase 2 | テスト設計レビュー → テスト合格 (smoke 40/40 PASS) → リファクタリング判定 | 0.2 | task-29 採用 5 条 4 準拠 (Phase 最終 Step 3 段) |
 
 合計: 0.5 工数
 
@@ -100,7 +100,7 @@ flowchart LR
 
 - smoke file rename (`git mv`) + コメント書き換え + 5 cases 追加 + bypass helper 1 関数追加
 - 被テスト hook `git-deny.sh` は無改変 (既存 production 実装をそのまま検証)
-- 既存 32 cases (destructive 19 block + 10 pass + 3 bypass) + 新 6 cases = 38 cases 全 PASS
+- 既存 32 cases (destructive 19 block + 10 pass + 3 bypass) + 新 8 cases (protected 7 + protected bypass 1) = 40 cases 全 PASS (Phase 2 iteration 2 で force-with-lease + bypass=0 negative 追加)
 
 ### REFACTOR
 
@@ -126,7 +126,7 @@ flowchart LR
 
 ### Phase 1: smoke 統合 + protected branch push deny cases 追加
 
-**ゴール**: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` 実行で「PASS: 38 / 38」が出力される (destructive 32 件 + protected push 6 件)。
+**ゴール**: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` 実行で「PASS: 40 / 40」が出力される (destructive 32 件 + protected push 7 件 + protected bypass 1 件 = 40 件)。
 
 **作業概要**:
 - `.claude/tests/git-destructive-deny-smoke (旧名)` を `.claude/tests/delegation-guard-deny-layers-smoke.sh` に rename
@@ -141,34 +141,34 @@ flowchart LR
 - **Step 1.1**: smoke file rename + コメント書き換え。`git mv` 実行 + L1-39 コメント更新 (4 箇所の literal 更新 + L4-8 設計起源に entry #14 追記)
   - 完了条件: `git diff --stat HEAD` で 2 file 変更 (rename 1 + コメント差分)、`grep -c 'protected branch push' .claude/tests/delegation-guard-deny-layers-smoke.sh` が 1 以上
 - **Step 1.2**: Protected branch push cases (5) 追加。L191 (Bypass cases printf) 直前に `expect_block_protected` 4 件 + `expect_pass_protected` 1 件を append、L53 `export ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` は削除し各 case で個別 env 制御
-  - 完了条件: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` 実行で 5 cases 全 PASS (destructive 32 件 + protected 5 件 = 37/37)、`grep -c 'expect_block_protected.*main' .claude/tests/delegation-guard-deny-layers-smoke.sh` ≥ 1
+  - 完了条件: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` 実行で 5 cases 全 PASS (destructive 32 件 + protected 7 件 = 39/39、iteration 2 で force-with-lease + bypass=0 negative 追加済)、`grep -c 'expect_block_protected.*main' .claude/tests/delegation-guard-deny-layers-smoke.sh` ≥ 1
 - **Step 1.3**: Bypass case 追加 (refspec 明示の current branch = main 判定 + bypass)。`expect_bypass_pass_protected` helper 新規 + (e) `ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` の 1 case を「Bypass cases (4)」セクション末尾に追加
-  - 完了条件: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` で全 38/38 PASS (32 + 5 + 1 = 38)、bypass section が「Bypass cases (4)」と表示
+  - 完了条件: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` で全 40/40 PASS (32 + 7 + 1 = 40)、bypass section が「Bypass cases (4)」と表示
 - **Step 1.4**: rename 参照の grep + 追従更新。`grep -rE 'git-destructive-deny-smoke\.sh' .claude/ docs/ .github/ 2>/dev/null` 実行、ヒット箇所を rename と同 commit で更新
   - 完了条件: `grep -rE 'git-destructive-deny-smoke\.sh' .claude/ docs/ .github/ 2>/dev/null` ヒット 0 件
 
 ### Phase 2: テスト設計レビュー + テスト合格 + リファクタリング (task-29 採用 5 条 4)
 
-**ゴール**: 5+ reviewer subagent からの修正提案 0 件 + `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` で 38/38 PASS。
+**ゴール**: 5+ reviewer subagent からの修正提案 0 件 + `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` で 40/40 PASS。
 
 **作業概要**:
 - Step 2.1: テスト設計レビュー (動的選定 5+ reviewer 並列起動、収束まで反復)
-- Step 2.2: テスト合格 (UI 変更なし Phase のため E2E 不要、smoke 38/38 PASS で OK)
+- Step 2.2: テスト合格 (UI 変更なし Phase のため E2E 不要、smoke 40/40 PASS で OK)
 - Step 2.3: リファクタリング判定 (持続可能性 / 汎用性 / 非冗長化、不要なら skip 明示)
 
 **Step**:
 
 - **Step 2.1: (テスト設計レビュー)** 以下 reviewer 5 件を動的選定して並列起動 (run_in_background: true 必須): 常時 base 4 (tdd-guide / test-automator / qa-expert / pr-test-analyzer) + domain-specific 1 (security-reviewer、protected branch push deny は production-bound branch 暴発防止が起源 / security 影響あり)。各 reviewer の修正提案を集約 → テスト設計に反映 → 再度 5+ reviewer 並列起動。**収束条件:** 全 reviewer が approve / no objection (修正提案 0 件)。**反復上限:** 5 回 (超過時 user escalation、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`)
   - 完了条件: 5 cases (a)-(e) が reviewer 5 件 approve、修正提案 0 件
-- **Step 2.2: (テスト合格)** `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` を実行、38/38 PASS を確認。UI 変更なし (smoke shell script のみ) のため E2E 不要 (task-29 採用 5 条 4 第 2 段 + 「UI 変更検出基準」OR 条件いずれも非該当)
-  - 完了条件: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh; echo $?` が `0` を出力 + `grep -c 'PASS: 38 / 38' <(bash .claude/tests/delegation-guard-deny-layers-smoke.sh)` が 1
+- **Step 2.2: (テスト合格)** `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` を実行、40/40 PASS を確認。UI 変更なし (smoke shell script のみ) のため E2E 不要 (task-29 採用 5 条 4 第 2 段 + 「UI 変更検出基準」OR 条件いずれも非該当)
+  - 完了条件: `bash .claude/tests/delegation-guard-deny-layers-smoke.sh; echo $?` が `0` を出力 + `grep -c 'PASS: 40 / 40' <(bash .claude/tests/delegation-guard-deny-layers-smoke.sh)` が 1
 - **Step 2.3: (リファクタリング)** 3 観点で判定: 持続可能性 (280 行が許容範囲か) / 汎用性 (env-driven case 駆動への refactor 余地) / 非冗長化 (`expect_bypass_pass` / `expect_bypass_pass_protected` の wrapper 重複削減余地)
   - 完了条件 (or skip): 暫定見込 `skip: 280 行は許容範囲、deny layer 追加 roadmap 無し、wrapper 重複は 2 件のみで抽象化 over-engineering`
 
 ## 完了条件
 
 - [ ] `.claude/tests/delegation-guard-deny-layers-smoke.sh` 存在 (rename 完了、`git-destructive-deny-smoke (旧名)` は file system 上消滅)
-- [ ] `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` exit 0 + 38/38 PASS (destructive 32 + protected push 5 + bypass 1)
+- [ ] `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` exit 0 + 40/40 PASS (destructive 32 + protected push 7 + protected bypass 1 = 40)
 - [ ] Protected push cases (a)+(b) 3 variant block + (c) pass + (e) bypass = 5 件 + Phase 2 iteration 2 追加 ((d) force-with-lease block + (f) bypass=0 negative) = 計 7 件が標準出力に「PASS: ...」と表示
 - [ ] 既存 destructive 32 cases regression 0 (FAIL 0 件)
 - [ ] `grep -rE 'git-destructive-deny-smoke\.sh' .claude/ docs/ .github/ 2>/dev/null` ヒット 0 件 (rename 完全反映)
@@ -184,7 +184,7 @@ flowchart LR
 | Phase 1 | Step 1.2 protected branch push cases (5) 追加 | 0.15 |
 | Phase 1 | Step 1.3 bypass case 追加 | 0.05 |
 | Phase 2 | Step 2.1 テスト設計レビュー (5+ reviewer 動的選定) | 0.1 |
-| Phase 2 | Step 2.2 テスト合格 (smoke 38/38 PASS) | 0.05 |
+| Phase 2 | Step 2.2 テスト合格 (smoke 40/40 PASS) | 0.05 |
 | Phase 2 | Step 2.3 リファクタリング判定 | 0.05 |
 | **合計** | | **0.5** |
 
