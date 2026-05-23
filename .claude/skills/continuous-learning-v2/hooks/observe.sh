@@ -75,7 +75,11 @@ ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 event=$(printf '%s' "$input" | jq -r '.hook_event_name // "unknown"' 2>/dev/null)
 tool=$(printf '%s' "$input" | jq -r '.tool_name // "unknown"' 2>/dev/null)
 
-# raw が壊れていても落ちないよう --argjson の代替で string 化
+# raw は --rawfile 経由で安全に passthrough する。
+# --argjson は nested string escape (literal control char / parse 失敗 raw_safe) で
+# 56% の records が破損していた (docs/draft/observe-jq-parse-fix.md §1)。
+# --rawfile は string として読み込み、jq 側で fromjson? で再解釈することで
+# schema 互換 (raw が object のまま) を保ちつつ全 payload を保護する。
 raw_safe=$(printf '%s' "$input" | jq -c '.' 2>/dev/null || echo '{}')
 
 obs=$(jq -nc \
@@ -85,7 +89,7 @@ obs=$(jq -nc \
   --arg pid "$project_id" \
   --arg pname "$project_name" \
   --arg scope "$scope" \
-  --argjson raw "$raw_safe" \
+  --rawfile raw <(printf '%s' "$raw_safe") \
   '{
      ts: $ts,
      event: $event,
@@ -93,7 +97,7 @@ obs=$(jq -nc \
      project_id: $pid,
      project_name: $pname,
      scope: $scope,
-     raw: $raw
+     raw: ($raw | fromjson? // {})
    }' 2>/dev/null) || obs=""
 
 if [ -n "$obs" ]; then
