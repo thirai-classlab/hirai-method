@@ -13,6 +13,12 @@ set -uo pipefail
 source "$(dirname "$0")/lib/config-loader.sh"
 
 input="$(cat)"
+
+# task-22 W2: jq 不在環境では fail-open (hook 機能停止して継続)
+if ! command -v jq >/dev/null 2>&1; then
+  exit 0
+fi
+
 session_id="$(printf '%s' "$input" | jq -r '.session_id // empty')"
 now="$(date +%s)"
 expire_seconds=3600

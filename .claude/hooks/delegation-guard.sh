@@ -26,6 +26,12 @@ source "$(dirname "$0")/lib/config-loader.sh"
 input=$(cat)
 tool="${1:-}"
 
+# task-22 W2: jq 不在環境では fail-open (hook 機能停止して継続)
+# delegation-guard.sh は jq に重度依存 (16 箇所) のため、不在で crash する前に exit 0
+if ! command -v jq >/dev/null 2>&1; then
+  exit 0
+fi
+
 # --- debug ---
 if [ "${CLAUDE_HOOK_DEBUG:-}" = "1" ]; then
   printf '[%s] tool=%s\n%s\n---\n' "$(date +%FT%T)" "$tool" "$input" \

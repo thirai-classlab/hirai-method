@@ -17,6 +17,12 @@ set -u
 
 input=$(cat)
 
+# task-22 W2: jq 不在環境では fail-open (hook 機能停止して継続)
+if ! command -v jq >/dev/null 2>&1; then
+  echo '{}'
+  exit 0
+fi
+
 file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // empty')
 
 if [ -z "$file_path" ]; then

@@ -10,7 +10,13 @@ set -u
 source "$(dirname "$0")/lib/config-loader.sh"
 
 input=$(cat)
-msg=$(echo "$input" | jq -r '.message // "承認/入力が必要です"')
+
+# task-22 W2: jq 不在環境では fail-open (msg = default、通知音のみ鳴らす)
+if command -v jq >/dev/null 2>&1; then
+  msg=$(echo "$input" | jq -r '.message // "承認/入力が必要です"')
+else
+  msg="承認/入力が必要です"
+fi
 project=$(basename "$(pwd)")
 afplay "$HC_NOTIFY_SOUND" >/dev/null 2>&1 &
 osascript -e "display notification \"$msg\" with title \"Claude Code: $project\" subtitle \"操作が必要です\"" >/dev/null 2>&1
