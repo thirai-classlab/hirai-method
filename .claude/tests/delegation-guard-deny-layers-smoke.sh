@@ -26,10 +26,14 @@
 #     - Pass cases (10): 非破壊 git 操作が block されないこと
 #     - Bypass cases (3): ECC_ALLOW_DESTRUCTIVE_GIT=1 で block 解除されること
 #   - protected branch push deny (本 file 末尾セクションで検証):
-#     - Block cases (4): main 明示 / stg 系部分一致 (3 variant) が
+#     - Block cases (5): main 明示 / stg 系部分一致 (3 variant) +
+#       --force-with-lease origin main (destructive + protected 二重 guard) が
 #       decision:"block" + reason に "[protected branch push deny]" を含むこと
 #     - Pass cases (1): feature branch への push は block されないこと
+#       (expect_pass_protected で destructive 干渉排除 + protected 単体検証)
 #     - Bypass case (1): ECC_ALLOW_PROTECTED_BRANCH_PUSH=1 で main push が通過
+#     - Negative bypass case (1): ECC_ALLOW_PROTECTED_BRANCH_PUSH=0 明示でも
+#       block 維持 (= "1" 比較の防御深度検証、iteration 2 追加)
 #
 # 非対象:
 #   - refspec 省略 (`git push` 引数なし) の current branch 解決 case
@@ -222,6 +226,29 @@ expect_bypass_pass_protected() {
   fi
 }
 
+# block 期待 (protected layer、bypass env "0" 明示設定 negative case):
+# ECC_ALLOW_PROTECTED_BRANCH_PUSH=0 を明示設定した場合、bypass は activate せず
+# block が維持されることを検証 (= "1" 比較の防御深度検証、iteration 2 追加)。
+# destructive layer の干渉を排除するため ECC_ALLOW_DESTRUCTIVE_GIT=1 を固定。
+expect_block_with_explicit_bypass_zero() {
+  local label="$1"
+  local cmd="$2"
+  local out decision reason
+
+  out=$(json_input "$cmd" | ECC_ALLOW_DESTRUCTIVE_GIT=1 ECC_ALLOW_PROTECTED_BRANCH_PUSH=0 bash "$HOOK" Bash 2>&1)
+  decision=$(extract_decision "$out")
+  reason=$(extract_reason "$out")
+
+  if [ "$decision" = "block" ] && printf '%s' "$reason" | grep -q '\[protected branch push deny\]'; then
+    PASS=$((PASS + 1))
+    printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (decision=$decision)")
+    printf "  FAIL: %s\n    cmd: %s\n    decision: %s\n    out: %s\n" "$label" "$cmd" "$decision" "$out"
+  fi
+}
+
 printf "===== delegation-guard-deny-layers-smoke (next-actions #13 + #14) =====\n\n"
 
 printf "Block cases (19):\n"
@@ -262,21 +289,28 @@ expect_pass  "show HEAD"                       "git show HEAD"
 expect_pass  "fetch origin"                    "git fetch origin"
 expect_pass  "pull origin feature/test"        "git pull origin feature/test"
 
-printf "\nProtected branch push cases (5):\n"
+printf "\nProtected branch push cases (7):\n"
 # (a) main 明示 refspec → block
 expect_block_protected "push origin main"                       "git push origin main"
 # (b) stg 系部分一致 (3 variant) → block
 expect_block_protected "push origin stg"                        "git push origin stg"
 expect_block_protected "push -u origin release/stg-prod"        "git push -u origin release/stg-prod"
 expect_block_protected "push origin feat:refs/heads/stg-v1"     "git push origin feat:refs/heads/stg-v1"
-# (c) feature branch は通過 → pass
+# (c) feature branch は通過 → pass (protected layer 単体検証、destructive bypass で干渉排除)
 expect_pass_protected  "push origin feature/test"               "git push origin feature/test"
+# (d) --force-with-lease origin main は destructive layer + protected layer の
+#     二重 guard で block (destructive bypass 状態で protected layer の block 動作検証、
+#     iteration 2 追加、security-reviewer MEDIUM 指摘起源)
+expect_block_protected "push --force-with-lease origin main"    "git push --force-with-lease origin main"
+# (e) ECC_ALLOW_PROTECTED_BRANCH_PUSH=0 明示でも block 維持
+#     (= "1" 比較の防御深度検証、iteration 2 追加、security-reviewer MEDIUM 指摘起源)
+expect_block_with_explicit_bypass_zero "push origin main with ECC=0 (bypass must not activate)" "git push origin main"
 
 printf "\nBypass cases (4):\n"
 expect_bypass_pass "push --force bypass"       "git push --force"
 expect_bypass_pass "reset --hard bypass"       "git reset --hard"
 expect_bypass_pass "clean -fdx bypass"         "git clean -fdx"
-# (e) ECC_ALLOW_PROTECTED_BRANCH_PUSH=1 + main → pass (bypass)
+# (f) ECC_ALLOW_PROTECTED_BRANCH_PUSH=1 + main → pass (bypass)
 expect_bypass_pass_protected "push origin main with bypass" "git push origin main"
 
 TOTAL=$((PASS + FAIL))

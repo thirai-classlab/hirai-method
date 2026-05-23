@@ -96,14 +96,16 @@ flowchart LR
 printf "\nProtected branch push cases (5):\n"
 # `unset ECC_ALLOW_PROTECTED_BRANCH_PUSH` を実施 (file 冒頭で既に unset 済だが念のため再確認)
 # (a) main 明示 refspec
-expect_block "push origin main"                "git push origin main"
+expect_block_protected "push origin main"                "git push origin main"
 # (b) stg 系部分一致 (3 variant)
-expect_block "push origin stg"                 "git push origin stg"
-expect_block "push -u origin release/stg-prod" "git push -u origin release/stg-prod"
-expect_block "push origin feat:refs/heads/stg-v1" "git push origin feat:refs/heads/stg-v1"
+expect_block_protected "push origin stg"                 "git push origin stg"
+expect_block_protected "push -u origin release/stg-prod" "git push -u origin release/stg-prod"
+expect_block_protected "push origin feat:refs/heads/stg-v1" "git push origin feat:refs/heads/stg-v1"
 # (c) feature branch は通過 (Normal モード、Loop モードでは autonomous-action-guard が別途 block)
-expect_pass  "push origin feature/test"        "git push origin feature/test"
+expect_pass_protected  "push origin feature/test"        "git push origin feature/test"
 ```
+
+> **Phase 2 iteration 2 反映**: 実装は `expect_block_protected` / `expect_pass_protected` を使用 (protected layer 単体検証、`ECC_ALLOW_DESTRUCTIVE_GIT=1` で destructive layer 干渉排除 + reason check が `[protected branch push deny]` に match)。
 
 ただし冒頭 L53 `export ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` は destructive layer 検証用なので、本セクション直前で `unset ECC_ALLOW_PROTECTED_BRANCH_PUSH` を実施し、セクション末尾で再 `export` する (もしくは Phase 1 で L53 export 自体を削除し、各 case で個別に env 制御する。後者を採用、destructive layer の pass case は元から feature branch push を含まないため env 削除しても影響なし)。
 
@@ -196,7 +198,7 @@ expect_bypass_pass_protected "push origin main bypass" "git push origin main"
 
 - [ ] `.claude/tests/delegation-guard-deny-layers-smoke.sh` 存在 (rename 完了、`git-destructive-deny-smoke (旧名)` は file system 上消滅)
 - [ ] `bash .claude/tests/delegation-guard-deny-layers-smoke.sh` exit 0 + 38/38 PASS (destructive 32 + protected push 5 + bypass 1)
-- [ ] 5 cases (a)-(d) block + (c)/(e) pass/bypass の 6 件が標準出力に「PASS: ...」と表示される
+- [ ] Protected push cases (a)+(b) 3 variant block + (c) pass + (e) bypass = 5 件 + Phase 2 iteration 2 追加 ((d) force-with-lease block + (f) bypass=0 negative) = 計 7 件が標準出力に「PASS: ...」と表示される
 - [ ] 既存 destructive 32 cases regression 0 (FAIL 0 件)
 - [ ] `grep -rE 'git-destructive-deny-smoke\.sh' .claude/ docs/ .github/ 2>/dev/null` ヒット 0 件 (rename 完全反映)
 - [ ] テスト設計レビュー reviewer 5 件 approve、修正提案 0 件 (task-29 採用 5 条 4 第 1 段)
