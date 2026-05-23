@@ -123,10 +123,10 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 
 ## Design Constraints
 
-- `<例: 内製パイプライン HTML のみ（globals.css の .rich-body）>`
-- `<例: モノトーン厳守、Tailwind v4 dark: プレフィックス全面禁止>`
-- `<例: Cache Components 制約 — export const dynamic/runtime/revalidate 禁止>`
-- `<その他、リポ固有の不変制約>`
+- **`.claude/` 単独で portable**: 別 repo に `cp -r .claude` (または `./install.sh <target>`) で即動作する設計を維持。project 固有の値 (URL / path / 個人 token) を `.claude/` 配下にハードコードしない (`.claude/harness-config.yml` 経由で env override 可能にする)
+- **保護パス / 配置 / 拡張子は `harness-config.yml` で集中管理**: `protected_paths` / `protected_paths_code` / `task_dir` / `draft_dir` / `bash_whitelist_path` / `code_file_extensions` 等を hook に直接ハードコードしない (`.claude/hooks/lib/config-loader.sh` 経由で `HC_*` env として export)
+- **hook の fail policy 統一**: 全 hook は `set -uo pipefail` (errexit 外し) を default、`set -euo pipefail` は subshell 関数化 (`do_work() ( set -euo pipefail; ... )`) でのみ使用。caller の shell flags への leak と SIGPIPE → exit 141 サイレント死を防ぐ (CLAUDE.md Critical Lessons HIGH)
+- **規範違反は機械強制 hook で防止**: 「ルールに書いて守らせる」ではなく「hook で BLOCK して守らせる」を default。違反検出 → next-actions entry → draft 起こし → 機械強制 hook 実装の閉ループ (task-21 / task-26 が典型例)
 
 ## Critical Operational Lessons（`<重要操作>`前に必読）
 
@@ -136,9 +136,9 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 | **`.claude/hooks/lib/*.sh` の file-top に `set -euo pipefail` を書かない**。caller の shell flags に leak し、`cmd \| head -1` で SIGPIPE → pipefail → errexit → **exit 141 サイレント終了**。`load_xxx() ( set -uo pipefail; ... )` のように subshell 関数化で局所化する (2026-05-12 CB-verify, `5846925` で根本修正、context-budget hook の未発火問題が解消) | HIGH |
 | **Loop モード稼働中、subagent 起動後にメインが `completion 通知の受動待ち` で停止しない**。`run_in_background: true` 必須 + 待ち中は別 task / メイン専任作業 / 規範文書化 / memory 整理 を並行進行する。違反例: subagent #13-#15 起動後にメインがターン区切り報告で停止 → user 「Loop モード継続中。なぜ自動で実行を続けないのか?」を **複数回**指摘 (2026-05-12)。`.claude/hooks/loop-auto-progress-reminder.sh` (UserPromptSubmit) が「待ち中報告」キーワード検出で `<system-reminder>` 強制注入、`modes.md` 遵守事項 7 で機械防止化 | HIGH |
 | **Loop モードの「中間確認禁止」を盾に `git push` / `gh pr create` / production deploy 等の破壊的操作を自律実行しない**。準備 (draft / 設計 / 実装 / ローカル commit) のみ自律、撤回不可な操作は user 明示承認必須。違反例: 2026-05-12 セッション中、`git push origin feat/loop-mode` を **5 回以上**自律実行。`.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) が 11 カテゴリ (push / PR / release / 本番 deploy / DB push / k8s apply / terraform apply 等) を `{"decision":"block"}` で機械防止化、bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` + bypass.log 記録、`modes.md` 遵守事項 8 | HIGH |
-| `<例: 公開/非公開フィルタは RLS で一元化、queries.ts に .not() 禁止>` | HIGH |
-| `<例: vitest は build 制約違反を検出不可、push 前に build 必須>` | HIGH |
-| `<例: 独自 secret 認証 API は middleware PUBLIC_PATHS にも追加（3 点セット）>` | HIGH |
+| **メインが `.claude/hooks/*.sh` `.claude/skills/**/*.{sh,py,mjs}` `.claude/scripts/**/*` を直接 Edit/Write しない**。コード実装は Agent tool で subagent 委譲 + staging 戦略 (`/tmp` に Write → mv → chmod +x) が原則。違反例: 2026-05-23 セッションで draft-flow-guard.sh 新設 / set policy 修正 / jq guard 追加 を **9 件メイン直接編集**、user 指摘「なぜ基本原則に従ってサブエージェントに移譲しないのですか?」(commit `6ed9337` / `6561475` / `17c493e`)。`.claude/hooks/delegation-guard.sh` 拡張 (task-26 W2、commit `43bf0e8`、`HC_PROTECTED_PATHS_CODE` + `HC_CODE_FILE_EXTENSIONS` 配下を block) で機械防止化、bypass: `ECC_ALLOW_MAIN_CODE_EDIT=1` + bypass.log 記録 | HIGH |
+| **メインが `docs/` 直下に新規設計文書 (要件 / 基本設計 / 機能一覧等) を直接 Write しない**。`docs/draft/<slug>.md` 起こし → user 承認 → `docs/tasks/list.md` 反映の 3 step フロー必須。違反例: 2026-05-23 セッションで recall_poc/docs/01_basic_design.md / 02_screen_flow.md / 03_feature_list.md が draft 経由なしで直接 Write された事案。`.claude/hooks/draft-flow-guard.sh` 新設 (task-21 W2.3、commit `6ed9337`、`docs/` 直下深さ 1 新規 .md/.mdx を block、対応 draft 存在で pass) で機械防止化、bypass: `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` or `harness-config.yml draft_flow_guard_whitelist` | HIGH |
+| **Loop モードでも「設計→承認→タスク追加」フローは免除されない**。`modes.md` 遵守事項 2「中間確認の停止」の禁止対象は **戦術判断のみ** (実装中の方式選択 / branch 命名 / commit メッセージ / build green までの試行錯誤)。設計文書の新規追加 / 仕様変更 / scope 拡張 / 戦略的判断 は引き続き user 承認必須 (task-21 W2.1 で modes.md 遵守事項 2 に例外条項明文化、commit `7684c09`) | HIGH |
 
 その他の教訓は memory `feedback_*.md` を参照。
 
