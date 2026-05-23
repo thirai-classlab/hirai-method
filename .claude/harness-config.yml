@@ -39,6 +39,19 @@
 # プロダクションコード / テスト / スクリプト等、サブエージェント委譲を強制したい領域を列挙。
 protected_paths: [src, tests, scripts]
 
+# === コード実装の保護パス (task-26、subagent 委譲を強制) ===
+# delegation-guard.sh が tool=Edit/Write 時、file_path が
+# protected_paths_code 配下 かつ code_file_extensions のいずれかに合致するなら BLOCK。
+# subagent 経由 (Agent tool) は通過 (既存 agent-marker 判定と同じ)。
+#
+# 規範文書 (.md) や設定 file (.yml/.json/.txt) は対象外で、メインで編集可。
+# bypass: 環境変数 ECC_ALLOW_MAIN_CODE_EDIT=1 (1 セッション、bypass.log 記録)
+#
+# 起源: 2026-05-23 user 指摘「なぜ基本原則に従ってサブエージェントに移譲しないのですか?」
+# 設計: docs/draft/delegation-code-enforcement.md W1
+protected_paths_code: [.claude/hooks, .claude/skills, .claude/scripts]
+code_file_extensions: [sh, py, mjs, ts, js, tsx, jsx, rb, go, rs, java, kt, swift, php, cpp, c, h]
+
 # === タスク管理ファイル配置 ===
 # task-rule-guard.sh / delegation-guard.sh が docs/tasks/ docs/draft/ 規約を判定する基準。
 # 値はプロジェクトルートからの相対 path セグメント (slashなし)。
