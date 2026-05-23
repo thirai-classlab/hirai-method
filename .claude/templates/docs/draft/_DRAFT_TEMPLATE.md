@@ -1,3 +1,11 @@
+<!--
+task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
+approval_required: true            # 承認必須 (default true、Loop モードでも user 承認スキップ不可)
+approved_at:                       # 承認日 (空 = 未承認、user 承認後に YYYY-MM-DD)
+approved_by:                       # 承認者 (空 = 未承認、承認後に "user" 等)
+retroactive: false                 # 遡及作成か (true = 既存実装の事後 draft 化、recall_poc/docs/draft/0[1-3] のような事案)
+-->
+
 # <設計タイトル>
 
 **ステータス:** 🔲 **draft（YYYY-MM-DD 起案、user 承認待ち）**
