@@ -179,6 +179,12 @@
             "command": "bash .claude/hooks/failure-loop-detect.sh",
             "timeout": 3,
             "statusMessage": "失敗ループ検出中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/why-x5-violation-detect.sh",
+            "timeout": 3,
+            "statusMessage": "Why × 5 format 違反検出中..."
           }
         ]
       }
@@ -270,6 +276,12 @@
           },
           {
             "type": "command",
+            "command": "bash .claude/hooks/why-x5-reminder.sh",
+            "timeout": 3,
+            "statusMessage": "Why × 5 出力ルールを初期注入..."
+          },
+          {
+            "type": "command",
             "command": "bash .claude/hooks/next-actions-surface.sh",
             "timeout": 5,
             "statusMessage": "未処理副産物 surface 中..."
@@ -298,12 +310,6 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/why-x5-reminder.sh",
-            "timeout": 3,
-            "statusMessage": "Why × 5 出力ルール注入中..."
-          },
           {
             "type": "command",
             "command": "bash .claude/hooks/context-budget.sh",
