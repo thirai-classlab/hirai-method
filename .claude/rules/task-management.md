@@ -1,8 +1,11 @@
----
-paths:
-  - "docs/tasks/**/*"
-  - "docs/draft/**/*"
----
+<!--
+task-21 W1.7: paths 条件付き受動 load を廃止し、常時参照 rule に格上げ。
+理由: paths: ["docs/tasks/**", "docs/draft/**"] では当該 path を Read した
+ターンしか context に load されず、設計→承認→タスク追加フローの認識が
+落ちる事案 (recall_poc/docs/01-03 が docs/ 直下に直接 Write された)。
+CLAUDE.md の Rules table で「(常時参照)」として明示し、毎セッション AI が
+本 rule を読む状態にする。
+-->
 
 # タスク管理ルール
 
