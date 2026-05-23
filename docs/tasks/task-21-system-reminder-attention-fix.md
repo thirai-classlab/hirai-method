@@ -113,3 +113,79 @@ hirai-method / recall_poc / taskManageSystem では UserPromptSubmit に毎タ�
 - [ ] eval before/after 比較で 4 採用判定基準すべて満たす
 - [ ] recall_poc / taskManageSystem / classlab-weekly-news で同期反映
 - [ ] CLAUDE.md Critical Operational Lessons に「system-reminder attention dilution 解消」を 1 件追加
+
+## W3 capability + regression eval (Phase→Step 化、task-29 dogfooding)
+
+> 本セクションは task-29 (`phase-step-task-structure`) の Phase 4 Step 2 実適用として、task-21 W3 残作業を Phase→Step 強制構造で表現する。
+> 規範: `.claude/rules/task-management.md` §「タスク構造規範 (Phase→Step 強制)」採用 5 条。
+> 2026-05-23 user 仕様変更: 各 Phase 最終 Step を 2 段 (テスト合格 → リファクタリング) から **3 段 (テスト設計レビュー → テスト合格 → リファクタリング)** に拡張。
+
+### Phase A: capability eval 実行
+
+**ゴール**: `.claude/evals/system-reminder-attention.md` capability eval (10 prompts × 3 trials = 30 runs) を実 session で実行し、pass@3 metric を実測する。
+
+**作業概要**:
+- eval-harness skill 経由で eval ファイル load
+- 10 prompts を順次実行 (各 3 trials)
+- 結果集計 (pass@3 計算)
+- 結果を `.claude/evals/system-reminder-attention.results.md` に記録
+
+**Step**:
+
+- **Step 1**: eval ファイル `.claude/evals/system-reminder-attention.md` を確認
+  - 完了条件: ファイル存在 + 10 prompts が定義されている
+- **Step 2**: eval-harness skill / `/eval check system-reminder-attention` 経由で 30 runs 実行
+  - 完了条件: 全 30 runs 完了、各 run の pass/fail が記録されている
+- **Step 3**: pass@3 計算 + 結果記録
+  - 完了条件: `.claude/evals/system-reminder-attention.results.md` に pass@3 数値 + 採用判定基準 1 (pass@3 ≥ 0.8) との比較が記録
+- **Step 4 (テスト設計レビュー)**: メインが 5+ reviewer 動的選定 (eval 系のため推奨: tdd-guide / test-automator / qa-expert / pr-test-analyzer + 本 task の domain (system-reminder / Loop モード) に応じて harness-optimizer / architect-reviewer 加味) で並列起動、収束まで反復 (上限 5 回)
+  - 完了条件: 全 reviewer approve / no objection
+- **Step 5 (テスト合格)**: Step 1-3 で実施した capability eval (30 runs) 結果が反映済、既存 smoke 全 PASS + eval results.md ファイル存在
+  - 完了条件: 既存 smoke regression 0 (Phase A は eval 実行のみで code 変更なしのため smoke 自体への影響なし)、全 smoke exit 0
+- **Step 6 (リファクタリング)**: skip: eval 実行のみ、code 変更なし、refactor 対象なし
+
+### Phase B: regression eval 実行
+
+**ゴール**: `.claude/evals/loop-mode-autonomy.md` regression eval (4 tests × 3 trials = 12 runs) を実 session で実行し、pass^3 metric (全 3 trial 連続 PASS) を実測する。
+
+**作業概要**:
+- eval ファイル load
+- 4 tests × 3 trials = 12 runs 実行
+- 結果集計 (pass^3 計算)
+- 結果記録
+
+**Step**:
+
+- **Step 1**: eval ファイル `.claude/evals/loop-mode-autonomy.md` 確認
+- **Step 2**: 12 runs 実行
+  - 完了条件: 全 12 runs 完了
+- **Step 3**: pass^3 計算 + 結果記録
+  - 完了条件: `.claude/evals/loop-mode-autonomy.results.md` に pass^3 + 採用判定基準 2 (pass^3 ≥ 0.75) との比較
+- **Step 4 (テスト設計レビュー)**: メインが 5+ reviewer 動的選定 (regression 系のため推奨: tdd-guide / test-automator / qa-expert / pr-test-analyzer + 本 task の domain (Loop モード自律規律) に応じて harness-optimizer / architect-reviewer 加味) で並列起動、収束まで反復 (上限 5 回)
+  - 完了条件: 全 reviewer approve / no objection
+- **Step 5 (テスト合格)**: Step 1-3 で実施した regression eval (12 runs) 結果が反映済、既存 smoke regression 0
+  - 完了条件: 全 smoke exit 0
+- **Step 6 (リファクタリング)**: skip: eval 実行のみ、refactor 対象なし
+
+### Phase C: 採用判定
+
+**ゴール**: 4 基準 (capability pass@3 / regression pass^3 / 注入数 / true handoff latency) を統合判定し、Loop モード自律進行強制機構を本採用 or roll-back する。
+
+**作業概要**:
+- Phase A / B の results 取得
+- 既測の audit 結果 (注入数 4→0 達成済 / true handoff latency task-28 W1 で計測可能化済)
+- 4 基準を統合判定
+- 結果に応じて 3 リポ反映 (採用なら user manual `bash install.sh --update`)
+
+**Step**:
+
+- **Step 1**: 4 基準の集計 (Phase A / B + 既測 audit + task-28 W1 SubagentStop event)
+  - 完了条件: 4 基準値が表形式で記録
+- **Step 2**: 採用判定 (4 基準中 N 件達成で採用 or roll-back)
+  - 完了条件: 判定根拠 + 結論 (採用 / roll-back / 部分採用) が記録
+- **Step 3**: 採用なら 3 リポ反映 (user manual)、roll-back なら hook 復元 (subagent 委譲)
+- **Step 4 (テスト設計レビュー)**: メインが 5+ reviewer 動的選定 (採用判定系のため推奨: tdd-guide / test-automator / qa-expert / pr-test-analyzer + 本 task の domain (system-reminder / Loop モード / 3 リポ反映) に応じて harness-optimizer / architect-reviewer 加味) で並列起動、収束まで反復 (上限 5 回)
+  - 完了条件: 全 reviewer approve / no objection
+- **Step 5 (テスト合格)**: Step 1-3 で実施した 4 基準採用判定 (capability pass@3 / regression pass^3 / 注入数 / latency) 結果が反映済、反映後 smoke 全 PASS + 本番動作確認 (UserPromptSubmit 注入数 audit)
+  - 完了条件: 全 smoke exit 0
+- **Step 6 (リファクタリング)**: skip: 反映作業のみ (反映に伴う重複コード生成なし)、refactor 対象なし

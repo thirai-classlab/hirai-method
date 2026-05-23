@@ -49,7 +49,7 @@ paths:
 | 5 | `design-review` | reviewer-registry の design + security 全 agent を並列起動して fan-out レビュー | `/design-review <slug>` |
 | 6 | `user-approval` | draft §8 承認履歴に user 承認エントリ追加 (必須、Loop モードでも) | user 対話 |
 | 7 | `task-creation` | `/new-task` でタスク化 + `.claude/.workflow-state/<slug>.json` を初期化 | `/new-task <id> <slug>` |
-| 8 | `tdd` | RED → GREEN → REFACTOR (subagent 経由のみ、メイン直接編集禁止)。**Wave 計画前に `git log --all --grep <finding>` で既存 commit 解消確認必須** (2026-05-21 TM 修正での no-op 重複起動再発防止)。**Phase 最終 Step = テスト合格→リファクタリングの 2 段必須** (詳細: [task-management.md §タスク構造規範](./task-management.md#タスク構造規範-phasestep-強制) 採用 5 条 4) | `/start-task <id>` |
+| 8 | `tdd` | RED → GREEN → REFACTOR (subagent 経由のみ、メイン直接編集禁止)。**Wave 計画前に `git log --all --grep <finding>` で既存 commit 解消確認必須** (2026-05-21 TM 修正での no-op 重複起動再発防止)。**Phase 最終 Step = テスト設計レビュー → テスト合格 → リファクタリングの 3 段必須** (テスト設計レビューは 5+ reviewer 動的選定 + 修正収束まで反復 + 5 回上限、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`、詳細: [task-management.md §タスク構造規範](./task-management.md#タスク構造規範-phasestep-強制) 採用 5 条 4) | `/start-task <id>` |
 | 9 | `module-review` | モジュール毎に持続可能性 / 汎用性 / 非冗長化 の 3 観点レビュー | `/module-review <module>` |
 | 10 | `local-test` | `<slug>.test-design.md` で ☑ にしたテスト全カテゴリを実行。**Step 完了条件 (定量 or 観察可能事実) で test 結果を検証** (詳細: [task-management.md §タスク構造規範](./task-management.md#タスク構造規範-phasestep-強制) 採用 5 条 3) | subagent test runner |
 | 11 | `system-review` | 全モジュール統合後にモジュール間重複 / 設計乖離検出 | `/system-review --slug <slug>` |

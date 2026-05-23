@@ -16,7 +16,9 @@ requester: ""
 
 既存 `_TASK_TEMPLATE.md` は **Wave 単位** での task 分解を強制するが、Wave 内の **Step 粒度 / 完了条件 / E2E 条件 / リファクタ強制** が未規範化。結果として subagent 委譲時の acceptance criteria が曖昧 (本セッション 11 subagent median confidence 0.88、再委譲発生事案あり) / TDD GREEN → REFACTOR 規範違反 (test PASS 後にリファクタ skip 事案複数) / UI 動作未検証で「build green = 完了」誤判定 (E2E 未配線、Critical Operational Lessons HIGH「UI または frontend changes は browser 検証」未強制) が継続している。
 
-本 task で **Phase→Step 2 階層強制 + Phase ゴール+概要必須 + Step 完了条件 (定量 or 観察可能) 必須 + 最終 Step = テスト合格→リファクタリング (UI 含む = E2E 必須、refactor 不要なら `skip: reason` 明示記録) + 小タスクは 1 Phase+1 Step 許容** の 5 条規範を導入し、`_TASK_TEMPLATE.md` / `task-management.md` / `workflow.md` 14-stage / smoke を統合する。
+本 task で **Phase→Step 2 階層強制 + Phase ゴール+概要必須 + Step 完了条件 (定量 or 観察可能) 必須 + 最終 Step = テスト設計レビュー → テスト合格 → リファクタリング (3 段必須、UI 含む = E2E 必須、refactor 不要なら `skip: reason` 明示記録) + 小タスクは 1 Phase+1 Step 許容** の 5 条規範を導入し、`_TASK_TEMPLATE.md` / `task-management.md` / `workflow.md` 14-stage / smoke を統合する。
+
+> **2026-05-23 仕様変更承認**: 採用 5 条 4 を **2 段 → 3 段** に拡張。テスト設計レビュー Step を追加し、メインが 5+ reviewer を動的選定 (固定 registry 不採用、case-by-case)、並列起動、修正収束まで反復 (上限 5 回、超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1` セッション全体)。詳細は [`docs/draft/phase-step-task-structure.md` §3 採用 5 条 4](../draft/phase-step-task-structure.md) を参照。
 
 ## 仕様（決定済）
 
@@ -48,8 +50,8 @@ requester: ""
 1. **Phase→Step 2 階層必須** — 1 Phase = 1 完了 commit 単位 / 1 Step = 1 subagent 委譲 or 1 操作、最小 1 Phase + 1 Step
 2. **Phase 必須項目** — ゴール (1 文、観察可能) + 作業概要 (箇条書き 3-5 件)
 3. **Step 必須項目** — 内容 (1-2 文) + 完了条件 (定量 or 観察可能な事実)
-4. **Phase 最終 Step = テスト合格 → リファクタリング (2 段必須)** — UI 含む Phase は E2E 必須、refactor 不要なら `skip: reason` 明示
-5. **小タスク許容** — 1 Step 完結作業は単一 Phase + 単一 Step OK、test (規範文書は observability check 代替) + refactor skip 記録は必須
+4. **Phase 最終 Step = テスト設計レビュー → テスト合格 → リファクタリング (3 段必須)** — テスト設計レビュー Step でメインが 5+ reviewer 動的選定 (常時 base: tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific: UI / DB / API / 言語 / security)、並列起動、収束まで反復 (上限 5 回、超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1`)。UI 含む Phase は E2E 必須、refactor 不要なら `skip: reason` 明示
+5. **小タスク許容** — 1 Step 完結作業は単一 Phase + 単一 Step OK、テスト設計レビュー + テスト合格 (規範文書は observability check 代替) + refactor skip 記録は必須
 
 ## TDD 戦略
 
@@ -74,21 +76,23 @@ requester: ""
 
 ### Phase 1: `_TASK_TEMPLATE.md` schema 改訂
 
-**ゴール**: テンプレに Phase 計画セクション + Step サブセクション + テスト合格 / リファクタリング 2 step が定型化された雛形が組み込まれる。
+**ゴール**: テンプレに Phase 計画セクション + Step サブセクション + テスト設計レビュー / テスト合格 / リファクタリング 3 step が定型化された雛形が組み込まれる。
 
 **作業概要**:
 - 既存 `## Wave 構成` セクションを `## Phase 計画` に rename
 - 各 Phase 内に `### Step <N>: <名前>` (内容 / 完了条件) を template 化
-- 各 Phase 末尾に「テスト合格」「リファクタリング (skip 理由明記)」2 step を雛形固定配置
+- 各 Phase 末尾に「テスト設計レビュー」「テスト合格」「リファクタリング (skip 理由明記)」3 step を雛形固定配置
 - 上部 frontmatter HTML comment に `phase_count: N` / `total_steps: M` 追加
 
 **Step**:
 
 - **Step 1**: subagent 委譲で `_TASK_TEMPLATE.md` を新 schema に改訂
-  - 完了条件: `grep -q '## Phase 計画' .claude/templates/docs/tasks/_TASK_TEMPLATE.md && grep -q 'リファクタリング' _TASK_TEMPLATE.md` exit 0
-- **Step 2 (テスト合格)**: 既存 task-rule-guard-smoke.sh で regression 0
+  - 完了条件: `grep -q '## Phase 計画' .claude/templates/docs/tasks/_TASK_TEMPLATE.md && grep -q 'テスト設計レビュー' _TASK_TEMPLATE.md && grep -q 'リファクタリング' _TASK_TEMPLATE.md` exit 0
+- **Step 2 (テスト設計レビュー)**: メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
+  - 完了条件: 全 reviewer approve / no objection (修正提案 0 件)
+- **Step 3 (テスト合格)**: 既存 task-rule-guard-smoke.sh で regression 0
   - 完了条件: `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、全 case PASS 出力
-- **Step 3 (リファクタリング)**: `skip: 単一 template file の structure 追加、refactor 対象なし`
+- **Step 4 (リファクタリング)**: `skip: 単一 template file の structure 追加、refactor 対象なし`
 
 ### Phase 2: 規範文書統合 (`task-management.md` + `workflow.md`)
 
@@ -105,9 +109,11 @@ requester: ""
   - 完了条件: 2 §セクションが grep で存在確認可、採用 5 条全項目記載
 - **Step 2**: subagent 委譲で `workflow.md` Edit
   - 完了条件: Stage 8 / 10 / 13 に `task-management.md#タスク構造規範` (or 同等) への参照リンクが含まれる
-- **Step 3 (テスト合格)**: 既存 smoke 全 PASS regression 0
+- **Step 3 (テスト設計レビュー)**: メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
+  - 完了条件: 全 reviewer approve / no objection (修正提案 0 件)
+- **Step 4 (テスト合格)**: 既存 smoke 全 PASS regression 0
   - 完了条件: `bash .claude/tests/workflow-guard-smoke.sh` + `task-rule-guard-smoke.sh` 両方 exit 0
-- **Step 4 (リファクタリング)**: `skip: 規範文書追記のみ、refactor 対象なし`
+- **Step 5 (リファクタリング)**: `skip: 規範文書追記のみ、refactor 対象なし`
 
 ### Phase 3: UI 変更検出基準の文書化 (規範のみ)
 
@@ -121,9 +127,11 @@ requester: ""
 
 - **Step 1**: subagent 委譲で `task-management.md` に §「UI 変更検出基準」追加
   - 完了条件: `grep -q 'UI 変更検出' task-management.md` exit 0、拡張子 list + path list + skip format 記載
-- **Step 2 (テスト合格)**: markdown 整合性 (section 存在 grep)
+- **Step 2 (テスト設計レビュー)**: メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
+  - 完了条件: 全 reviewer approve / no objection (修正提案 0 件)
+- **Step 3 (テスト合格)**: markdown 整合性 (section 存在 grep)
   - 完了条件: 上記 grep が exit 0
-- **Step 3 (リファクタリング)**: `skip: 文書追加のみ、refactor 対象なし`
+- **Step 4 (リファクタリング)**: `skip: 文書追加のみ、refactor 対象なし`
 
 ### Phase 4: smoke 拡充 + 実適用効果実測
 
@@ -139,26 +147,30 @@ requester: ""
 - **Step 1**: subagent 委譲で smoke 拡張
   - 完了条件: 新 case 追加後 `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、全 case PASS
 - **Step 2**: 実適用 task の Phase→Step 化 (subagent 委譲、対象は task-21 W3 or 他 active task)
-  - 完了条件: 該当 task ファイルに Phase 計画セクション + 各 Phase 内 Step 構造 + 最終 Step 2 段が存在
-- **Step 3 (テスト合格)**: 全 smoke PASS + subagent confidence 実測
+  - 完了条件: 該当 task ファイルに Phase 計画セクション + 各 Phase 内 Step 構造 + 最終 Step 3 段 (テスト設計レビュー → テスト合格 → リファクタリング) が存在
+- **Step 3 (テスト設計レビュー)**: メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
+  - 完了条件: 全 reviewer approve / no objection (修正提案 0 件)
+- **Step 4 (テスト合格)**: 全 smoke PASS + subagent confidence 実測
   - 完了条件: 全 smoke exit 0 (regression 0) + Step 2 subagent confidence ≥ 0.92
-- **Step 4 (リファクタリング)**: smoke の重複 grep ロジック共通化
+- **Step 5 (リファクタリング)**: smoke の重複 grep ロジック共通化
   - 不要なら `skip: smoke case 数少なく duplication なし、refactor 対象なし` で OK
 
 ## 完了条件
 
-- [ ] `_TASK_TEMPLATE.md` に Phase/Step セクション + テスト合格 / リファクタリング 2 step 固定が追加済
-- [ ] `task-management.md` に §「タスク構造規範 (Phase→Step 強制)」+ §「既存 task 移行ガイド」+ §「UI 変更検出基準」が追加済
-- [ ] `workflow.md` 14-stage の Stage 8 / 10 / 13 から本規範への参照リンク追加済
-- [ ] `task-rule-guard-smoke.sh` で Phase/Step format 検証 case 追加 + 全 PASS
+- [ ] `_TASK_TEMPLATE.md` に Phase/Step セクション + テスト設計レビュー / テスト合格 / リファクタリング 3 step 固定が追加済
+- [ ] `task-management.md` に §「タスク構造規範 (Phase→Step 強制)」+ §「既存 task 移行ガイド」+ §「UI 変更検出基準」が追加済 (採用 5 条 4 は 3 段必須 + テスト設計レビュー 5+ 動的選定 + 5 回上限を明文化)
+- [ ] `workflow.md` 14-stage の Stage 8 / 10 / 13 から本規範への参照リンク追加済 (Stage 8 cell に「3 段必須」記載)
+- [ ] `task-rule-guard-smoke.sh` で Phase/Step format 検証 case 追加 + テスト設計レビュー 3 段化検証 case 追加 + 全 PASS
 - [ ] 本セッション内に最低 1 task で実適用、subagent median confidence ≥ 0.92 実測
 - [ ] regression 0 (既存 smoke 全 PASS)
 
 ## 工数見積
 
-合計 1.9-2.4 工数 (Phase 1: 0.4 / Phase 2: 0.3 / Phase 3: 0.3 / Phase 4: 0.5、加えて regression 検証 0.4)。
+合計 2.4-3.0 工数 (Phase 1: 0.5 / Phase 2: 0.4 / Phase 3: 0.4 / Phase 4: 0.7、加えて regression 検証 0.4)。
 
-W3 (Phase 3) は規範のみ採用で 0.3 工数固定 (機械強制 hook 案は別タスク化済)。
+W3 (Phase 3) は規範のみ採用で 0.4 工数固定 (機械強制 hook 案は別タスク化済)。
+
+> **2026-05-23 仕様変更による工数調整**: 採用 5 条 4 の 3 段化 (テスト設計レビュー追加) で各 Phase の最終 Step が 1 増、1 Phase あたり +0.1〜+0.2 工数加算。テスト設計レビューの反復 5 回上限 + 動的 reviewer 選定の cost を考慮し +0.5〜+0.6 増。
 
 ## 影響範囲
 
@@ -180,6 +192,7 @@ W3 (Phase 3) は規範のみ採用で 0.3 工数固定 (機械強制 hook 案は
 |---|---|---|
 | 2026-05-23 | 起案 | draft 起こし `docs/draft/phase-step-task-structure.md` |
 | 2026-05-23 | 承認 | user 承認、W3 判断点 A: 規範のみ採用、`list.md` に追加 |
+| 2026-05-23 | 仕様変更 | 採用 5 条 4 を 2 段 → 3 段に拡張 (テスト設計レビュー追加、5+ 動的選定 + 5 回上限、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`)。5 file (task-management.md / _TASK_TEMPLATE.md / draft / 本 task / workflow.md) に patch 反映 |
 | YYYY-MM-DD | 着手 | branch (未定、`feat/phase-step-task-structure` 候補) |
 | YYYY-MM-DD | 完了 | commit `<sha>`、+<N> tests |
 

@@ -38,7 +38,27 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
 
 3. **Step 必須項目: 内容 (1-2 文) + 完了条件 (定量 or 観察可能な事実)** — Step 見出し直下に「内容: <1-2 文で何をやるか>」と「完了条件: <定量値 or grep -q exit 0 等の機械検証可能な事実>」を記載する。「test PASS」のような曖昧表現ではなく、「`bash .claude/tests/foo-smoke.sh` exit 0」のように再現可能な検証コマンドを書く。
 
-4. **Phase 最終 Step = テスト合格 → リファクタリング (2 段必須、UI 含 = E2E 必須、refactor 不要なら `skip: reason` 明示)** — 各 Phase の最終 2 Step は「テスト合格 Step」+「リファクタリング Step」とする。UI 変更を含む Phase (検出基準は後述) は E2E test Step を必須化。リファクタリング不要と判断した場合は Step を省略せず、完了条件欄に `skip: <理由>` を明示記録する (例: `skip: 単純な文字列追加で refactor 余地なし`)。
+4. **Phase 最終 Step = テスト設計レビュー → テスト合格 → リファクタリング (3 段必須)**
+   - **テスト設計レビュー Step**:
+     - メインエージェントがテスト設計内容 (TDD 戦略 § + 各 Phase 内 Step 完了条件) を分析し、**適切な reviewer 5+ subagent を動的選定**して並列起動 (run_in_background: true 必須)
+     - **動的選定の判定ヒント** (固定 registry 不採用、case-by-case):
+       - **常時 base 候補**: tdd-guide / test-automator / qa-expert / pr-test-analyzer
+       - **UI 含む** → ui-designer / accessibility-tester / e2e-runner 加味
+       - **DB schema / migration** → database-reviewer / postgres-pro 加味
+       - **API 変更** → api-designer / api-documenter 加味
+       - **言語特定** → 言語別 reviewer (python-reviewer / typescript-reviewer / go-reviewer / rust-reviewer 等) 加味
+       - **security 影響** → security-reviewer / security-auditor 加味
+       - 上記から **5 件以上**を動的選定
+     - 各 reviewer の修正提案を集約 → テスト設計に反映 → 再度 5+ reviewer 並列起動
+     - **収束条件**: 全 reviewer が approve / no objection (修正提案 0 件)
+     - **反復上限**: 5 回 (超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1` セッション全体)
+   - **テスト合格 Step**:
+     - レビューで合意したテスト設計に従いテスト実行
+     - UI 含む Phase → **E2E 必須** (Playwright / 同等)
+     - UI 変更なし Phase → unit / integration test PASS で OK
+   - **リファクタリング Step**:
+     - 持続可能性 / 汎用性 / 非冗長化 の 3 観点 (`/module-review` 同期)
+     - 不要なら `skip: <reason>` 明示記録 (例: `skip: 単純な文字列追加で refactor 余地なし`)
 
 5. **小タスク許容: 1 Phase + 1 Step OK** — hot fix / typo 修正 / config 1 行追加 等の小タスクでは「1 Phase + 1 Step (内容 + 完了条件)」で OK。条 4 の「最終 2 Step」は本ケースでは「1 Step 内に test 検証と refactor 判定を併記」で代替可。
 
@@ -47,6 +67,7 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
 | 経路 | env | スコープ | 痕跡 |
 |---|---|---|---|
 | Phase→Step 強制無効化 | `ECC_PHASE_STEP_STRUCTURE_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` に append (hot fix 用) |
+| テスト設計レビュー (採用 5 条 4 第 1 段) 無効化 | `ECC_TEST_DESIGN_REVIEW_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` に append (反復 5 回上限超過時の user escalation 後の継続用) |
 
 honor system: bypass 時は理由を CLAUDE.md or `docs/tasks/<task-N>.md` の該当 entry に記録すること。機械強制 hook (`task-rule-guard.sh` 拡張で Phase 内容解析) は本規範採用フェーズでは未実装、効果観察後に別 task で検討する。
 

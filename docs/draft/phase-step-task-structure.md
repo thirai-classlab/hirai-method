@@ -76,17 +76,31 @@ flowchart LR
    - 完了条件: 定量指標 or 観察可能な事実 (例: 「smoke 6/6 PASS」「LOC < 100」「`grep -q 'X' file && exit 0`」)
    - 定性的な場合は「観察可能な事実」で代替可 (例: 「規範文書に §X が追加済」)
 
-4. **Phase 最終 Step = テスト合格 → リファクタリング (必須 2 段)**
-   - テスト合格 Step:
+4. **Phase 最終 Step = テスト設計レビュー → テスト合格 → リファクタリング (3 段必須)**
+   - **テスト設計レビュー Step**:
+     - メインエージェントがテスト設計内容 (TDD 戦略 § + 各 Phase 内 Step 完了条件) を分析し、**適切な reviewer 5+ subagent を動的選定**して並列起動 (run_in_background: true 必須)
+     - **動的選定の判定ヒント** (固定 registry 不採用、case-by-case):
+       - **常時 base 候補**: tdd-guide / test-automator / qa-expert / pr-test-analyzer
+       - **UI 含む** → ui-designer / accessibility-tester / e2e-runner 加味
+       - **DB schema / migration** → database-reviewer / postgres-pro 加味
+       - **API 変更** → api-designer / api-documenter 加味
+       - **言語特定** → 言語別 reviewer (python-reviewer / typescript-reviewer / go-reviewer / rust-reviewer 等) 加味
+       - **security 影響** → security-reviewer / security-auditor 加味
+       - 上記から **5 件以上**を動的選定
+     - 各 reviewer の修正提案を集約 → テスト設計に反映 → 再度 5+ reviewer 並列起動
+     - **収束条件**: 全 reviewer が approve / no objection (修正提案 0 件)
+     - **反復上限**: 5 回 (超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1` セッション全体)
+   - **テスト合格 Step**:
+     - レビューで合意したテスト設計に従いテスト実行
      - UI 変更含む Phase (UI ファイル変更検出: `git diff --name-only` で `*.tsx` / `*.vue` / `*.svelte` / `*.jsx` / `*.html` / `*.css` 等を match) → **E2E 必須** (Playwright / 同等)
      - UI 変更なし Phase → unit / integration test PASS で OK
-   - リファクタリング Step:
+   - **リファクタリング Step**:
      - 持続可能性 / 汎用性 / 非冗長化 の 3 観点 (`/module-review` 同期)
      - 不要なら `skip: <reason>` で明示記録 (例: `skip: 単一 commit message 修正、refactor 対象なし`)
 
 5. **小タスクの単一 Phase 許容**
    - 1 Step のみで完結する作業 (typo 修正 / 1 行 fix / コメント追加等) は単一 Phase + 単一 Step で OK
-   - ただし「テスト合格 (規範文書修正なら observability check で代替) → リファクタ skip 記録」は必須
+   - ただし「テスト設計レビュー (5+ reviewer 動的選定、収束まで反復、上限 5 回) → テスト合格 (規範文書修正なら observability check で代替) → リファクタ skip 記録」は必須
 
 ### Wave / Sub-task 分割
 
@@ -211,6 +225,7 @@ W3 の幅は「規範のみ (0.3)」or「機械強制 hook まで (0.8)」の判
 | 日付 | 承認者 | 結果 |
 |---|---|---|
 | 2026-05-23 | user | 承認 → `docs/tasks/task-29-phase-step-task-structure.md` 作成 (W3 判断点 A: 規範のみ採用、機械強制 hook は別タスク化) |
+| 2026-05-23 | user | 仕様変更承認 — 採用 5 条 4 を **2 段 → 3 段 (テスト設計レビュー → テスト合格 → リファクタリング)** に拡張。テスト設計レビューは **5+ subagent 動的選定 + 修正収束まで反復 + 5 回上限 + 超過時 user escalation**、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`。完了済 subagent 成果物 (Phase 1-4 既存実装) を生かして 5 file (task-management.md / _TASK_TEMPLATE.md / 本 draft / task-29 / workflow.md) に patch 反映 |
 
 ---
 
