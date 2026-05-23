@@ -37,6 +37,7 @@ fi
 project_id=""
 project_name=""
 project_root=""
+scope=""
 
 # 優先順: CLAUDE_PROJECT_DIR > git remote > git toplevel > global fallback
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
@@ -58,10 +59,27 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 # 保存先決定
+#
+# task-25 C4: project_id 未解決時の global pool 流入を防ぐため
+# `unknown-cwd-<sha256short(cwd)>` を fallback として使用。
+# git remote 不在 + 複数 dir で観察した場合の混線を解消し、
+# 各 dir が独立 project_id を持つ。
+if [ -z "$project_id" ]; then
+  cwd_for_hash="${project_root:-$PWD}"
+  cwd_hash=$(printf '%s' "$cwd_for_hash" | shasum -a 256 2>/dev/null | cut -c1-12)
+  if [ -n "$cwd_hash" ]; then
+    project_id="unknown-cwd-$cwd_hash"
+    project_name="unknown-cwd"
+    scope="unknown-cwd"
+  fi
+fi
+
 if [ -n "$project_id" ]; then
   obs_dir="$HOMUNCULUS_DIR/projects/$project_id"
-  scope="project"
+  # scope は project (上の C4 block 内で unknown-cwd が代入されていればそのまま)
+  scope="${scope:-project}"
 else
+  # shasum 未利用環境 (極稀) の保険
   obs_dir="$HOMUNCULUS_DIR"
   scope="global"
 fi

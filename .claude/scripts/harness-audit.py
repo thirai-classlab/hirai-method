@@ -360,6 +360,216 @@ def fmt_bypass_log(b: dict) -> str:
     return "\n".join(lines)
 
 
+def stale_drafts_summary(threshold_days: int = 90, root: Path | None = None) -> dict:
+    """`docs/draft/*.md` を走査し、未承認 + mtime > threshold_days の draft を返す (task-25 C2)。
+
+    判定基準:
+      - frontmatter (HTML comment 内 `key: value`) で `approval_required: true`
+      - `approved_at:` が空 (key 不在 or 値が空文字)
+      - file mtime が threshold_days 日より古い
+      - `_DRAFT_TEMPLATE.md` のような template / underscore prefix は除外
+
+    出力:
+      - threshold_days: 閾値 (default 90)
+      - total: 該当件数
+      - drafts: [{path, mtime_iso, days_old}] (days_old 降順)
+      - draft_dir_present: ディレクトリ存在判定
+    """
+    base = root if root is not None else ROOT
+    draft_dir = base / "docs" / "draft"
+    out: dict = {
+        "threshold_days": threshold_days,
+        "total": 0,
+        "drafts": [],
+        "draft_dir_present": draft_dir.is_dir(),
+    }
+    if not draft_dir.is_dir():
+        return out
+
+    now = datetime.now()
+    cutoff_sec = now.timestamp() - threshold_days * 86400
+    findings: list[dict] = []
+
+    for p in sorted(draft_dir.glob("*.md")):
+        name = p.name
+        # template / underscore prefix は対象外
+        if name.startswith("_"):
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if st.st_mtime > cutoff_sec:
+            continue
+        # frontmatter parse (HTML comment block の先頭 30 行のみ)
+        try:
+            head_lines = []
+            with p.open("r", encoding="utf-8", errors="replace") as f:
+                for i, line in enumerate(f):
+                    if i >= 30:
+                        break
+                    head_lines.append(line)
+        except OSError:
+            continue
+        head = "".join(head_lines)
+        # `approval_required: true` で承認必須を判定 (default true、key 不在も承認必須として扱う)
+        # `\s` は改行を含むため `[ \t]` に限定 (改行跨ぎマッチを防止)
+        m_req = re.search(r"^[ \t]*approval_required[ \t]*:[ \t]*(\S+)", head, re.MULTILINE)
+        approval_required = True
+        if m_req:
+            approval_required = m_req.group(1).lower() == "true"
+        if not approval_required:
+            continue
+        # `approved_at: <value>` を抽出 — 値が空なら未承認
+        m_app = re.search(r"^[ \t]*approved_at[ \t]*:[ \t]*(.*)$", head, re.MULTILINE)
+        approved_value = ""
+        if m_app:
+            approved_value = m_app.group(1).strip()
+        if approved_value:
+            continue
+
+        days_old = int((now.timestamp() - st.st_mtime) // 86400)
+        try:
+            rel = str(p.relative_to(base))
+        except ValueError:
+            rel = str(p)
+        findings.append({
+            "path": rel,
+            "mtime_iso": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d"),
+            "days_old": days_old,
+        })
+
+    findings.sort(key=lambda d: d["days_old"], reverse=True)
+    out["total"] = len(findings)
+    out["drafts"] = findings
+    return out
+
+
+def fmt_stale_drafts(sd: dict) -> str:
+    """Stale draft section markdown (task-25 C2)."""
+    lines: list[str] = []
+    lines.append(f"## Stale Drafts (≥{sd['threshold_days']} days, unapproved)")
+    if not sd["draft_dir_present"]:
+        lines.append("- (docs/draft/ 不在)")
+        return "\n".join(lines)
+    if sd["total"] == 0:
+        lines.append(f"- 0 drafts (no unapproved drafts older than {sd['threshold_days']} days)")
+        return "\n".join(lines)
+    lines.append(f"{sd['total']} drafts found:")
+    for d in sd["drafts"]:
+        lines.append(f"  - {d['path']} (起案: {d['mtime_iso']}, {d['days_old']}日経過)")
+    return "\n".join(lines)
+
+
+def settings_drift_check(root: Path | None = None) -> dict:
+    """`.claude/settings.json` と `settings.local.json` を比較 (task-25 C3)。
+
+    判定:
+      - settings.local.json 不在 → drift なし (silent skip)
+      - 両 file の top-level key を再帰比較
+        - local のみに存在 → "local_only"
+        - main のみに存在 → "main_only"
+        - 値が違う → "modified" (path + before/after の文字列化)
+
+    出力:
+      - local_present: bool
+      - drift_count: int (発見 diff 件数)
+      - local_only: list[{path, value}]
+      - main_only: list[{path, value}]
+      - modified: list[{path, main, local}]
+    """
+    base = root if root is not None else ROOT
+    main_path = base / ".claude" / "settings.json"
+    local_path = base / ".claude" / "settings.local.json"
+    out: dict = {
+        "main_present": main_path.is_file(),
+        "local_present": local_path.is_file(),
+        "drift_count": 0,
+        "local_only": [],
+        "main_only": [],
+        "modified": [],
+    }
+    if not local_path.is_file():
+        return out
+    if not main_path.is_file():
+        # local だけある状態は drift 報告対象だが main を読めないので skip
+        return out
+    try:
+        main_data = json.loads(main_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return out
+    try:
+        local_data = json.loads(local_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return out
+
+    local_only: list[dict] = []
+    main_only: list[dict] = []
+    modified: list[dict] = []
+
+    def _walk(prefix: str, m: object, l: object) -> None:
+        # 両側が dict なら key 単位再帰
+        if isinstance(m, dict) and isinstance(l, dict):
+            for k in sorted(set(m.keys()) | set(l.keys())):
+                child_path = f"{prefix}.{k}" if prefix else k
+                if k in m and k not in l:
+                    main_only.append({"path": child_path, "value": _short(m[k])})
+                elif k in l and k not in m:
+                    local_only.append({"path": child_path, "value": _short(l[k])})
+                else:
+                    _walk(child_path, m[k], l[k])
+            return
+        # それ以外 (list / scalar) は eq 比較
+        if m != l:
+            modified.append({
+                "path": prefix or "(root)",
+                "main": _short(m),
+                "local": _short(l),
+            })
+
+    _walk("", main_data, local_data)
+
+    out["local_only"] = local_only
+    out["main_only"] = main_only
+    out["modified"] = modified
+    out["drift_count"] = len(local_only) + len(main_only) + len(modified)
+    return out
+
+
+def _short(v: object, limit: int = 80) -> str:
+    """値を 1 行 string に圧縮 (drift 出力用)。"""
+    try:
+        s = json.dumps(v, ensure_ascii=False)
+    except (TypeError, ValueError):
+        s = str(v)
+    if len(s) > limit:
+        s = s[: limit - 3] + "..."
+    return s
+
+
+def fmt_settings_drift(sd: dict) -> str:
+    """Settings drift section markdown (task-25 C3)."""
+    lines: list[str] = []
+    lines.append("## Settings Drift")
+    if not sd["local_present"]:
+        lines.append("- settings.local.json 不在 → drift 検証 skip")
+        return "\n".join(lines)
+    if not sd["main_present"]:
+        lines.append("- settings.json 不在 → drift 検証 skip")
+        return "\n".join(lines)
+    if sd["drift_count"] == 0:
+        lines.append("- settings.json vs settings.local.json: identical (0 diff)")
+        return "\n".join(lines)
+    lines.append("settings.json vs settings.local.json:")
+    for e in sd["local_only"]:
+        lines.append(f"  + {e['path']}: {e['value']}  (local only)")
+    for e in sd["main_only"]:
+        lines.append(f"  - {e['path']}: <missing in local but present in main>")
+    for e in sd["modified"]:
+        lines.append(f"  ~ {e['path']}: {e['main']} -> {e['local']}")
+    return "\n".join(lines)
+
+
 def confidence_gate_breakdown() -> dict:
     """Confidence Gate (F3) bypass.log を集計。
 
@@ -464,6 +674,16 @@ def fmt_human(report: dict) -> str:
     # Workflow bypass log (W4)
     if "bypass_log" in report:
         lines.append(fmt_bypass_log(report["bypass_log"]))
+        lines.append("")
+
+    # Stale drafts (task-25 C2)
+    if "stale_drafts" in report:
+        lines.append(fmt_stale_drafts(report["stale_drafts"]))
+        lines.append("")
+
+    # Settings drift (task-25 C3)
+    if "settings_drift" in report:
+        lines.append(fmt_settings_drift(report["settings_drift"]))
         lines.append("")
 
     # Health badge
@@ -1018,6 +1238,23 @@ def main() -> int:
         default=None,
         help="--compare の source root (default: cwd)",
     )
+    # task-25 C2 / C3 toggles
+    ap.add_argument(
+        "--no-stale-drafts",
+        action="store_true",
+        help="stale draft (>=90 days unapproved) section を skip (task-25 C2)",
+    )
+    ap.add_argument(
+        "--stale-drafts-threshold",
+        type=int,
+        default=90,
+        help="stale draft 判定の閾値日数 (default: 90)",
+    )
+    ap.add_argument(
+        "--no-settings-drift",
+        action="store_true",
+        help="settings.local.json drift section を skip (task-25 C3)",
+    )
     args = ap.parse_args()
 
     # --compare branch (task-25 B3)
@@ -1098,6 +1335,11 @@ def main() -> int:
         "swe_bench": swe_bench_breakdown(),
         "router": router_breakdown(),
     }
+    # task-25 C2 / C3: opt-out flags
+    if not args.no_stale_drafts:
+        report["stale_drafts"] = stale_drafts_summary(threshold_days=args.stale_drafts_threshold)
+    if not args.no_settings_drift:
+        report["settings_drift"] = settings_drift_check()
 
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
