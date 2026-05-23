@@ -12,17 +12,17 @@
 
 このコマンドが呼ばれたら、メインエージェントは以下の手順を順次実行してください。
 
-### Phase 1: Onboarding check (必須)
-
-1. `mcp__serena__check_onboarding_performed`
-   - 未済なら error message: 「Serena MCP onboarding が未完了です。`/onboarding` 等で完了させてから再実行してください。」+ 終了
-
-### Phase 2: Project activation
+### Phase 1: Project activation & onboarding check (必須、統合)
 
 1. `mcp__serena__activate_project` (引数 = current project name)
-   - project 未登録なら error: 「現プロジェクトが Serena に未登録です。`/save-state` でまず保存してください。」+ 終了
+   - 戻り値が success: 続行 (onboarding 済 + project 登録済を意味する)
+   - 戻り値が error: 内容に応じて分岐:
+     - `onboarding` / `not performed` を含む → error message: 「Serena MCP onboarding が未完了です。`/onboarding` 等で完了させてから再実行してください。」+ 終了
+     - その他 (project 不在等) → error message: 「現プロジェクトが Serena に未登録です。`/save-state` でまず保存してください。」+ 終了
 
-### Phase 3: Memory enumeration
+> **設計補足**: 旧版では `mcp__serena__check_onboarding_performed` を Phase 1 で呼んでいたが、現 Serena MCP には該当 tool が存在しない (2026-05-23 確認、deferred tools list にも無し)。代わりに `activate_project` の error response で onboarding 未済 / project 未登録を一括検知する。
+
+### Phase 2: Memory enumeration
 
 1. `mcp__serena__list_memories` で全 key 取得
 2. 期待 key カテゴリ (PM Agent spec 準拠):
@@ -34,14 +34,14 @@
    - `project/*` (project 全体理解)
 3. `session/context` が不在なら error: 「前 session の memory が見つかりません。新規セッションとして開始してください。」+ 終了
 
-### Phase 4: Sequential restore
+### Phase 3: Sequential restore
 
 1. `mcp__serena__read_memory("session/context")` で完全 snapshot 復元
 2. `mcp__serena__read_memory("session/last")` で last summary
 3. `mcp__serena__read_memory("session/checkpoint")` で進捗 (存在時のみ)
 4. その他存在 key (plan/* / execution/* / evaluation/* / learning/*) を逐次 `read_memory` で復元
 
-### Phase 5: 復元レポート (user 提示)
+### Phase 4: 復元レポート (user 提示)
 
 stdout に以下 4 項目を構造化して提示:
 
@@ -61,7 +61,7 @@ stdout に以下 4 項目を構造化して提示:
    <存在すれば箇条書き、なければ "なし">
 ```
 
-### Phase 6: TaskList 再同期 (option)
+### Phase 5: TaskList 再同期 (option)
 
 復元した `session/context` に未完 task (status = `pending` or `in_progress`) が記録されていれば:
 1. TaskCreate で復元 (内部 task list と同期)
@@ -73,18 +73,18 @@ stdout に以下 4 項目を構造化して提示:
 
 引数なし。常に最新の `session/context` を復元する。
 
-特定 memory key のみ復元したい場合: 本コマンドの Phase 4 を modify した後継 command を別途検討 (本 task scope 外)。
+特定 memory key のみ復元したい場合: 本コマンドの Phase 3 を modify した後継 command を別途検討 (本 task scope 外)。
 
 ## エラーハンドリング
 
 | 状況 | 動作 |
 |---|---|
 | Serena MCP 未注入 | Phase 1 で停止 + 案内 + exit |
-| onboarding 未済 | 同上 |
-| project 未登録 | Phase 2 で停止 + 案内 + exit |
-| `session/context` key 不在 | Phase 3 で停止 + 「新規 session として開始」案内 |
+| onboarding 未済 | Phase 1 で `activate_project` error として停止 + 案内 + exit |
+| project 未登録 | Phase 1 で `activate_project` error として停止 + 案内 + exit |
+| `session/context` key 不在 | Phase 2 で停止 + 「新規 session として開始」案内 |
 | 個別 key の `read_memory` fail | warning 出力 + 残 key 復元続行 |
-| Phase 6 TaskList 再同期 fail | warning + 復元レポートは出力 (Phase 5 は成功扱い) |
+| Phase 5 TaskList 再同期 fail | warning + 復元レポートは出力 (Phase 4 は成功扱い) |
 
 ## 関連
 

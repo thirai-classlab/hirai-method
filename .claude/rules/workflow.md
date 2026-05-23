@@ -293,7 +293,9 @@ honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry �
 
 ### Serena 必須化
 
-各 command の Phase 1 で `mcp__serena__check_onboarding_performed` を必須実行。未済時は graceful error で `/onboarding` 案内 + 終了。
+各 command の Phase 1 で `mcp__serena__activate_project` を必須実行し、戻り値 error に `onboarding` / `not performed` を含む場合は onboarding 未済と判定して graceful error で `/onboarding` 案内 + 終了。
+
+> **設計補足**: 旧版では `mcp__serena__check_onboarding_performed` を別 step で呼んでいたが、現 Serena MCP には該当 tool が存在しない (2026-05-23 確認、deferred tools list にも無し)。`activate_project` の error response で onboarding 未済を検知する形に統合した (`resume-state.md` / `save-state.md` / `pm-start.md` の Phase 1 同期修正済)。
 
 `.mcp.json` の `serena` entry は採用者側で個別登録 (Claude Code 標準には required marker 機構なし、command-level enforcement で代替)。
 

@@ -16,16 +16,19 @@ PM Agent (Project Manager) として user request を分析、適切な subagent
 
 新規 session 開始 / `/pm-start` 初回呼出時、`/resume-state` 相当の auto-restore を内包:
 
-1. `mcp__serena__check_onboarding_performed`
-   - 未済なら error: 「Serena MCP onboarding が未完了です。`/onboarding` で完了させてください。」+ 終了
-2. `mcp__serena__activate_project` (引数 = current project name)
-3. `mcp__serena__list_memories` で全 key 取得
-4. `session/context` が存在すれば:
+1. `mcp__serena__activate_project` (引数 = current project name)
+   - 戻り値が success: 続行 (onboarding 済 + project 登録済を意味する)
+   - 戻り値が error で `onboarding` / `not performed` を含む: 「Serena MCP onboarding が未完了です。`/onboarding` で完了させてください。」+ 終了
+   - その他 error: warning 出力 + Phase 2 へ続行 (新規 session 扱い)
+2. `mcp__serena__list_memories` で全 key 取得
+
+> **設計補足**: 旧版では `mcp__serena__check_onboarding_performed` を呼んでいたが、現 Serena MCP には該当 tool が存在しない (2026-05-23 確認、deferred tools list にも無し)。代わりに `activate_project` の error response で onboarding 未済を検知する。
+3. `session/context` が存在すれば:
    - `read_memory("session/context")` で完全 snapshot 復元
    - `read_memory("session/last")` で last summary
-   - 復元レポートを user に提示 (`/resume-state` Phase 5 と同 format):
+   - 復元レポートを user に提示 (`/resume-state` Phase 4 と同 format):
      - 📋 前回 (Last session) / 📊 進捗 / 🎯 次回 / ⚠️ 課題
-5. `session/context` 不在なら新規 session として開始 (Phase 2 へ)
+4. `session/context` 不在なら新規 session として開始 (Phase 2 へ)
 
 ### Phase 2: User request analysis
 

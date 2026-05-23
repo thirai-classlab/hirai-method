@@ -65,11 +65,11 @@ case_5() {
   [ -z "$found" ]
 }
 
-# Case 6: 3 command 全てに check_onboarding_performed Phase 1 必須実行
+# Case 6: 3 command 全てに activate_project (onboarding 検知統合) Phase 1 必須実行
 case_6() {
-  grep -q 'check_onboarding_performed' "$PROJECT_ROOT/.claude/commands/save-state.md" && \
-  grep -q 'check_onboarding_performed' "$PROJECT_ROOT/.claude/commands/resume-state.md" && \
-  grep -q 'check_onboarding_performed' "$PROJECT_ROOT/.claude/commands/pm-start.md"
+  grep -q 'activate_project' "$PROJECT_ROOT/.claude/commands/save-state.md" && \
+  grep -q 'activate_project' "$PROJECT_ROOT/.claude/commands/resume-state.md" && \
+  grep -q 'activate_project' "$PROJECT_ROOT/.claude/commands/pm-start.md"
 }
 
 echo "===== task #7 custom-pm-commands smoke test ====="
@@ -78,7 +78,7 @@ run_case 2 "resume-state.md mentions read_memory + 4 report items" case_2
 run_case 3 "3 commands mention Serena MCP graceful error" case_3
 run_case 4 "mode-session-start.sh checks memory file + /resume-state" case_4
 run_case 5 "grep /sc:(save|load|pm) zero (excl. allowed files)" case_5
-run_case 6 "3 commands mandate check_onboarding_performed" case_6
+run_case 6 "3 commands mandate activate_project (with onboarding check)" case_6
 
 echo ""
 echo "===== Result ====="

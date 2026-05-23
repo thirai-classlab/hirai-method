@@ -11,14 +11,15 @@
 
 このコマンドが呼ばれたら、メインエージェントは以下の手順を順次実行してください。
 
-### Phase 1: Onboarding & project activation (必須)
+### Phase 1: Project activation & onboarding check (必須、統合)
 
-1. `mcp__serena__check_onboarding_performed` を実行
-   - 戻り値が "未済" / "Error" を含む場合:
-     - stdout に error message: 「Serena MCP onboarding が未完了です。`/onboarding` 等で完了させてから再実行してください。」
-     - 以降の Phase を skip して終了
-2. `mcp__serena__activate_project` を実行 (引数 = current project name 推定 or git remote の repo name)
-   - 既に activated なら no-op、未 active なら activate
+1. `mcp__serena__activate_project` を実行 (引数 = current project name 推定 or git remote の repo name)
+   - 戻り値が success: 続行 (onboarding 済 + project 登録済を意味する。既に activated なら no-op)
+   - 戻り値が error: 内容に応じて分岐:
+     - `onboarding` / `not performed` を含む → stdout に error message: 「Serena MCP onboarding が未完了です。`/onboarding` 等で完了させてから再実行してください。」+ 以降の Phase を skip して終了
+     - その他 (project 不在等) → warning 出力 + 続行 (memory 書き込みは試行)
+
+> **設計補足**: 旧版では `mcp__serena__check_onboarding_performed` を別 step で呼んでいたが、現 Serena MCP には該当 tool が存在しない (2026-05-23 確認、deferred tools list にも無し)。代わりに `activate_project` の error response で onboarding 未済を検知する。
 
 ### Phase 2: Session context snapshot
 
@@ -74,7 +75,7 @@ Resume with `/resume-state` in next session.
 | 状況 | 動作 |
 |---|---|
 | Serena MCP 未注入 (`mcp__serena__*` tool 不在) | Phase 1 で停止 + 案内 message + exit |
-| `check_onboarding_performed` が未済を返す | 同上 |
+| `activate_project` の error response が onboarding 未済を示す | Phase 1 で停止 + `/onboarding` 案内 + exit |
 | `activate_project` が fail (project 不在 / hash 不一致) | warning 出力 + 続行 (memory 書き込みは試行) |
 | `write_memory` の各 key が fail | 該当 key を skip + 残り key を試行、最後に集計報告 |
 
