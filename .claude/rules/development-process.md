@@ -226,6 +226,42 @@ honor system のため、subagent dispatch prompt への staging 明示忘れリ
 - 案 B: `.claude/templates/` に staging 強制プロンプト template 新設 + `/new-task` 系 command が自動参照
 - 案 C: 専用 hook `subagent-staging-reminder.sh` で PreToolUse(Agent) に staging 強制注入
 
+## cross-repo write 例外 (agent 経路 deny / user manual 専用)
+
+本 repo (`/Users/t.hirai/work/hirai-method`) から外部 repo (例: `/Users/t.hirai/タスクマネジメント/taskManageSystem` / `/Users/t.hirai/recall_poc` / `/Users/t.hirai/work/classlab-weekly-news`) への **cross-repo write** (Write / cp / mv / heredoc redirect) を実行する task は、agent context (main / subagent / `isolation: "worktree"` 含む全経路) で **完全 denied**。`bash install.sh --update <target>` 系 cross-repo sync は **user manual (terminal) 実行のみ可能**。
+
+### Why (二重制約の構造)
+
+- **system-level**: Claude Code **sandbox** が cross-repo Write / cp / mv / heredoc redirect を一律 deny。`dangerouslyDisableSandbox: true` 付き Bash も block (2026-05-23 task-24 W1 subagent 調査 confidence 0.85 で実証)
+- **harness-level**: 本 repo の `delegation-guard.sh` (`.claude/hooks/delegation-guard.sh`) が main からの `.claude/hooks/*.sh` 等 code 配下 Write を block するため、外部 repo の同種 path への Write も同様に block 経路にかかる (二重制約)
+- subagent foreground / background / `isolation: "worktree"` いずれも同 permission policy 下、回避経路なし
+- `ECC_*_OVERRIDE` / `HC_*_ENABLED=false` 等 bypass env は **system-level 制約には効かない** (harness-level のみ無効化可能)
+
+### How to apply
+
+- 3 リポ反映 (task-21 W3.3 / task-24 W1 / task-26 W6 / classlab-weekly-news 同期等) 系 task は `bash install.sh --update <target>` を **user に手動依頼** することを default 経路とする
+- task draft / task file の Phase 計画段で「Phase N (cross-repo): user manual `bash install.sh --update <target>` 案内」と最初から明記し、agent 実行を試みない (`_TASK_TEMPLATE.md` の Phase 計画 section にも同 hint あり)
+- 副産物 entry 起票時も「(c) user manual 経路で対応」を推奨処理に明記
+- 「sandbox deny で進められない」を loop 停止理由にしてはならない (本セクションを毎セッション参照、§5「Bash deny / whitelist 不在時の subagent 委譲反射」と類似の構造)
+
+### 例外
+
+- **単一 repo 内 (例: hirai-method 内の `.claude/hooks/` 編集) は staging 戦略で subagent から可能**: `/tmp/foo.sh` → `mv .claude/hooks/foo.sh` (詳細は §「サブエージェント `.claude/` 編集の staging 戦略」参照)
+- cross-repo Write のみが完全 deny
+
+### 起源
+
+- 2026-05-23 task-24 W1 subagent a174bcef696b54860 confidence 0.85 で実証
+- task-26 W6 / task-21 W3.3 で同じ blocker を再確認、user manual `bash install.sh --update <target>` で 3 リポ反映完了
+- Serena memory: `feedback_cross_repo_write_sandbox_block.md` (2026-05-23、本 rule の事実根拠)
+- 副産物 entry: `docs/tasks/next-actions.md` entry #17 (2026-05-23、🟡)
+- 規範化 task: #31 (本セクション追加)
+- audit: `.claude/.workflow-state/bypass.log` (cross-repo agent 試行 block 痕跡)、`harness-audit.py` `bypass_log_summary` (再発検知)
+
+### 将来追随窓口
+
+system-level sandbox 仕様変化 (例: Claude Code が cross-repo Write を opt-in で許可する future feature) への追随は `docs/tasks/parking-lot.md` 🔍「cross-repo sandbox 緩和の future Claude Code 仕様変化追随」entry で四半期 review、Claude Code release notes 監視を user manual で実施。
+
 ## サブエージェント完了サマリ（Confidence Gate / F3 必須）
 
 サブエージェントが返す **最後の assistant text** には **必ず `confidence: 0.X`**（0.0〜1.0）を含める。

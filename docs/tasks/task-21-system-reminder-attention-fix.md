@@ -190,6 +190,8 @@ hirai-method / recall_poc / taskManageSystem では UserPromptSubmit に毎タ�
 - 4 基準を統合判定
 - 結果に応じて 3 リポ反映 (採用なら user manual `bash install.sh --update`)
 
+> **cross-repo 注意**: 本 Phase の Step 3 「3 リポ反映 (採用なら user manual)」は cross-repo write (本 repo → recall_poc / taskManageSystem / classlab-weekly-news) を含む。Claude Code sandbox + `delegation-guard.sh` 二重制約で agent 経路完全 denied、`bash install.sh --update <target>` は **user manual (terminal) 実行のみ可能**。詳細は `.claude/rules/development-process.md` §「cross-repo write 例外」参照 (task-31 で規範化、commit `f90d194`)。
+
 **Step**:
 
 - **Step 1**: 4 基準の集計 (Phase A / B + 既測 audit + task-28 W1 SubagentStop event)
