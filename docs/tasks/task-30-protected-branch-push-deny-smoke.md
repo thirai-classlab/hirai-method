@@ -13,8 +13,9 @@ total_steps: 6
 
 # Task #30: protected branch push deny の単体 smoke 追加
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (Phase 1 着手)
 > 起案: 2026-05-23
+> 着手: 2026-05-23 (branch: `test/protected-branch-push-deny-smoke`)
 > 関連: #17 (bash-whitelist-git), #18 (protected-branch-push), #19 (smoke-coverage)
 > 設計起源: [`docs/draft/protected-branch-push-deny-smoke.md`](../draft/protected-branch-push-deny-smoke.md)
 
@@ -205,6 +206,7 @@ flowchart LR
 |---|---|---|
 | 2026-05-23 | 起案 | 設計 draft `docs/draft/protected-branch-push-deny-smoke.md` 起こし |
 | 2026-05-23 | 承認 | user 承認、`list.md` に追加 |
+| 2026-05-23 | 着手 | branch `test/protected-branch-push-deny-smoke`、Phase 1 着手 |
 
 ## 派生 task / 次アクション候補
 
