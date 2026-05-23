@@ -22,6 +22,9 @@ set -u
 # config 読み込み (HC_* 変数 export)
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
+# bypass logger (log_bypass 関数を提供)
+# shellcheck source=lib/bypass-logger.sh
+source "$(dirname "$0")/lib/bypass-logger.sh"
 
 input=$(cat)
 tool="${1:-}"
@@ -89,6 +92,52 @@ case "$tool" in
     # protected_paths 判定 (動的 case eval)
     if [ -n "$f" ]; then
       eval "case \"\$f\" in $HC_PROTECTED_GLOB_FILE) echo \"\$block_path_msg\"; exit 0 ;; esac"
+
+      # === task-26 W2: コード実装の保護パス (.claude/hooks/ .claude/skills/ .claude/scripts/) ===
+      # メインからの code 実装直接編集を block し、Agent tool で subagent 委譲を強制する。
+      # 判定: file_path が HC_PROTECTED_PATHS_CODE 配下 (部分一致) かつ
+      #       拡張子が HC_CODE_FILE_EXTENSIONS のいずれかに該当
+      # bypass: ECC_ALLOW_MAIN_CODE_EDIT=1 (1 セッション、bypass.log 記録)
+      # 設計起源: docs/draft/delegation-code-enforcement.md W1+W2
+      _code_block="false"
+      _matched_code_path=""
+      _matched_ext=""
+      for _cp in $HC_PROTECTED_PATHS_CODE; do
+        [ -z "$_cp" ] && continue
+        case "$f" in
+          */${_cp}/*|"${_cp}"/*)
+            _ext="${f##*.}"
+            # 拡張子が file 名と等しい (= ドットなし) なら skip
+            if [ "$_ext" = "$f" ]; then
+              continue
+            fi
+            for _ve in $HC_CODE_FILE_EXTENSIONS; do
+              [ -z "$_ve" ] && continue
+              if [ "$_ext" = "$_ve" ]; then
+                _code_block="true"
+                _matched_code_path="$_cp"
+                _matched_ext="$_ext"
+                break 2
+              fi
+            done
+            ;;
+        esac
+      done
+
+      if [ "$_code_block" = "true" ]; then
+        if [ "${ECC_ALLOW_MAIN_CODE_EDIT:-}" = "1" ]; then
+          # bypass 経路: bypass.log に記録して通過
+          log_bypass "delegation-guard-code" "ECC_ALLOW_MAIN_CODE_EDIT" "main edit on $f ($_matched_code_path/*.$_matched_ext)"
+          # context 注入だけ行い通過
+          jq -nc --arg p "$f" \
+            '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:("[code 保護 bypass] " + $p + " のメイン直接編集を ECC_ALLOW_MAIN_CODE_EDIT=1 で許可。bypass.log に記録済。")}}'
+          exit 0
+        fi
+        _code_reason=$(printf '[サブエージェント委譲ルール / code 保護] .claude/hooks/ .claude/skills/ .claude/scripts/ 配下の code 実装はメイン直接編集禁止。Agent tool で subagent に委譲してください (staging 戦略: /tmp に Write → mv で install → chmod +x)。\n\n対象 file: %s\n一致 path: %s\n一致拡張子: %s\n\n【次のアクション】\n1. Agent tool で subagent を起動 (run_in_background: true 必須)\n2. その subagent に本作業を委譲 (staging 戦略を prompt に明記)\n3. TaskCreate でタスク登録\n\n緊急 bypass (1 セッション): export ECC_ALLOW_MAIN_CODE_EDIT=1 (.claude/.workflow-state/bypass.log に記録される)\n\n設計起源: docs/draft/delegation-code-enforcement.md' "$f" "$_matched_code_path" "$_matched_ext")
+        jq -n --arg r "$_code_reason" '{decision:"block", reason:$r}'
+        exit 0
+      fi
+
       case "$f" in
         $task_glob)
           root="${f%/${HC_TASK_DIR}/*}"
