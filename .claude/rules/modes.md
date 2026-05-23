@@ -48,7 +48,7 @@ HIRAI メソッドは 2 つの動作モードを持つ。
    - **「subagent 完了通知後のメイン報告 → 即次タスク自動起動」を default 動作とする**
    - 違反検出時の hook 強制 (W2 で実装予定): `.claude/hooks/loop-auto-progress-reminder.sh` が UserPromptSubmit で「待ち中停止」キーワードを検出し `<system-reminder>` 強制注入
 
-8. **自律実行禁止リスト**（必須）: Loop モードでも以下の操作は **user の明示承認が必要**。準備（draft / 設計 / 実装 / ローカル `git commit`）のみ自律可。設計起源: `docs/draft/loop-auto-progress-enforcement.md`。
+8. **自律実行禁止リスト**（必須）: Loop モードでも以下の操作は **user の明示承認が必要**。準備（draft / 設計 / ローカル `git commit`）のみ自律可。設計起源: `docs/draft/loop-auto-progress-enforcement.md`。
 
    | カテゴリ | 対象コマンド / 操作 | 例外（準備として OK） |
    |---|---|---|
@@ -64,16 +64,56 @@ HIRAI メソッドは 2 つの動作モードを持つ。
    | subagent への委譲拡張 | 上記操作を subagent prompt で許可すること | 上記禁止項目を除外した prompt |
    | 第三者リポ | submodule update / fork 外への push / `gh repo` 操作 | submodule branch 確認 |
 
-   違反検出時の hook 強制 (W3 で実装予定): `.claude/hooks/autonomous-action-guard.sh` が PreToolUse(Bash) で対象コマンドを `exit 2` BLOCK。bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` (user の明示承認をセッション env で表明)、`.claude/.workflow-state/bypass.log` に記録。
+   違反検出時の hook 強制: `.claude/hooks/autonomous-action-guard.sh` が PreToolUse(Bash) で対象コマンドを `exit 2` BLOCK。bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` (user の明示承認をセッション env で表明)、`.claude/.workflow-state/bypass.log` に記録。
 
    - **mode-switch bypass の log** (2026-05-13、task #9): Normal モードで禁止パターン match した cmd 実行は `.claude/.workflow-state/bypass.log` に `mode-normal-restricted-cmd` として記録される。env `HC_AUTONOMOUS_LOG_NORMAL_RESTRICTED=false` で OFF 可。「Loop モード規律を一時的に外して破壊的操作を実行した」事実が audit log に残るため `/harness-audit` でトレース可能。
 
-   honor system (hook 実装前): メインは自律実行せず、user に「実行を承認しますか?」と提示してから実行する。
+   honor system (hook 未実装パスの場合): メインは自律実行せず、user に「実行を承認しますか?」と提示してから実行する。
 
 **停止条件は以下 3 つのみ**:
 - ユーザの明示的な停止指示（"stop" / "ストップ" / "止めて" 等）
 - タスクの完了
 - 致命的エラー（権限拒否 / 復旧不能 / 重大なデータ破壊リスク）
+
+## Loop モード自律規律の 5 層強制機構
+
+タスク実装中・Loop モード稼働中の「subagent 完了待ち停止」「破壊的操作の自律実行」を **5 層強制** で構造防止する。設計の経緯と承認履歴は採用プロジェクト側の `docs/draft/` を参照 (本ルールは `.claude/` 単独で portable)。
+
+| 層 | 機構 | 発火 | 動作 |
+|---|---|---|---|
+| 1 | `.claude/rules/modes.md` 遵守事項 7+8 | (規範) | subagent 待ち中独立作業義務 + 自律禁止 11 カテゴリ明文化 |
+| 2 | `.claude/hooks/loop-auto-progress-reminder.sh` (UserPromptSubmit) | 毎ターン | 待ち中報告キーワード検出 + pending Agent tool_use 数集計 → `<system-reminder>` 強制注入 |
+| 3 | `.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) | Bash 実行前 | 11 カテゴリ regex 照合 → Loop なら `{"decision":"block"}` / Normal なら context 注入 |
+| 4 | `.claude/settings.json` 配線 | (機構接続) | UserPromptSubmit 末尾 + PreToolUse Bash 先頭に配置 |
+| 5 | `.claude/tests/loop-auto-progress-smoke.sh` | 検証 | 9 ケースで両 hook の動作検証 |
+
+### 禁止 11 カテゴリ (default、`HC_AUTONOMOUS_ACTION_PATTERNS` で上書き可)
+
+- remote 反映: `git push` (any branch)
+- PR / リリース: `gh pr (create|merge)` / `gh release` / `git tag <name> origin|upstream`
+- 第三者リポ: `gh repo (delete|transfer|archive)`
+- 本番 deploy: `vercel --prod` / `supabase deploy` / `supabase db (push|reset)`
+- infra apply: `kubectl (apply|delete)` / `terraform (apply|destroy)`
+- AWS 破壊操作: `aws *-delete-*|terminate-*|destroy-*`
+
+### bypass
+
+| 経路 | env | スコープ | 痕跡 |
+|---|---|---|---|
+| autonomous-action-guard 無効化 | `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` | 1 セッション | bypass.log (autonomous-action-guard 行) |
+| config レベル OFF | `HC_AUTONOMOUS_ACTION_ENABLED=false` | 1 セッション | bypass.log |
+| reminder 無効化 | `HC_LOOP_AUTO_PROGRESS_ENABLED=false` | 1 セッション | (記録なし、reminder のみ) |
+| パターン上書き | `HC_AUTONOMOUS_ACTION_PATTERNS=...` | env-set 中 | 上書き内容は env のみ |
+
+honor system: bypass 時は理由を `docs/tasks/<task-N>.md` または `ECC_BYPASS_REASON` env に記録すること。
+
+### 関連 artifact
+
+- [`.claude/rules/modes.md`](./modes.md) 遵守事項 7 (subagent 待ち独立作業) + 8 (自律禁止リスト)
+- [`.claude/hooks/loop-auto-progress-reminder.sh`](../hooks/loop-auto-progress-reminder.sh)
+- [`.claude/hooks/autonomous-action-guard.sh`](../hooks/autonomous-action-guard.sh)
+- [`.claude/tests/loop-auto-progress-smoke.sh`](../tests/loop-auto-progress-smoke.sh)
+- 設計の起源と承認履歴は採用プロジェクト側 `docs/draft/` / `docs/tasks/` を参照
 
 ## 設定
 

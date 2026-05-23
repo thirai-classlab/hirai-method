@@ -44,7 +44,7 @@ paths:
 読み取り（Read/Grep/Glob）・編集（Edit/Write）の両方が Hook でブロックされる。
 
 **メインエージェントの役割（これだけ）:**
-- **タスク管理（メイン専任・必須）**: docs/tasks/ の更新、進捗追跡、ステータス変更。サブエージェントにタスク管理を委譲してはならない
+- **タスク管理（メイン専任・必須）**: docs/tasks/ の更新、進捗追跡、ステータス変更。サブエージェントにタスク管理を委譲してはならない (詳細は [`task-management.md`](./task-management.md) §「メインエージェント専任（必須）」)
 - 作業のアサイン（Agent tool でサブエージェントを起動）
 - 完了報告・成果物の確認
 - docs/, CLAUDE.md, .claude/ など管理ファイルの更新
@@ -288,11 +288,7 @@ honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリ�
 
 ## タスク管理（メイン専任）
 
-タスク管理はメインエージェントのみが行う。サブエージェントにタスク管理を委譲してはならない。
-
-- `docs/tasks/list.md` のステータス更新 → メインが必ず実行
-- 個別タスクファイルの作成・更新 → メインが必ず実行
-- サブエージェント起動前にタスクを「進行中」に、完了後に「完了」に更新
+詳細は [`task-management.md`](./task-management.md) §「メインエージェント専任（必須）」を参照。
 
 ## 副産物発生時の即時 draft 起こし義務（必須・再発防止）
 
@@ -317,74 +313,10 @@ honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリ�
 
 詳細は [`workflow.md`](./workflow.md) の関連セクションおよび [`docs/draft/byproduct-discharge-mechanism.md`](../../docs/draft/byproduct-discharge-mechanism.md) を参照。
 
-## 設計→承認→タスク追加フロー（必須）
+## 設計→承認→タスク追加フロー
 
-**設計なしのタスク追加は禁止**。下記 4 ステップを厳守:
-
-1. **テンプレ初期化**（初回のみ・自動）: SessionStart hook で `docs/tasks/list.md` `parking-lot.md` `_TASK_TEMPLATE.md` および `docs/draft/_DRAFT_TEMPLATE.md` がテンプレートから自動生成される。明示実行は `/init-tasks`
-2. **設計起こし**: `/new-draft <slug>` で `docs/draft/<slug>.md` を `_DRAFT_TEMPLATE.md` から生成 → §1〜9 を埋める
-3. **承認依頼**: ユーザーにレビュー・承認を依頼。承認履歴を draft の §8 に記録
-4. **タスク化**: 承認後に `/new-task <id> <slug>` を実行 — 以下が **同時に** 行われる:
-   - `docs/tasks/task-<id>-<slug>.md` を `_TASK_TEMPLATE.md` から生成
-   - `docs/tasks/list.md` に `🔲 未着手` 行を追加
-   - draft は `docs/draft/<slug>.md` に保存（履歴として残す）
-
-### テンプレートの場所
-
-- `.claude/templates/docs/tasks/list.md` — タスク台帳ひな型（凡例・依存関係図・更新ルール込み）
-- `.claude/templates/docs/tasks/parking-lot.md` — 保留タスクひな型（必須 7 項目フォーマット込み）
-- `.claude/templates/docs/tasks/_TASK_TEMPLATE.md` — 個別タスクひな型（背景 / 仕様 / 設計 / TDD / Wave / 完了条件 / 影響範囲）
-- `.claude/templates/docs/draft/_DRAFT_TEMPLATE.md` — 設計 draft ひな型（真因 / 案比較 / Wave / リスク / DoD / 承認履歴）
-
-### 自動生成のセーフティ
-
-- **冪等**: 既存ファイルは絶対に上書きしない（`/init-tasks --force` のみ例外）
-- **ID 重複検知**: `/new-task` は同 ID が既に存在する場合中断
-- **設計欠落検知**: `/new-task` は対応 draft が無い場合中断（`--no-draft` で hot fix の例外）
-- **fail-open**: SessionStart hook 失敗時もセッション継続
-
-### Hook による強制（コマンド経由でなくても発動）
-
-`.claude/hooks/task-rule-guard.sh` が PreToolUse で以下を **block** で強制する:
-
-| シナリオ | 動作 |
-|---|---|
-| `docs/tasks/task-<id>-<slug>.md` の Write、対応する `docs/draft/{<slug>.md, task-<slug>.md, <basename>}` が無い | **BLOCK** — 「先に `/new-draft` で設計を起こせ」と提示 |
-| `docs/tasks/task-<id>-*.md` / `phase-<id>-*.md` の Write、同 `<id>` が既に存在 | **BLOCK** — 「別 ID を割り当てるか既存を Edit せよ」と提示 |
-| `docs/tasks/` への命名規約外 Write（`task-` `phase-` で始まらない） | 警告 context 注入（block しない） |
-| `docs/tasks/task-*.md` の **Edit**（既存編集） | 「list.md と同期更新せよ」context 注入 |
-| `docs/tasks/parking-lot.md` の Edit | 必須 7 項目の hint context 注入 |
-| `list.md` `_TASK_TEMPLATE.md` `_DRAFT_TEMPLATE.md` の Edit/Write | exempt（素通り） |
-| サブエージェント実行中 | 全パス通過（多重ゲート防止） |
-
-### Bypass
-
-| 方法 | 用途 |
-|---|---|
-| `ECC_TASKGUARD=off` | セッション全体で OFF |
-| `/task-bypass <slug>` | 1 ファイル分 pre-clear（`.claude/.taskguard-state/<slug>.cleared`） |
-| `/task-bypass --clear-all` | 全 marker 削除 |
-
-honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリに記録すること。
+詳細は [`task-management.md`](./task-management.md) §「設計→承認→タスク追加フロー（必須）」を参照。テンプレ初期化 / 設計起こし / 承認 / タスク化の 4 ステップ、テンプレート配置、自動生成セーフティ、`task-rule-guard.sh` による Hook 強制表、bypass 経路 (`ECC_TASKGUARD` / `/task-bypass`)、関連コマンド一覧を集約。
 
 ## Parking Lot（保留タスク）
 
-着手不可の保留タスクは [`docs/tasks/parking-lot.md`](../../docs/tasks/parking-lot.md) で管理する。テンプレは `.claude/templates/docs/tasks/parking-lot.md`。
-
-- **追加条件**: 既存設計書（`docs/` 配下）または `docs/draft/` の承認済み設計へのリンクが必須
-- **必須項目 7 つ**: 起案日 / 保留日 / 保留理由 / 設計書 / 実装状態 / 再検討トリガー / 代替現状
-- **ステータス**: 🧊 保留 / 🔍 再検討予定 / ❌ 不採用
-- **移行**: 再検討トリガー成立時に parking-lot から削除し、list.md に新規タスクとして追加（通常フロー = `/new-task`）
-- **定期レビュー**: 🔍 エントリは四半期ごとに見直し
-- **不採用**: ❌ エントリは履歴として残す（過去意思決定のトレーサビリティ）
-
-## タスク管理の関連コマンド
-
-| コマンド | 役割 |
-|---|---|
-| `/init-tasks` | 台帳テンプレ初期化（SessionStart hook で自動実行） |
-| `/new-draft <slug>` | 設計 draft 起こし（`_DRAFT_TEMPLATE.md` から） |
-| `/new-task <id> <slug>` | 設計承認後にタスク化（`_TASK_TEMPLATE.md` から）+ list.md 行追加 |
-| `/start-task <id>` | 着手（branch 切替 + status 同期） |
-| `/finish-task <id>` | 完了（build/test/docs 検証 + done 化 + commit 提案） |
-| `/task-bypass <slug>` | task-rule-guard を 1 ファイル分 bypass（hot fix 用） |
+詳細は [`task-management.md`](./task-management.md) §「Parking Lot（今後検討タスク）」を参照。必須 7 項目 / ステータス記号 / 移行ルール / 定期レビューを集約。
