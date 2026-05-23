@@ -35,21 +35,59 @@
 
 ## 2. 修正案 (3 wave 構成)
 
-### Wave 1: System-Reminder 注入数の削減 (仮説 A 対処)
+### Wave 0: hook タイミング根本再配置 (2026-05-23 user 指摘、最優先)
 
-**目的**: UserPromptSubmit + SessionStart で注入される `<system-reminder>` 件数を **半減** し、attention 予算を `task-management.md` に確保する。
+**目的**: Wave 1 (頻度間引き) の **前段** として、そもそもの hook 発火タイミング自体が attention dilution と fail-late を引き起こしている設計問題を解消する。user 明示指摘「Loop モード hook はターン終了時 (Stop) や user 質問時 (Notification) に実行するべきでは?」への構造的回答。
+
+**設計原則** (Anthropic `agent-harness-construction` skill の context budgeting + instruction conflict 回避):
+
+| タイミング | AI 次行動への影響力 | 過剰注入リスク | 適用すべき hook の性質 |
+|---|---|---|---|
+| **UserPromptSubmit** | 最強 (応答開始直前の context tail に注入) | 高 (毎ターン肥大化) | 次応答を直接制御する hook **のみ** |
+| **SubagentStop** | 強 (subagent 完了直後のメイン判断に影響) | 低 (subagent 完了時のみ) | subagent 完了後の行動制御 hook |
+| **Stop** | 中 (次ターンまで持ち越し、1 ターン遅延) | 低 | ターン終了時の最終検証 hook |
+| **SessionStart** | 弱 (session 全体に薄く効く) | 最低 (1 度だけ) | 1 度の情報提示 / 初期化 hook |
+| **Notification** | (Loop モードでは未発火) | — | Loop モードで意味なし |
+
+**判定**: 現状 26 hooks のうち 3 hooks がタイミングミスで、これが Wave 1 (頻度間引き) より根本的な原因。
+
+| 措置 | 対象 hook | 現状 | 推奨タイミング | 根拠 |
+|---|---|---|---|---|
+| **W0.1** | `loop-auto-progress-reminder.sh` | UserPromptSubmit | **SubagentStop + Stop 併用** | **設計の根本ミス (fail-late)**: 「subagent 完了待ちでメイン停止」を検出するために user 次入力時に発火 = user が痺れを切らして次プロンプト送った時点で「もう停止済」を検出するだけ。検出されても次ターンまで効かない。SubagentStop で subagent 完了直後にメインへ「即次タスク継続」hint 注入、Stop で「ターン終了時にメインが受動待ちで終わろうとした」を最終検出 |
+| **W0.2** | `mode-enforce.sh` | UserPromptSubmit (毎ターン) | **SessionStart 1 度 + 違反検出時のみ** | Loop モード遵守事項を毎ターン全文 (~1.5 KB) 注入 = context attention dilution の主因。AI は 1 度読めば理解しているのに毎ターン繰返しは過剰。違反検出は `loop-auto-progress-reminder` (W0.1 で再配置済) と `autonomous-action-guard` が既に分担しているので二重化解消 |
+| **W0.3** | `why-x5-reminder.sh` | UserPromptSubmit (毎ターン) | **SessionStart 1 度 + format 違反検出時のみ** | 1 行 format ルールを毎ターン全文 (~2 KB) 注入も同じく過剰。新 hook `why-x5-violation-detect.sh` (PostToolUse で AI 直前 text を grep して 4 セクション format / 装飾 / 「何のため」省略を検出) で違反検出時のみ再注入 |
+
+**期待効果**:
+- UserPromptSubmit 注入数 4 → **0 (全 3 hooks が他タイミングへ移動 + context-budget は閾値超のみ)**
+- 毎ターン context tail に注入される `<system-reminder>` 量が **~5 KB → ~0.1 KB** に縮小
+- `loop-auto-progress-reminder` が fail-late → fail-early に変化、subagent 完了直後にメインの停止を防げる
+- 結果として `task-management.md` (paths 条件付き受動 load) が attention 予算上の競合相手を失い、認識落ち解消
+
+**Wave 1 (頻度間引き) との関係**:
+- Wave 0 でタイミング再配置 → Wave 1 の「mod N 間引き」は不要 (注入頻度自体が 0 or イベント駆動になる)
+- Wave 1.4 〜 1.7 は Wave 0 と独立で引き続き有効 (`context-budget`, `next-actions-surface`, `session-help-surface`, `task-management.md` の常時参照化)
+- Wave 1.1 〜 1.3 は Wave 0 で吸収済、削除可
+
+**実装順序**: W0.1 → W0.2 → W0.3 → 各 hook 移動後に既存 smoke test で regression 確認 → W3 eval で attention 改善測定。
+
+---
+
+### Wave 1: System-Reminder 注入数の削減 (仮説 A 対処、Wave 0 と独立)
+
+**目的**: Wave 0 (タイミング再配置) で吸収しきれない hook の頻度 / 条件を間引き、attention 予算を `task-management.md` に確保する。
 
 | 措置 | 対象 hook | 内容 |
 |---|---|---|
-| W1.1 | `why-x5-reminder.sh` | 注入を「ターン 1 回 + ターン番号 mod 3 == 0」に間引く (毎ターンは過剰)。env `HC_WHY_X5_INTERVAL=3` で調整可。 |
-| W1.2 | `mode-enforce.sh` | Loop モード遵守事項を **「毎ターン全文注入」から「セッション初回 + 違反検出時のみ」** に変更。違反検出は `loop-auto-progress-reminder.sh` が担当しているので二重化を解消。 |
-| W1.3 | `loop-auto-progress-reminder.sh` | 「subagent 待ち中の停止検出」のみに responsibility を絞り、Loop モード規範本体の注入は mode-enforce.sh に集約。 |
-| W1.4 | `context-budget.sh` | 60% 未満では完全 silent、60% 超過時のみ注入。現状 silent だが kill switch を確実化。 |
-| W1.5 | `next-actions-surface.sh` | 🔴 entry がある時のみ注入、🟡 / なしは silent。 |
-| W1.6 | `session-help-surface.sh` | session help は **初回 session のみ** 表示し、`.claude/.session-help-shown` marker で再表示抑止。 |
-| W1.7 | `task-management.md` を **常時参照 rule** に格上げ (`paths:` 条件を外す) | `paths: ["docs/tasks/**/*", "docs/draft/**/*"]` の受動 load を廃止し、CLAUDE.md から直接 link で常時参照を強制。 |
+| ~~W1.1~~ | ~~`why-x5-reminder.sh` 間引き~~ | **Wave 0 (W0.3) で吸収済** (タイミング再配置で毎ターン注入自体が消える) |
+| ~~W1.2~~ | ~~`mode-enforce.sh` 違反検出時のみ~~ | **Wave 0 (W0.2) で吸収済** |
+| ~~W1.3~~ | ~~`loop-auto-progress-reminder.sh` 責務分離~~ | **Wave 0 (W0.1) で吸収済** |
+| W1.4 | `context-budget.sh` | 60% 未満では完全 silent、60% 超過時のみ注入。現状 silent だが kill switch を確実化。Wave 0 と独立 |
+| W1.5 | `next-actions-surface.sh` | 🔴 entry がある時のみ注入、🟡 / なしは silent。SessionStart hook で配置妥当、頻度のみ調整 |
+| W1.6 | `session-help-surface.sh` | session help は **初回 session のみ** 表示し、`.claude/.session-help-shown` marker で再表示抑止 |
+| W1.7 | `task-management.md` を **常時参照 rule** に格上げ (`paths:` 条件を外す) | `paths: ["docs/tasks/**/*", "docs/draft/**/*"]` の受動 load を廃止し、CLAUDE.md から直接 link で常時参照を強制 |
+| W1.8 | `improvement-proposal.sh` | 直近 7 日 observations の集計結果を `improvement-proposal-state/cache.json` に TTL 1h でキャッシュし、毎 SessionStart の fullscan を削減 |
 
-**期待効果**: UserPromptSubmit 注入数 4 → 1〜2、SessionStart 注入数 8 → 5〜6。`task-management.md` の認識優先度が「条件付き load」から「常時 top-level rule」に昇格。
+**期待効果**: SessionStart 注入数 8 → 5〜6。`task-management.md` の認識優先度が「条件付き load」から「常時 top-level rule」に昇格。Wave 0 と組み合わせて UserPromptSubmit 注入数は **0 (常時注入なし、イベント駆動のみ)** に縮小。
 
 ### Wave 2: Loop モードと draft フロー相反の解消 (仮説 B 対処)
 
@@ -112,14 +150,19 @@ Target: pass^3 = 1.00 (戦術自律性は失わない)
 
 #### W3.3 比較条件 (before/after A/B)
 
-| 変数 | before | after |
+| 変数 | before | after (Wave 0+1+2 完了後) |
 |---|---|---|
-| `<system-reminder>` 注入数/ターン (UserPromptSubmit) | 4 | 1〜2 |
+| `<system-reminder>` 注入数/ターン (UserPromptSubmit) | **4** | **0** (Wave 0 でイベント駆動化、常時注入消滅) |
+| UserPromptSubmit context 注入量 (KB/ターン) | ~5 KB | ~0.1 KB |
+| `loop-auto-progress-reminder` fail mode | fail-late (user 次入力時検出) | fail-early (subagent 完了直後検出) |
+| `mode-enforce` 注入頻度 | 毎ターン全文 | SessionStart 1 回 + 違反時のみ |
+| `why-x5-reminder` 注入頻度 | 毎ターン全文 | SessionStart 1 回 + format 違反時のみ |
 | `task-management.md` の常時参照 | × (条件付き) | ○ (常時 top-level) |
 | Loop モード承認例外条項 | × | ○ |
-| `docs/` 直下への新規 Write block | × | ○ (新 hook) |
+| `docs/` 直下への新規 Write block | × | ○ (`draft-flow-guard.sh` 配備済 `6ed9337`) |
 | capability eval `task-management-recognition` pass@3 | 計測必要 | >= 0.95 (目標) |
 | regression eval `loop-mode-tactical-autonomy` pass^3 | 1.00 | 1.00 維持 |
+| regression eval `subagent-completion-handoff-latency` (W0.1 効果) | (新規) | subagent 完了 → 次タスク起動 latency: SubagentStop 即時 (秒オーダー)、現状は user 次入力依存 (分〜時間) |
 
 #### W3.4 測定手順
 
@@ -145,24 +188,34 @@ Target: pass^3 = 1.00 (戦術自律性は失わない)
 
 - W3.3 比較条件で `task-management-recognition` pass@3 が **0.50 (修正前推定) → 0.95 (目標)** に改善
 - かつ `loop-mode-tactical-autonomy` pass^3 が **1.00 維持**
-- かつ `<system-reminder>` 注入数/ターンが **4 → 1〜2** に削減
+- かつ `<system-reminder>` 注入数/ターン (UserPromptSubmit) が **4 → 0** に削減 (Wave 0 効果)
+- かつ `subagent-completion-handoff-latency` が SubagentStop 即時 (秒オーダー) に改善
 
-3 条件すべて満たせば採用、1 つでも未達なら Wave 単位で原因切り分け再設計。
+4 条件すべて満たせば採用、1 つでも未達なら Wave 単位で原因切り分け再設計。
 
 ---
 
-## 5. 実装順序 (推奨)
+## 5. 実装順序 (推奨、Wave 0 追加で更新)
 
 | Wave | 期間目安 | 依存 |
 |---|---|---|
-| W3.1 capability eval 定義 + before 計測 | 1 session | なし (最初に baseline 取る) |
-| W1.7 task-management.md 常時参照化 + 圧縮 | 0.5 session | なし |
-| W1.1〜1.6 hook 注入間引き | 1 session | W1.7 |
-| W2.1〜2.5 modes.md 改訂 + draft-flow-guard.sh 新設 | 1.5 session | W1.x 完了 |
-| W3.2 regression eval + after 計測 + 比較 | 1 session | W1+W2 完了 |
-| 採用判定 + recall_poc / classlab-weekly-news に install.sh --update で反映 | 0.5 session | W3 達成 |
+| W3.1 capability eval 定義 + before 計測 (Wave 0 効果込み) | 1 session | なし (最初に baseline 取る) |
+| **W0.1** `loop-auto-progress-reminder.sh` SubagentStop+Stop 移動 | 0.5 session | なし (タイミング修正で fail-early 化、最も効果大) |
+| **W0.2** `mode-enforce.sh` SessionStart 1 度 + 違反時のみ | 0.5 session | W0.1 (違反検出の役割分担確定後) |
+| **W0.3** `why-x5-reminder.sh` SessionStart + 違反検出 hook 新設 | 0.7 session | なし、W0.2 と並行可 |
+| W1.4 〜 1.8 (Wave 0 残余 + improvement-proposal cache) | 0.5 session | W0.x |
+| W1.7 `task-management.md` 常時参照化 + 圧縮 | 0.5 session | なし |
+| W2.1〜2.5 `modes.md` 改訂 + `_DRAFT_TEMPLATE.md` frontmatter (`draft-flow-guard.sh` は実装済 `6ed9337`) | 1 session | W1.x 完了 |
+| W3.2 regression eval + after 計測 + 比較 | 1 session | W0+W1+W2 完了 |
+| 採用判定 + recall_poc / classlab-weekly-news / taskManageSystem に install.sh --update で反映 | 0.5 session | W3 達成 |
 
-合計 5.5 session 想定。
+合計 **6.2 session 想定** (Wave 0 追加で +0.7 session、ただし最も大きな効果が見込まれる)。
+
+**着手優先順** (Quick Win 順):
+1. **W0.1** (fail-late → fail-early、subagent handoff latency 即改善) ← 最優先
+2. **W0.2** + **W0.3** (UserPromptSubmit 注入数 4 → 1 → 0)
+3. **W3.1 before 計測** + **W1.7** (task-management.md 常時参照化)
+4. **W2.x** + **W3.2 after 計測** + 採用判定
 
 ---
 
