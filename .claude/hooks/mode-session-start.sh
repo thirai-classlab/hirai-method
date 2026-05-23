@@ -8,7 +8,7 @@
 #
 # 失敗時の挙動: exit 0 のみ。失敗してもセッションをブロックしない。
 
-set -euo pipefail
+set -uo pipefail  # task-22 W1: errexit 外し SIGPIPE 141 サイレント死を防止 (CLAUDE.md Critical Lessons HIGH)
 
 # stdin は SessionStart hook では使わないが、念のため消費
 cat > /dev/null 2>&1 || true

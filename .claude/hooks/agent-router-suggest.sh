@@ -30,7 +30,7 @@
 #     hook which Claude Code does not currently expose. The hook only adds
 #     a contextual hint.
 
-set -euo pipefail
+set -uo pipefail  # task-22 W1: errexit 外し SIGPIPE 141 サイレント死を防止 (CLAUDE.md Critical Lessons HIGH)
 
 THRESHOLD="${AGENT_ROUTER_SUGGEST_THRESHOLD:-0.5}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -6,7 +6,7 @@
 #
 # 失敗時の挙動: exit 0 のみ。失敗してもユーザターンをブロックしない。
 
-set -euo pipefail
+set -uo pipefail  # task-22 W1: errexit 外し SIGPIPE 141 サイレント死を防止 (CLAUDE.md Critical Lessons HIGH)
 
 # stdin を消費（pipeline block を避ける）
 cat > /dev/null 2>&1 || true
