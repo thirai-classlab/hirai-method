@@ -5,6 +5,14 @@ approved_by: user (「順次実行してください」発言で Loop モード�
 retroactive: false
 -->
 
+> **⚠️ Historical footnote (2026-05-24、task-32 で訂正)**
+>
+> 本 draft の "**56% (3916/7048 records)**" / "**44%**" / "**95%+**" 等の jq parse invalid 率は、task-25 A3 計測時の `jq -s` stream mode cascade fail 由来の **誤計測** (5600x off)。実 invalid 率は task-27 W2 commit `fd5f6e5` の Python decoder 実測で **11/28583 = 0.04%** (jq-valid 99.96%) と判明、`raw` field の 100% object 化も task-32 commit `a51dd6b` の `harness-audit.py` 健全性指標で実測確認済。
+>
+> 本 draft は **historical record として保持**、measurement 機構 (observation pipeline 健全性指標 + cascade fail 検出) は task-32 で実装完結。詳細: [`docs/tasks/task-32-harness-audit-jq-valid-metric-fix.md`](../tasks/task-32-harness-audit-jq-valid-metric-fix.md) / commits `a51dd6b` + `5288648` + `8dc8934`。
+>
+> 以下の本文中の "56%" / "44%" / "95%+" は cascade fail 由来の誤計測前提と読み替えること。
+
 # observe.sh jq parse 失敗 56% 修復
 
 **ステータス:** 🔲 **draft (2026-05-23 起案、user 承認待ち)**
