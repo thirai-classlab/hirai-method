@@ -179,27 +179,29 @@ def _read_tail_chunk(path: Path, n: int) -> bytes:
         return f.read()
 
 
-_EMPTY_TAIL_RESULT: dict = {
-    "records": [],
-    "skipped_lines": 0,
-    "total_lines": 0,
-    "cascade_suspected": False,
-    "max_consecutive_skips": 0,
-}
-
-
 def tail_jsonl(path: Path, n: int) -> dict:
     """末尾 N 行 JSON parse + observation pipeline 健全性指標 (task-32)。
 
-    返り値 dict 各 key の意味は `_EMPTY_TAIL_RESULT` (skipped/total/cascade/max_consec) を参照。
+    返り値 key:
+      - records: list[dict]
+      - skipped_lines: int (JSONDecodeError 件数)
+      - total_lines: int (空行除外後の line count)
+      - cascade_suspected: bool (連続 JSONDecodeError が cascade threshold 以上)
+      - max_consecutive_skips: int (window 内の最長連続 skip 数)
+
+    iter4 PY-9 fix: 旧 `_EMPTY_TAIL_RESULT` const は inline literal return に置換 (shallow
+    copy mutable share 防止)。`dict(const)` は内部の `records: []` mutable list が share される
+    バグを生み、別 invocation が前回の result を mutate する事故を起こすため。
     """
     threshold = _cascade_threshold()
     if not path.exists():
-        return dict(_EMPTY_TAIL_RESULT)
+        return {"records": [], "skipped_lines": 0, "total_lines": 0,
+                "cascade_suspected": False, "max_consecutive_skips": 0}
     try:
         raw_bytes = _read_tail_chunk(path, n)
-    except (OSError, PermissionError, MemoryError):
-        return dict(_EMPTY_TAIL_RESULT)
+    except (OSError, MemoryError):
+        return {"records": [], "skipped_lines": 0, "total_lines": 0,
+                "cascade_suspected": False, "max_consecutive_skips": 0}
     data = raw_bytes.decode("utf-8", errors="replace")
     out: list[dict] = []
     skipped = total = consecutive_skips = max_consecutive = 0
@@ -241,26 +243,33 @@ def _classify_raw_field(raw_val: object) -> str:
     return "other"
 
 
-_EMPTY_SUMMARY: dict = {
-    "total": 0,
-    "tools": {},
-    "errors": 0,
-    "error_rate": 0.0,
-    "timeouts": 0,
-    "first_ts": None,
-    "last_ts": None,
-    "raw_object_count": 0,
-    "raw_string_count": 0,
-    "raw_other_count": 0,
-    "raw_present_count": 0,
-    "raw_object_rate": 0.0,
-}
-
-
 def summarize_observations(records: list[dict]) -> dict:
-    """observations から指標を抽出 (task-32: raw object rate も併記、schema 統一の実測継続)。"""
+    """observations から指標を抽出 (task-32: raw object rate も併記、schema 統一の実測継続)。
+
+    raw_object_rate semantics: `raw_present_count: 0` のとき `raw_object_rate: 0.0` は
+    rate 計算不能 (no data) を意味する。`raw_present_count > 0` のときは
+    `raw_object_count / raw_present_count` (object 比率) を 3 桁丸めで返す。
+
+    iter4 PY-9 / PY-4 fix: 旧 `_EMPTY_SUMMARY` const は inline literal return に置換 + `tool_errors: {}`
+    を schema に追加。`dict(const)` は内部 dict (`tools: {}` / `tool_errors: {}`) が shallow share
+    されるバグを生むため、empty 時も inline literal で完全独立の dict を返す。
+    """
     if not records:
-        return dict(_EMPTY_SUMMARY)
+        return {
+            "total": 0,
+            "tools": {},
+            "tool_errors": {},
+            "errors": 0,
+            "error_rate": 0.0,
+            "timeouts": 0,
+            "first_ts": None,
+            "last_ts": None,
+            "raw_object_count": 0,
+            "raw_string_count": 0,
+            "raw_other_count": 0,
+            "raw_present_count": 0,
+            "raw_object_rate": 0.0,
+        }
     total = len(records)
     tool_counts: Counter[str] = Counter()
     tool_errors: Counter[str] = Counter()
