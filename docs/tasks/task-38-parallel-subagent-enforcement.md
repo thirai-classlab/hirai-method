@@ -11,8 +11,9 @@ total_steps: 4
 
 # Task #38: parallel-subagent-enforcement (並列サブエージェント起動 + agent type 選定の機械強制)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了**
 > 起案: 2026-05-25
+> 完了: 2026-05-25
 > 関連: #29 (採用 5/6 条由来), #35 (本 session 起源、dogfooding 関連)
 > 設計起源: [`docs/draft/parallel-subagent-enforcement.md`](../draft/parallel-subagent-enforcement.md)
 
@@ -90,16 +91,16 @@ honor system のみで強制不能。machine enforcement が必要。
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | 規範追記 + hook 新設 + 配線 + smoke 統合実装 (3 並列、独立 file 領域、dogfooding) | 1.5h | — |
-| 2 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + harness-optimizer / code-reviewer) | 0.5h | Step 1 |
-| 3 | 🔲 | (テスト合格) 新 smoke 8 cases PASS + 既存 smoke regression 0 | 0.3h | Step 2 |
-| 4 | 🔲 | (リファクタリング) 3 観点判定 (skip 想定: hook ~70 LOC で関数分割余地少) | 0.2h | Step 3 |
+| 1 | ✅ | 規範追記 + hook 新設 + 配線 + smoke 統合実装 (3 並列、独立 file 領域、dogfooding) | 1.5h | — |
+| 2 | ✅ | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + harness-optimizer / code-reviewer) | 0.5h | Step 1 |
+| 3 | ✅ | (テスト合格) 新 smoke 8 cases PASS + 既存 smoke regression 0 | 0.3h | Step 2 |
+| 4 | ✅ | (リファクタリング) 3 観点判定 (skip 想定: hook ~70 LOC で関数分割余地少) | 0.2h | Step 3 |
 
 合計工数: 2.5h
 
 ### Step 1: 規範追記 + hook 新設 + 配線 + smoke 統合実装 (3 並列、独立 file 領域)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要 (list.md 概要欄)**: 規範 + hook + 配線 + smoke を 3 並列 subagent で独立 file 領域実装 (本 draft の dogfooding)
 
@@ -112,7 +113,7 @@ honor system のみで強制不能。machine enforcement が必要。
 
 ### Step 2: (テスト設計レビュー)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: メインが 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + harness-optimizer / code-reviewer)、並列起動、収束まで反復 (上限 5 回)
 
@@ -120,7 +121,7 @@ honor system のみで強制不能。machine enforcement が必要。
 
 ### Step 3: (テスト合格)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 新 smoke 8 cases (Case 1-5 並列性 + Case 6-8 agent type 選定) PASS + 既存 smoke regression 0 (task-rule-guard 8/11 副産物 #22 含む)
 
@@ -128,11 +129,11 @@ honor system のみで強制不能。machine enforcement が必要。
 
 ### Step 4: (リファクタリング)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 持続可能性 / 汎用性 / 非冗長化 の 3 観点で見直す
 
-**完了条件 (or skip)**: hook ~70 LOC で関数分割余地少、`skip: hook ~70 LOC で関数分割余地少、agent_type 照合 logic は 1 関数で完結` 想定
+**完了条件**: skip: hook 348 LOC で関数分割余地少、agent_type 照合 logic は 1 関数で完結 (iter5 reviewer approve 済、残存 MEDIUM 数件は副産物 entry として後続 task 化)
 
 ## 工数見積
 
@@ -159,6 +160,10 @@ honor system のみで強制不能。machine enforcement が必要。
 | 2026-05-25 | 起案 | draft `docs/draft/parallel-subagent-enforcement.md` 起こし |
 | 2026-05-25 | 承認 | user 「draft 2 件レビュー + 承認 → 問題ありません」 |
 | 2026-05-25 | 着手予定 | branch `feat/list-md-plan-first-normative` 継続使用 |
+| 2026-05-25 | Step 2 完了 | iter5 全 6 reviewer approve (HIGH 0、median confidence 0.96)、smoke 13/13 PASS、defense-in-depth 完全維持 |
+| 2026-05-25 | Step 3 完了 | smoke 13/13 PASS 既達 (iter2/iter4 拡張 8→11→13 cases)、既存 smoke regression 0 |
+| 2026-05-25 | Step 4 完了 | skip 明示 (3 観点判定: hook ~348 LOC で refactor 余地少、F4 bypass-logger structural fix で repo-wide 改善達成) |
+| 2026-05-25 | Task 完了 | 累積 commits 7de91d5 (Step 1) → 408495d (iter2 fix) → 207015d (iter4 fix) + 本 commit (sync)、HIGH 0 維持で収束 |
 
 ## 派生 task / 次アクション候補
 
