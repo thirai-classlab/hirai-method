@@ -12,7 +12,7 @@ total_steps: 5
 
 # Task #34: `/new-task` の 📝 → 🔲 update or append 動作実装
 
-> Status: **🔄 進行中** (2026-05-25、Step 1+2 完了、Step 3 iter1 完了、Step 4 iter2 fix 待ち)
+> Status: **✅ 完了** (2026-05-25、iter1→iter4 cycle 4 回 + Step 5 refactor、commits 8 件 `2237515`/`287eba7`/`65b3ce2`/`54f9230`/`1ea26d4`/`7e94ed0`/`7d25cb3`/`26ac01e`、helper 432 LOC + smoke 664 LOC 55/55 PASS 1.019s、parallel race 10/10 解消、shellcheck 0、5 reviewer iter4 全員 Step 4 完了判定 Yes median 0.96)
 > 起案: 2026-05-25 (task #33 分割、旧 Phase 2)
 > 関連: #33 (継承元 task)、#35/#36/#37 (兄弟分割 task)
 > 設計起源: [`docs/draft/list-md-plan-first-normative.md`](../draft/list-md-plan-first-normative.md) §3 P2 (`/new-task` 動作拡張)
@@ -98,11 +98,11 @@ flowchart LR
 |:---:|:---:|:---|---:|:---|
 | 1 | ✅ | `/new-task.md` 動作仕様 update or append 分岐化 (42 insertions/4 deletions) | 0.2h | — |
 | 2 | ✅ | `.claude/scripts/new-task-helper.sh` 新設、`update_or_append_task_row()` 関数 (83 LOC) | 0.3h | Step 1 |
-| 3 | ✅ | (テスト設計レビュー) 6 reviewer iter1 完了 (CRIT 3 + HIGH 17+ + MED 多数 + LOW 多数) | iter2-5 で 0.5h | Step 2 |
-| 4 | 🔲 | (テスト合格) iter2 fix で 6 reviewer iter1 finding 解消 + 新 smoke 3 cases PASS + 既存 11 smoke regression 0 | 0.3h | Step 3 |
-| 5 | 🔲 | (リファクタリング) 3 観点 (持続可能性 / 汎用性 / 非冗長化) 判定 | 0.1h | Step 4 |
+| 3 | ✅ | (テスト設計レビュー) 6 reviewer iter1→iter4 cycle 4 回 (CRIT 3 + HIGH 17+ + 新規 CR-001 overflow 発見、iter4 で 5/5 全員 Step 4 完了判定 Yes、median 0.96) | iter2-iter4 で 1.5h | Step 2 |
+| 4 | ✅ | (テスト合格) iter4 で 49/49 PASS + parallel race 10/10 + shellcheck 0 + CR-001+MED-001 解消 (commits `65b3ce2`/`1ea26d4`/`7e94ed0`/`54f9230`) | 0.8h | Step 3 |
+| 5 | ✅ | (リファクタリング) 関数分割 218→77 LOC orchestrator + 7 extract 関数全 <50 LOC、smoke 55/55 PASS 1.019s、refactor 3 観点 PASS (commit `26ac01e`) | 0.5h | Step 4 |
 
-合計工数: **1.4h** (元 Phase 2 工数 0.7 から iter cycle 込み実工数)
+合計工数: **3.3h** (元見積 1.4h → iter cycle 4 回 + Step 5 refactor 込み実工数)
 
 ### Step 1: `/new-task.md` 動作仕様 update
 
@@ -169,7 +169,7 @@ flowchart LR
 
 ### Step 4: (テスト合格) iter2 fix + 新 smoke 3 cases PASS
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-25、iter cycle 4 回 + 5/5 reviewer iter4 Step 4 完了判定 Yes、commits `65b3ce2`/`1ea26d4`/`7e94ed0`/`54f9230`、49/49 PASS + parallel race 10/10 + shellcheck 0、CR-001 overflow 新規 CRITICAL を iter3 review で発見し iter4 で解消)
 
 **作業概要**: 6 reviewer iter1 findings (CRIT 3 + HIGH 17+ + MED + LOW) を iter2 fix で解消 (subagent staging で `new-task-helper.sh` fix)、新 smoke `new-task-batch-update-smoke.sh` 3 cases (update / append / batch 先置き整合性) PASS + 既存 11 smoke regression 0。iter cycle 5 回以内で strict 0-finding 収束。
 
@@ -187,7 +187,7 @@ flowchart LR
 
 ### Step 5: (リファクタリング) 3 観点判定
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-25、commit `26ac01e` + `7d25cb3` (main 編集 Refactor 6)、関数分割 218→77 LOC orchestrator + 7 extract 関数全 <50 LOC、`_new_task_ensure_eol` cleaner impl、smoke +17 (Case 9 補強 + 11.5.5b + 11.7 複数件 📝 BLOCK + 3.5.2 ms 精度)、55/55 PASS 1.019s、refactor 3 観点 PASS、subagent a7ed43494dcb45276 confidence 0.95)
 
 **作業概要**: `new-task-helper.sh` を 3 観点 (持続可能性 / 汎用性 / 非冗長化) で見直し、必要なら refactor or skip 明示。
 
@@ -225,9 +225,14 @@ flowchart LR
 | 2026-05-25 | Step 1 完了 | commit `2237515` (`/new-task.md` spec) |
 | 2026-05-25 | Step 2 完了 | commit `287eba7` (helper script 83 LOC) |
 | 2026-05-25 | Step 3 iter1 完了 | 6 reviewer 並列、CRIT 3 + HIGH 17+ + MED + LOW finding、median confidence 0.89 |
-| TBD | Step 4 完了 | iter2 fix + 新 smoke 3 cases PASS + 既存 11 smoke regression 0 |
-| TBD | Step 5 完了 | リファクタリング 3 観点判定 |
-| TBD | Task 完了 | 全 Step ✅、commit (push は user manual) |
+| 2026-05-25 | iter2 fix 完了 | commit `65b3ce2`、CRIT 3 + HIGH 8 解消、24/24 PASS 0.54s、subagent a3524fd32786f11e4 confidence 0.92 |
+| 2026-05-25 | iter2 review 完了 | 6 reviewer 並列、5/6 iter 続行 (CRIT 2 parallel race + leading zero、HIGH 5)、1/6 approve (architect)、median 0.92 |
+| 2026-05-25 | iter3 fix 完了 | commit `1ea26d4` + main `54f9230`、atomic-mkdir lock で race 10/10 解消、leading zero 数値正規化、bash-whitelist + new-task.md doc 整合、39/39 PASS、subagent a01d5cb01895c3a9f confidence 0.96 |
+| 2026-05-25 | iter3 review 完了 | 6 reviewer 並列、5/6 approve、code-reviewer が新規 CRITICAL (CR-001 bash arithmetic overflow) 発見、iter4 必須、median 0.93 |
+| 2026-05-25 | iter4 fix 完了 | commit `7e94ed0`、CR-001 18 桁超 reject + MED-001 CR validation、49/49 PASS 0.9s、git stash で iter3 baseline 7 assertion FAIL を実証、subagent a5e055207aa1475be confidence 0.97 |
+| 2026-05-25 | iter4 review 完了 (Step 4 完了) | 5 reviewer 並列、5/5 全員 Step 4 完了判定 Yes (strict 0-finding / approve / partial)、median 0.96、Step 5 進行可 |
+| 2026-05-25 | Step 5 完了 | commit `26ac01e` + main `7d25cb3` (Refactor 6 doc)、関数分割 218→77 LOC + 7 extract 関数全 <50 LOC、`_new_task_ensure_eol` cleaner、smoke +17 で 55/55 PASS 1.019s、refactor 3 観点 PASS、subagent a7ed43494dcb45276 confidence 0.95 |
+| 2026-05-25 | Task 完了 | 全 Step ✅、累計 commits 8 件 (push は user manual 待ち) |
 
 ## 派生 task / 次アクション候補
 
