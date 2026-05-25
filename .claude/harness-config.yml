@@ -228,3 +228,31 @@ workflow_stages_modify: [branch-decision, checkout, recover-design, pre-test, re
 # env 上書き例:
 #   export HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false   # 一時的に黙らせる
 list_plan_first_reminder_enabled: true
+
+# === Parallel Subagent Reminder (task #38) ===
+# PreToolUse(Agent) hook (.claude/hooks/parallel-subagent-reminder.sh) が消費。
+# subagent 起動時に以下 2 観点で <system-reminder> を注入する (BLOCK しない、fail-open):
+#
+#   (A) 並列性 reminder: 直近 TTL 秒内に他 Agent 起動なし、かつ task description に
+#       並列性 keyword (実装/fix/refactor/設計/新設/拡張/改修) を含む場合、
+#       「並列起動を検討せよ」warning を注入。除外: reviewer/review/監査/audit。
+#   (B) agent type 選定 reminder: subagent_type == "general-purpose" かつ
+#       task description に専門 type 適合 keyword (smoke 拡張/test 追加/refactor 等)
+#       を含む場合、「専門 type 推奨」warning を注入。
+#
+# - parallel_subagent_reminder_enabled: false で reminder 完全停止 (bypass)
+# - parallel_subagent_ttl_sec:          state file TTL (秒)、env override で変更可
+#
+# agent_type_keyword_mapping は draft §4.5.0 設定不要原則により hook 内 hardcode default
+# を採用。採用者は yaml 編集なしで動作する。任意 override したい場合のみ環境変数
+# HC_AGENT_TYPE_KEYWORD_MAPPING で改行区切り "keyword|type" 形式を渡す。
+#
+# 起源:
+#   - 設計 draft: docs/draft/parallel-subagent-enforcement.md §4.2-4.5
+#   - task:       docs/tasks/task-38-parallel-subagent-enforcement.md Step 1
+#
+# env 上書き例:
+#   export HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false   # 一時的に黙らせる
+#   export HC_PARALLEL_SUBAGENT_TTL_SEC=600              # TTL 10 分に延長
+parallel_subagent_reminder_enabled: true
+parallel_subagent_ttl_sec: 300

@@ -177,6 +177,146 @@ paths:
 - 委譲ガード(`delegation-guard.sh`)は「メインが直接コードを触る」ことを防ぐためで、subagent はその対象外
 - 「Bash deny = 進行不能」と短絡判断するとハーネス本来の目的(メイン → subagent 委譲)を裏切る
 
+### 6. 並列化義務（必須）
+
+メインエージェントは独立 sub-task を 2 件以上検出した場合、**並列起動を default** とする。
+1 subagent への統合委譲は **明示的理由が必要**。
+
+#### 並列起動の判定基準（OR 条件）
+
+以下のいずれかに該当する 2 件以上の sub-task は **並列起動の default 対象**:
+
+- **file 領域独立**: 編集対象 file の path が重なっていない (例: subagent A が `.claude/rules/foo.md` のみ編集 / subagent B が `.claude/hooks/bar.sh` のみ編集)
+- **依存関係なし**: subagent A の出力 / 副作用を subagent B が consume しない
+- **commit 競合なし**: 同一 branch で `git add <specific files>` 限定起動が可能 (CLAUDE.md Critical Operational Lessons HIGH「並列 subagent の git operation 競合」参照)
+
+#### 1 subagent 統合委譲の許容条件（明示的理由が必要）
+
+以下のいずれかが明らかな場合のみ、複数 sub-task を 1 subagent に統合委譲してよい:
+
+- **race risk**: state file / lock / DB row 等の共有 resource に対し並列 write が race condition を引き起こす
+- **共有 file 衝突**: 複数 sub-task が同一 file の異なる箇所を編集 (Edit hunk 競合 / merge conflict 不可避)
+- **context budget 制約**: 各 sub-task の context が大きく、並列起動で session 全体の token 上限を超える見込み
+- **sequential 必須**: sub-task A の出力 (例: 新規 hook の path) を sub-task B が consume する依存関係 (この場合は逐次起動が正解、§2 タスク順序整合性の保証で対応)
+
+#### 違反例
+
+- 独立 file 領域 (例: 3 file 編集) を 1 subagent に統合委譲 → 並列化機会逃失、user 体感速度劣化
+- 「規範追加 + hook 新設 + smoke 新設」のような完全独立 sub-task を sequential で起動 → 3 倍時間消費
+
+#### 違反検出時の対応
+
+1. **即時切替**: 起動済 subagent を継続させつつ、次の sub-task 群から並列起動に切替
+2. **教訓記録**: memory `feedback_*.md` に「並列化逃失の trigger / 真因 / 再発防止策」追記
+3. **規範補強**: 同種違反の再発が観測されたら本セクションに具体例追加
+
+#### 機械強制 (soft warning)
+
+`.claude/hooks/parallel-subagent-reminder.sh` (PreToolUse(Agent) hook) が以下を検出して `<system-reminder>` を注入する (BLOCK しない、AI 判断尊重):
+
+- 同 turn 内で過去 N 分間 (default 5 分) に他 Agent tool_use 履歴なし (= 単独起動) ∧ task description に並列化対象 keyword 検出
+- 並列化対象 keyword (default): "実装" "fix" "refactor" "設計" "新設" "拡張" "改修"
+- 除外 keyword (1+ match で skip): "reviewer" "review" "監査" "audit" (reviewer 系は採用 6 条 4 で別途並列強制)
+
+state file は `.claude/.parallel-subagent-state/recent.json` (TTL 5 分、atomic-mkdir lock で race 防止)。
+
+#### bypass
+
+| 経路 | env | スコープ | 痕跡 |
+|---|---|---|---|
+| reminder 無効化 | `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false` | 1 セッション | bypass.log (parallel-subagent-reminder 行) |
+| TTL 変更 | `HC_PARALLEL_SUBAGENT_TTL_SEC=<秒>` | env-set 中 | (記録なし、TTL のみ) |
+
+honor system: bypass 時は理由を `docs/tasks/<task-N>.md` 該当 entry に記録すること。
+
+#### 起源
+
+- 2026-05-25 task-35 Step 1+2+4 を 1 subagent に統合委譲した実例 (本来 3 並列起動可能だった file 領域独立 sub-task)
+- 設計 draft: `docs/draft/parallel-subagent-enforcement.md` §4.1 (規範強化部)
+- 副産物 entry #23
+- 規範化 task: #38
+
+### 7. agent type 選定義務（必須）
+
+メインエージェントは Agent tool 起動時、task description に応じた **適切な specialist agent_type** を default 採用する。
+`general-purpose` は specialized agent が不在 / 該当しない場合のみ採用する。
+
+#### 設定不要原則（user 強調要件、2026-05-25）
+
+採用者は `harness-config.yml` を編集しなくても、**hook 内 hardcode の default mapping** で agent type が自動判定される。`harness-config.yml` での override は **任意 (advanced 用途のみ)**、未設定でも完全動作する。
+
+これは「ハーネス採用 = box-open で即動作」を保証する SSoT 設計。default mapping を hook 内 SSoT として保持し、yaml override は補完オプション位置付け。
+
+#### default mapping（hook 内 SSoT）
+
+| task description keyword | 推奨 subagent_type | 採用理由 |
+|---|---|---|
+| "smoke 拡張" / "test 追加" / "test 修正" / "regression test" | `test-automator` | テスト設計 + 実装の専門知識 |
+| "refactor" / "関数分割" / "cleanup" / "dead code" | `refactoring-specialist` (or `refactor-cleaner`) | behavior-preserving refactor の専門知識 |
+| "build error" / "compile error" / "type error" | 言語別 `*-build-resolver` (例: `go-build-resolver` / `rust-build-resolver`) | 言語特化の error pattern 知識 |
+| "bash 品質" / "shellcheck" / "subshell" | `code-reviewer` | shell script lint / safety 知識 |
+| "設計レビュー" / "architecture review" | `architect-reviewer` | 設計観点の専門知識 |
+| "セキュリティレビュー" / "OWASP" / "脆弱性" | `security-reviewer` (or `security-auditor`) | security 観点の専門知識 |
+| "新 hook" / "新 script" / "新 file 実装" (specialized 不在) | `general-purpose` | OK、汎用 implementer として default |
+
+#### agent-router skill 連携（補完オプション、Phase 2 future）
+
+既存 `agent-router` skill (Anthropic 提供、`Route ambiguous "general-purpose" subagent prompts to the most appropriate specialist`) を SessionStart で auto-trigger 可能なら、本 hook と組合せで深い解析対応:
+
+- 本 hook (`parallel-subagent-reminder.sh`): PreToolUse(Agent) 時点の即時 warning 注入 (軽量 keyword 照合)
+- `agent-router` skill: task description の semantic 解析 (LLM 経由、深い推論)
+
+採用判断:
+
+- **Phase 1 (現状)**: 本 hook のみ実装 (軽量、確実、LLM cost 0)
+- **Phase 2 (future)**: `agent-router` skill auto-trigger 検討 (LLM cost 評価後)
+
+#### 違反例
+
+- test 拡張 task で `general-purpose` を default 採用 → `test-automator` の専門知識を逃失 (本 session 2026-05-25 task-35 Subagent B 実例)
+- refactor task で `general-purpose` を default 採用 → `refactoring-specialist` の behavior-preserving 知識を逃失 (本 session task-34 Step 5 実例)
+- 言語別 build error で `general-purpose` 採用 → 言語特化 `*-build-resolver` の error pattern 知識を逃失
+
+#### 違反検出時の対応
+
+1. **即時切替**: 該当 sub-task を停止せず継続 (差し戻し不要)、次の同種 sub-task から専門 agent type 採用
+2. **mapping 拡張検討**: 既存 mapping に該当 keyword がない場合、本セクションの mapping 表に追記提案 (規範化 task 起票)
+3. **教訓記録**: memory `feedback_*.md` に「agent type 選定逃失の trigger / 真因」追記
+
+#### 機械強制 (soft warning)
+
+同 `parallel-subagent-reminder.sh` 内で agent type 選定を照合する:
+
+- PreToolUse(Agent) 時点で `tool_input.subagent_type == "general-purpose"` ∧ task description に専門 type 適合 keyword 検出 → `<system-reminder>` で「専門 type 推奨」warning 注入
+- BLOCK しない (false positive 回避、AI 判断尊重)
+
+#### bypass
+
+並列化義務 §6 の bypass (`HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false`) で agent type 選定 warning も同時無効化される (1 hook 統合のため)。個別無効化は現状未提供 (将来 `HC_AGENT_TYPE_REMINDER_ENABLED` 等で分離検討可)。
+
+#### 任意 override（advanced 用途）
+
+採用者が hook 内 default mapping を上書き / 拡張したい場合のみ `harness-config.yml` で override 可:
+
+```yaml
+# 設定不要原則のため、本キーは optional (未設定なら hook 内 hardcode 使用)
+agent_type_keyword_mapping:
+  test-automator:
+    - "smoke 拡張"
+    - "test 追加"
+    - "<採用者追加 keyword>"
+```
+
+env override: `HC_AGENT_TYPE_KEYWORD_MAPPING=...` (改行区切り、advanced 用途のみ)。
+
+#### 起源
+
+- 2026-05-25 task-35 Subagent B (test 拡張) で `general-purpose` を採用、`test-automator` を逃失した実例
+- 2026-05-25 task-34 Step 5 (refactor) で `general-purpose` を採用、`refactoring-specialist` を逃失した実例
+- user 強調要件「設定不要で自動的に判断」(2026-05-25 13th save-state 後)
+- 設計 draft: `docs/draft/parallel-subagent-enforcement.md` §4.5 + §4.5.0 設定不要原則
+- 規範化 task: #38
+
 ### Hook による補助（soft warning）
 
 `.claude/hooks/agent-marker-set.sh` は PreToolUse(Agent) で foreground 起動を検出した場合、stderr に WARN を出す（block ではない）。`tool_input.run_in_background != true` のときに発火。

@@ -128,6 +128,12 @@
             "command": "bash .claude/hooks/agent-marker-set.sh",
             "timeout": 5,
             "statusMessage": "サブエージェント起動マーカー設定中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/parallel-subagent-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "並列 subagent / agent type 選定検証中..."
           }
         ]
       },
