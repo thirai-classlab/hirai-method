@@ -3,6 +3,7 @@
 # task-33 Phase 2 Step 2.2: /new-task の 📝 → 🔲 update or append helper
 # task-34 Step 4 iter2 fix: CRIT 3 + HIGH 8 件解消版
 # task-34 Step 4 iter3 fix: MUST FIX 7 + SHOULD FIX 3 件解消版
+# task-34 Step 4 iter4 fix: CR-001 (id overflow) + MED-001 (CR validation) 解消版
 #
 # 役割:
 #   list.md に対し、同 ID + 同 slug の AND 一致 grep で既存 📝 行を検出し:
@@ -35,6 +36,11 @@
 #   - M-MV-01: tmp file を target_dir に配置 (cross-filesystem 非 atomic 回避)
 #   - L-SC-01: shellcheck SC2016 disable comment
 #
+# iter4 追加 fix:
+#   - CR-001 (CRITICAL): id 18 桁超 reject で signed 64-bit overflow による silent APPEND 防止
+#                        ("99999999999999999999999999" 等で $((10#X)) が負数化 → 同 ID で 2 行混入)
+#   - MED-001: row_content CR (\r) 検出を改行 validation に追加 (CR-only 入力での list.md 破損防止)
+#
 # CLI entry point + source 両対応:
 #   - source して `update_or_append_task_row` 関数を call
 #   - 直接実行 `bash new-task-helper.sh update_or_append_task_row <id> <slug> <row_content> [list_md]`
@@ -64,15 +70,15 @@ _new_task_ensure_eol() (
 
 # --- メイン関数: update or append ---
 # Arguments:
-#   $1 id           — task id (numeric, leading zero 許容、内部で 10#$ 正規化)
+#   $1 id           — task id (numeric, leading zero 許容、内部で 10#$ 正規化、最大 18 桁)
 #   $2 slug         — kebab-case slug
-#   $3 row_content  — 完全な list.md row (`| id | 🔲 | ... |`)、改行不可
+#   $3 row_content  — 完全な list.md row (`| id | 🔲 | ... |`)、改行 (LF/CR) 不可
 #   $4 list_md      — list.md path (省略時 ${HC_TASK_DIR:-docs/tasks}/list.md)
 #
 # Return codes:
 #   0 = update or append 成功
 #   1 = BLOCK (誤連番 / 重複起動 / status 混在 / 複数マッチ)
-#   2 = usage error / file not found / lock timeout / invalid input
+#   2 = usage error / file not found / lock timeout / invalid input (overflow / CR 含む)
 update_or_append_task_row() (
     set -uo pipefail
 
@@ -97,14 +103,29 @@ update_or_append_task_row() (
             return 2
             ;;
     esac
+
+    # iter4 CR-001: signed 64-bit overflow 防止
+    # bash の $((10#X)) は signed 64-bit、上限 ~9.22e18 (19 桁) で overflow → 負数化 silent corruption
+    # 例: "99999999999999999999999999" (26 桁) → $((10#$raw_id)) = -2537764290115403777
+    # 結果として grep "^| -2537764290115403777 |" が 0 hit → APPEND mode で silent 2 行混入
+    # 対策: leading zero strip 後の長さで判定 (18 桁以下なら確実に 64-bit 範囲内)
+    local _stripped
+    _stripped=$(printf '%s' "$raw_id" | sed 's/^0*//')
+    _stripped="${_stripped:-0}"
+    if [ "${#_stripped}" -gt 18 ]; then
+        echo "ERROR: id '$raw_id' は 18 桁 (signed 64-bit 上限) を超える非対応値 (overflow 防止)" >&2
+        return 2
+    fi
+
     # 10 進数強制 (bash 構文、"08" を 8 進と解釈させない)。zero stripping して string 化
     local id
     id=$((10#$raw_id))
 
-    # iter3 QA-H01: row_content 改行 input validation
+    # iter3 QA-H01 + iter4 MED-001: row_content 改行 (LF/CR) input validation
+    # LF (\n) と CR (\r) の両方を検出 (CR-only 入力 = 旧 Mac 形式 / Windows 由来の \r\n 一部 等)
     case "$row_content" in
-        *$'\n'*)
-            echo "ERROR: row_content に改行不可 (list.md 行数破壊防止)" >&2
+        *$'\n'*|*$'\r'*)
+            echo "ERROR: row_content に改行 (LF/CR) 不可 (list.md 行数破壊 / 表示破損 防止)" >&2
             return 2
             ;;
     esac

@@ -27,6 +27,10 @@
 #   Case 10 (QA-C01/H-RC-01): parallel race 3 subprocess 並列実行で 📝 残存 0 件
 #   Case 11 (QA-C02): leading zero id ("01" vs "1") で silent duplicate 防止
 #
+#   iter4 追加 (CR-001 + MED-001):
+#   Case 11.5 (CR-001): 18 桁超 id (overflow) → BLOCK exit 2 (silent APPEND corruption 防止)
+#   Case 11.6 (MED-001): CR (\r) only row_content → BLOCK exit 2 (CR validation 拡張)
+#
 # 設計制約:
 #   - file-top に set -euo pipefail を書かない (Critical Lesson HIGH)
 #   - 全体実行時間 10 秒以内 (M-02)
@@ -512,7 +516,100 @@ EOF
     case_assert "Case 11.4: row_content 改行 → exit 2" "2" "$exit_code"
 }
 
-printf "===== new-task-batch-update-smoke (task-34 Step 4 iter3, 13 cases) =====\n\n"
+# === Case 11.5: iter4 CR-001 18 桁超 id (overflow) → BLOCK ===
+case11_5_id_overflow_reject() {
+    echo "=== Case 11.5 (iter4 CR-001): 18 桁超 id (overflow) → BLOCK exit 2 ==="
+    local list="$TMP_ROOT/list11_5.md"
+    cat > "$list" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+
+    # 26 桁 id (raw_id="99999999999999999999999999") → exit 2
+    # 旧実装は $((10#$raw_id)) で signed 64-bit overflow → 負数化 → grep "^| -... |" 0 hit
+    # → APPEND mode で同 ID で 2 行混入の silent corruption (CR-001)
+    local out exit_code
+    out=$(bash "$HELPER" update_or_append_task_row \
+        "99999999999999999999999999" foo "| 1 | 🔲 | **Task: foo** | overview | [foo.md] |" "$list" 2>&1)
+    exit_code=$?
+    case_assert "Case 11.5.1: 26 桁 id (overflow) → exit 2" "2" "$exit_code"
+    case_assert_contains "Case 11.5.2: ERROR message 含む '18 桁'" "18 桁" "$out"
+
+    # list.md 未変更確認 (overflow による silent APPEND corruption 防止)
+    local line_count
+    line_count=$(wc -l < "$list" | tr -d ' ')
+    case_assert "Case 11.5.3: list.md 1 行維持 (silent APPEND なし)" "1" "$line_count"
+
+    # 19 桁 (signed 64-bit 境界、9223372036854775807 = 19 桁 8e+18) → BLOCK
+    local list_19="$TMP_ROOT/list11_5_19.md"
+    cat > "$list_19" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    local exit_19
+    bash "$HELPER" update_or_append_task_row "1234567890123456789" foo \
+        "| 1 | 🔲 | **Task: foo** | overview | [foo.md] |" "$list_19" >/dev/null 2>&1
+    exit_19=$?
+    case_assert "Case 11.5.4: 19 桁 id (signed 64-bit 境界) → exit 2" "2" "$exit_19"
+
+    # 18 桁 (signed 64-bit 範囲内) → 正常動作 (BLOCK しない)
+    # raw_id="123456789012345678" (18 桁、9.22e18 未満) → id=123456789012345678 へ正規化
+    # list.md に id=123456789012345678 行がないので APPEND される (exit 0)
+    local list_18="$TMP_ROOT/list11_5_18.md"
+    cat > "$list_18" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    local exit_18
+    bash "$HELPER" update_or_append_task_row "123456789012345678" bar \
+        "| 123456789012345678 | 🔲 | **Task: bar** | overview | [bar.md] |" "$list_18" >/dev/null 2>&1
+    exit_18=$?
+    case_assert "Case 11.5.5: 18 桁 id (境界内) → exit 0 (overflow しない)" "0" "$exit_18"
+
+    # leading zero stripping 後の長さで判定 (確認: "001" (3 桁 raw) → "1" (1 桁) で OK)
+    local list_lz="$TMP_ROOT/list11_5_lz.md"
+    cat > "$list_lz" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    local exit_lz
+    bash "$HELPER" update_or_append_task_row "001" foo \
+        "| 1 | 🔲 | **Task: foo** | overview | [foo.md] |" "$list_lz" >/dev/null 2>&1
+    exit_lz=$?
+    case_assert "Case 11.5.6: leading zero '001' → exit 0 (stripped 1 桁判定)" "0" "$exit_lz"
+}
+
+# === Case 11.6: iter4 MED-001 CR-only row_content → BLOCK ===
+case11_6_cr_only_row_content_reject() {
+    echo "=== Case 11.6 (iter4 MED-001): CR (\r) row_content → BLOCK exit 2 ==="
+    local list="$TMP_ROOT/list11_6.md"
+    cat > "$list" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+
+    # row_content に CR (`\r`) 含む → exit 2
+    # 旧実装は *$'\n'* のみ検出、CR-only は通過 → list.md に \r 混入 (cat -A で ^M 可視化)
+    local out exit_code
+    out=$(bash "$HELPER" update_or_append_task_row \
+        1 foo $'| 1 | 🔲 | **Task: foo** | overview\rwith CR | [foo.md] |' "$list" 2>&1)
+    exit_code=$?
+    case_assert "Case 11.6.1: CR row_content → exit 2" "2" "$exit_code"
+    case_assert_contains "Case 11.6.2: ERROR message 含む 'LF/CR'" "LF/CR" "$out"
+
+    # list.md に CR 混入なし (未変更確認)
+    local cr_count
+    cr_count=$(tr -cd '\r' < "$list" | wc -c | tr -d ' ')
+    case_assert "Case 11.6.3: list.md に CR 混入なし" "0" "$cr_count"
+
+    # CRLF (混在) row_content も BLOCK
+    local list_crlf="$TMP_ROOT/list11_6_crlf.md"
+    cat > "$list_crlf" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    local exit_crlf
+    bash "$HELPER" update_or_append_task_row \
+        1 foo $'| 1 | 🔲 | **Task: foo** | overview\r\nwith CRLF | [foo.md] |' "$list_crlf" >/dev/null 2>&1
+    exit_crlf=$?
+    case_assert "Case 11.6.4: CRLF row_content → exit 2" "2" "$exit_crlf"
+}
+
+printf "===== new-task-batch-update-smoke (task-34 Step 4 iter4, 16 cases) =====\n\n"
 
 case1_update_mode
 case2_append_mode
@@ -528,6 +625,8 @@ case9b_in_progress_status_block
 case9c_completed_status_block
 case10_parallel_race_3_processes
 case11_leading_zero_id_normalization
+case11_5_id_overflow_reject
+case11_6_cr_only_row_content_reject
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"
