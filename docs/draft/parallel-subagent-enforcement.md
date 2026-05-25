@@ -1,6 +1,6 @@
 ---
 approval_required: true
-approved_at: ""
+approved_at: "2026-05-25"
 ---
 
 # Draft: parallel-subagent-enforcement (並列サブエージェント起動の機械強制)
@@ -199,6 +199,6 @@ agent_type_keyword_mapping:
 ## 9. 承認履歴
 
 - 2026-05-25: 起案 (user 要望「ハーネスで並列化を強制してください」)
-- TBD: user 承認 (本 draft レビュー後)
+- 2026-05-25: **user 承認** (本 session 13th save-state、user 発言「draft 2 件レビュー + 承認 (parallel-subagent-enforcement / autonomous-action-guard-relaxation) → 問題ありません」)
 - TBD: task #38 として起票 (`/new-task 38 parallel-subagent-enforcement`)
 - TBD: 実装着手 (3 並列起動で本 draft の dogfooding)

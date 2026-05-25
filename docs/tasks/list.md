@@ -81,6 +81,16 @@
 |    | 🔲 | Step 3 | (テスト設計レビュー) 5+ reviewer 動的選定 (全 Phase 統合観点)、iter cycle 5 回以内収束 | | |
 |    | 🔲 | Step 4 | (テスト合格) 統合 smoke 再実行 + CLAUDE.md grep 4 件 PASS + 3 リポ user manual install 案内 (`bash install.sh --update <target>` × 3) | | |
 |    | 🔲 | Step 5 | (リファクタリング) 3 観点判定 (skip 想定: 統合 task のため refactor 余地なし、各 sub-task は task #34/35/36 Step 5 で個別実施) | | |
+| 38 | 🔲 | **Task: parallel-subagent-enforcement (並列サブエージェント起動 + agent type 選定の機械強制)** | subagent 並列起動と agent type 選定の機械強制のため、PreToolUse(Agent) hook で並列性と agent type 適切性を warning 注入する仕組み (規範 + hook + 8 case smoke) を新設する。完成すれば AI が PreToolUse(Agent) 時点で並列起動忘れと general-purpose 誤採用を即時警告される。 | #29, #35 | [task-38-parallel-subagent-enforcement.md](task-38-parallel-subagent-enforcement.md) ← draft: [`docs/draft/parallel-subagent-enforcement.md`](../draft/parallel-subagent-enforcement.md) |
+|    | 🔲 | Step 1 | 規範追記 + hook 新設 + 配線 + smoke 統合実装 (3 並列、独立 file 領域、本 draft の dogfooding) | | |
+|    | 🔲 | Step 2 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + harness-optimizer / code-reviewer) | | |
+|    | 🔲 | Step 3 | (テスト合格) 新 smoke 8 cases (Case 1-5 並列性 + Case 6-8 agent type) PASS + 既存 smoke regression 0 | | |
+|    | 🔲 | Step 4 | (リファクタリング) 3 観点判定 (skip 想定: hook ~70 LOC で関数分割余地少) | | |
+| 39 | 🔲 | **Task: autonomous-action-guard-relaxation (main/stg 以外 push + PR 作成 自律実行可)** | feature push と PR 作成の過剰制約解消のため、autonomous-action-guard の禁止 pattern 配列から git push 一般 + gh pr create を削除し protected-branch-push-deny との二重ガードに整理する。完成すれば AI が main/stg 以外の branch への push と PR 作成を自律実行できるようになり、merge と main/stg 操作のみ user 明示承認が必須になる。 | #18 | [task-39-autonomous-action-guard-relaxation.md](task-39-autonomous-action-guard-relaxation.md) ← draft: [`docs/draft/autonomous-action-guard-relaxation.md`](../draft/autonomous-action-guard-relaxation.md) |
+|    | 🔲 | Step 1 | autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域) | | |
+|    | 🔲 | Step 2 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer) | | |
+|    | 🔲 | Step 3 | (テスト合格) 新 smoke 5 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 40/40 維持) | | |
+|    | 🔲 | Step 4 | (リファクタリング) 3 観点判定 (skip 想定: 配列削減のみで refactor 余地なし) | | |
 
 <!--
 記入ルール:

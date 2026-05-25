@@ -1,6 +1,6 @@
 ---
 approval_required: true
-approved_at: ""
+approved_at: "2026-05-25"
 ---
 
 # Draft: autonomous-action-guard-relaxation (main/stg 以外 push + PR 作成 自律実行可)
@@ -128,6 +128,6 @@ AUTONOMOUS_RESTRICTED_PATTERNS=(
 ## 9. 承認履歴
 
 - 2026-05-25: 起案 (user 要望、本 session 末)
-- TBD: user 承認 (本 draft レビュー後)
+- 2026-05-25: **user 承認** (本 session 13th save-state、user 発言「draft 2 件レビュー + 承認 (parallel-subagent-enforcement / autonomous-action-guard-relaxation) → 問題ありません」)
 - TBD: task #39 として起票 (`/new-task 39 autonomous-action-guard-relaxation`)
 - TBD: 実装着手 (2 並列で本 draft 自身の dogfooding)
