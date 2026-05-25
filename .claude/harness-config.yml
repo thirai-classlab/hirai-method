@@ -209,3 +209,14 @@ reviewer_registry_impl: [code-reviewer, refactoring-specialist, typescript-revie
 #   export HC_WORKFLOW_STAGES_NEW=$'requirements\nbasic-design\n...'   # 改行区切り
 workflow_stages_new: [requirements, basic-design, detailed-design, test-design, design-review, user-approval, task-creation, tdd, module-review, local-test, system-review, ci-cd, scenario-test, finish]
 workflow_stages_modify: [branch-decision, checkout, recover-design, pre-test, redesign, retest-design, tdd, module-review, full-test, system-review]
+
+# === list-md plan-first reminder (task-33 Phase 3) ===
+# SessionStart hook (.claude/hooks/list-md-plan-first-reminder.sh、Phase 3 で実装予定) が消費。
+# `docs/draft/*.md` ≥ 3 件 ∧ `docs/tasks/list.md` task エントリ行 == 0 を検出した場合、
+# <system-reminder> で「経路 B (batch planning) 適用検討」を強制注入する。
+#
+# - list_plan_first_reminder_enabled: false で reminder を完全停止 (Phase 1 完了時点では未実装、Phase 3 実装後に有効化)
+#
+# env 上書き例:
+#   export HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false   # 一時的に黙らせる
+list_plan_first_reminder_enabled: true

@@ -85,6 +85,8 @@ flowchart LR
 
 **ゴール**: `.claude/rules/task-management.md` に「設計→承認→タスク追加フロー」を 2 経路 (A: 単発、B: batch planning) に分岐する subsection が存在し、凡例 📝 の用途が明文化される (観察可能: `grep -q "経路 B (batch planning)" .claude/rules/task-management.md` exit 0)
 
+**honor system 退行リスク認識**: Phase 3+4 機械検出は warn ベース (block しない) のため、AI が経路 A only に退行する可能性残存。Phase 5 Step 5.4 で CLAUDE.md Critical Lessons に教訓追加し永続化することで再発抑制を構造的に補完。
+
 **作業概要**:
 - 既存 §「設計→承認→タスク追加フロー（必須）」直後に新 subsection 追加
 - 経路 A (単発): 既存フロー保持
@@ -97,7 +99,11 @@ flowchart LR
 - **Step 1.2 (テスト設計レビュー)**: 5+ reviewer 動的選定 (architect-reviewer / harness-optimizer / qa-expert / tdd-guide / pr-test-analyzer)、収束まで反復 (上限 5 回)
   - 完了条件: 全 reviewer approve
 - **Step 1.3 (テスト合格)**: 規範文書のため grep 検証 + 既存 smoke regression 0
-  - 完了条件: `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 smoke 全 PASS
+  - 完了条件:
+    - `grep -q "経路 A (単発、既存フロー、default)" .claude/rules/task-management.md` exit 0 (経路 A 不破壊)
+    - `grep -q "経路 B (batch planning)" .claude/rules/task-management.md` exit 0 (経路 B 追加)
+    - `grep -q "📝 設計（未承認）" .claude/rules/task-management.md` exit 0 (凡例 📝 用途明文化、用途 (1)/(2) table 存在)
+    - `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
 - **Step 1.4 (リファクタリング)**: skip 明示 (規範文書追記のみ、refactor 余地なし)
   - 完了条件: `skip: 規範文書追記のみ、refactor 余地なし` 明記
 
@@ -117,8 +123,13 @@ flowchart LR
   - 完了条件: helper 関数 `update_or_append_task_row()` 存在、grep 検証可能
 - **Step 2.3 (テスト設計レビュー)**: 5+ reviewer (上記 + code-reviewer 追加)
   - 完了条件: 全 reviewer approve
-- **Step 2.4 (テスト合格)**: 新 smoke `new-task-batch-update-smoke.sh` で update vs append 2 cases PASS
-  - 完了条件: smoke exit 0、既存 smoke regression 0
+- **Step 2.4 (テスト合格)**: 新 smoke `new-task-batch-update-smoke.sh` で **3 cases** PASS
+  - 完了条件: 新 smoke `new-task-batch-update-smoke.sh` で **3 cases** PASS:
+    - Case 1 (update mode): list.md に同 ID 📝 行 既存 + `/new-task` 実行 → 行数増えず status 🔲 へ変化
+    - Case 2 (append mode): list.md 同 ID 不在 + `/new-task` 実行 → 新規行 append
+    - Case 3 (batch 先置き整合性): list.md に 📝 N 行 batch 先置き後、同 ID で `/new-task` 連続実行 → 各行 status 順次 update、行重複なし
+    既存 smoke (task-rule-guard 11 cases / workflow-guard / next-actions-hooks 等) regression 0
+  - 追加: `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
 - **Step 2.5 (リファクタリング)**: 3 観点 (持続可能性 / 汎用性 / 非冗長化) 判定
   - 完了条件: refactor 実施 or skip 明示
 
@@ -131,34 +142,43 @@ flowchart LR
 - bypass env: `HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false`
 - subagent staging で `.claude/hooks/` 編集 + settings.json SessionStart 配線
 
+**計測ロジック**:
+- task エントリ行カウント: `grep -cE '^\| [0-9]' docs/tasks/list.md`
+- draft カウント: `find docs/draft -name "*.md" -not -name "_*" | wc -l`
+- 検出条件: `task_count == 0 && draft_count >= 3`
+- bypass: `[ "${HC_LIST_PLAN_FIRST_REMINDER_ENABLED:-true}" = "false" ]` で skip
+
 **Step**:
 - **Step 3.1**: hook 実装 (subagent staging で `.claude/hooks/` 編集)
   - 完了条件: hook file 存在 + bypass env 動作
 - **Step 3.2**: settings.json SessionStart 配線
-  - 完了条件: `jq '.hooks.SessionStart' .claude/settings.json` で新 entry 含まれる
+  - 完了条件:
+    - `jq '.hooks.SessionStart' .claude/settings.json` で新 entry 含まれる
+    - `.claude/harness-config.yml` に `list_plan_first_reminder_enabled: true` キー追加、`config-loader.sh` で `HC_LIST_PLAN_FIRST_REMINDER_ENABLED` export 確認
 - **Step 3.3 (テスト設計レビュー)**: 5+ reviewer
   - 完了条件: 全 reviewer approve
 - **Step 3.4 (テスト合格)**: 新 smoke 3 case (条件成立 / 不成立 / bypass)
-  - 完了条件: smoke exit 0
+  - 完了条件: smoke exit 0、`bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
 - **Step 3.5 (リファクタリング)**: skip or 抽出判定
 
-### Phase 4: `task-rule-guard.sh` PreToolUse(`/new-draft`) で 📝 不在 warn (P5)
+### Phase 4: `task-rule-guard.sh` PreToolUse(Write `docs/draft/*.md`) で 📝 不在 warn (P5、R-03 反映)
 
-**ゴール**: `/new-draft <slug>` 実行時、list.md に対応 slug の 📝 行が不在なら warn context 注入 (block しない) されることが smoke で検証される (観察可能: 📝 行不在で `/new-draft` 実行時 stderr に「先に list.md に 📝 行を先置きするか、master roadmap で計画段階を明示」keyword 含まれる)
+**ゴール**: Write(`docs/draft/<slug>.md`) 発生時、list.md に対応 slug の 📝 行が不在なら warn context 注入されることが smoke で検証される
 
 **作業概要**:
-- `task-rule-guard.sh` PreToolUse(Bash) で `/new-draft <slug>` pattern 検出
-- list.md grep で `📝 .* <slug>` row 存在 check
+- `task-rule-guard.sh` の既存 PreToolUse(Edit/Write) hook を拡張、tool_input.file_path が `docs/draft/*.md` pattern に match する場合に slug 抽出 + list.md grep
+- slug 抽出: file_path から `docs/draft/<slug>.md` の `<slug>` を basename + .md strip で取得
+- list.md grep: `grep -E "^\| [0-9]+ \| 📝 .* ${slug}" docs/tasks/list.md`
 - 不在なら warn context 注入 (block しない、honor system)
-- smoke 拡充 11→13 cases (2 new case 追加: 📝 不在で warn / 📝 存在で素通り)
+- smoke 拡充 11→13 cases (2 new case: 📝 不在で warn / 📝 存在で素通り、Bash `/new-draft` intercept は scope 外)
 
 **Step**:
 - **Step 4.1**: hook 拡張 (subagent staging で `.claude/hooks/task-rule-guard.sh`)
   - 完了条件: hook 拡張済、新 logic grep 検証可能
 - **Step 4.2 (テスト設計レビュー)**: 5+ reviewer
   - 完了条件: 全 reviewer approve
-- **Step 4.3 (テスト合格)**: smoke 拡充 11→13 cases、新 2 case PASS
-  - 完了条件: smoke exit 0、既存 11 cases regression 0
+- **Step 4.3 (テスト合格)**: smoke 拡充 11→13 cases、Write(docs/draft/*.md) で 📝 不在 warn 検証
+  - 完了条件: smoke exit 0、`bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
 - **Step 4.4 (リファクタリング)**: skip
 
 ### Phase 5: テスト設計レビュー → smoke 統合 → リファクタリング (採用 5 条 4 強制、Phase 全体)
@@ -173,7 +193,10 @@ flowchart LR
 - **Step 5.3 (リファクタリング)**: 統合観点で重複 / 命名 / 抽出余地評価
   - 完了条件: refactor or skip 明示
 - **Step 5.4 (CLAUDE.md 教訓追加)**: Critical Operational Lessons に HIGH 級として追加
-  - 完了条件: `grep -q "list.md plan-first" CLAUDE.md` exit 0
+  - 完了条件:
+    - `grep -q "list.md plan-first" CLAUDE.md` exit 0
+    - 教訓 entry が HIGH 列に分類 (`grep -A 2 "list.md plan-first" CLAUDE.md | grep -q "HIGH"` exit 0)
+    - 再発防止 action 1 行以上記載 (`grep -A 5 "list.md plan-first" CLAUDE.md | grep -qE "(再発防止|prevention|Phase 3|Phase 4)"` exit 0)
 
 ## 完了条件
 
