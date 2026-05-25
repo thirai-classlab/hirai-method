@@ -170,7 +170,7 @@ improvement_proposal_dedup_hours: 24
 #   export HC_CONTEXT_BUDGET_ENABLED=false     # 一時的に無効化
 context_budget_enabled: true
 context_budget_limit: 1000000
-context_budget_threshold: 0.60
+context_budget_threshold: 0.66
 context_budget_state_dir: .claude/.context-budget-state
 
 # === Reviewer Registry (W2 design-review fan-out 用) ===

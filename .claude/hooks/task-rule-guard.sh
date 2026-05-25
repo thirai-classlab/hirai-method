@@ -103,6 +103,84 @@ if [ -z "$file" ]; then
   exit 0
 fi
 
+# === ${draft_dir}/ 配下の Write は plan-first warn 判定 (block しない、honor system) ===
+# task-33 Phase 3 規範化 (list-md-plan-first-normative.md §3 P5、task-36 Step 1 / Step 2):
+#   新規 draft Write が発生した時点で list.md に対応 slug の 📝 行が不在なら warn 注入。
+#   既存 task_glob filter (L下) より前に挿入する必要あり (filter で early-exit するため)。
+#
+# task-36 Step 2 iter2 fix:
+#   F1: Write 限定 (Edit は素通り) — draft の既存 update 時に warn を出さない
+#   F2: slug grep を col 限定 (awk) に変更 — 別 task の description/detail に slug が含まれる
+#       false negative (warn 抑制) を防ぐ。false positive は許容。
+#
+# task-36 Step 2 iter3 fix:
+#   F7: awk col 拡張 (MED-2、reviewer C) — 実 list.md 6 列 format
+#       `| # | Status | Task | 概要 | 依存 | 詳細 |` (awk NF=8、$4=Task / $5=概要 / $6=依存 / $7=詳細)
+#       で slug link が col 7 にある false negative を解消。概要列 ($5) のみ除外して
+#       行全体で slug index 検索 (false positive 回避 + 5 列/6 列 両 format サポート)。
+draft_glob_a="*/${HC_DRAFT_DIR}/*.md"
+draft_glob_b="*/${HC_DRAFT_DIR}/*.mdx"
+# shellcheck disable=SC2254  # 意図的な glob 展開 (case pattern として draft path 判定)
+case "$file" in
+  $draft_glob_a|$draft_glob_b)
+    # F1: Write のみ判定 (Edit は素通り、既存 draft update に warn 不要)
+    if [ "$tool" != "Write" ]; then
+      echo '{}'
+      exit 0
+    fi
+    # template (_DRAFT_TEMPLATE.md 等の underscore prefix) は exempt
+    draft_basename=$(basename "$file")
+    case "$draft_basename" in
+      _*) echo '{}'; exit 0 ;;
+    esac
+    # slug 抽出 (basename から .md / .mdx を除去)
+    draft_slug="${draft_basename%.md}"
+    draft_slug="${draft_slug%.mdx}"
+    # list.md path 算出 (draft path から root 推定)
+    # shellcheck disable=SC2295  # 意図的: HC_DRAFT_DIR は literal path、glob 文字含まない前提
+    draft_root="${file%/${HC_DRAFT_DIR}/*}"
+    list_md_path="${draft_root}/${HC_TASK_DIR}/list.md"
+    # list.md 不在なら silent pass (init 未完了)
+    if [ ! -f "$list_md_path" ]; then
+      echo '{}'
+      exit 0
+    fi
+    # F7 (iter3): 📝 行検出を「概要列 ($5) のみ除外 + 行全体 index 検索」に変更
+    # 対応する list.md 列構成:
+    #   5 列 format (規範): | # | Status | Task | 概要 | 詳細 |              awk NF=7、$5=概要、slug link は $6
+    #   6 列 format (実 list.md): | # | Status | Task | 概要 | 依存 | 詳細 | awk NF=8、$5=概要、slug link は $7
+    #   将来 7 列拡張時も $5 概要列のみ除外 + 残列で検索 で対応可
+    # false positive 回避: 概要列に偶然 slug substring が含まれるケースは $5 を空文字に置換して除外
+    # awk 変数 injection 防止: draft_slug は basename 由来で英数字 + `.` + `-` のみ (kebab-case)、index() は literal 比較で安全
+    # [OFS rewrite 副作用の設計メモ]
+    # `$5 = ""` を実行すると awk は $0 を OFS (default: 空白) で再構築するため、
+    # `|` 区切りが空白に置換される。ただし index($0, slug) は literal 文字列比較であり、
+    # slug は kebab-case (英数字+ハイフンのみ) で空白を含まないため、誤検知ゼロで安全。
+    # 5列 / 6列 / 7列 format 進化耐性のため列番号非依存設計。
+    if awk -F'|' -v slug="$draft_slug" '
+      $3 !~ /📝/ { next }
+      {
+        $5 = ""  # 概要列除外 ($0 が OFS=空白で再構築されるが index() slug 検出には影響なし)
+        if (index($0, slug) > 0) { found = 1; exit }
+      }
+      END { exit (found ? 0 : 1) }
+    ' "$list_md_path" 2>/dev/null; then
+      # 既存 📝 行あり → pass (warn なし)
+      echo '{}'
+      exit 0
+    fi
+    # 📝 行不在 → warn 注入 (block しない)
+    warn_msg="[task-rule-guard] 新規 draft '${draft_basename}' を Write 中ですが、list.md に対応 slug '${draft_slug}' の 📝 行が見当たりません。
+
+batch planning (経路 B、N ≥ 3 task の一括計画) の場合は、先に list.md に 📝 行を先置きしてください。
+単発 task (経路 A) なら本 warn は無視可。
+
+詳細: .claude/rules/task-management.md §plan-first 行先置きフロー (batch planning)"
+    jq -n --arg m "$warn_msg" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$m}}'
+    exit 0
+    ;;
+esac
+
 # === ${task_dir}/ 配下のみ判定対象（${draft_dir}/ は通過） ===
 task_glob="*/${HC_TASK_DIR}/*"
 case "$file" in
