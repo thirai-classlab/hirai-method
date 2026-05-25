@@ -89,6 +89,14 @@ trigger keyword (1+ match で trigger):
 
 並列起動だけでなく **agent type 選定の適切性** も hook で強制する。本 session で `general-purpose` を default 採用した結果、test 拡張 / refactor 系で専門 agent type (`test-automator` / `refactoring-specialist`) を逃失した。
 
+#### 4.5.0 設定不要原則 (user 強調要件「設定不要で自動的に判断」、2026-05-25)
+
+採用者が `harness-config.yml` を編集しなくても、**hook 内 hardcode の default mapping** で自動判定する。`harness-config.yml` での override は **任意 (advanced 用途のみ)**、未設定でも完全動作する。
+
+加えて、既存 `agent-router` skill (Anthropic 提供、`Route ambiguous "general-purpose" subagent prompts to the most appropriate specialist`) を SessionStart で auto-trigger 検討可。本 hook (`parallel-subagent-reminder.sh`) と agent-router skill は補完関係:
+- 本 hook = PreToolUse(Agent) 時点の warning 注入 (即時介入)
+- agent-router skill = `general-purpose` task description を解析し最適 specialist を推奨 (深い解析)
+
 #### 4.5.1 default mapping (PreToolUse(Agent) で `subagent_type` + task description 照合)
 
 | task description keyword | 推奨 subagent_type | 本 session 実例 |
@@ -112,28 +120,44 @@ PreToolUse(Agent) で:
 - Case 7: `general-purpose` + 「refactor」description → `refactoring-specialist` 推奨 warning
 - Case 8: 専門 type (`test-automator` 等) 採用 → silent (適切)
 
-#### 4.5.4 keyword → type mapping の外部化
+#### 4.5.4 keyword → type mapping の hook 内 hardcode (default) + 任意 override
 
-`harness-config.yml` で外部化、採用者側で拡張可能:
+**default は hook 内 hardcode** (採用者設定不要、上記 4.5.1 mapping 表が SSoT):
+
+```bash
+# .claude/hooks/parallel-subagent-reminder.sh 内 (抜粋)
+declare -A AGENT_TYPE_MAPPING=(
+    ["test-automator"]="smoke 拡張|test 追加|test 修正|regression test"
+    ["refactoring-specialist"]="refactor|関数分割|cleanup|dead code"
+    ["code-reviewer"]="bash 品質|shellcheck|subshell"
+    # 採用 6 条 4 規範化 = mapping 拡張時は本配列に追記
+)
+```
+
+**任意 override** (advanced 用途、`harness-config.yml`):
 
 ```yaml
+# 採用者が default mapping を上書き / 拡張したい場合のみ
 agent_type_keyword_mapping:
   test-automator:
     - "smoke 拡張"
     - "test 追加"
-    - "test 修正"
-    - "regression test"
-  refactoring-specialist:
-    - "refactor"
-    - "関数分割"
-    - "cleanup"
-    - "dead code"
-  code-reviewer:
-    - "bash 品質"
-    - "shellcheck"
-    - "subshell"
-  # 拡張は採用者側で追記可能
+    - "<採用者追加 keyword>"
+  # 採用 6 条 4 ではなく Phase 設計で追記
 ```
+
+未設定なら hook 内 hardcode が動作。設定不要原則 (4.5.0) 遵守。
+
+#### 4.5.5 agent-router skill 連携 (補完オプション)
+
+既存 skill `agent-router` (Anthropic 提供) を SessionStart で auto-trigger 可能なら、本 hook と組合せで深い解析対応:
+
+- 本 hook: 即時 warning 注入 (PreToolUse、軽量 keyword 照合)
+- agent-router skill: task description の semantic 解析 (LLM 経由、深い推論)
+
+採用判断:
+- Phase 1: 本 hook のみ実装 (軽量、確実)
+- Phase 2 (future): agent-router skill auto-trigger 検討 (LLM cost 評価後)
 
 ## 5. リスク
 
@@ -149,8 +173,8 @@ agent_type_keyword_mapping:
 - [ ] `.claude/rules/development-process.md` §並列化義務 + §agent type 選定義務 セクション追加 (grep `並列化義務` exit 0 + grep `agent type 選定` exit 0)
 - [ ] `.claude/hooks/parallel-subagent-reminder.sh` 新設 (約 70 LOC + fail-open guard + atomic-mkdir lock + subshell 関数化 + agent type 照合 logic)
 - [ ] `.claude/settings.json` PreToolUse(Agent) 配線
-- [ ] `.claude/harness-config.yml` `parallel_subagent_reminder_enabled: true` + `parallel_subagent_ttl_sec: 300` + `agent_type_keyword_mapping:` (test-automator / refactoring-specialist / code-reviewer 等の keyword list) キー追加
-- [ ] `.claude/hooks/lib/config-loader.sh` で `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED` + `HC_PARALLEL_SUBAGENT_TTL_SEC` + (agent_type_keyword_mapping は yq 経由 parse) export
+- [ ] `.claude/harness-config.yml` `parallel_subagent_reminder_enabled: true` + `parallel_subagent_ttl_sec: 300` キー追加 (`agent_type_keyword_mapping` は **設定不要原則** で hook 内 hardcode、yaml override は **任意 / advanced 用途**)
+- [ ] `.claude/hooks/lib/config-loader.sh` で `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED` + `HC_PARALLEL_SUBAGENT_TTL_SEC` export (`HC_AGENT_TYPE_KEYWORD_MAPPING` は optional、未設定なら hook 内 default 使用)
 - [ ] 新 smoke `.claude/tests/parallel-subagent-reminder-smoke.sh` **8 cases** PASS (Case 1-5 並列性 + Case 6-8 agent type 選定)
 - [ ] 既存 smoke regression 0
 - [ ] 5+ reviewer iter cycle で strict 0-finding 収束 (採用 6 条 4)
