@@ -86,11 +86,11 @@
 |    | 🔲 | Step 2 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + harness-optimizer / code-reviewer) | | |
 |    | 🔲 | Step 3 | (テスト合格) 新 smoke 8 cases (Case 1-5 並列性 + Case 6-8 agent type) PASS + 既存 smoke regression 0 | | |
 |    | 🔲 | Step 4 | (リファクタリング) 3 観点判定 (skip 想定: hook ~70 LOC で関数分割余地少) | | |
-| 39 | 🔲 | **Task: autonomous-action-guard-relaxation (main/stg 以外 push + PR 作成 自律実行可)** | feature push と PR 作成の過剰制約解消のため、autonomous-action-guard の禁止 pattern 配列から git push 一般 + gh pr create を削除し protected-branch-push-deny との二重ガードに整理する。完成すれば AI が main/stg 以外の branch への push と PR 作成を自律実行できるようになり、merge と main/stg 操作のみ user 明示承認が必須になる。 | #18 | [task-39-autonomous-action-guard-relaxation.md](task-39-autonomous-action-guard-relaxation.md) ← draft: [`docs/draft/autonomous-action-guard-relaxation.md`](../draft/autonomous-action-guard-relaxation.md) |
-|    | 🔲 | Step 1 | autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域) | | |
-|    | 🔲 | Step 2 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer) | | |
-|    | 🔲 | Step 3 | (テスト合格) 新 smoke 5 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 40/40 維持) | | |
-|    | 🔲 | Step 4 | (リファクタリング) 3 観点判定 (skip 想定: 配列削減のみで refactor 余地なし) | | |
+| 39 | ✅ | **Task: autonomous-action-guard-relaxation (main/stg 以外 push + PR 作成 自律実行可)** | feature push と PR 作成の過剰制約解消のため、autonomous-action-guard の禁止 pattern 配列から git push 一般 + gh pr create を削除し protected-branch-push-deny との二重ガードに整理する。完成すれば AI が main/stg 以外の branch への push と PR 作成を自律実行できるようになり、merge と main/stg 操作のみ user 明示承認が必須になる。 **完了** (2026-05-25、4 commits: c96033a/34159d2/f670d96/0c5113e、iter5 5 reviewer approve median confidence 0.96、smoke 12/12 + delegation-guard 48/48 PASS、Step 4 skip 明示) | #18 | [task-39-autonomous-action-guard-relaxation.md](task-39-autonomous-action-guard-relaxation.md) ← draft: [`docs/draft/autonomous-action-guard-relaxation.md`](../draft/autonomous-action-guard-relaxation.md) |
+|    | ✅ | Step 1 | autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域) | | |
+|    | ✅ | Step 2 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer) | | |
+|    | ✅ | Step 3 | (テスト合格) 新 smoke 12 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 48/48 維持) | | |
+|    | ✅ | Step 4 | (リファクタリング) 3 観点判定 (skip 想定: 配列削減のみで refactor 余地なし) | | |
 
 <!--
 記入ルール:

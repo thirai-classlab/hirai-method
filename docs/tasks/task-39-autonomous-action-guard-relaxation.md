@@ -11,7 +11,7 @@ total_steps: 4
 
 # Task #39: autonomous-action-guard-relaxation (main/stg 以外 push + PR 作成 自律実行可)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了**
 > 起案: 2026-05-25
 > 関連: protected-branch-push-deny (#18, commit `ad2f7bc`), delegation-guard 二重ガード継続
 > 設計起源: [`docs/draft/autonomous-action-guard-relaxation.md`](../draft/autonomous-action-guard-relaxation.md)
@@ -89,16 +89,16 @@ total_steps: 4
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域) | 0.5h | — |
-| 2 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer) | 0.5h | Step 1 |
-| 3 | 🔲 | (テスト合格) 新 smoke 12 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 48/48 維持) | 0.3h | Step 2 |
-| 4 | 🔲 | (リファクタリング) 3 観点判定 (skip 想定: 配列削減のみで refactor 余地なし) | 0.1h | Step 3 |
+| 1 | ✅ | autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域) | 0.5h | — |
+| 2 | ✅ | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer) | 0.5h | Step 1 |
+| 3 | ✅ | (テスト合格) 新 smoke 12 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 48/48 維持) | 0.3h | Step 2 |
+| 4 | ✅ | (リファクタリング) 3 観点判定 (skip 想定: 配列削減のみで refactor 余地なし) | 0.1h | Step 3 |
 
 合計工数: 1.4h
 
 ### Step 1: autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要 (list.md 概要欄)**: hook 配列削減と modes.md table 更新を 2 並列 subagent で独立 file 領域実装
 
@@ -109,7 +109,7 @@ total_steps: 4
 
 ### Step 2: (テスト設計レビュー)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: メインが 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer)、並列起動、収束まで反復 (上限 5 回)
 
@@ -117,7 +117,7 @@ total_steps: 4
 
 ### Step 3: (テスト合格)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 新 smoke **12 cases** PASS + 既存 smoke regression 0 (特に `delegation-guard-deny-layers-smoke.sh` **48/48 PASS** 維持で二重ガード継続を実証)
 
@@ -125,11 +125,11 @@ total_steps: 4
 
 ### Step 4: (リファクタリング)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 持続可能性 / 汎用性 / 非冗長化 の 3 観点で見直す
 
-**完了条件 (or skip)**: 配列削減のみで refactor 余地なし、`skip: 配列削減のみで refactor 余地なし、helper 抽出不要` 想定
+**完了条件**: skip: 配列削減のみで refactor 余地なし、helper 抽出不要 (iter5 reviewer approve 済、残存 MEDIUM 2 件は副産物 entry として後続 task 化)
 
 ## 工数見積
 
@@ -158,6 +158,10 @@ total_steps: 4
 | 2026-05-25 | 承認 | user 「draft 2 件レビュー + 承認 → 問題ありません」 |
 | 2026-05-25 | 着手予定 | branch `feat/list-md-plan-first-normative` 継続使用 |
 | 2026-05-25 | Step 2 iter4 | iter1-3 reviewer findings 全件解消、smoke 12/12 + delegation-guard 48/48 PASS |
+| 2026-05-25 | Step 2 完了 | iter5 全 5 reviewer approve (HIGH 0、median confidence 0.96)、smoke 12/12 + delegation-guard 48/48 PASS |
+| 2026-05-25 | Step 3 完了 | smoke 12/12 PASS 既達 (iter2/iter4 拡張)、delegation-guard regression 0 |
+| 2026-05-25 | Step 4 完了 | skip 明示 (3 観点判定: 配列削減のみで refactor 余地なし) |
+| 2026-05-25 | Task 完了 | 累積 commits c96033a (起票) → 34159d2 (Step 1) → f670d96 (iter2 fix) → 0c5113e (iter4 fix) 計 4 commit、HIGH 0 維持で収束 |
 
 ## 派生 task / 次アクション候補
 
