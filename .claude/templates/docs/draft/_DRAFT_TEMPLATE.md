@@ -49,17 +49,23 @@ flowchart LR
 
 ## 3. 採用案の詳細設計
 
-### Wave / Sub-task 分割
+### Task 計画 (採用 6 条準拠、Phase 中間階層廃止)
 
-| Wave | 内容 | 工数 | 効果 |
-|:---:|:---|---:|:---|
-| W1 | … | 0.3 | 即日改善 |
-| W2 | … | 0.5 | … |
-| W3 | … | 0.4 | … |
+> **採用 6 条 (2026-05-25)**: Task = Phase = N Step、Phase 中間階層廃止。1 draft = 1 Task (= 1 deliverable)、複数 deliverable なら複数 draft に分割。
+
+#### Step 計画
+
+| Step | Status | 作業概要 | 工数 | 依存 |
+|:---:|:---:|:---|---:|:---|
+| 1 | 🔲 | <作業 1> | 0.3h | — |
+| 2 | 🔲 | <作業 2> | 0.5h | Step 1 |
+| 3 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 | 0.5h | Step 2 |
+| 4 | 🔲 | (テスト合格) unit/integration/E2E test | 0.3h | Step 3 |
+| 5 | 🔲 | (リファクタリング) 3 観点判定 or skip | 0.2h | Step 4 |
 
 合計: <X> 工数
 
-### W1 詳細
+### Step 1 詳細
 
 #### スコープ
 - 対象ファイル: `<path>`
@@ -76,9 +82,15 @@ flowchart LR
 #### テスト
 - `tests/foo.test.ts`: <観点>
 
-### W2 詳細
+### Step 2 詳細
 
 …
+
+### Step 3-5 詳細 (Task 最終 3 Steps、固定)
+
+- **Step 3 (テスト設計レビュー)**: 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、収束まで反復 (上限 5 回、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`)
+- **Step 4 (テスト合格)**: UI 含む Task は E2E 必須、それ以外は unit/integration test、既存 smoke regression 0
+- **Step 5 (リファクタリング)**: 3 観点 (持続可能性 / 汎用性 / 非冗長化) で判定、不要なら `skip: <reason>` 明示
 
 ---
 
