@@ -82,3 +82,10 @@
 # === 監査 (W2.2) ===
 # harness-audit スクリプトのみ許可（read-only）
 ^python3 \.claude/scripts/harness-audit\.py( |$)
+
+# === タスク管理 helper (task-34) ===
+# /new-task command が経路 B (batch planning) で list.md の 📝 → 🔲 update 動作を機械実装する helper。
+# 規範: `.claude/rules/task-management.md` §plan-first 経路 B (採用 6 条 規範化、2026-05-25)
+# 引数: update_or_append_task_row <id> <slug> <row_content> [<list_md>]
+# 設計起源: docs/draft/list-md-plan-first-normative.md §3 P2、task-34 iter3 で 6 reviewer 並列検証
+^bash \.claude/scripts/new-task-helper\.sh( |$)

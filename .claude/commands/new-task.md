@@ -81,15 +81,45 @@ description: 承認済 draft からタスクファイルを生成し、list.md �
 
 `<概要>` は draft の「真因サマリ」または「目的」から 1 行抽出。
 
-#### 実装 helper (Phase 2 Step 2.2 で実装)
+#### 実装 helper (task-34 Step 2 で実装、iter3 で parallel race 等修正)
 
-`update_or_append_task_row()` 関数 (`.claude/scripts/init-tasks.sh` 拡張 or 新 helper script) で機械実装する:
+helper script: `.claude/scripts/new-task-helper.sh` の `update_or_append_task_row()` 関数 (subshell 関数化 / kebab-word boundary 照合 / atomic-mkdir lock 内蔵)。
 
-1. `grep -E "^\| <id> \| 📝 .*<slug>" docs/tasks/list.md` で既存 📝 行検出 (AND 一致)
-2. 不在 → append (経路 A 動作、末尾に新規行追加)
-3. 既存 1 件 → update (経路 B 動作、status 列のみ書き換え)
-4. **複数マッチ (2 行以上 hit)** → BLOCK + user 通知 (list.md の行重複は user 手動修正必須)
-5. **同 ID で status 📝 以外 既存** → BLOCK + 重複 ID 修正案内
+CLI 呼出 (経路 A / B 共通):
+
+```bash
+bash .claude/scripts/new-task-helper.sh update_or_append_task_row <id> <slug> <row_content> [<list_md>]
+```
+
+引数:
+- `<id>` — タスク ID (非負整数、leading zero は `printf '%d'` で正規化)
+- `<slug>` — kebab-case slug (英数字 + `-` のみ)
+- `<row_content>` — 完成済 list.md 行 (`| <id> | 🔲 | ... |`、**改行 `\n` 不可** = input validation で reject)
+- `<list_md>` — optional、既定は `${HC_TASK_DIR:-docs/tasks}/list.md`
+
+動作 (Phase 1 step 3 判定と整合):
+1. id 数値正規化 + non-negative integer validation (非数値 / leading zero / 改行 row_content は exit 2 = system-level error)
+2. atomic-mkdir lock 取得 (`<list_md>.lock.d`、最大 100 retries × 50ms = 5 秒、timeout で exit 2)
+3. `^\| <id> \|` で同 ID 行を取得、`(^|[^a-zA-Z0-9-])<slug>([^a-zA-Z0-9-]|$)` (kebab-word boundary) で同 slug 判定
+4. 同 ID + 別 slug + 📝 既存 → BLOCK 「誤連番」(exit 1)
+5. 同 ID + 同 slug + 📝 以外 (🔲/🔄/✅) → BLOCK 「重複起動 / 完了済 task の上書き」(exit 1)
+6. 同 ID + 同 slug + 📝 単数 → status 列のみ 🔲 へ書換 (update mode、行数増えず)
+7. 同 ID + 同 slug + 📝 複数 → BLOCK 「list.md 行重複、user 手動修正必須」(exit 1)
+8. 同 ID 不在 → 末尾 append (append mode、`_new_task_ensure_eol` で末尾改行担保)
+
+exit code 仕様 (caller の error path 設計に必須):
+- `0` — 成功 (update / append いずれか)
+- `1` — data-level BLOCK (誤連番 / 重複起動 / 行重複)
+- `2` — system-level error (引数不正 / lock timeout / mktemp 失敗 / 改行 row_content)
+
+caller 責務 (`/new-task` command 内で本 helper を呼ぶ Bash script):
+- `HC_TASK_DIR` を本 helper に伝える必要がある場合は、caller 側で `.claude/hooks/lib/config-loader.sh` を source して `HC_TASK_DIR` を export してから helper を呼ぶ
+- helper 自身は `config-loader.sh` を source せず env fallback (`${HC_TASK_DIR:-docs/tasks}`) のみ実装、CLI 単独実行 (smoke test) と caller 経由実行の両用途に対応 (Design Constraints 遵守)
+
+並列実行安全性 (task-34 iter3 で確保):
+- atomic-mkdir lock により subagent 並列 `/new-task` 実行時の race condition を防止
+- iter2 では 3 並列で 10/10 race 再現 → iter3 lock 実装で 0/10 race 達成
+- bash-whitelist 登録: `^bash \.claude/scripts/new-task-helper\.sh( |$)` (`.claude/bash-whitelist.txt`)
 
 ### Phase 4: draft の取り扱い
 
