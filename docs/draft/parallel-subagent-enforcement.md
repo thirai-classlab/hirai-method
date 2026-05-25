@@ -77,13 +77,63 @@ trigger keyword (1+ match で trigger):
 除外 keyword (1+ match で skip、reviewer 系を除外):
 - "reviewer" "review" "監査" "audit"
 
-### 4.4 新 smoke (5 cases)
+### 4.4 新 smoke (5 cases、§4.5 追加で 8 cases に拡張)
 
-- Case 1: 単独 Agent 起動 + 実装系 description → warning 注入
+- Case 1: 単独 Agent 起動 + 実装系 description → warning 注入 (並列性)
 - Case 2: 単独 Agent 起動 + review 系 description → silent
 - Case 3: 並列 (2+) Agent 起動 → silent (history に既に Agent あり)
 - Case 4 (fail-open): state file 不在環境 → exit 0 + silent
 - Case 5 (bypass): env で disable → silent
+
+### 4.5 適切な agent type 選定の機械強制 (本 session 2026-05-25 user 追加要件)
+
+並列起動だけでなく **agent type 選定の適切性** も hook で強制する。本 session で `general-purpose` を default 採用した結果、test 拡張 / refactor 系で専門 agent type (`test-automator` / `refactoring-specialist`) を逃失した。
+
+#### 4.5.1 default mapping (PreToolUse(Agent) で `subagent_type` + task description 照合)
+
+| task description keyword | 推奨 subagent_type | 本 session 実例 |
+|---|---|---|
+| "smoke 拡張" "test 追加" "test 修正" "regression test" | `test-automator` | task-35 Subagent B (general-purpose 採用 ⚠️) |
+| "refactor" "関数分割" "cleanup" "dead code" | `refactoring-specialist` or `refactor-cleaner` | task-34 Step 5 (general-purpose 採用 ⚠️) |
+| "build error" "compile error" "type error" | 言語別 `*-build-resolver` | (本 session 該当なし) |
+| "bash 品質" "shellcheck" "subshell" | `code-reviewer` | iter review で実証 (適切) |
+| "設計レビュー" "architecture review" | `architect-reviewer` | iter review で実証 (適切) |
+| "新 hook" "新 script" "新 file 実装" | `general-purpose` (OK、specialized 不在) | task-35 Subagent A (適切) |
+
+#### 4.5.2 検出ロジック (案 B 拡張)
+
+PreToolUse(Agent) で:
+- `tool_input.subagent_type == "general-purpose"` ∧ task description に専門 type 適合 keyword 検出 → `<system-reminder>` で「専門 type 推奨」warning 注入
+- BLOCK しない (false positive 回避、AI 判断尊重)
+
+#### 4.5.3 新 smoke 拡張 (3 cases 追加で計 8 cases)
+
+- Case 6: `general-purpose` + 「smoke 拡張」description → `test-automator` 推奨 warning
+- Case 7: `general-purpose` + 「refactor」description → `refactoring-specialist` 推奨 warning
+- Case 8: 専門 type (`test-automator` 等) 採用 → silent (適切)
+
+#### 4.5.4 keyword → type mapping の外部化
+
+`harness-config.yml` で外部化、採用者側で拡張可能:
+
+```yaml
+agent_type_keyword_mapping:
+  test-automator:
+    - "smoke 拡張"
+    - "test 追加"
+    - "test 修正"
+    - "regression test"
+  refactoring-specialist:
+    - "refactor"
+    - "関数分割"
+    - "cleanup"
+    - "dead code"
+  code-reviewer:
+    - "bash 品質"
+    - "shellcheck"
+    - "subshell"
+  # 拡張は採用者側で追記可能
+```
 
 ## 5. リスク
 
@@ -96,12 +146,12 @@ trigger keyword (1+ match で trigger):
 
 ## 6. 完了条件 (DoD)
 
-- [ ] `.claude/rules/development-process.md` §並列化義務 セクション追加 (grep `並列化義務` exit 0)
-- [ ] `.claude/hooks/parallel-subagent-reminder.sh` 新設 (約 50 LOC + fail-open guard + atomic-mkdir lock + subshell 関数化)
+- [ ] `.claude/rules/development-process.md` §並列化義務 + §agent type 選定義務 セクション追加 (grep `並列化義務` exit 0 + grep `agent type 選定` exit 0)
+- [ ] `.claude/hooks/parallel-subagent-reminder.sh` 新設 (約 70 LOC + fail-open guard + atomic-mkdir lock + subshell 関数化 + agent type 照合 logic)
 - [ ] `.claude/settings.json` PreToolUse(Agent) 配線
-- [ ] `.claude/harness-config.yml` `parallel_subagent_reminder_enabled: true` + `parallel_subagent_ttl_sec: 300` キー追加
-- [ ] `.claude/hooks/lib/config-loader.sh` で `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED` + `HC_PARALLEL_SUBAGENT_TTL_SEC` export
-- [ ] 新 smoke `.claude/tests/parallel-subagent-reminder-smoke.sh` 5 cases PASS
+- [ ] `.claude/harness-config.yml` `parallel_subagent_reminder_enabled: true` + `parallel_subagent_ttl_sec: 300` + `agent_type_keyword_mapping:` (test-automator / refactoring-specialist / code-reviewer 等の keyword list) キー追加
+- [ ] `.claude/hooks/lib/config-loader.sh` で `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED` + `HC_PARALLEL_SUBAGENT_TTL_SEC` + (agent_type_keyword_mapping は yq 経由 parse) export
+- [ ] 新 smoke `.claude/tests/parallel-subagent-reminder-smoke.sh` **8 cases** PASS (Case 1-5 並列性 + Case 6-8 agent type 選定)
 - [ ] 既存 smoke regression 0
 - [ ] 5+ reviewer iter cycle で strict 0-finding 収束 (採用 6 条 4)
 
