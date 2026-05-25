@@ -18,11 +18,16 @@
 #   - `docs/tasks/list.md` 不在環境 (新規採用 project / /init-tasks 未実行) → 何もせず exit 0
 #   - `docs/draft/` 不在 → 同上
 #
-# 環境変数:
+# 環境変数 (env override > YAML > defaults):
 #   HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false  ... reminder 全停止 (bypass)
 #   HC_TASK_DIR                                  ... default docs/tasks
 #   HC_DRAFT_DIR                                 ... default docs/draft
 #   CLAUDE_PROJECT_DIR                           ... Claude Code 注入の project root
+#
+# YAML 設定 (harness-config.yml):
+#   list_plan_first_reminder_enabled: false      ... reminder 全停止 (env と同等動作)
+#   config-loader.sh 経由で env として export される。
+#   env override が優先 (env > YAML > defaults)。
 #
 # Stdin:  SessionStart hook JSON (使わない、念のため消費)
 # Stdout: 未使用
@@ -37,16 +42,30 @@
 #   - task #33 (list-md-plan-first-normative) 採用 6 条 supersede による分割で task #35 へ
 #   - 設計起源: docs/draft/list-md-plan-first-normative.md §3 P3
 #   - 規範:     .claude/rules/task-management.md §plan-first 経路 B
+#   - Step 5 refactor: harness-optimizer M-1 finding (YAML→hook 受渡し欠如) を解消
+#     context-budget.sh L59-62 パターンを踏襲し、config-loader.sh source で
+#     harness-config.yml の list_plan_first_reminder_enabled: false が hook に届くようにする。
 
 set -u
 
 # stdin 消費 (SessionStart hook JSON は使わない)
 cat >/dev/null 2>&1 || true
 
+# --- config 読み込み ---
+# harness-config.yml の list_plan_first_reminder_enabled を HC_LIST_PLAN_FIRST_REMINDER_ENABLED
+# として export する。env override が優先される (config-loader.sh 仕様)。
+# source 失敗時は || true で fail-open (caller への set flags leak を防止)。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/config-loader.sh
+if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+fi
+
 _lpfr_main() (
     set -uo pipefail
 
-    # bypass check (env override 経由)
+    # bypass check (env override 経由 or YAML 経由、config-loader.sh で統一済)
     if [ "${HC_LIST_PLAN_FIRST_REMINDER_ENABLED:-true}" = "false" ]; then
         exit 0
     fi
@@ -103,7 +122,7 @@ _lpfr_main() (
 - \`${draft_dir_rel}/*.md\` が ${draft_count} 件存在し、かつ \`${task_dir}/list.md\` に task エントリ行 (📝/🔲/🔄/✅) が 0 件です。
 - master roadmap で N ≥ 3 task を一括計画する場合、\`.claude/rules/task-management.md\` §plan-first 経路 B に従い list.md に N 行 **📝 設計（未承認）** で先置きしてください (main 直接 Edit、task-rule-guard.sh 既存 exempt 通過)。
 - 規範: \`.claude/rules/task-management.md\` §「plan-first 行先置きフロー (batch planning) — 2 経路分岐」
-- bypass: \`HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false\`
+- bypass: \`HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false\` または harness-config.yml \`list_plan_first_reminder_enabled: false\`
 </system-reminder>
 EOF
     exit 0
