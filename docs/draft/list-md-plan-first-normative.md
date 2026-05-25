@@ -1,7 +1,7 @@
 <!--
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-05-25
+approved_by: user
 retroactive: false
 -->
 
@@ -207,6 +207,7 @@ flowchart LR
 
 | 日付 | 承認者 | 結果 |
 |---|---|---|
+| 2026-05-25 | user | 承認 (「a」発話で option (a) draft 承認 + 即着手選択) → `docs/tasks/task-33-list-md-plan-first-normative.md` 作成、Phase 1 着手 |
 
 ---
 

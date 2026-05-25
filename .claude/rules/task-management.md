@@ -138,8 +138,59 @@ reviewer 確認推奨 (`/module-review` or `/system-review` 時に skip 妥当�
 3. **承認依頼**: ユーザーにレビュー・承認を依頼。承認履歴を draft の §8 に記録 (Loop モードでも必須、戦略判断は例外条項対象)
 4. **タスク化**: 承認後に `/new-task <id> <slug>` を実行 — 以下が **同時に** 行われる:
    - `docs/tasks/task-<id>-<slug>.md` を `_TASK_TEMPLATE.md` から生成
-   - `docs/tasks/list.md` に `🔲 未着手` 行を追加
+   - `docs/tasks/list.md` に `🔲 未着手` 行を追加 (📝 行が既存なら 🔲 update、不在なら新規 append。詳細は「plan-first 行先置きフロー (batch planning)」§ 参照)
    - draft は `docs/draft/<slug>.md` に保存（履歴として残す）
+
+### plan-first 行先置きフロー (batch planning) — 2 経路分岐 (task-33 規範化、2026-05-25)
+
+**設計→承認→タスク追加フロー**は **2 経路** に分岐する。task の発生源 (単発 vs batch planning) で使い分け、batch 計画下での list.md 進捗 visibility を確保する。
+
+#### 経路 A (単発、既存フロー、default)
+
+上記 4 step を順次実行 — 1 task ずつ draft 起案 → user 承認 → `/new-task` で 1 行 append。hot fix / 1 機能 / 副産物 entry 由来など、batch 計画前提のない task に適用。
+
+#### 経路 B (batch planning、新規)
+
+**master roadmap で N 個の task を計画段階で先に並べる**用途。`/new-task` の sequential 動作が想定外なため、以下 4 step で plan-first を強制する:
+
+1. **master roadmap (or 高 level 計画 doc) で N 個の task を §plan で確定**: `docs/draft/00_master-roadmap.md` 等で計画段階の task list (id / slug / 概要 / 依存) を確定 + user 承認
+2. **main agent が `list.md` に N 行 📝 batch 先置き**: 承認時点で list.md 末尾に N 行を **📝 設計（未承認）** status で append (`/new-task` ではなく main 直接 Edit、`task-rule-guard.sh` で exempt 済)。各行は draft link 付きで、IDE で開いた user が batch 計画全体を即可視できる
+3. **個別 draft 起案** (subagent 並列可): 各 task の draft (`docs/draft/<slug>.md`) を起案 → user 承認 → 経路 A step 4 へ
+4. **`/new-task <id> <slug>` で 📝 → 🔲 update**: list.md の 同 ID (or 同 slug) 既存 📝 行を **🔲 未着手** に status update (新規行 append しない、行重複なし)。`/new-task` 実装は list.md grep で既存 📝 行検出 → 不在なら append (経路 A 動作)、既存なら update (経路 B 動作)
+
+#### 凡例 📝 の用途明文化
+
+`docs/tasks/list.md` 凡例の `📝 設計（未承認）` は **2 用途** をカバーする:
+
+| 用途 | 状態 | 出典 |
+|---|---|---|
+| **(1) draft 起案中 / user 承認待ち** | 単発 task の draft 起案後、`/new-task` 前の中間状態 (経路 A 中間) | 既存運用 |
+| **(2) batch plan の計画段階先置き** | master roadmap で承認された task 群を list.md に N 行先置き、個別 draft 起案待ち / 承認待ち (経路 B 中間) | task-33 規範化 (2026-05-25) |
+
+両用途で `/new-task` 実行時に 🔲 に update される。
+
+#### 経路 B 適用判定
+
+以下のいずれかなら **経路 B** を選択:
+
+- master roadmap (or 同等の高 level 計画 doc) で N ≥ 3 個の task を一括計画
+- 全 task の draft 起案 + user 承認 + `/new-task` 完了まで複数セッション跨る見込み (IDE 視点での progress visibility が必要)
+- task 間に強い順序依存 / Phase 区分があり、全体像を user が IDE で随時確認したい
+
+それ以外は **経路 A** が default。判定は main agent が user 承認時に確認、迷ったら user に問い合わせ。
+
+#### 機械検出 (task-33 Phase 3 + 4)
+
+- **SessionStart hook**: `docs/draft/*.md` ≥ 3 件 ∧ `list.md` task 行 == 0 を検出 → `<system-reminder>` で「経路 B 適用検討」を強制注入 (bypass: `HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false`)
+- **PreToolUse(`/new-draft`)**: list.md に対応 slug の 📝 行が不在なら warn context 注入 (block しない、honor system)
+
+詳細は task-33 Phase 3 / 4 を参照。
+
+#### 起源
+
+- 2026-05-25 recall_poc で plan-first 不在事案発生 (26 task batch plan で list.md 空継続 + user 明示質問でようやく顕在化)
+- user Post-Mortem 報告で真因 4 階層 (1) `/new-task` 1-task-at-a-time gate (2) 規範矛盾 (3) 凡例 📝 用途未明文化 (4) AI 運用判断ミス を特定
+- task-33 で案 C ハイブリッド (P1+P2+P3+P5、工数 2.5) 採用、本セクションは P1 (規範修正) に該当
 
 ### テンプレートの場所
 
