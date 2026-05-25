@@ -103,6 +103,52 @@ if [ -z "$file" ]; then
   exit 0
 fi
 
+# === ${draft_dir}/ 配下の Write は plan-first warn 判定 (block しない、honor system) ===
+# task-33 Phase 3 規範化 (list-md-plan-first-normative.md §3 P5、task-36 Step 1):
+#   新規 draft Write が発生した時点で list.md に対応 slug の 📝 行が不在なら warn 注入。
+#   既存 task_glob filter (L下) より前に挿入する必要あり (filter で early-exit するため)。
+draft_glob_a="*/${HC_DRAFT_DIR}/*.md"
+draft_glob_b="*/${HC_DRAFT_DIR}/*.mdx"
+# shellcheck disable=SC2254  # 意図的な glob 展開 (case pattern として draft path 判定)
+case "$file" in
+  $draft_glob_a|$draft_glob_b)
+    # template (_DRAFT_TEMPLATE.md 等の underscore prefix) は exempt
+    draft_basename=$(basename "$file")
+    case "$draft_basename" in
+      _*) echo '{}'; exit 0 ;;
+    esac
+    # slug 抽出 (basename から .md / .mdx を除去)
+    draft_slug="${draft_basename%.md}"
+    draft_slug="${draft_slug%.mdx}"
+    # list.md path 算出 (draft path から root 推定)
+    # shellcheck disable=SC2295  # 意図的: HC_DRAFT_DIR は literal path、glob 文字含まない前提
+    draft_root="${file%/${HC_DRAFT_DIR}/*}"
+    list_md_path="${draft_root}/${HC_TASK_DIR}/list.md"
+    # list.md 不在なら silent pass (init 未完了)
+    if [ ! -f "$list_md_path" ]; then
+      echo '{}'
+      exit 0
+    fi
+    # 📝 行 grep (slug は word boundary で厳密一致、kebab-case 想定)
+    # pattern: 行頭 "| <id> | 📝" 以降に slug が含まれる行
+    # 複数マッチ時は最初の 1 件で良い (本判定は存在 / 不在のみ)
+    if grep -qE "^\| [0-9]+ \| 📝 .*[^a-z0-9-]${draft_slug}([^a-z0-9-]|$)" "$list_md_path" 2>/dev/null; then
+      # 既存 📝 行あり → pass (warn なし)
+      echo '{}'
+      exit 0
+    fi
+    # 📝 行不在 → warn 注入 (block しない)
+    warn_msg="[task-rule-guard] 新規 draft '${draft_basename}' を Write 中ですが、list.md に対応 slug '${draft_slug}' の 📝 行が見当たりません。
+
+batch planning (経路 B、N ≥ 3 task の一括計画) の場合は、先に list.md に 📝 行を先置きしてください。
+単発 task (経路 A) なら本 warn は無視可。
+
+詳細: .claude/rules/task-management.md §plan-first 行先置きフロー (batch planning)"
+    jq -n --arg m "$warn_msg" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$m}}'
+    exit 0
+    ;;
+esac
+
 # === ${task_dir}/ 配下のみ判定対象（${draft_dir}/ は通過） ===
 task_glob="*/${HC_TASK_DIR}/*"
 case "$file" in

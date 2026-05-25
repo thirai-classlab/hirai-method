@@ -2,17 +2,19 @@
 # task-rule-guard-smoke.sh — task-22 W3 smoke for task-rule-guard.sh
 #                          + task-29 Phase 4 Step 1 で Phase/Step format 検証 case を追加
 #                          + task-21 W3 仕様変更 (Phase 最終 Step 2 段 → 3 段) 追従 (Case 7 更新 + Case 11 追加)
+#                          + task-36 Step 3 (Sub B) で plan-first warn 検証 case を追加 (Case 12/13)
 #
 # 設計起源:
 #   docs/draft/hook-reliability-uplift.md W3
 #   docs/tasks/task-29-phase-step-task-structure.md Phase 4
 #   docs/tasks/task-21-system-reminder-attention-fix.md W3 (2026-05-23 user 仕様変更)
+#   docs/tasks/task-36-list-md-plan-first-draft-warn.md Step 3 (task-36 Sub B)
 #
 # 対象 hook / template:
 #   .claude/hooks/task-rule-guard.sh
 #   .claude/templates/docs/tasks/_TASK_TEMPLATE.md
 #
-# 検証範囲 (11 ケース):
+# 検証範囲 (13 ケース):
 #   既存 5 case (task-22 W3):
 #     Case 1: 新規 task Write、対応 draft 不在 → BLOCK
 #     Case 2: 新規 task Write、対応 draft 存在 → PASS (additionalContext)
@@ -30,18 +32,23 @@
 #   追加 1 case (task-21 W3 仕様変更追従):
 #     Case 11: template にテスト設計レビューの動的選定方針 ("5+ reviewer" + "動的選定") が存在
 #
+#   追加 2 case (task-36 Step 3 Sub B — plan-first draft warn):
+#     Case 12: docs/draft/<slug>.md Write、list.md に 📝 行不在 → additionalContext に "plan-first" keyword 含む (warn)
+#     Case 13: docs/draft/<slug>.md Write、list.md に 📝 行存在 → additionalContext に "plan-first" keyword 含まない (素通り)
+#
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs)
 #   - tmp project root を /tmp/ に作って docs/tasks docs/draft を配置
 #   - hook は HC_TASK_DIR / HC_DRAFT_DIR / HC_TASKGUARD_STATE_DIR の env override に従う
 #   - subagent 短絡防止: CLAUDE_HARNESS_ROLE をクリア + HC_AGENT_MARKER_DIR を空 dir に向ける
 #   - 新規 case は実 template (_TASK_TEMPLATE.md) を読み、grep で検証する pure read-only
+#   - Case 12/13 は task-36 Sub A (hook 拡張) 完了後に PASS する想定 (TDD RED phase 許容)
 #
 # 実行:
 #   bash .claude/tests/task-rule-guard-smoke.sh
 #
 # 終了コード:
-#   0 = 11/11 PASS / 1 = 1 件以上 FAIL
+#   0 = 13/13 PASS / 1 = 1 件以上 FAIL
 
 set -uo pipefail
 
@@ -112,6 +119,20 @@ import os, json
 try:
     d = json.loads(os.environ["OUT"])
     print(d.get("reason", ""))
+except Exception:
+    print("")
+' 2>/dev/null
+}
+
+# additionalContext を hookSpecificOutput から抽出
+# 設計起源: task-36 task file Step 3 — top-level additionalContext は常時 null
+extract_additional_context() {
+  OUT="$1" python3 -c '
+import os, json
+try:
+    d = json.loads(os.environ["OUT"])
+    hso = d.get("hookSpecificOutput", {}) or {}
+    print(hso.get("additionalContext", "") or "")
 except Exception:
     print("")
 ' 2>/dev/null
@@ -398,7 +419,74 @@ case11_template_test_design_review_dynamic_selection() {
   fi
 }
 
-printf "===== task-rule-guard-smoke (task-22 W3.2 + task-29 Phase 4 Step 1 + task-21 W3 仕様変更追従, 11 cases) =====\n\n"
+# === Case 12 (task-36 Sub B): docs/draft/<slug>.md Write、list.md に 📝 行不在 → warn (plan-first keyword) ===
+#
+# 設計起源: task-36 task file Step 3、jq path 注意: .hookSpecificOutput.additionalContext
+# TDD RED phase: Sub A (hook 拡張) 完了後に PASS する想定。Sub A 並走中は FAIL 許容。
+case12_draft_write_no_planned_row_warns() {
+  local label="Case 12: docs/draft/<slug> Write, list.md has no 📝 row → warn with 'plan-first'"
+
+  # fixture: list.md に対象 slug の 📝 行が無い状態
+  local list_md="${TMP_ROOT}/docs/tasks/list.md"
+  cat > "$list_md" <<'LISTEOF'
+| # | ステータス | Phase | 概要 | 依存 | 詳細 |
+|:---:|:---:|:---|:---|:---|:---|
+| 1 | ✅ | some-other-task | ... | — | ... |
+LISTEOF
+
+  # fixture: 書き込み対象の draft file (内容は問わない)
+  local draft_fp="${TMP_ROOT}/docs/draft/test-slug-not-planned.md"
+  touch "$draft_fp"
+
+  local out additional_ctx
+  out=$(json_write_input "$draft_fp" | env "${COMMON_ENV[@]}" bash "$HOOK" Write 2>/dev/null)
+  additional_ctx=$(extract_additional_context "$out")
+
+  if printf '%s' "$additional_ctx" | grep -q "plan-first"; then
+    PASS=$((PASS + 1))
+    printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (additionalContext did not contain 'plan-first')")
+    printf "  FAIL: %s\n    additionalContext: %s\n    out: %s\n" "$label" "$additional_ctx" "$out"
+  fi
+}
+
+# === Case 13 (task-36 Sub B): docs/draft/<slug>.md Write、list.md に 📝 行存在 → 素通り (plan-first keyword 含まない) ===
+#
+# 設計起源: task-36 task file Step 3
+# TDD RED phase: Sub A (hook 拡張) 完了後に PASS する想定。Sub A 並走中は FAIL 許容。
+case13_draft_write_planned_row_exists_passthrough() {
+  local label="Case 13: docs/draft/<slug> Write, list.md has 📝 row → no 'plan-first' warn"
+
+  # fixture: list.md に対象 slug の 📝 行が存在する状態
+  local list_md="${TMP_ROOT}/docs/tasks/list.md"
+  cat > "$list_md" <<'LISTEOF'
+| # | ステータス | Phase | 概要 | 依存 | 詳細 |
+|:---:|:---:|:---|:---|:---|:---|
+| 99 | 📝 | test-slug-planned | ... | — | ... |
+LISTEOF
+
+  # fixture: 書き込み対象の draft file
+  local draft_fp="${TMP_ROOT}/docs/draft/test-slug-planned.md"
+  touch "$draft_fp"
+
+  local out additional_ctx
+  out=$(json_write_input "$draft_fp" | env "${COMMON_ENV[@]}" bash "$HOOK" Write 2>/dev/null)
+  additional_ctx=$(extract_additional_context "$out")
+
+  # grep -qv は空文字列で exit 1 になるため ! grep -q で判定する
+  if ! printf '%s' "$additional_ctx" | grep -q "plan-first"; then
+    PASS=$((PASS + 1))
+    printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (additionalContext unexpectedly contained 'plan-first')")
+    printf "  FAIL: %s\n    additionalContext: %s\n    out: %s\n" "$label" "$additional_ctx" "$out"
+  fi
+}
+
+printf "===== task-rule-guard-smoke (task-22 W3.2 + task-29 Phase 4 Step 1 + task-21 W3 仕様変更追従 + task-36 Step 3 Sub B, 13 cases) =====\n\n"
 
 case1_no_draft_blocked
 case2_draft_exists_pass
@@ -411,6 +499,8 @@ case8_template_small_task_mode
 case9_template_metadata_placeholder
 case10_template_no_legacy_wave_section
 case11_template_test_design_review_dynamic_selection
+case12_draft_write_no_planned_row_warns
+case13_draft_write_planned_row_exists_passthrough
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"
