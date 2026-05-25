@@ -92,9 +92,9 @@ bash .claude/scripts/new-task-helper.sh update_or_append_task_row <id> <slug> <r
 ```
 
 引数:
-- `<id>` — タスク ID (非負整数、leading zero は `printf '%d'` で正規化)
+- `<id>` — タスク ID (非負整数、leading zero は `printf '%d'` で正規化、**18 桁上限** = signed 64-bit overflow 防止 / 規範 §plan-first 経路 B では ID 払い出し時 `next_id=$((${max:-0} + 1))` で 1 始まり連番のため実用上 18 桁に到達しない)
 - `<slug>` — kebab-case slug (英数字 + `-` のみ)
-- `<row_content>` — 完成済 list.md 行 (`| <id> | 🔲 | ... |`、**改行 `\n` 不可** = input validation で reject)
+- `<row_content>` — 完成済 list.md 行 (`| <id> | 🔲 | ... |`、**改行 `\n` / `\r` 不可** = input validation で reject、CR-only / CRLF も検出)
 - `<list_md>` — optional、既定は `${HC_TASK_DIR:-docs/tasks}/list.md`
 
 動作 (Phase 1 step 3 判定と整合):
