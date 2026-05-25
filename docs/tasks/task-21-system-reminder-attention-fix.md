@@ -43,6 +43,24 @@ user manual 42 sessions 実行を支援する 5 ファイル新規:
 
 既存 eval 仕様 2 ファイル (`system-reminder-attention.md` / `loop-mode-autonomy.md`) は不変。staging 戦略遵守 (`/tmp` Write → `mv` → `chmod +x`)。
 
+### 2026-05-25 11th session 並行進行ステータス (task-33 系列と並走)
+
+- task-29 採用 5 条 → 採用 6 条 (Task=Phase=N Step) の連続 dogfooding 進行中 (task-33 → 5 task 分割完了、task-34 Step 4 iter2 fix subagent `a3524fd32786f11e4` 稼働中)
+- 本 session で task-21 W3 残は **agent 側着手可能項目ゼロ** を再確認 (case A 実行 + 採用判定基準 1, 2 測定 + 採用後 3 リポ反映、いずれも user manual 案件)
+- agent 並行進行作業: 本 entry 追記 (進捗追跡) + grader script `.claude/evals/grader-{system-reminder-attention,loop-mode-autonomy}.sh` の事前確認 commit `0db9889` で完備済を確認、追加 dry-run 不要 (subagent a5109ff50a06066c0 confidence 0.94 で当初検証済)
+- **user 依頼 (次の任意タイミング)**:
+  1. `.claude/evals/system-reminder-attention.runner.md` 参照、30 sessions capability + 12 sessions regression = 42 sessions 実行
+  2. results を `.claude/evals/{system-reminder-attention,loop-mode-autonomy}.results.template.md` に追記
+  3. `bash .claude/evals/grader-system-reminder-attention.sh` / `grader-loop-mode-autonomy.sh` で自動 score 算出
+  4. 採用判定 (基準 1: pass@3 ≥ 0.95、基準 2: pass^3 = 1.00) → 採用なら 3 リポ反映へ
+- **採用判定後の 3 リポ反映手順 (user manual、cross-repo write 規範遵守)**:
+  ```bash
+  bash install.sh --update /Users/t.hirai/recall_poc
+  bash install.sh --update /Users/t.hirai/タスクマネジメント/taskManageSystem
+  bash install.sh --update /Users/t.hirai/work/classlab-weekly-news
+  ```
+  agent (main / subagent / worktree isolation) では Claude Code sandbox + delegation-guard 二重制約で deny されるため、必ず user manual 経路で実施 (`.claude/rules/development-process.md` §「cross-repo write 例外」)
+
 ### 残作業
 
 - **W3 case A 実行** (user manual): 30 sessions capability + 12 sessions regression = 42 sessions (推定 90-130 分、user 任意タイミング)
