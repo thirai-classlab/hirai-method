@@ -12,7 +12,7 @@ total_steps: 5
 
 # Task #35: SessionStart hook で「list.md 空 + draft ≥ 3」検出 (plan-first reminder)
 
-> Status: **🔲 未着手** (2026-05-25 起案、task #34 完了後着手予定)
+> Status: **✅ 完了** (2026-05-25、Step 1+2+4 統合 → Step 3 5 reviewer iter1 → Step 5 2 並列 refactor、commits 3 件 `453aafb`/`29e11cb`/(Subagent A+B 集約)、hook 132 LOC + smoke 311 LOC 9/9 PASS 3.26s、shellcheck 0、既存 smoke regression 0、agent type 適切性 finding は next-actions entry #23 draft へ)
 > 起案: 2026-05-25 (task #33 分割、旧 Phase 3)
 > 関連: #33 (継承元 task)、#34 (兄弟分割 task、依存先)、#36/#37 (兄弟分割 task)
 > 設計起源: [`docs/draft/list-md-plan-first-normative.md`](../draft/list-md-plan-first-normative.md) §3 P3 (SessionStart hook)
@@ -111,17 +111,17 @@ draft §3 P3 + 6 reviewer iter1 想定 finding (harness-opt M-01 / M-02) 反映�
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | hook 実装 (subagent staging で `.claude/hooks/list-md-plan-first-reminder.sh` 新設、fail-open guard 含む) | 0.2h | — |
-| 2 | 🔲 | settings.json SessionStart 配線 + harness-config.yml + config-loader.sh 連携 | 0.2h | Step 1 |
-| 3 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定、iter cycle 5 回以内収束 | 0.5h | Step 2 |
-| 4 | 🔲 | (テスト合格) 新 smoke 3 cases PASS + 既存 smoke regression 0 | 0.2h | Step 3 |
-| 5 | 🔲 | (リファクタリング) 3 観点判定 (skip 想定: 新 hook 約 30 LOC、helper 抽出余地なし) | 0.1h | Step 4 |
+| 1 | ✅ | hook 実装 (subagent staging で `.claude/hooks/list-md-plan-first-reminder.sh` 新設 100 LOC、fail-open + bypass env + CLAUDE_PROJECT_DIR portable + subshell 局所化、commit `453aafb`) | 0.2h | — |
+| 2 | ✅ | settings.json SessionStart 配線 (wrapper.sh 後配置) + harness-config.yml + config-loader.sh 連携 (task-33 Phase 1 iter4 既設で配線追加のみ) | 0.2h | Step 1 |
+| 3 | ✅ | (テスト設計レビュー) 5 reviewer iter1 完了 (tdd-guide / test-automator / qa-expert / pr-test-analyzer / harness-optimizer 並列)、5/5 全員 iter 続行 No、median 0.93 | 0.5h | Step 2 |
+| 4 | ✅ | (テスト合格) 新 smoke 6/6 → 9/9 PASS (Step 5 で +3 case)、既存 smoke regression 0 | 0.2h | Step 3 |
+| 5 | ✅ | (リファクタリング) 2 並列 subagent (A hook config-loader source +19 LOC conf 0.97 / B smoke Case 7/8/9 追加 +93 LOC conf 0.95)、commit `29e11cb` | 0.3h | Step 4 |
 
 合計工数: **1.2h** (元 Phase 3 工数 0.6 から iter cycle 込み実工数)
 
 ### Step 1: hook 実装 (subagent staging)
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-25、詳細は §ステータスログ + list.md task-35 row 参照)
 
 **作業概要**: `.claude/hooks/list-md-plan-first-reminder.sh` を subagent staging で新設。fail-open guard (`[ -f docs/tasks/list.md ] || exit 0`) を hook 先頭に置く。`set -uo pipefail` (fail-open) で `set -e` なし、grep error は exit code 検知 + skip。
 
@@ -132,7 +132,7 @@ draft §3 P3 + 6 reviewer iter1 想定 finding (harness-opt M-01 / M-02) 反映�
 
 ### Step 2: settings.json 配線 + config 連携
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-25、詳細は §ステータスログ + list.md task-35 row 参照)
 
 **作業概要**: `.claude/settings.json` SessionStart 配列に新 hook entry 追加 (wrapper.sh 後配置)、`.claude/harness-config.yml` に `list_plan_first_reminder_enabled: true` キー追加、`.claude/hooks/lib/config-loader.sh` で `HC_LIST_PLAN_FIRST_REMINDER_ENABLED` env として export。
 
@@ -144,7 +144,7 @@ draft §3 P3 + 6 reviewer iter1 想定 finding (harness-opt M-01 / M-02) 反映�
 
 ### Step 3: (テスト設計レビュー)
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-25、詳細は §ステータスログ + list.md task-35 row 参照)
 
 **作業概要**: 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + harness-optimizer)、並列起動、収束まで反復 (上限 5 回、超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1`)。
 
@@ -154,7 +154,7 @@ draft §3 P3 + 6 reviewer iter1 想定 finding (harness-opt M-01 / M-02) 反映�
 
 ### Step 4: (テスト合格) 新 smoke 3 cases PASS
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-25、詳細は §ステータスログ + list.md task-35 row 参照)
 
 **作業概要**: 新 smoke `.claude/tests/list-md-plan-first-reminder-smoke.sh` で 3 cases 検証。tmp dir + hook 直接 bash 実行 + stderr grep。
 
@@ -168,7 +168,7 @@ draft §3 P3 + 6 reviewer iter1 想定 finding (harness-opt M-01 / M-02) 反映�
 
 ### Step 5: (リファクタリング) 3 観点判定 (skip 想定)
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-25、詳細は §ステータスログ + list.md task-35 row 参照)
 
 **完了条件**: `skip: hook 新設のみ (約 30 LOC)、汎用 helper 抽出余地なし、refactor 対象パターンなし` 明示記録 (or 実施なら 3 観点指標明示)
 
@@ -196,12 +196,10 @@ draft §3 P3 + 6 reviewer iter1 想定 finding (harness-opt M-01 / M-02) 反映�
 | 日付 | 状態 | 備考 |
 |---|---|---|
 | 2026-05-25 | 起案 | task #33 着手後、採用 6 条 supersede で旧 Phase 3 を本 task に分割 |
-| TBD | 着手 | branch `feat/list-md-plan-first-normative` (task #33 から継承) or 新 branch |
-| TBD | Step 1 完了 | commit `<sha>` |
-| TBD | Step 2 完了 | commit `<sha>` |
-| TBD | Step 3-4 完了 | commit `<sha>` |
-| TBD | Step 5 完了 | リファクタリング 3 観点判定 (skip 想定) |
-| TBD | Task 完了 | 全 Step ✅、commit (push は user manual) |
+| 2026-05-25 | 着手 + Step 1+2+4 統合完了 | branch `feat/list-md-plan-first-normative` (task #33 から継承)、subagent a86007985db7bb74a で Step 1+2+4 統合 staging、commit `453aafb` (hook 100 LOC + smoke 218 LOC 6/6 PASS 0.087s + settings.json 配線、shellcheck 0、実 repo 37 task 行 / 28 draft で誤発火 0、confidence 0.95) |
+| 2026-05-25 | Step 3 5 reviewer iter1 完了 | tdd-guide / test-automator / qa-expert / pr-test-analyzer / harness-optimizer 並列、5/5 iter 続行 No、median 0.93、CRIT/HIGH 0、MED 5 件 (PR-H1 N=3 境界 / PR-H2 exit code / QA-M1 draft_dir 不在 / harness-opt M-1 config-loader source / TA-H1 run_case diagnostic = Step 5 へ deferring) |
+| 2026-05-25 | Step 5 2 並列 refactor 完了 | commit `29e11cb`、Subagent A (a02629ec935cdec4d、hook config-loader source +19 LOC confidence 0.97) + Subagent B (a4ce0a8aa04829f13、smoke Case 7/8/9 追加 +93 LOC = N=3 exact / exit code / draft_dir fail-open、9/9 PASS 3.26s、confidence 0.95)、TA-H1 は既存 smoke 共通設計で skip (separate PR 候補) |
+| 2026-05-25 | Task 完了 | 全 5 Step ✅、累計 commits 3 件 (`453aafb` + `29e11cb` + sync)、list.md + task-35 file sync 完了、agent type 適切性 finding は next-actions entry #23 (parallel-subagent-enforcement draft、設定不要原則) で別 task 化、push + merge は user 明示承認下で実行 |
 
 ## 派生 task / 次アクション候補
 
