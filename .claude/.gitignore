@@ -17,3 +17,6 @@ homunculus-cache/
 .confidence-gate-state/
 # Improvement proposal dedup state (SessionStart hook)
 .improvement-proposal-state/
+
+# Parallel subagent reminder state (task #38)
+.parallel-subagent-state/

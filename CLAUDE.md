@@ -44,8 +44,9 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 - **戦略的判断** — architecture 選択 / 採用技術スタック変更 / 既存 task の優先順入替
 - 承認外の設計変更、破壊的 DB 変更（DROP / 既存 RLS 削除）、データ削除
 - secrets ローテーション、`git push --force` / `git reset --hard` / `git branch -D`
-- `git push` (any branch、Loop モード自律実行禁止リスト)、`gh pr create` / `gh pr merge`
-- main 以外への push、`<外部サービス quota 超過見込み>`
+- `git push origin main|stg*` (protected-branch-push-deny で別 layer block 維持)、`gh pr merge` (user 明示承認必須)
+- (緩和、task #39 由来) feature branch への `git push` および `gh pr create` は自律実行可 (modes.md 遵守事項 8 と整合)
+- `<外部サービス quota 超過見込み>`
 - 同一エラーで 3 回連続失敗、サブエージェントの「要判断」報告
 - security-reviewer の CRITICAL、進行不可ブロッカー
 
@@ -65,7 +66,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 | [`development-process.md`](.claude/rules/development-process.md) | `src/**`, `scripts/**`, `tests/**`, `docs/tasks/**`, `docs/draft/**` | TDD、委譲、指摘対応、タスク管理、設計→承認フロー |
 | [`self-improvement.md`](.claude/rules/self-improvement.md) | **(常時参照)** | L1〜L5 自己改善 + F1/F2 事実検証の使い分け規約 |
 | [`workflow.md`](.claude/rules/workflow.md) | `docs/draft/**`, `docs/tasks/**`, `.claude/commands/**`, `.claude/hooks/workflow-guard.sh`, `.claude/.workflow-state/**` | workflow 強制 (test-design / design-review / module-review / system-review / new-feature / modify-feature / workflow-guard) |
-| [`task-management.md`](.claude/rules/task-management.md) | **(常時参照、task-21 W1.7 で paths 廃止)** | メイン専任 / 設計→承認→タスク追加フロー (Loop モードでも免除されない、`modes.md` 遵守事項 2 例外条項参照) / Parking Lot 運用 |
+| [`task-management.md`](.claude/rules/task-management.md) | **(常時参照、task-21 W1.7 で paths 廃止)** | メイン専任 / 設計→承認→タスク追加フロー (Loop モードでも免除されない、`modes.md` 遵守事項 2 例外条項参照) / Parking Lot 運用 / **タスク構造規範 採用 6 条 (Task=Phase=N Step、Phase 中間階層廃止、Step status 5 種、Task 概要欄 3 要素規範、2026-05-25 採用、task-29 採用 5 条 supersede)** / batch planning 経路 B (plan-first 行先置きフロー、task #33 規範化) |
 | [`modes.md`](.claude/rules/modes.md) | **(常時参照)** | Normal / Loop モード仕様 + 8 遵守事項 (中間確認禁止の例外条項 / 自律実行禁止 11 カテゴリ含む) |
 | [`why-x5-output.md`](.claude/rules/why-x5-output.md) | **(常時参照、v10 2026-05-23)** | 「<何のため> のため、<何をやる> を行う」1 行 format 強制 |
 | [`git-workflow.md`](.claude/rules/git-workflow.md) | **(常時参照)** | branch 命名規約 (`<type>/<short-kebab-description>`、main は唯一例外) |
@@ -137,10 +138,11 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 | **並列 subagent に同一 branch で `git commit` させる際は `git add <specific files>` 限定 + `git reset` 禁止を prompt 必須記載**。`git reset --soft HEAD^` がメイン / 他 subagent の commit を巻き添えで orphan 化する事故 (2026-05-12, `2bbe079` 混在 → `deda280` orphan → `52a170f` 再 commit で復旧)。完全分離が必要なら `isolation: "worktree"` で worktree 隔離 | HIGH |
 | **`.claude/hooks/lib/*.sh` の file-top に `set -euo pipefail` を書かない**。caller の shell flags に leak し、`cmd \| head -1` で SIGPIPE → pipefail → errexit → **exit 141 サイレント終了**。`load_xxx() ( set -uo pipefail; ... )` のように subshell 関数化で局所化する (2026-05-12 CB-verify, `5846925` で根本修正、context-budget hook の未発火問題が解消) | HIGH |
 | **Loop モード稼働中、subagent 起動後にメインが `completion 通知の受動待ち` で停止しない**。`run_in_background: true` 必須 + 待ち中は別 task / メイン専任作業 / 規範文書化 / memory 整理 を並行進行する。違反例: subagent #13-#15 起動後にメインがターン区切り報告で停止 → user 「Loop モード継続中。なぜ自動で実行を続けないのか?」を **複数回**指摘 (2026-05-12)。`.claude/hooks/loop-auto-progress-reminder.sh` (UserPromptSubmit) が「待ち中報告」キーワード検出で `<system-reminder>` 強制注入、`modes.md` 遵守事項 7 で機械防止化 | HIGH |
-| **Loop モードの「中間確認禁止」を盾に `git push` / `gh pr create` / production deploy 等の破壊的操作を自律実行しない**。準備 (draft / 設計 / 実装 / ローカル commit) のみ自律、撤回不可な操作は user 明示承認必須。違反例: 2026-05-12 セッション中、`git push origin feat/loop-mode` を **5 回以上**自律実行。`.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) が 11 カテゴリ (push / PR / release / 本番 deploy / DB push / k8s apply / terraform apply 等) を `{"decision":"block"}` で機械防止化、bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` + bypass.log 記録、`modes.md` 遵守事項 8 | HIGH |
+| **Loop モードの「中間確認禁止」を盾に `git push origin main|stg*` / `gh pr merge` / production deploy 等の破壊的操作を自律実行しない**。準備 (draft / 設計 / 実装 / ローカル commit / feature branch push / PR 作成) のみ自律、main/stg* 反映 + merge + 撤回不可な操作は user 明示承認必須。違反例: 2026-05-12 セッション中、`git push origin feat/loop-mode` を **5 回以上**自律実行 (当時規範下では feature branch push も禁止対象、**2026-05-25 task #39 緩和で feature branch push と `gh pr create` は自律実行可** になった — 現規範では本違反例の push 自体は規範違反でなく、無断連発の度合いが問題)。`.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) が現規範 (main/stg* push + PR merge + release + 本番 deploy + DB push + k8s apply + terraform apply 等) を `{"decision":"block"}` で機械防止化、main/stg* push は別 layer の `protected-branch-push-deny` (delegation-guard.sh) でも block (二重ガード)、bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` / `ECC_ALLOW_PROTECTED_BRANCH_PUSH=1` + bypass.log 記録、`modes.md` 遵守事項 8 | HIGH |
 | **メインが `.claude/hooks/*.sh` `.claude/skills/**/*.{sh,py,mjs}` `.claude/scripts/**/*` を直接 Edit/Write しない**。コード実装は Agent tool で subagent 委譲 + staging 戦略 (`/tmp` に Write → mv → chmod +x) が原則。違反例: 2026-05-23 セッションで draft-flow-guard.sh 新設 / set policy 修正 / jq guard 追加 を **9 件メイン直接編集**、user 指摘「なぜ基本原則に従ってサブエージェントに移譲しないのですか?」(commit `6ed9337` / `6561475` / `17c493e`)。`.claude/hooks/delegation-guard.sh` 拡張 (task-26 W2、commit `43bf0e8`、`HC_PROTECTED_PATHS_CODE` + `HC_CODE_FILE_EXTENSIONS` 配下を block) で機械防止化、bypass: `ECC_ALLOW_MAIN_CODE_EDIT=1` + bypass.log 記録 | HIGH |
 | **メインが `docs/` 直下に新規設計文書 (要件 / 基本設計 / 機能一覧等) を直接 Write しない**。`docs/draft/<slug>.md` 起こし → user 承認 → `docs/tasks/list.md` 反映の 3 step フロー必須。違反例: 2026-05-23 セッションで recall_poc/docs/01_basic_design.md / 02_screen_flow.md / 03_feature_list.md が draft 経由なしで直接 Write された事案。`.claude/hooks/draft-flow-guard.sh` 新設 (task-21 W2.3、commit `6ed9337`、`docs/` 直下深さ 1 新規 .md/.mdx を block、対応 draft 存在で pass) で機械防止化、bypass: `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` or `harness-config.yml draft_flow_guard_whitelist` | HIGH |
 | **Loop モードでも「設計→承認→タスク追加」フローは免除されない**。`modes.md` 遵守事項 2「中間確認の停止」の禁止対象は **戦術判断のみ** (実装中の方式選択 / branch 命名 / commit メッセージ / build green までの試行錯誤)。設計文書の新規追加 / 仕様変更 / scope 拡張 / 戦略的判断 は引き続き user 承認必須 (task-21 W2.1 で modes.md 遵守事項 2 に例外条項明文化、commit `7684c09`) | HIGH |
+| **task 構造は採用 6 条 (Task=Phase=N Step、Phase 中間階層廃止) を採用**。task-29 採用 5 条 (Phase→Step 強制、2026-05-23) を 2026-05-25 supersede。新規範: (1) 1 task = 1 Goal + N Steps、Phase 中間階層は廃止 (2) Step status 個別管理 (📝/🔲/🔄/✅/⏸️、list.md sub-row 表現) (3) Task 完了条件 (DoD) は Task header に集約 (4) list.md 概要欄 2 種規約 (Task: 何のため × 何をやる × 何ができる / Step: 作業概要のみ) (5) Task 最終 3 Steps = テスト設計レビュー / テスト合格 / リファクタリング (固定) (6) 既存 task は次回着手時に新構造へ移行推奨 (honor system)。違反例: task-33 が 5 Phase × 14 Step に肥大化、Phase 1 完遂時点の status 判定困難、Step status が IDE 視点で不可視。詳細: `.claude/rules/task-management.md` §タスク構造規範 (採用 6 条) + `docs/draft/task-equals-phase-step-status-list-normative.md` | HIGH |
 
 その他の教訓は memory `feedback_*.md` を参照。
 

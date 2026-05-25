@@ -10,9 +10,8 @@ requester: ""
 ---
 
 <!--
-# task-29 Phase→Step 強制タスク構造 metadata (W5 smoke 集計用 placeholder)
+# 採用 6 条 (Task=Phase=N Step、2026-05-25 採用) metadata
 # 実 task では下記を値で埋める。
-phase_count: 0
 total_steps: 0
 -->
 
@@ -20,8 +19,37 @@ total_steps: 0
 
 > Status: **draft (要承認)** | **🔲 未着手** | **🔄 進行中** | **✅ 完了**
 > 起案: YYYY-MM-DD
-> 関連: <#N, #M> / Phase <X>
+> 関連: <#N, #M>
 > 設計起源: [<draft または PDCA リンク>](../draft/<file>.md)
+
+## Task ゴール
+
+<完了時に何が達成されているか、1 文、観察可能な事実で記述>
+
+例: 「`.claude/rules/task-management.md` に §「plan-first」が追加され、batch planning 時の 📝 行先置きフロー 2 経路分岐 (経路 A/B) と凡例 📝 用途 (2 用途) が明文化される」
+
+## Task 作業概要
+
+- <作業項目 1>
+- <作業項目 2>
+- <作業項目 3>
+- (3-5 件、箇条書き)
+
+## Task 完了条件 (DoD)
+
+- [ ] <観察可能な振る舞い 1>
+- [ ] <観察可能な振る舞い 2>
+- [ ] テスト追加 + 全 PASS (regression 0)
+- [ ] docs 反映（rules / runbook 含む）
+- [ ] reviewer 5+ approve (Task 最終 3 Steps の「テスト設計レビュー Step」で達成)
+- [ ] 既存 N tests 維持
+- [ ] commit 完了 (push は user manual で実施、Loop モード自律実行禁止)
+
+## Task 概要欄 (list.md 用、3 要素規範)
+
+> **規約 (採用 6 条 6)**: 「何のため × 何をやる × 何ができるようになる」の 3 要素を 1 段落で記述
+
+例: 「recall_poc plan-first 不在事案の再発防止のため、task-management.md §plan-first を追加し batch planning 時の 📝 行先置きフロー 2 経路分岐を明文化する。完成すれば AI が batch planning 時に list.md plan-first 先置きを規範通り実行できるようになる。」
 
 ## 背景・目的
 
@@ -51,10 +79,10 @@ flowchart LR
 
 ## TDD 戦略
 
-> **本セクションと「Phase 計画」最終 Step 3 段の関係**:
-> 本 §「TDD 戦略」は **Phase 全体に対する戦略** (RED/GREEN/REFACTOR) を記述する。
-> 一方、§「Phase 計画」の各 Phase 末尾に固定配置される **テスト設計レビュー Step → テスト合格 Step → リファクタリング Step** は **その Phase 単位の REVIEW→GREEN→REFACTOR** を表す。
-> 両者は **互いに補完する関係** (二重化ではない)。本 §で全体戦略を、Phase 計画で各 Phase の最終 3 Step として実行手順を書く。
+> **本セクションと「Step 計画」最終 3 Steps の関係**:
+> 本 §「TDD 戦略」は **Task 全体に対する戦略** (RED/GREEN/REFACTOR) を記述する。
+> 一方、§「Step 計画」末尾に固定配置される **テスト設計レビュー → テスト合格 → リファクタリング** の 3 Steps は **Task 単位の REVIEW→GREEN→REFACTOR** を表す。
+> 両者は **互いに補完する関係** (二重化ではない)。本 §で全体戦略を、Step 計画末尾で実行手順を書く。
 
 ### RED（先に追加するテスト）
 
@@ -71,121 +99,111 @@ flowchart LR
 
 - <抽出・命名整理・重複排除の余地>
 
-## Phase 計画
+## Step 計画
 
-> **Phase = Wave の新呼称** (task-29 Phase→Step 強制タスク構造規範、2026-05-23 採用)。
-> 旧 task で `Wave` 表記を使用していた箇所は本セクションの `Phase` と読み替える。
+> **採用 6 条 (Task=Phase=N Step、2026-05-25 採用)**:
+> Phase 中間階層は廃止。Task 直下に N Step を列挙し、最終 3 Steps は固定 (テスト設計レビュー / テスト合格 / リファクタリング)。
+> 旧 task で `Wave` / `Phase` 表記を使用していた箇所は本セクションの `Step` と読み替える (移行ガイドは `.claude/rules/task-management.md` §「既存 task 移行ガイド」参照)。
 
-### Phase 計画前の事前確認 (必須)
+### Step 計画前の事前確認 (必須)
 
-別 repo 作業 / 既存 gap-review report 起点の Phase 計画では、各 finding に対し以下を**着手前に**実施:
+別 repo 作業 / 既存 gap-review report 起点の Step 計画では、各 finding に対し以下を**着手前に**実施:
 
 1. `git log --all --grep <finding-id-or-keyword> --oneline` で既存 commit を確認 (別 repo は `git -C <abs path> log --all --grep ...`)
 2. 該当 file を Read で現状確認
-3. 解消済 finding は Phase list から除外し、本テンプレに「[no-op、commit <sha> で解消済]」と記録
+3. 解消済 finding は Step list から除外し、本テンプレに「[no-op、commit <sha> で解消済]」と記録
 4. 未解消 finding のみ subagent dispatch 対象に残す
 
-省略時: 重複 subagent 起動 / no-op 発覚での Phase 再計画コスト
+省略時: 重複 subagent 起動 / no-op 発覚での Step 再計画コスト
 
-### cross-repo write を含む Phase の注意 (必須)
+### cross-repo write を含む Step の注意 (必須)
 
-cross-repo write (本 repo → 外部 repo への Write / cp / mv / heredoc redirect) を含む Phase は、Phase description に **user manual 注意書きを必ず明記**:
+cross-repo write (本 repo → 外部 repo への Write / cp / mv / heredoc redirect) を含む Step は、Step description に **user manual 注意書きを必ず明記**:
 
-> 例: `Phase N (cross-repo): user manual `bash install.sh --update <target>` 案内`
+> 例: `Step N (cross-repo): user manual `bash install.sh --update <target>` 案内`
 
-理由: cross-repo write は Claude Code sandbox + `delegation-guard.sh` 二重制約で agent 経路完全 denied、user manual (terminal) 実行のみ可能 (詳細: `.claude/rules/development-process.md` §「cross-repo write 例外」)。Phase 計画段で明記しないと、subagent dispatch 時に sandbox deny で進行不能 / loop 停止の誤判断リスクあり (development-process.md §5 と同種の反射パターン)。
+理由: cross-repo write は Claude Code sandbox + `delegation-guard.sh` 二重制約で agent 経路完全 denied、user manual (terminal) 実行のみ可能 (詳細: `.claude/rules/development-process.md` §「cross-repo write 例外」)。Step 計画段で明記しないと、subagent dispatch 時に sandbox deny で進行不能 / loop 停止の誤判断リスクあり (development-process.md §5 と同種の反射パターン)。
 
 省略時: subagent 起動 → 即時 deny → 「進められない」誤報告 → loop 停止のコスト
 
-### Phase / Step schema (採用 5 条)
+### Step schema (採用 6 条準拠)
 
-各 Phase に **ゴール (1 文、観察可能)** + **作業概要 (箇条書き 3-5 件)** + **Step リスト** を必ず記載する。
-各 Step に **内容 (1-2 文)** + **完了条件 (定量指標 or 観察可能な事実)** を必ず記載する。
-Phase の **最終 Step 3 段は固定**: `(テスト設計レビュー) → (テスト合格) → (リファクタリング)`。
+各 Step に **作業概要 (1-2 文 actionable description)** + **完了条件 (定量指標 or 観察可能な事実)** + **Step status (📝/🔲/🔄/✅/⏸️)** + **概要欄 (list.md 用、作業概要のみ)** を必ず記載する。
+Task の **最終 3 Steps は固定**: `(テスト設計レビュー) → (テスト合格) → (リファクタリング)`。
 - テスト設計レビュー: メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific) → 並列起動 → 収束まで反復 (上限 5 回、超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1`)
-- テスト合格: UI 含む Phase は E2E 必須 (Playwright 等)、それ以外は unit/integration test
+- テスト合格: UI 含む Task は E2E 必須 (Playwright 等)、それ以外は unit/integration test
 - リファクタリング: 不要なら `skip: <reason>` 明示
 
-### Phase 一覧 (サマリ表)
+### Step 一覧 (サマリ表)
 
-| Phase | 名前 | 工数 | 依存 |
-|:---:|:---|---:|:---|
-| 1 | … | 0.5h | — |
-| 2 | … | 1.0h | Phase 1 |
+| Step | Status | 作業概要 | 工数 | 依存 |
+|:---:|:---:|:---|---:|:---|
+| 1 | 🔲 | <作業 1> | 0.3h | — |
+| 2 | 🔲 | <作業 2> | 0.5h | Step 1 |
+| 3 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 | 0.5h | Step 2 |
+| 4 | 🔲 | (テスト合格) unit/integration/E2E test | 0.3h | Step 3 |
+| 5 | 🔲 | (リファクタリング) 3 観点判定 or skip | 0.2h | Step 4 |
 
 合計工数: <X> h
 
-### Phase 1: <Phase 名>
+### Step 1: <作業概要 1>
 
-**ゴール**: <完了時に何が達成されているか、1 文、観察可能な事実で記述>
+**Step status**: 🔲 未着手 | 🔄 進行中 | ✅ 完了
 
-**作業概要**:
-- <作業項目 1>
-- <作業項目 2>
-- <作業項目 3>
+**作業概要 (list.md 概要欄)**: <1-2 文 actionable description>
 
-**Step**:
+**完了条件**: <定量指標 or 観察可能な事実 (例: `pnpm test` exit 0、grep -q 'X' file)>
 
-- **Step 1**: <内容、1-2 文>
-  - 完了条件: <定量指標 or 観察可能な事実 (例: `pnpm test` exit 0、grep -q 'X' file)>
-- **Step 2**: <内容、1-2 文>
-  - 完了条件: <…>
-- **Step 3: (テスト設計レビュー)** メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
-  - 完了条件: 全 reviewer approve / no objection (修正提案 0 件)
-- **Step 4: (テスト合格)** <UI 含む Phase なら E2E 必須 (Playwright 等)、それ以外は unit/integration test>
-  - 完了条件: `<test command>` exit 0、全 case PASS (regression 0)
-- **Step 5: (リファクタリング)** 持続可能性 / 汎用性 / 非冗長化 の 3 観点で見直す
-  - 完了条件 (or skip): refactor 実施なら指標 (例: 関数 LOC < 50、重複削減 N 箇所) / 不要なら `skip: <理由>` を明示記録
+### Step 2: <作業概要 2>
 
-### Phase 2: <Phase 名>
+**Step status**: 🔲
 
-**ゴール**: <…>
+**作業概要**: <1-2 文>
 
-**作業概要**:
-- <…>
+**完了条件**: <…>
 
-**Step**:
+### Step 3: (テスト設計レビュー)
 
-- **Step 1**: <…>
-  - 完了条件: <…>
-- **Step 2: (テスト設計レビュー)** メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
-  - 完了条件: 全 reviewer approve / no objection (修正提案 0 件)
-- **Step 3: (テスト合格)** <…>
-  - 完了条件: <…>
-- **Step 4: (リファクタリング)** <…>
-  - 完了条件 (or skip): <…>
+**Step status**: 🔲
 
-### 小タスクモード (1 Phase + 1 Step 完結)
+**作業概要**: メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
 
-typo 修正 / 1 行 fix / コメント追加 / 規範文書の文言調整 等、**単一 Phase + 単一 Step で完結する作業** は以下の最小 schema で OK。
-ただし「テスト設計レビュー (5+ reviewer 動的選定、収束まで反復、上限 5 回) + テスト合格 (規範文書修正なら observability check で代替) + リファクタ skip 記録」は **必須**。
+**完了条件**: 全 reviewer approve / no objection (修正提案 0 件)、iter cycle 5 回以内収束
+
+### Step 4: (テスト合格)
+
+**Step status**: 🔲
+
+**作業概要**: <UI 含む Task なら E2E 必須 (Playwright 等)、それ以外は unit/integration test>
+
+**完了条件**: `<test command>` exit 0、全 case PASS (regression 0)
+
+### Step 5: (リファクタリング)
+
+**Step status**: 🔲
+
+**作業概要**: 持続可能性 / 汎用性 / 非冗長化 の 3 観点で見直す
+
+**完了条件 (or skip)**: refactor 実施なら指標 (例: 関数 LOC < 50、重複削減 N 箇所) / 不要なら `skip: <理由>` を明示記録
+
+### 小タスクモード (1 Task + 1 Step 完結)
+
+typo 修正 / 1 行 fix / コメント追加 / 規範文書の文言調整 等、**1 Task + 1 Step で完結する作業** は以下の最小 schema で OK。
+ただし「テスト設計レビュー (5+ reviewer 動的選定、収束まで反復、上限 5 回) + テスト合格 (規範文書修正なら observability check で代替) + リファクタ skip 記録」は **必須** (Step 内に併記可)。
 
 ```markdown
-### Phase 1: <短い Phase 名>
+### Step 1: <作業概要>
 
-**ゴール**: <完了時の観察可能な状態、1 文>
+**Step status**: 🔲
 
-**作業概要**:
-- <作業 1 件のみで OK>
+**作業概要**: <1-2 文>
 
-**Step**:
-
-- **Step 1**: <内容、1-2 文>
-  - 完了条件: <定量 or 観察可能>
-- **Step 2: (テスト設計レビュー)** メインが 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + domain-specific)、並列起動、収束まで反復 (上限 5 回)
-  - 完了条件: 全 reviewer approve / no objection (修正提案 0 件)
-- **Step 3: (テスト合格)** <unit test or observability check (規範文書なら grep 等)>
-  - 完了条件: `<command>` exit 0
-- **Step 4: (リファクタリング)** skip: <理由 (例: 1 行 fix、refactor 対象なし)>
+**完了条件**:
+- <定量 or 観察可能 (例: `grep -q 'X' file` PASS)>
+- reviewer 5+ approve (本 Step 内で完結)
+- unit test or observability check (規範文書なら grep 等) exit 0
+- refactor 判定: skip (理由: 1 行 fix、refactor 対象なし) or 実施
 ```
-
-## 完了条件
-
-- [ ] <条件1: 機能仕様>
-- [ ] <条件2: テスト追加 + 全 PASS>
-- [ ] <条件3: docs 反映>
-- [ ] <条件4: 既存 N tests 維持>
-- [ ] <条件5: 本番動作確認 / smoke>
 
 ## 工数見積
 
@@ -210,7 +228,9 @@ typo 修正 / 1 行 fix / コメント追加 / 規範文書の文言調整 等�
 |---|---|---|
 | YYYY-MM-DD | 起案 | 設計 draft 起こし |
 | YYYY-MM-DD | 承認 | user 承認、`list.md` に追加 |
-| YYYY-MM-DD | 着手 | branch `feature/issue-<ID>-<slug>` |
+| YYYY-MM-DD | 着手 | branch `<type>/<short-kebab-description>` |
+| YYYY-MM-DD | Step 1 完了 | commit `<sha>` |
+| YYYY-MM-DD | Step 2 完了 | commit `<sha>` |
 | YYYY-MM-DD | 完了 | commit `<sha>`、+<N> tests |
 
 ## 派生 task / 次アクション候補

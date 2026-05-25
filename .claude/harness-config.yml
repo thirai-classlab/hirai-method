@@ -209,3 +209,65 @@ reviewer_registry_impl: [code-reviewer, refactoring-specialist, typescript-revie
 #   export HC_WORKFLOW_STAGES_NEW=$'requirements\nbasic-design\n...'   # 改行区切り
 workflow_stages_new: [requirements, basic-design, detailed-design, test-design, design-review, user-approval, task-creation, tdd, module-review, local-test, system-review, ci-cd, scenario-test, finish]
 workflow_stages_modify: [branch-decision, checkout, recover-design, pre-test, redesign, retest-design, tdd, module-review, full-test, system-review]
+
+# === list-md plan-first reminder (task-35) ===
+# SessionStart hook .claude/hooks/list-md-plan-first-reminder.sh が消費。
+# `docs/draft/*.md` ≥ 3 件 ∧ `docs/tasks/list.md` task エントリ行 == 0 を検出した場合、
+# <system-reminder> で「経路 B (batch planning) 適用検討」を stderr 強制注入する。
+#
+# 実装 (task-35、案 B 採用 — 責務分離 + 単体 smoke 容易化):
+#   - hook:     .claude/hooks/list-md-plan-first-reminder.sh (約 100 LOC、fail-open guard 含む)
+#   - smoke:    .claude/tests/list-md-plan-first-reminder-smoke.sh (6 cases)
+#   - 配線:    .claude/settings.json SessionStart (wrapper.sh 後配置、wrapper failure 時の独立発火維持)
+#   - 起源:    task-33 採用 6 条 supersede で task-35 へ分割
+#
+# - list_plan_first_reminder_enabled: false で reminder を完全停止
+# - 検出ロジック: grep -cE '^\| [0-9]' で task 行カウント、find -maxdepth 1 -name "*.md" -not -name "_*" で draft 件数
+# - fail-open guard: list.md or docs/draft 不在 → silent exit 0 (新規採用 project で誤発火しない)
+#
+# env 上書き例:
+#   export HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false   # 一時的に黙らせる
+list_plan_first_reminder_enabled: true
+
+# === Parallel Subagent Reminder (task #38) ===
+# PreToolUse(Agent) hook (.claude/hooks/parallel-subagent-reminder.sh) が消費。
+# subagent 起動時に以下 2 観点で <system-reminder> を注入する (BLOCK しない、fail-open):
+#
+#   (A) 並列性 reminder: 直近 TTL 秒内に他 Agent 起動なし、かつ task description に
+#       並列性 keyword (実装/fix/refactor/設計/新設/拡張/改修) を含む場合、
+#       「並列起動を検討せよ」warning を注入。除外: reviewer/review/監査/audit。
+#   (B) agent type 選定 reminder: subagent_type == "general-purpose" かつ
+#       task description に専門 type 適合 keyword (smoke 拡張/test 追加/refactor 等)
+#       を含む場合、「専門 type 推奨」warning を注入。
+#
+# - parallel_subagent_reminder_enabled: false で reminder 完全停止 (bypass)
+# - parallel_subagent_ttl_sec:          state file TTL (秒)、env override で変更可
+#
+# agent_type_keyword_mapping は draft §4.5.0 設定不要原則により hook 内 hardcode default
+# を採用。採用者は yaml 編集なしで動作する。任意 override したい場合のみ環境変数
+# HC_AGENT_TYPE_KEYWORD_MAPPING で改行区切り "keyword|type" 形式を渡す。
+#
+# 起源:
+#   - 設計 draft: docs/draft/parallel-subagent-enforcement.md §4.2-4.5
+#   - task:       docs/tasks/task-38-parallel-subagent-enforcement.md Step 1
+#
+# env 上書き例:
+#   export HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false   # 一時的に黙らせる
+#   export HC_PARALLEL_SUBAGENT_TTL_SEC=600              # TTL 10 分に延長
+#   export HC_AGENT_TYPE_KEYWORD_MAPPING="smoke 拡張|tdd-guide,refactor|refactoring-specialist"
+#                                                        # advanced: keyword → agent type マッピング override
+#                                                        # (default は hook 内 hardcode、設定不要原則で動作)
+#
+# 注意: agent_type_keyword_mapping は yaml multi-line value 非対応のため
+# yaml 設定は **非推奨** (advanced 用途)、env 経由 override 推奨。
+# 設定不要原則 (draft §4.5.0) により hook 内 hardcode default が動作。
+parallel_subagent_reminder_enabled: true
+parallel_subagent_ttl_sec: 300
+
+# parallel_subagent_state_dir: state file 保存 dir の任意 override (テスト isolation 用)。
+# default 空文字 → hook 内 fallback (`$repo_root/.claude/.parallel-subagent-state/`) を使用。
+# 設定不要原則 (draft §4.5.0) で hook 内 fallback 動作するため、通常運用は yaml 設定不要。
+# テスト / CI で isolation したい場合のみ設定:
+#   parallel_subagent_state_dir: "/tmp/my-isolated-state"
+# env 上書き例:
+#   export HC_PARALLEL_SUBAGENT_STATE_DIR=/tmp/parallel-state-test

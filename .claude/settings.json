@@ -128,6 +128,12 @@
             "command": "bash .claude/hooks/agent-marker-set.sh",
             "timeout": 5,
             "statusMessage": "サブエージェント起動マーカー設定中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/parallel-subagent-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "並列 subagent / agent type 選定検証中..."
           }
         ]
       },
@@ -261,6 +267,12 @@
             "command": "bash .claude/hooks/session-start-wrapper.sh",
             "timeout": 15,
             "statusMessage": "SessionStart hooks 並列実行中 (task-25 A2)..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/list-md-plan-first-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "list.md plan-first reminder 検証中 (task-35)..."
           },
           {
             "type": "command",

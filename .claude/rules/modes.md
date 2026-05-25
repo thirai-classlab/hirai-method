@@ -48,12 +48,12 @@ HIRAI メソッドは 2 つの動作モードを持つ。
    - **「subagent 完了通知後のメイン報告 → 即次タスク自動起動」を default 動作とする**
    - 違反検出時の hook 強制 (W2 で実装予定): `.claude/hooks/loop-auto-progress-reminder.sh` が UserPromptSubmit で「待ち中停止」キーワードを検出し `<system-reminder>` 強制注入
 
-8. **自律実行禁止リスト**（必須）: Loop モードでも以下の操作は **user の明示承認が必要**。準備（draft / 設計 / ローカル `git commit`）のみ自律可。設計起源: `docs/draft/loop-auto-progress-enforcement.md`。
+8. **自律実行禁止リスト**（必須）: Loop モードでも以下の操作は **user の明示承認が必要**。準備（draft / 設計 / ローカル `git commit`）のみ自律可。設計起源: `docs/draft/loop-auto-progress-enforcement.md`。**2026-05-25 task #39 で緩和**: feature branch (= main / stg* 以外) への `git push` および `gh pr create` を自律実行可とした (main/stg* への push は別 layer の `protected-branch-push-deny` に委譲)。
 
    | カテゴリ | 対象コマンド / 操作 | 例外（準備として OK） |
    |---|---|---|
-   | remote 反映 | `git push` (any branch) | ローカル `git commit` |
-   | PR / リリース | `gh pr create` / `gh pr merge` / `gh release create` / `git tag <name> origin` (tag push) | task ファイル / draft 起こし |
+   | remote 反映 | `git push origin main\|stg*` のみ (protected-branch-push-deny で別 layer block) | feature branch への push は自律実行可 (緩和、task #39 由来) / ローカル `git commit` |
+   | PR / リリース | `gh pr merge` / `gh release create` / `git tag <name> origin` (tag push) | `gh pr create` は自律実行可 (緩和、task #39 由来) / task ファイル / draft 起こし |
    | main 操作 | main への merge / main checkout 後の編集 | feature branch 編集 |
    | DB 作業 | migration 実行 / `INSERT/UPDATE/DELETE` 直接実行 / dump / restore | migration script 作成（実行しない） |
    | 本番 deploy | `vercel --prod` / `supabase deploy` / production environment 触る操作 | preview / staging deploy |
@@ -89,8 +89,8 @@ HIRAI メソッドは 2 つの動作モードを持つ。
 
 ### 禁止 11 カテゴリ (default、`HC_AUTONOMOUS_ACTION_PATTERNS` で上書き可)
 
-- remote 反映: `git push` (any branch)
-- PR / リリース: `gh pr (create|merge)` / `gh release` / `git tag <name> origin|upstream`
+- remote 反映: `git push origin main|stg*` のみ (feature branch への push は緩和で自律実行可、task #39 由来。main/stg* への push は別 layer `protected-branch-push-deny` に委譲)
+- PR / リリース: `gh pr merge` / `gh release` / `git tag <name> origin|upstream` (`gh pr create` は緩和で自律実行可、task #39 由来)
 - 第三者リポ: `gh repo (delete|transfer|archive)`
 - 本番 deploy: `vercel --prod` / `supabase deploy` / `supabase db (push|reset)`
 - infra apply: `kubectl (apply|delete)` / `terraform (apply|destroy)`

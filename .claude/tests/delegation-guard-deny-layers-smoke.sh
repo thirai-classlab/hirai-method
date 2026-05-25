@@ -19,15 +19,18 @@
 #
 # 検証範囲:
 #   - destructive deny:
-#     - Block cases (19): destructive git 操作が decision:"block" + reason に
+#     - Block cases (23): destructive git 操作が decision:"block" + reason に
 #       "[git destructive guard]" を含むこと
 #       (`git push -f` single space は 2026-05-18 hook fix で blockable 化:
 #        regex を `push[[:space:]]+([^|;&]*[[:space:]])?-f([[:space:]]|$)` に修正)
+#       (iter3 R5 MEDIUM F-03/F-04/F-05 解消: push --mirror / --all / --branches / --prune
+#        を追加、defense-in-depth 完全化)
 #     - Pass cases (10): 非破壊 git 操作が block されないこと
 #     - Bypass cases (3): ECC_ALLOW_DESTRUCTIVE_GIT=1 で block 解除されること
 #   - protected branch push deny (本 file 末尾セクションで検証):
-#     - Block cases (5): main 明示 / stg 系部分一致 (3 variant) +
-#       --force-with-lease origin main (destructive + protected 二重 guard) が
+#     - Block cases (9): main 明示 / stg 系部分一致 (3 variant) +
+#       --force-with-lease origin main (destructive + protected 二重 guard) +
+#       HEAD:main / HEAD:refs/heads/main / +main / +HEAD:main (R5 HIGH F-01/F-02 解消) が
 #       decision:"block" + reason に "[protected branch push deny]" を含むこと
 #     - Pass cases (1): feature branch への push は block されないこと
 #       (expect_pass_protected で destructive 干渉排除 + protected 単体検証)
@@ -251,7 +254,7 @@ expect_block_with_explicit_bypass_zero() {
 
 printf "===== delegation-guard-deny-layers-smoke (next-actions #13 + #14) =====\n\n"
 
-printf "Block cases (19):\n"
+printf "Block cases (23):\n"
 expect_block "push --force"                    "git push --force"
 # 2026-05-18 hook fix で blockable 化:
 # 旧 regex `[^|;&]*[[:space:]]-f` は「push 直後の space と -f の前の space」の
@@ -276,6 +279,19 @@ expect_block "tag -d v1.0"                     "git tag -d v1.0"
 expect_block "tag -f v1.0"                     "git tag -f v1.0"
 expect_block "reflog expire --expire=now"      "git reflog expire --expire=now"
 expect_block "gc --prune=now"                  "git gc --prune=now"
+# --- iteration 3: R5 security-reviewer MEDIUM F-03/F-04/F-05 解消 (task-39 Step2 iter3) ---
+# (j) push --mirror: 全 ref 強制反映 (main 含む)、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--mirror([[:space:]]|$)
+expect_block "push --mirror origin (F-03)"     "git push --mirror origin"
+# (k) push --all: 全 branch 一括 push (main 含む)、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--all([[:space:]]|$)
+expect_block "push --all origin (F-04)"        "git push --all origin"
+# (l) push --branches: 全 branch 一括 push (main 含む)、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--branches([[:space:]]|$)
+expect_block "push --branches origin (F-04)"   "git push --branches origin"
+# (m) push --prune: remote-only branch 削除を含む、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--prune([[:space:]]|$)
+expect_block "push --prune origin (F-05)"      "git push --prune origin"
 
 printf "\nPass cases (10):\n"
 expect_pass  "status"                          "git status"
@@ -289,7 +305,7 @@ expect_pass  "show HEAD"                       "git show HEAD"
 expect_pass  "fetch origin"                    "git fetch origin"
 expect_pass  "pull origin feature/test"        "git pull origin feature/test"
 
-printf "\nProtected branch push cases (7):\n"
+printf "\nProtected branch push cases (11):\n"
 # (a) main 明示 refspec → block
 expect_block_protected "push origin main"                       "git push origin main"
 # (b) stg 系部分一致 (3 variant) → block
@@ -305,6 +321,19 @@ expect_block_protected "push --force-with-lease origin main"    "git push --forc
 # (e) ECC_ALLOW_PROTECTED_BRANCH_PUSH=0 明示でも block 維持
 #     (= "1" 比較の防御深度検証、iteration 2 追加、security-reviewer MEDIUM 指摘起源)
 expect_block_with_explicit_bypass_zero "push origin main with ECC=0 (bypass must not activate)" "git push origin main"
+# --- iteration 3: R5 security-reviewer HIGH F-01 / F-02 解消 (task-39 Step2 iter1) ---
+# (f) HEAD:main symbolic refspec → block
+#     git-deny.sh L86-95: dst_part=main → dst_basename=main → protected branch 一致
+expect_block_protected "push origin HEAD:main"                  "git push origin HEAD:main"
+# (g) HEAD:refs/heads/main (fully-qualified refspec variant) → block
+#     dst_part=refs/heads/main → basename strip → main 一致
+expect_block_protected "push origin HEAD:refs/heads/main"       "git push origin HEAD:refs/heads/main"
+# (h) +main forced update refspec → block
+#     git-deny.sh L93: dst_basename="${dst_basename#+}" で + 除去後 main 一致
+expect_block_protected "push origin +main"                      "git push origin +main"
+# (i) +HEAD:main 複合 (forced symbolic refspec) → block
+#     + 除去 → HEAD:main → dst_part=main → main 一致
+expect_block_protected "push origin +HEAD:main"                 "git push origin +HEAD:main"
 
 printf "\nBypass cases (4):\n"
 expect_bypass_pass "push --force bypass"       "git push --force"

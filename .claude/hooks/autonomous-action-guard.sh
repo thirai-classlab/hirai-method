@@ -8,12 +8,17 @@
 #   準備フェーズ (draft / 実装 / ローカル commit) は対象外。
 #
 # 対象カテゴリ (default、env override 可):
-#   - remote 反映: git push (any branch)
-#   - PR / リリース: gh pr create / gh pr merge / gh release / git tag push
+#   - PR merge / リリース: gh pr merge / gh release / git tag push
 #   - 本番 deploy: vercel --prod / supabase deploy / supabase db push|reset
 #   - infra apply: kubectl apply / terraform apply|destroy
 #   - 第三者リポ: gh repo (delete|transfer|archive)
 #   - AWS 破壊操作: aws *-delete-*|terminate-*|destroy-*
+#
+# task-39 緩和 (2026-05-25、docs/draft/autonomous-action-guard-relaxation.md):
+#   - git push 一般 pattern を削除 → protected-branch-push-deny
+#     (delegation-guard.sh) に委譲。main/stg 以外は push 許可。
+#   - gh pr create を削除 → user 要望で PR 作成は自律実行可。
+#   - gh pr merge / gh release / git tag push は依然 block (本番影響大)。
 #
 # bypass:
 #   ECC_AUTONOMOUS_ACTION_OVERRIDE=1   セッション全体 OFF + bypass.log 記録
@@ -23,6 +28,7 @@
 # 設計起源:
 #   docs/draft/loop-auto-progress-enforcement.md §3 W3
 #   docs/tasks/task-6-loop-auto-progress-enforcement.md W3 詳細
+#   docs/draft/autonomous-action-guard-relaxation.md §4 採用案 (task-39)
 #
 # Subagent からの操作は対象外 (delegation-guard.sh と同 pattern)。
 # bash flags: set -u のみ。set -e leak 事故 (CB-verify 教訓) を避ける。
@@ -115,9 +121,13 @@ if [ -z "$cmd" ]; then
   exit 0
 fi
 
-# --- 禁止パターン (default 11 個、env override 可) ---
-DEFAULT_PATTERNS='^git[[:space:]]+push([[:space:]]|$)
-^gh[[:space:]]+pr[[:space:]]+(create|merge)([[:space:]]|$)
+# --- 禁止パターン (default、env override 可) ---
+# task-39 緩和 (2026-05-25):
+#   - `git push` 一般 pattern: 削除済。protected-branch-push-deny
+#     (delegation-guard.sh) に委譲。main/stg のみ block、それ以外は許可。
+#   - `gh pr create`: 削除済。user 要望で PR 作成は自律実行可 (task-39)。
+#   - `gh pr merge`: 維持。本番影響大の merge 操作は引き続き block。
+DEFAULT_PATTERNS='^gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)
 ^gh[[:space:]]+release([[:space:]]|$)
 ^gh[[:space:]]+repo[[:space:]]+(delete|transfer|archive)([[:space:]]|$)
 ^git[[:space:]]+tag[[:space:]].+[[:space:]]+(origin|upstream)([[:space:]]|$)
@@ -171,13 +181,17 @@ match 正規表現: ${matched_pattern}
 modes.md 遵守事項 8 (Loop モード自律実行禁止リスト) により、以下の操作は user の
 明示承認が必要です。準備 (draft / 設計 / 実装 / ローカル commit) のみ自律可。
 
-【ブロック対象カテゴリ (default)】
-- remote 反映: git push (any branch)
-- PR / リリース: gh pr create / gh pr merge / gh release / git tag push
+【ブロック対象カテゴリ (default、task-39 緩和後)】
+- PR merge / リリース: gh pr merge / gh release / git tag push
 - 第三者リポ: gh repo delete|transfer|archive
 - 本番 deploy: vercel --prod / supabase deploy / supabase db push|reset
 - infra apply: kubectl apply|delete / terraform apply|destroy
 - AWS 破壊操作: aws *-delete-*|terminate-*|destroy-*
+
+【task-39 緩和 (2026-05-25)】
+- git push (一般): 緩和。main/stg 以外への push は許可
+  (protected-branch-push-deny に委譲)
+- gh pr create: 緩和。PR 作成は自律実行可
 
 【bypass (user の明示承認下で)】
 1. user に承認を求める (chat で明示)
