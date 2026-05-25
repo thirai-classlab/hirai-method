@@ -1,0 +1,130 @@
+---
+approval_required: true
+approved_at: ""
+---
+
+# Draft: parallel-subagent-enforcement (並列サブエージェント起動の機械強制)
+
+> Status: 起案 (2026-05-25)
+> 起案者: user (本 session 後半「ハーネスで並列化を強制してください (可能な限り、作業に齟齬がでないように)」)
+> 関連: 副産物 entry #23 / 既存規範 `.claude/rules/development-process.md` §「サブエージェント委譲」
+
+## 1. 背景
+
+本 session で reviewer 並列 (採用 6 条 4) は遵守された (23 並列起動) が、fix 系 sub-task は 1 subagent 統合委譲が default 化し、5 件統合 = 並列化機会逃失。具体的に task-35 Step 1+2+4 を 1 subagent に統合委譲、本来 3 並列起動可能 (file 領域独立) だった。
+
+honor system のみで強制不能。machine enforcement が必要。
+
+## 2. 要件
+
+- 独立 sub-task (file 領域独立 / 依存関係なし) の **並列起動を default** とする
+- 機械強制 + soft warning で AI 判断を補完
+- false positive 最小化 (誤検知で並列強制すると race condition / 共有 file 衝突 リスク)
+- bypass env で開発時の一時無効化可能
+- 既存 reviewer 並列 (採用 6 条 4) と整合 (重複 reminder 禁止)
+
+## 3. 設計案 (4 案比較)
+
+### 案 A: PreToolUse(Agent) hook で並列度強制 BLOCK
+
+- 同 turn 内で過去 N tool_use 内に同種 task description の Agent 起動なし → 単独 Agent 起動を BLOCK
+- 強: 機械強制で確実
+- 弱: 「同種 task description」判定が困難、false positive リスク大、AI が回避困難で詰む
+
+### 案 B: UserPromptSubmit / PreToolUse(Agent) で soft reminder
+
+- 該当 turn で Agent tool_use 1 件のみ + 直近の task description に「実装」「fix」「refactor」「設計」「smoke 拡張」keyword 検出 → `<system-reminder>` で warning 注入
+- 強: false positive でも warning のみで BLOCK しない、AI が判断可能、開発体験悪化最小
+- 弱: 機械強制ではなく honor system に依存
+
+### 案 C: SubagentStop hook で post-hoc 監査
+
+- 各 turn の Agent 起動数を観測、N=1 起動なら次 turn で reminder
+- 強: 観測ベース、誤検知少ない
+- 弱: 違反検出が turn 遅延、開発体験悪化
+
+### 案 D: 規範強化のみ (development-process.md §並列化義務)
+
+- machine enforcement なし、honor system のみ
+- 強: 実装コスト 0
+- 弱: 違反継続のリスク (本 session で実証済)
+
+## 4. 採用案 (案 B + D ハイブリッド)
+
+### 4.1 規範強化 (案 D 部分)
+
+`.claude/rules/development-process.md` §「サブエージェント委譲」配下に「並列化義務」サブセクション追加:
+
+- 独立 sub-task (file 領域独立 + 依存関係なし) を 2+ 検出した場合、並列起動を **default**
+- 1 subagent 統合委譲は **明示的理由が必要** (race risk / 共有 file 衝突 / context budget 制約 / sequential 必須)
+- 違反検出時の対応: 次の sub-task で並列化 + 教訓 memory 追加
+
+### 4.2 soft reminder hook (案 B 部分)
+
+新 hook `.claude/hooks/parallel-subagent-reminder.sh`:
+
+- PreToolUse(Agent) で発火
+- 直近 N 分間の Agent tool_use 履歴を参照 (`.claude/.parallel-subagent-state/recent.json` 等で軽量記録、TTL 5 分)
+- 単独起動 (履歴に他 Agent 起動なし) + task description に keyword 検出 → `<system-reminder>` 注入
+- BLOCK しない (soft warning)
+- bypass: `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false`
+
+### 4.3 keyword 検出 pattern (false positive 最小化)
+
+trigger keyword (1+ match で trigger):
+- "実装" "fix" "refactor" "設計" "新設" "拡張" "改修"
+
+除外 keyword (1+ match で skip、reviewer 系を除外):
+- "reviewer" "review" "監査" "audit"
+
+### 4.4 新 smoke (5 cases)
+
+- Case 1: 単独 Agent 起動 + 実装系 description → warning 注入
+- Case 2: 単独 Agent 起動 + review 系 description → silent
+- Case 3: 並列 (2+) Agent 起動 → silent (history に既に Agent あり)
+- Case 4 (fail-open): state file 不在環境 → exit 0 + silent
+- Case 5 (bypass): env で disable → silent
+
+## 5. リスク
+
+- **false positive**: 真に sequential 依存があり 1 subagent が正解 case で warning 注入 → AI 判断負荷
+  - 緩和策: warning text に「無視可、明示的理由ある場合は続行」明記、bypass env 周知
+- **state file race**: 並列 Agent 起動時に state file 並列 write で race
+  - 緩和策: atomic-mkdir lock (task-34 iter3 で確立 pattern 流用)
+- **false negative**: 履歴 TTL 5 分超過で並列性検出失敗
+  - 緩和策: TTL 値は env override 可能 (`HC_PARALLEL_SUBAGENT_TTL_SEC=300`)
+
+## 6. 完了条件 (DoD)
+
+- [ ] `.claude/rules/development-process.md` §並列化義務 セクション追加 (grep `並列化義務` exit 0)
+- [ ] `.claude/hooks/parallel-subagent-reminder.sh` 新設 (約 50 LOC + fail-open guard + atomic-mkdir lock + subshell 関数化)
+- [ ] `.claude/settings.json` PreToolUse(Agent) 配線
+- [ ] `.claude/harness-config.yml` `parallel_subagent_reminder_enabled: true` + `parallel_subagent_ttl_sec: 300` キー追加
+- [ ] `.claude/hooks/lib/config-loader.sh` で `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED` + `HC_PARALLEL_SUBAGENT_TTL_SEC` export
+- [ ] 新 smoke `.claude/tests/parallel-subagent-reminder-smoke.sh` 5 cases PASS
+- [ ] 既存 smoke regression 0
+- [ ] 5+ reviewer iter cycle で strict 0-finding 収束 (採用 6 条 4)
+
+## 7. 影響範囲
+
+| 範囲 | 詳細 |
+|---|---|
+| ファイル | 規範 1 file (development-process.md) + 新 hook + 新 smoke + settings.json + harness-config.yml + config-loader.sh = 6 file |
+| migration | なし |
+| 環境変数 | `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED` 新設 (default: true、bypass: false) / `HC_PARALLEL_SUBAGENT_TTL_SEC` 新設 (default: 300) |
+| 互換性 | warning 注入のみ、既存挙動破壊なし |
+| state dir | `.claude/.parallel-subagent-state/` 新設 (`.gitignore` で除外) |
+
+## 8. Phase 計画 (採用 6 条 4 準拠、Task = Phase = N Step)
+
+- Step 1+2+3 統合実装: 規範追記 + hook 新設 + 配線 (3 並列、独立 file 領域: 規範 md / hook sh / settings/yaml/loader) ← **本 draft の dogfooding**
+- Step 4 (テスト合格): 新 smoke 5 cases + 既存 regression 0
+- Step 5 (リファクタリング 3 観点): hook ~50 LOC で refactor 余地なし見込み (skip 想定)
+- Step 3+4 reviewer: 5+ 動的選定で iter cycle (採用 6 条 4)
+
+## 9. 承認履歴
+
+- 2026-05-25: 起案 (user 要望「ハーネスで並列化を強制してください」)
+- TBD: user 承認 (本 draft レビュー後)
+- TBD: task #38 として起票 (`/new-task 38 parallel-subagent-enforcement`)
+- TBD: 実装着手 (3 並列起動で本 draft の dogfooding)
