@@ -50,7 +50,10 @@ flowchart LR
 
 ### RED
 - 規範文書系 (Phase 1) は grep 検証ベース、unit test 不要
-- 実装系 (Phase 2-4) は smoke test 先行 (新規 `new-task-batch-update-smoke.sh` + 既存 smoke 拡充 11→13 cases)
+- 実装系 (Phase 2-4) は smoke test 先行:
+  - **Phase 2**: 新規 `new-task-batch-update-smoke.sh` (3 cases: update / append / batch 先置き整合性)
+  - **Phase 3**: 新規 `list-md-plan-first-reminder-smoke.sh` (3 cases: 条件成立 [draft=3] / 不成立 [draft=2 境界] / bypass)
+  - **Phase 4**: 既存 `task-rule-guard-smoke.sh` 拡充 11→13 cases (Case 12: 📝 不在 warn / Case 13: 📝 存在 素通り)
 
 ### GREEN
 - Phase 1: task-management.md 新 subsection 追加 (main 直接 Edit)
@@ -102,7 +105,8 @@ flowchart LR
   - 完了条件:
     - `grep -q "経路 A (単発、既存フロー、default)" .claude/rules/task-management.md` exit 0 (経路 A 不破壊)
     - `grep -q "経路 B (batch planning)" .claude/rules/task-management.md` exit 0 (経路 B 追加)
-    - `grep -q "📝 設計（未承認）" .claude/rules/task-management.md` exit 0 (凡例 📝 用途明文化、用途 (1)/(2) table 存在)
+    - `grep -q "📝 設計（未承認）" .claude/rules/task-management.md` exit 0 (凡例 📝 status 文言存在)
+    - `grep -q "2 用途" .claude/rules/task-management.md` exit 0 (用途 (1)/(2) table 存在、QA-08 強化: status 文言単独では table 削除を検知できないため AND 条件で table 自体の存在を担保)
     - `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
 - **Step 1.4 (リファクタリング)**: skip 明示 (規範文書追記のみ、refactor 余地なし)
   - 完了条件: `skip: 規範文書追記のみ、refactor 余地なし` 明記
@@ -128,6 +132,7 @@ flowchart LR
     - Case 1 (update mode): list.md に同 ID 📝 行 既存 + `/new-task` 実行 → 行数増えず status 🔲 へ変化
     - Case 2 (append mode): list.md 同 ID 不在 + `/new-task` 実行 → 新規行 append
     - Case 3 (batch 先置き整合性): list.md に 📝 N 行 batch 先置き後、同 ID で `/new-task` 連続実行 → 各行 status 順次 update、行重複なし
+    - **実行時間制約 (pr-test-analyzer M-02)**: N=3 (最小 MECE batch) で必ず検証、N=10 でも **smoke 全体実行時間 10 秒以内**完了 (他 smoke は 30 秒以内目安に揃える、Phase 5 統合実行で timeout / CI 負荷回避)。N=100 は scope 外 (Phase 5 別 stress test 検討)
     既存 smoke (task-rule-guard 11 cases / workflow-guard / next-actions-hooks 等) regression 0
   - 追加: `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
 - **Step 2.5 (リファクタリング)**: 3 観点 (持続可能性 / 汎用性 / 非冗長化) 判定
@@ -150,16 +155,25 @@ flowchart LR
 
 **Step**:
 - **Step 3.1**: hook 実装 (subagent staging で `.claude/hooks/` 編集)
-  - 完了条件: hook file 存在 + bypass env 動作
+  - 完了条件:
+    - hook file 存在 + bypass env 動作
+    - **fail-open guard (harness-opt M-01)**: hook 先頭に `[ -f docs/tasks/list.md ] || exit 0` 形式の guard を置く。list.md 不在 (新規採用 project / `/init-tasks` 未実行環境) で grep が exit 2 (file not found) を返した場合に誤発火しないことを smoke で検証 (Step 3.4 Case で list.md 不在 condition を追加)
+    - hook 全体は `set -uo pipefail` (fail-open) で `set -e` なし、grep error は exit code 検知 + skip
 - **Step 3.2**: settings.json SessionStart 配線
   - 完了条件:
     - `jq '.hooks.SessionStart' .claude/settings.json` で新 entry 含まれる
-    - `.claude/harness-config.yml` に `list_plan_first_reminder_enabled: true` キー追加、`config-loader.sh` で `HC_LIST_PLAN_FIRST_REMINDER_ENABLED` export 確認
+    - `.claude/harness-config.yml` に `list_plan_first_reminder_enabled: true` キー追加 (Phase 1 で追加済) + `config-loader.sh` で `HC_LIST_PLAN_FIRST_REMINDER_ENABLED` export 確認 (Phase 1 iter4 で `_HC_KNOWN_KEYS` / defaults / export 節 3 箇所追加済、commit `<iter4>`)
+    - **wrapper 順序確認 (harness-opt M-02)**: 現 SessionStart は `session-start-wrapper.sh` (timeout 15s) + `observe.sh` (timeout 3s) の 2 entry。wrapper.sh 内実装を Read し、新 hook を wrapper 内に組み込むか直接 SessionStart 配列に追記するか判定 (二重実行リスク回避)。直接追記の場合は wrapper.sh の前 or 後 (default: wrapper.sh **後**、wrapper failure 時の独立発火維持)
 - **Step 3.3 (テスト設計レビュー)**: 5+ reviewer
   - 完了条件: 全 reviewer approve
-- **Step 3.4 (テスト合格)**: 新 smoke 3 case (条件成立 / 不成立 / bypass)
-  - 完了条件: smoke exit 0、`bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
-- **Step 3.5 (リファクタリング)**: skip or 抽出判定
+- **Step 3.4 (テスト合格)**: 新 smoke `.claude/tests/list-md-plan-first-reminder-smoke.sh` で **3 cases** PASS (tdd-guide M-01 / pr-test-analyzer M-01 反映: smoke ファイル名 + 検証方式明示):
+  - **Case 1 (条件成立)**: tmp dir に `docs/draft/` 配下 3 file 作成 + `docs/tasks/list.md` を task エントリ行 0 状態にして hook を bash 直接実行 → stderr に `list.md plan-first` keyword を含む `<system-reminder>` が出力されることを `grep -q "list.md plan-first"` で検証
+  - **Case 2 (不成立、N=2 境界、G5 LOW 反映)**: tmp dir に `docs/draft/` 配下 **2 file** のみ作成 + list.md 同条件 → stderr に `list.md plan-first` keyword **含まれない**ことを `! grep -q "list.md plan-first"` で検証 (N=3 が経路 B 境界の真値、N=2 で不発火を実証)
+  - **Case 3 (bypass)**: Case 1 と同条件 + `HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false` env 設定 → stderr に keyword **含まれない**ことを検証
+  - 検証方式: hook 直接 bash 実行 + stderr grep (SessionStart hook は `<system-reminder>` を stderr 出力する形式、`decision/reason` JSON 方式と異なる)
+  - 追加: `bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
+- **Step 3.5 (リファクタリング)**: skip (tdd-guide M-02 反映: 観察可能事実明記)
+  - 完了条件: `skip: hook 新設のみ (約 30 LOC)、汎用 helper 抽出余地なし、refactor 対象パターンなし` と Step 完了記録に明記
 
 ### Phase 4: `task-rule-guard.sh` PreToolUse(Write `docs/draft/*.md`) で 📝 不在 warn (P5、R-03 反映)
 
@@ -174,12 +188,18 @@ flowchart LR
 
 **Step**:
 - **Step 4.1**: hook 拡張 (subagent staging で `.claude/hooks/task-rule-guard.sh`)
-  - 完了条件: hook 拡張済、新 logic grep 検証可能
+  - 完了条件:
+    - hook 拡張済、新 logic grep 検証可能
+    - **⚠️ フィルタ順序 (H-02 HIGH 反映)**: 既存 hook L106-111 で `task_glob="*/${HC_TASK_DIR}/*"` ( = `*/docs/tasks/*`) に match しない path は `echo '{}'; exit 0` で early-exit する。`docs/draft/*.md` はこのフィルタを通過せず到達不能になるため、新 logic は **L106 以前** に draft path 判定を挿入する (or 既存フィルタ後の early-exit を draft path の場合 skip する分岐を加える) 必要あり。L111 以降に追記しても warn 一切発火しない無音障害になる
 - **Step 4.2 (テスト設計レビュー)**: 5+ reviewer
   - 完了条件: 全 reviewer approve
 - **Step 4.3 (テスト合格)**: smoke 拡充 11→13 cases、Write(docs/draft/*.md) で 📝 不在 warn 検証
   - 完了条件: smoke exit 0、`bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
-- **Step 4.4 (リファクタリング)**: skip
+  - **新規 case 詳細 (pr-test-analyzer L-02 反映)**:
+    - **Case 12 (📝 不在 → warn)**: fixture で list.md に対応 slug の 📝 行が **無い**状態 + Write(`docs/draft/<slug>.md`) tool_input を hook stdin → output JSON の `additionalContext` に「先に list.md に 📝 行を先置きするか、master roadmap で計画段階を明示」keyword 含まれることを `jq -r '.additionalContext' | grep -q "plan-first"` で検証
+    - **Case 13 (📝 存在 → 素通り)**: fixture で list.md に対応 slug の 📝 行が **既存**状態 + 同 Write tool_input → output JSON に `additionalContext` が **無い** or warn keyword **含まれない**ことを検証 (`additionalContext` 別目的で出力されるケースは別 case で網羅)
+- **Step 4.4 (リファクタリング)**: skip (tdd-guide M-02 反映: 観察可能事実明記)
+  - 完了条件: `skip: task-rule-guard.sh への 2 case 追加 (約 20 LOC) のみ、既存関数の汎用抽出余地なし、refactor 対象パターンなし` と Step 完了記録に明記
 
 ### Phase 5: テスト設計レビュー → smoke 統合 → リファクタリング (採用 5 条 4 強制、Phase 全体)
 

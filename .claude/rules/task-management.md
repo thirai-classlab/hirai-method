@@ -154,13 +154,13 @@ reviewer 確認推奨 (`/module-review` or `/system-review` 時に skip 妥当�
 **master roadmap で N 個の task を計画段階で先に並べる**用途。`/new-task` の sequential 動作が想定外なため、以下 4 step で plan-first を強制する:
 
 1. **master roadmap (or 高 level 計画 doc) で N 個の task を §plan で確定**: `docs/draft/00_master-roadmap.md` 等で計画段階の task list (id / slug / 概要 / 依存) を確定 + user 承認
-2. **main agent が `list.md` に N 行 📝 batch 先置き**: 承認時点で list.md 末尾に N 行を **📝 設計（未承認）** status で append (main 直接 Edit、`task-rule-guard.sh` Hook 強制表 line 220 で `list.md` は **既存 exempt** として定義済、本 § で追加 exempt 実装は不要。task-rule-guard.sh の参照: `.claude/hooks/task-rule-guard.sh` L117-127)。各行は draft link 付き。
-   - **ID 払い出し手順**: list.md 既存最大 ID + 1 から連番で N 件割り当て (`grep -oE 'task-[0-9]+' docs/tasks/list.md | grep -oE '[0-9]+' | sort -n | tail -1` で最大値取得、+1 開始)
+2. **main agent が `list.md` に N 行 📝 batch 先置き**: 承認時点で list.md 末尾に N 行を **📝 設計（未承認）** status で append (main 直接 Edit、`task-rule-guard.sh` L116-127 の exempt case 定義で `list.md` は **既存 exempt** として通過、本 § で追加 exempt 実装は不要。本 .md §「Hook による強制」表内 `list.md` 行も参照)。各行は draft link 付き。
+   - **ID 払い出し手順**: list.md 既存最大 ID + 1 から連番で N 件割り当て (`grep -oE 'task-[0-9]+' docs/tasks/list.md | grep -oE '[0-9]+' | sort -n | tail -1` で最大値取得、+1 開始)。**結果が空 (list.md に `task-N` 行が 1 件も無い初期状態) の場合は ID=1 を初期値**とする (例: `next_id=$((${max:-0} + 1))` で max 空時 0 fallback、+1 で 1 開始)
    - **重複検知**: 同 ID が既存 (📝 / 🔲 / 🔄 / ✅ 問わず) なら BLOCK + user 通知 (誤連番 / 別 task 起案 conflict の可能性)
    - **目的**: IDE で開いた user が batch 計画全体を即可視
    - **Loop モード整合**: 本動作は master roadmap §plan で user 承認済の N task を list.md に転記する **事務作業** なので、`modes.md` 遵守事項 2 例外条項「設計文書の新規追加」には該当せず、main 自律実行可。
 3. **個別 draft 起案** (subagent 並列可): 各 task の draft (`docs/draft/<slug>.md`) を起案 → user 承認 → 経路 A step 4 へ
-4. **`/new-task <id> <slug>` で 📝 → 🔲 update**: list.md の 同 ID (or 同 slug) 既存 📝 行を **🔲 未着手** に status update (新規行 append しない、行重複なし)。`/new-task` 実装は list.md grep で既存 📝 行検出 (**ID + slug の AND 一致** 必須、slug 単独 grep 禁止) → 不在なら append (経路 A 動作)、既存なら update (経路 B 動作)。
+4. **`/new-task <id> <slug>` で 📝 → 🔲 update**: list.md の **同 ID かつ 同 slug** の既存 📝 行を **🔲 未着手** に status update (新規行 append しない、行重複なし)。`/new-task` 実装は list.md grep で既存 📝 行検出 (**ID + slug の AND 一致** 必須、ID 単独 / slug 単独 grep 禁止) → 不在なら append (経路 A 動作)、既存なら update (経路 B 動作)。
    - **複数マッチ**: 同 ID + slug で 2 行以上 hit なら BLOCK + user 通知
    - **status conflict**: 同 ID で status が 📝 以外 (🔲 / 🔄 / ✅) で既存なら BLOCK + 重複 ID 修正案内
    - **⚠️ Phase 2 依存**: 本動作 (📝 既存行を 🔲 update) は task-33 Phase 2 で `/new-task` 実装更新後に有効化。Phase 1 完了時点 (本 commit) では `/new-task` は同 ID 既存行を BLOCK する (既存仕様、`.claude/commands/new-task.md` Phase 1 step 3)。Phase 1 単体運用時は経路 B step 2 後に main 直接 Edit で 📝 → 🔲 update せよ。
@@ -200,6 +200,7 @@ reviewer 確認推奨 (`/module-review` or `/system-review` 時に skip 妥当�
   - **bypass**: `HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false`
 - **PreToolUse(Write `docs/draft/<slug>.md`)**: 新規 draft Write が発生した時点で、`list.md` に対応 slug の 📝 行が不在なら warn context 注入 (block しない、honor system)。
   - **検出 path**: `task-rule-guard.sh` の既存 PreToolUse(Edit/Write) hook を拡張、tool_input.file_path が `docs/draft/*.md` pattern に match する場合に slug 抽出 + list.md grep
+  - **⚠️ フィルタ順序注意 (Phase 4 実装者向け)**: 既存 hook は L106-111 で `task_glob="*/${HC_TASK_DIR}/*"` ( = `*/docs/tasks/*`) に match しない path を early `exit 0` する。`docs/draft/*.md` はこのフィルタを通過しないため、新ロジックは **L106 以前** に draft path 判定を挿入する (or 既存フィルタ後の early-exit を draft path の場合 skip する分岐を加える) 必要がある。L111 以降に追記しても到達不能で warn 一切発火しない無音障害になる
   - **slug マッチ**: 厳密一致 (kebab-case slug)、複数マッチ時は最初の 1 件のみ参照
   - **理由**: Bash slash command (`/new-draft <slug>`) は task-rule-guard.sh の現アーキ (Edit/Write tool のみ処理) で intercept 不可、Write tool 経由で代替 (R-03 finding 反映)
 

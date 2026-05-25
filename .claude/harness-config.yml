@@ -211,11 +211,17 @@ workflow_stages_new: [requirements, basic-design, detailed-design, test-design, 
 workflow_stages_modify: [branch-decision, checkout, recover-design, pre-test, redesign, retest-design, tdd, module-review, full-test, system-review]
 
 # === list-md plan-first reminder (task-33 Phase 3) ===
-# SessionStart hook (.claude/hooks/list-md-plan-first-reminder.sh、Phase 3 で実装予定) が消費。
+# SessionStart hook が消費。
 # `docs/draft/*.md` ≥ 3 件 ∧ `docs/tasks/list.md` task エントリ行 == 0 を検出した場合、
 # <system-reminder> で「経路 B (batch planning) 適用検討」を強制注入する。
 #
+# Phase 3 実装方針 (2 案、task-33 Phase 3 Step 3.1 で確定):
+#   (a) 既存 .claude/hooks/session-help-surface.sh 拡張
+#   (b) 新 hook .claude/hooks/list-md-plan-first-reminder.sh 新設
+# 実装後、本コメントを実 path に更新すること (Phase 3 Step 3.2 完了条件)。
+#
 # - list_plan_first_reminder_enabled: false で reminder を完全停止 (Phase 1 完了時点では未実装、Phase 3 実装後に有効化)
+# - Phase 1 iter4 で config-loader.sh に _HC_KNOWN_KEYS / defaults / export 3 箇所登録済、env override 動作実証
 #
 # env 上書き例:
 #   export HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false   # 一時的に黙らせる
