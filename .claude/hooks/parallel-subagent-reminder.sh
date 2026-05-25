@@ -235,7 +235,14 @@ _psr_main() (
     # Fix 8 (R4 M / R5 M1): `リファクタリング` (日本語長 word) を default mapping ではなく
     #                並列性 keyword 側にも追加 (refactor の日本語表記)。
     local parallel_keywords='実装|\bfix\b|\brefactor\b|リファクタリング|設計|新設|拡張|改修'
-    local exclude_keywords='reviewer|review|監査|audit'
+    # Fix 9 (R4-H2 HIGH): exclude_keywords に word boundary `\b` を付与。
+    # 旧 `review` (boundary なし) は `preview` / `code-reviewer` 等の substring に
+    # 誤マッチし、正当な並列性 warning を false-negative で抑制していた。
+    # `reviewer` と `review` 両方を併記する理由: `reviewer` の `review` 部分は
+    # 末尾境界 `\b` (e の後 r、word 境界不一致) を持たないため `\breview\b` 単独だと
+    # `reviewer` を取りこぼす。両方明記で確実に除外する。
+    # 日本語 (監査) は CJK で word boundary が機能しないため `\b` 不要。
+    local exclude_keywords='\breviewer\b|\breview\b|監査|\baudit\b'
 
     local should_remind_parallel=0
     # --- 境界値 recent_active_count -le 1 の意図 (Fix 4: R2 F-03 + R5 + R6) ---

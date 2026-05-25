@@ -263,3 +263,11 @@ list_plan_first_reminder_enabled: true
 # 設定不要原則 (draft §4.5.0) により hook 内 hardcode default が動作。
 parallel_subagent_reminder_enabled: true
 parallel_subagent_ttl_sec: 300
+
+# parallel_subagent_state_dir: state file 保存 dir の任意 override (テスト isolation 用)。
+# default 空文字 → hook 内 fallback (`$repo_root/.claude/.parallel-subagent-state/`) を使用。
+# 設定不要原則 (draft §4.5.0) で hook 内 fallback 動作するため、通常運用は yaml 設定不要。
+# テスト / CI で isolation したい場合のみ設定:
+#   parallel_subagent_state_dir: "/tmp/my-isolated-state"
+# env 上書き例:
+#   export HC_PARALLEL_SUBAGENT_STATE_DIR=/tmp/parallel-state-test
