@@ -19,10 +19,12 @@
 #
 # 検証範囲:
 #   - destructive deny:
-#     - Block cases (19): destructive git 操作が decision:"block" + reason に
+#     - Block cases (23): destructive git 操作が decision:"block" + reason に
 #       "[git destructive guard]" を含むこと
 #       (`git push -f` single space は 2026-05-18 hook fix で blockable 化:
 #        regex を `push[[:space:]]+([^|;&]*[[:space:]])?-f([[:space:]]|$)` に修正)
+#       (iter3 R5 MEDIUM F-03/F-04/F-05 解消: push --mirror / --all / --branches / --prune
+#        を追加、defense-in-depth 完全化)
 #     - Pass cases (10): 非破壊 git 操作が block されないこと
 #     - Bypass cases (3): ECC_ALLOW_DESTRUCTIVE_GIT=1 で block 解除されること
 #   - protected branch push deny (本 file 末尾セクションで検証):
@@ -252,7 +254,7 @@ expect_block_with_explicit_bypass_zero() {
 
 printf "===== delegation-guard-deny-layers-smoke (next-actions #13 + #14) =====\n\n"
 
-printf "Block cases (19):\n"
+printf "Block cases (23):\n"
 expect_block "push --force"                    "git push --force"
 # 2026-05-18 hook fix で blockable 化:
 # 旧 regex `[^|;&]*[[:space:]]-f` は「push 直後の space と -f の前の space」の
@@ -277,6 +279,19 @@ expect_block "tag -d v1.0"                     "git tag -d v1.0"
 expect_block "tag -f v1.0"                     "git tag -f v1.0"
 expect_block "reflog expire --expire=now"      "git reflog expire --expire=now"
 expect_block "gc --prune=now"                  "git gc --prune=now"
+# --- iteration 3: R5 security-reviewer MEDIUM F-03/F-04/F-05 解消 (task-39 Step2 iter3) ---
+# (j) push --mirror: 全 ref 強制反映 (main 含む)、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--mirror([[:space:]]|$)
+expect_block "push --mirror origin (F-03)"     "git push --mirror origin"
+# (k) push --all: 全 branch 一括 push (main 含む)、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--all([[:space:]]|$)
+expect_block "push --all origin (F-04)"        "git push --all origin"
+# (l) push --branches: 全 branch 一括 push (main 含む)、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--branches([[:space:]]|$)
+expect_block "push --branches origin (F-04)"   "git push --branches origin"
+# (m) push --prune: remote-only branch 削除を含む、destructive group
+#     git-deny.sh: push[[:space:]]+([^|;&]*[[:space:]])?--prune([[:space:]]|$)
+expect_block "push --prune origin (F-05)"      "git push --prune origin"
 
 printf "\nPass cases (10):\n"
 expect_pass  "status"                          "git status"

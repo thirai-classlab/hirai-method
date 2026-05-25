@@ -31,11 +31,18 @@ check_git_destructive() {
   git_destructive_re="${git_destructive_re}|tag[[:space:]]+([^|;&]*[[:space:]])?-[df]([[:space:]]|$)"
   git_destructive_re="${git_destructive_re}|reflog[[:space:]]+expire"
   git_destructive_re="${git_destructive_re}|gc[[:space:]]+--prune=now"
+  # iteration 3: R5 security-reviewer MEDIUM F-03/F-04/F-05 解消 (task-39 Step2)
+  # `--mirror` (全 ref 強制反映、main 含む)、`--all` / `--branches` (全 branch 一括 push、main 含む)、
+  # `--prune` (deletion を含むため destructive) を destructive 扱いに追加 (defense-in-depth 完全化)。
+  git_destructive_re="${git_destructive_re}|push[[:space:]]+([^|;&]*[[:space:]])?--mirror([[:space:]]|$)"
+  git_destructive_re="${git_destructive_re}|push[[:space:]]+([^|;&]*[[:space:]])?--all([[:space:]]|$)"
+  git_destructive_re="${git_destructive_re}|push[[:space:]]+([^|;&]*[[:space:]])?--branches([[:space:]]|$)"
+  git_destructive_re="${git_destructive_re}|push[[:space:]]+([^|;&]*[[:space:]])?--prune([[:space:]]|$)"
   git_destructive_re="${git_destructive_re})"
 
   if printf '%s' "$cmd" | grep -qE "$git_destructive_re"; then
     local destructive_reason
-    destructive_reason=$(printf '[git destructive guard] 破壊的 git 操作は禁止: %s\n\n破壊的操作の例:\n  - push --force / push -f (force push)\n  - reset --hard (history 破壊)\n  - branch -D <name> (force delete)\n  - clean -f / -fd / -fdx (untracked 削除)\n  - checkout -- <file> (file 復元)\n  - restore --worktree|--source (file 復元)\n  - stash drop|clear (stash 破壊)\n  - tag -d|-f (tag 削除/上書き)\n  - reflog expire (reflog 破壊)\n  - gc --prune=now (orphan commit gc)\n\nbypass (1 セッション): export ECC_ALLOW_DESTRUCTIVE_GIT=1\n\n設計起源: 2026-05-18 user 指示「mainAgentでgitコマンドは基本的(破壊的変更以外)に実行できるようにしてください」' "$cmd")
+    destructive_reason=$(printf '[git destructive guard] 破壊的 git 操作は禁止: %s\n\n破壊的操作の例:\n  - push --force / push -f (force push)\n  - push --mirror (全 ref 強制反映、main 含む)\n  - push --all / push --branches (全 branch 一括 push、main 含む)\n  - push --prune (remote-only branch 削除)\n  - reset --hard (history 破壊)\n  - branch -D <name> (force delete)\n  - clean -f / -fd / -fdx (untracked 削除)\n  - checkout -- <file> (file 復元)\n  - restore --worktree|--source (file 復元)\n  - stash drop|clear (stash 破壊)\n  - tag -d|-f (tag 削除/上書き)\n  - reflog expire (reflog 破壊)\n  - gc --prune=now (orphan commit gc)\n\nbypass (1 セッション): export ECC_ALLOW_DESTRUCTIVE_GIT=1\n\n設計起源: 2026-05-18 user 指示「mainAgentでgitコマンドは基本的(破壊的変更以外)に実行できるようにしてください」' "$cmd")
     jq -n --arg r "$destructive_reason" '{decision:"block", reason:$r}'
     exit 0
   fi

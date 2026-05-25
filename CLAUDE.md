@@ -46,7 +46,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 - secrets ローテーション、`git push --force` / `git reset --hard` / `git branch -D`
 - `git push origin main|stg*` (protected-branch-push-deny で別 layer block 維持)、`gh pr merge` (user 明示承認必須)
 - (緩和、task #39 由来) feature branch への `git push` および `gh pr create` は自律実行可 (modes.md 遵守事項 8 と整合)
-- main 以外への push、`<外部サービス quota 超過見込み>`
+- `<外部サービス quota 超過見込み>`
 - 同一エラーで 3 回連続失敗、サブエージェントの「要判断」報告
 - security-reviewer の CRITICAL、進行不可ブロッカー
 

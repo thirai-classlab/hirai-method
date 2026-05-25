@@ -87,7 +87,7 @@ AUTONOMOUS_RESTRICTED_PATTERNS=(
 
 ### 4.4 新 smoke (7 cases、責務分担明示)
 
-本 smoke は **autonomous-action-guard 単体の責務範囲** を検証する。main/stg 系 push の実 block は `delegation-guard.sh` の `protected-branch-push-deny` layer (別 hook) が担い、`.claude/tests/delegation-guard-deny-layers-smoke.sh` 40/40 PASS で別途実証される。本 smoke は autonomous-action-guard 緩和後に該当 pattern が **通過する**ことを確認し、実 block は別 layer に委譲されている責務分担を明示する。
+本 smoke は **autonomous-action-guard 単体の責務範囲** を検証する。main/stg 系 push の実 block は `delegation-guard.sh` の `protected-branch-push-deny` layer (別 hook) が担い、`.claude/tests/delegation-guard-deny-layers-smoke.sh` **48/48 PASS** で別途実証される (iter2 で HEAD:main 系 4 case + iter4 で --mirror/--all/--branches/--prune 4 case 追加)。本 smoke は autonomous-action-guard 緩和後に該当 pattern が **通過する**ことを確認し、実 block は別 layer に委譲されている責務分担を明示する。
 
 - **Case 1**: `git push origin feature/foo` (feature branch、Loop mode) → **autonomous-action-guard 通過** (緩和効果、実際の push 可否は Claude Code permission system 側)
 - **Case 2**: `git push origin main` (Loop mode) → **autonomous-action-guard 単体通過** (一般 push pattern 削除のため本 hook では block しない。実 block は `delegation-guard.sh` の `protected-branch-push-deny` layer が担当、smoke コメントで責務分担明示)
@@ -118,8 +118,8 @@ AUTONOMOUS_RESTRICTED_PATTERNS=(
 
 - [ ] `.claude/hooks/autonomous-action-guard.sh` `AUTONOMOUS_RESTRICTED_PATTERNS` 配列から `git push` 一般 pattern 削除 + `gh pr create` 削除 (`gh pr merge` は維持)
 - [ ] `.claude/rules/modes.md` 遵守事項 8 table 更新 (緩和対象明示)
-- [ ] 新 smoke `.claude/tests/autonomous-action-guard-relaxation-smoke.sh` 5 cases PASS
-- [ ] 既存 smoke regression 0 (`delegation-guard-deny-layers-smoke.sh` 40/40 PASS 維持)
+- [ ] 新 smoke `.claude/tests/autonomous-action-guard-relaxation-smoke.sh` **12 cases** PASS (R4 H1/H2 反映で iter2 で Case 8-12 拡張、`--force` / `--tags` / `--all` / `gh pr merge` flag variants 網羅)
+- [ ] 既存 smoke regression 0 (`delegation-guard-deny-layers-smoke.sh` **48/48 PASS** 維持、iter2 で HEAD:main 系 4 case + iter4 で --mirror/--all/--branches/--prune 4 case 追加)
 - [ ] 5+ reviewer iter cycle で strict 0-finding 収束 (採用 6 条 4)
 - [ ] memory `feedback_claude_permission_git_push_deny.md` の実態確認 (本緩和後 agent 経路で push が動くか別途検証 task 起票)
 
@@ -136,7 +136,7 @@ AUTONOMOUS_RESTRICTED_PATTERNS=(
 
 - Step 1 (実装): autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域)
 - Step 2 (テスト設計レビュー): 5+ reviewer 動的選定
-- Step 3 (テスト合格): 新 smoke 5 cases PASS + 既存 smoke regression 0
+- Step 3 (テスト合格): 新 smoke 12 cases PASS + 既存 smoke regression 0 (iter2/iter4 拡張: 5→12 cases + 40→48 cases)
 - Step 4 (リファクタリング 3 観点): 配列削減のみで refactor 余地なし見込み (skip 想定)
 
 ## 9. 承認履歴

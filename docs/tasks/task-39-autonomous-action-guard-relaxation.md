@@ -24,15 +24,15 @@ total_steps: 4
 
 - `.claude/hooks/autonomous-action-guard.sh` `AUTONOMOUS_RESTRICTED_PATTERNS` 配列削減 (`git push` 一般 / `gh pr create` 削除、`gh pr merge` 維持)
 - `.claude/rules/modes.md` 遵守事項 8 table 更新 (緩和対象明示、protected-branch-push-deny 委譲明記)
-- `.claude/tests/autonomous-action-guard-relaxation-smoke.sh` 5 cases (feature push 通過 / main push deny / stg push deny / pr create 通過 / pr merge block) PASS
-- 既存 smoke regression 0 (特に `delegation-guard-deny-layers-smoke.sh` 40/40 維持)
+- `.claude/tests/autonomous-action-guard-relaxation-smoke.sh` **12 cases** PASS (iter2/iter4 で Case 8-12 拡張: --force/--tags/--all + gh pr merge variants)
+- 既存 smoke regression 0 (特に `delegation-guard-deny-layers-smoke.sh` **48/48 PASS** 維持、iter2 で HEAD:main 系 4 case + iter4 で --mirror/--all/--branches/--prune 4 case 追加)
 
 ## Task 完了条件 (DoD)
 
 - [ ] `.claude/hooks/autonomous-action-guard.sh` `AUTONOMOUS_RESTRICTED_PATTERNS` 配列から `git push` 一般 pattern 削除 + `gh pr create` 削除 (`gh pr merge` は維持)
 - [ ] `.claude/rules/modes.md` 遵守事項 8 table 更新 (緩和対象明示)
-- [ ] 新 smoke `.claude/tests/autonomous-action-guard-relaxation-smoke.sh` 5 cases PASS
-- [ ] 既存 smoke regression 0 (`delegation-guard-deny-layers-smoke.sh` 40/40 PASS 維持)
+- [ ] 新 smoke `.claude/tests/autonomous-action-guard-relaxation-smoke.sh` **12 cases** PASS (iter2/iter4 で Case 8-12 拡張: --force/--tags/--all + gh pr merge variants)
+- [ ] 既存 smoke regression 0 (`delegation-guard-deny-layers-smoke.sh` **48/48 PASS** 維持、iter2 で HEAD:main 系 4 case + iter4 で --mirror/--all/--branches/--prune 4 case 追加)
 - [ ] 5+ reviewer iter cycle で strict 0-finding 収束 (採用 6 条 4)
 - [ ] memory `feedback_claude_permission_git_push_deny.md` 実態確認 (本緩和後 agent 経路で push が動くか別途検証 task 起票候補)
 - [ ] commit 完了 (push は user manual で実施、本 task 完了直後ならば本緩和適用後の agent push で実証可能性あり)
@@ -64,7 +64,7 @@ total_steps: 4
 - 4.1: `AUTONOMOUS_RESTRICTED_PATTERNS` 配列削減
 - 4.2: protected-branch-push-deny 維持 (二重ガード = defense-in-depth)
 - 4.3: modes.md 遵守事項 8 table 更新
-- 4.4: 新 smoke 5 cases
+- 4.4: 新 smoke (Step 2 iter2/iter4 拡張で 5→12 cases、--force/--tags/--all + gh pr merge variants 網羅)
 
 ## TDD 戦略
 
@@ -74,8 +74,8 @@ total_steps: 4
 
 ### GREEN
 
-- hook 配列削減 → 5 cases PASS
-- 既存 `delegation-guard-deny-layers-smoke.sh` 40/40 regression 0
+- hook 配列削減 → 12 cases PASS (Step 2 iter2/iter4 拡張後)
+- 既存 `delegation-guard-deny-layers-smoke.sh` 48/48 regression 0 (Step 2 iter2/iter4 拡張後)
 
 ### REFACTOR
 
@@ -91,7 +91,7 @@ total_steps: 4
 |:---:|:---:|:---|---:|:---|
 | 1 | 🔲 | autonomous-action-guard.sh 配列削減 + modes.md table 更新 (2 並列、独立 file 領域) | 0.5h | — |
 | 2 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer) | 0.5h | Step 1 |
-| 3 | 🔲 | (テスト合格) 新 smoke 5 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 40/40 維持) | 0.3h | Step 2 |
+| 3 | 🔲 | (テスト合格) 新 smoke 12 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 48/48 維持) | 0.3h | Step 2 |
 | 4 | 🔲 | (リファクタリング) 3 観点判定 (skip 想定: 配列削減のみで refactor 余地なし) | 0.1h | Step 3 |
 
 合計工数: 1.4h
@@ -119,9 +119,9 @@ total_steps: 4
 
 **Step status**: 🔲
 
-**作業概要**: 新 smoke 5 cases PASS + 既存 smoke regression 0 (特に `delegation-guard-deny-layers-smoke.sh` 40/40 維持で二重ガード継続を実証)
+**作業概要**: 新 smoke **12 cases** PASS + 既存 smoke regression 0 (特に `delegation-guard-deny-layers-smoke.sh` **48/48 PASS** 維持で二重ガード継続を実証)
 
-**完了条件**: `bash .claude/tests/autonomous-action-guard-relaxation-smoke.sh` exit 0、`bash .claude/tests/delegation-guard-deny-layers-smoke.sh` 40/40 PASS
+**完了条件**: `bash .claude/tests/autonomous-action-guard-relaxation-smoke.sh` exit 0 (**12/12 PASS**、iter2/iter4 で Case 8-12 拡張)、`bash .claude/tests/delegation-guard-deny-layers-smoke.sh` **48/48 PASS** (iter2 で HEAD:main 系 4 case + iter4 で --mirror/--all/--branches/--prune 4 case 追加)
 
 ### Step 4: (リファクタリング)
 
@@ -157,6 +157,7 @@ total_steps: 4
 | 2026-05-25 | 起案 | draft `docs/draft/autonomous-action-guard-relaxation.md` 起こし |
 | 2026-05-25 | 承認 | user 「draft 2 件レビュー + 承認 → 問題ありません」 |
 | 2026-05-25 | 着手予定 | branch `feat/list-md-plan-first-normative` 継続使用 |
+| 2026-05-25 | Step 2 iter4 | iter1-3 reviewer findings 全件解消、smoke 12/12 + delegation-guard 48/48 PASS |
 
 ## 派生 task / 次アクション候補
 
