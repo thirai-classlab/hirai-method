@@ -17,9 +17,15 @@
 #   Case 4 (C-01 / H-08): 同 ID + 別 slug + 📝 既存 → BLOCK (誤連番検知)
 #   Case 5 (C-02): slug substring false match 防止 (foo vs foo-bar)
 #   Case 6 (C-03): 同 ID + 同 slug で status 混在 (📝/🔲) → BLOCK
-#   Case 7 (H-01): regex injection (slug 特殊文字) で破壊されない
+#   Case 7 (H-01 + H-03): regex injection (slug 特殊文字) + backslash 保護
 #   Case 8 (H-04): 末尾改行なし list.md への append で前行結合しない
 #   Case 9 (重複起動防止): 同 ID + 別 status (🔲 のみ) → BLOCK
+#
+#   iter3 追加 (MUST FIX 7 件):
+#   Case 9b (PR-001): 🔄 status → BLOCK
+#   Case 9c (PR-001): ✅ status → BLOCK
+#   Case 10 (QA-C01/H-RC-01): parallel race 3 subprocess 並列実行で 📝 残存 0 件
+#   Case 11 (QA-C02): leading zero id ("01" vs "1") で silent duplicate 防止
 #
 # 設計制約:
 #   - file-top に set -euo pipefail を書かない (Critical Lesson HIGH)
@@ -288,10 +294,10 @@ EOF
     case_assert_contains "Case 6.2: '混在' message" "混在" "$out"
 }
 
-# === Case 7: H-01 regex injection (slug 特殊文字) ===
-case7_regex_injection_slug() {
-    echo "=== Case 7 (H-01): regex injection (slug 特殊文字 .) ==="
-    # slug に '.' が含まれる場合、escape されないと '.' が任意文字に match して誤動作
+# === Case 7: H-01 regex injection + H-03 backslash 保護 ===
+case7_extended_regex_and_backslash() {
+    echo "=== Case 7 (H-01 + H-03): regex injection + backslash 保護 ==="
+    # 7.1-7.3: slug に '.' が含まれる場合、escape されないと '.' が任意文字に match して誤動作
     local list="$TMP_ROOT/list7.md"
     cat > "$list" <<'EOF'
 | 1 | 📝 | **Task: foo.bar** | overview | [foo.bar.md] |
@@ -313,6 +319,37 @@ EOF
         FAILED_CASES+=("Case 7.2: regex injection (content: $(cat "$list"))")
         printf "  FAIL: %s\n" "Case 7.2"
     fi
+
+    # 7.3 (iter3 TDD-002): backslash 保護 direct assertion
+    # row_content に backslash + ampersand を含めて update、awk ENVIRON 経由で
+    # backslash 保持 + ampersand 保持を verify
+    local list2="$TMP_ROOT/list7b.md"
+    cat > "$list2" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    local backslash_row='| 1 | 🔲 | **Task: foo** | overview \backslash & ampersand | [foo.md] |'
+    bash "$HELPER" update_or_append_task_row 1 foo "$backslash_row" "$list2" >/dev/null
+
+    local content
+    content=$(cat "$list2")
+
+    if printf '%s' "$content" | grep -qF '\backslash'; then
+        PASS=$((PASS + 1))
+        printf "  PASS: %s\n" "Case 7.3: backslash 保持"
+    else
+        FAIL=$((FAIL + 1))
+        FAILED_CASES+=("Case 7.3: backslash 消失 (content: $content)")
+        printf "  FAIL: %s\n" "Case 7.3: backslash 消失"
+    fi
+
+    if printf '%s' "$content" | grep -qF '& ampersand'; then
+        PASS=$((PASS + 1))
+        printf "  PASS: %s\n" "Case 7.4: ampersand 保持"
+    else
+        FAIL=$((FAIL + 1))
+        FAILED_CASES+=("Case 7.4: ampersand 消失 (content: $content)")
+        printf "  FAIL: %s\n" "Case 7.4: ampersand 消失"
+    fi
 }
 
 # === Case 8: H-04 末尾改行欠落 append ===
@@ -321,10 +358,6 @@ case8_no_trailing_eol_append() {
     local list="$TMP_ROOT/list8.md"
     # printf で末尾改行なしを作る
     printf '%s' '| 1 | 🔲 | **Task: foo** | overview | [foo.md] |' > "$list"
-
-    # 末尾改行確認
-    local last_byte_before
-    last_byte_before=$(tail -c 1 "$list" | od -An -c -N1 | tr -d ' ')
 
     # append (同 ID 不在の id=2)
     bash "$HELPER" update_or_append_task_row 2 bar '| 2 | 🔲 | **Task: bar** | overview | [bar.md] |' "$list" >/dev/null
@@ -346,7 +379,7 @@ case8_no_trailing_eol_append() {
 
 # === Case 9: 同 ID + 別 status (🔲 のみ) → BLOCK ===
 case9_same_id_completed_block() {
-    echo "=== Case 9: 同 ID + 別 status (🔲 のみ) → BLOCK ==="
+    echo "=== Case 9: 同 ID + 別 status (🔲) → BLOCK ==="
     local list="$TMP_ROOT/list9.md"
     cat > "$list" <<'EOF'
 | 1 | 🔲 | **Task: foo** | overview | [foo.md] |
@@ -357,7 +390,7 @@ EOF
 
     if [ "$exit_code" -eq 1 ]; then
         PASS=$((PASS + 1))
-        printf "  PASS: %s\n" "Case 9.1: 重複起動防止 BLOCK"
+        printf "  PASS: %s\n" "Case 9.1: 重複起動防止 BLOCK (🔲)"
     else
         FAIL=$((FAIL + 1))
         FAILED_CASES+=("Case 9.1: 重複起動 BLOCK 失敗 (exit=$exit_code, out=$out)")
@@ -365,7 +398,121 @@ EOF
     fi
 }
 
-printf "===== new-task-batch-update-smoke (task-34 Step 4, 9 cases) =====\n\n"
+# === Case 9b: iter3 PR-001 同 ID + 🔄 status → BLOCK ===
+case9b_in_progress_status_block() {
+    echo "=== Case 9b (iter3 PR-001): 同 ID + 🔄 status → BLOCK ==="
+    local list="$TMP_ROOT/list9b.md"
+    cat > "$list" <<'EOF'
+| 1 | 🔄 | **Task: foo** | overview | [foo.md] |
+EOF
+    local out exit_code
+    out=$(bash "$HELPER" update_or_append_task_row 1 foo '| 1 | 🔲 | **Task: foo** | overview | [foo.md] |' "$list" 2>&1)
+    exit_code=$?
+
+    case_assert "Case 9b.1: 🔄 status BLOCK exit 1" "1" "$exit_code"
+    case_assert_contains "Case 9b.2: BLOCK message 含む" "BLOCK" "$out"
+
+    local lc
+    lc=$(wc -l < "$list" | tr -d ' ')
+    case_assert "Case 9b.3: list.md 1 行維持" "1" "$lc"
+}
+
+# === Case 9c: iter3 PR-001 同 ID + ✅ status → BLOCK ===
+case9c_completed_status_block() {
+    echo "=== Case 9c (iter3 PR-001): 同 ID + ✅ status → BLOCK ==="
+    local list="$TMP_ROOT/list9c.md"
+    cat > "$list" <<'EOF'
+| 1 | ✅ | **Task: foo** | overview | [foo.md] |
+EOF
+    local out exit_code
+    out=$(bash "$HELPER" update_or_append_task_row 1 foo '| 1 | 🔲 | **Task: foo** | overview | [foo.md] |' "$list" 2>&1)
+    exit_code=$?
+
+    case_assert "Case 9c.1: ✅ status BLOCK exit 1" "1" "$exit_code"
+    case_assert_contains "Case 9c.2: BLOCK message 含む" "BLOCK" "$out"
+
+    local lc
+    lc=$(wc -l < "$list" | tr -d ' ')
+    case_assert "Case 9c.3: list.md 1 行維持" "1" "$lc"
+}
+
+# === Case 10: iter3 QA-C01/H-RC-01 parallel race 3 subprocess ===
+case10_parallel_race_3_processes() {
+    echo "=== Case 10 (iter3 QA-C01/H-RC-01): parallel race 3 subprocess ==="
+    local list="$TMP_ROOT/list10.md"
+    cat > "$list" <<'EOF'
+| 1 | 📝 | **Task: a** | overview | [a.md] |
+| 2 | 📝 | **Task: b** | overview | [b.md] |
+| 3 | 📝 | **Task: c** | overview | [c.md] |
+EOF
+    # 3 並列で同時 update
+    bash "$HELPER" update_or_append_task_row 1 a '| 1 | 🔲 | **Task: a** | overview | [a.md] |' "$list" >/dev/null 2>&1 &
+    bash "$HELPER" update_or_append_task_row 2 b '| 2 | 🔲 | **Task: b** | overview | [b.md] |' "$list" >/dev/null 2>&1 &
+    bash "$HELPER" update_or_append_task_row 3 c '| 3 | 🔲 | **Task: c** | overview | [c.md] |' "$list" >/dev/null 2>&1 &
+    wait
+
+    local pending_count
+    pending_count=$(grep -cF "📝" "$list" 2>/dev/null || true)
+    case_assert "Case 10.1: 3 並列 race 後 📝 残存 0 件" "0" "$pending_count"
+
+    local box_count
+    box_count=$(grep -cF "🔲" "$list" 2>/dev/null || true)
+    case_assert "Case 10.2: 3 並列 race 後 🔲 3 件" "3" "$box_count"
+
+    local total_lines
+    total_lines=$(wc -l < "$list" | tr -d ' ')
+    case_assert "Case 10.3: 行数 3 維持" "3" "$total_lines"
+}
+
+# === Case 11: iter3 QA-C02 leading zero id duplicate 防止 ===
+case11_leading_zero_id_normalization() {
+    echo "=== Case 11 (iter3 QA-C02): leading zero id 数値正規化 ==="
+    # list.md に "| 1 | 📝 |" 行を作り、raw_id="01" で呼び出し → 同 id=1 として update
+    # (旧実装は "01" を string で grep "^| 01 |" として APPEND してしまい silent duplicate を起こす)
+    local list="$TMP_ROOT/list11.md"
+    cat > "$list" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    bash "$HELPER" update_or_append_task_row "01" foo '| 1 | 🔲 | **Task: foo** | overview | [foo.md] |' "$list" >/dev/null
+
+    # 行数 1 維持 (APPEND されていない、UPDATE された)
+    local total
+    total=$(grep -cE "^\| [0-9]+ \|" "$list" || true)
+    case_assert "Case 11.1: 行数 1 維持 (silent duplicate なし)" "1" "$total"
+
+    # status 🔲 に変化
+    if grep -qE "^\| 1 \| 🔲" "$list"; then
+        PASS=$((PASS + 1))
+        printf "  PASS: %s\n" "Case 11.2: status 🔲 へ update (raw_id='01' → id=1)"
+    else
+        FAIL=$((FAIL + 1))
+        FAILED_CASES+=("Case 11.2: leading zero update 失敗 (content: $(cat "$list"))")
+        printf "  FAIL: %s\n" "Case 11.2"
+    fi
+
+    # 11.3: 非数値 id → error (exit 2)
+    local list_err="$TMP_ROOT/list11_err.md"
+    cat > "$list_err" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    local exit_code
+    bash "$HELPER" update_or_append_task_row "abc" foo '| 1 | 🔲 | **Task: foo** | overview | [foo.md] |' "$list_err" >/dev/null 2>&1
+    exit_code=$?
+    case_assert "Case 11.3: 非数値 id → exit 2" "2" "$exit_code"
+
+    # 11.4: row_content 改行 → error (exit 2)
+    local list_nl="$TMP_ROOT/list11_nl.md"
+    cat > "$list_nl" <<'EOF'
+| 1 | 📝 | **Task: foo** | overview | [foo.md] |
+EOF
+    local nl_row
+    nl_row=$(printf '| 1 | 🔲 | **Task: foo** | line1\nline2 | [foo.md] |')
+    bash "$HELPER" update_or_append_task_row 1 foo "$nl_row" "$list_nl" >/dev/null 2>&1
+    exit_code=$?
+    case_assert "Case 11.4: row_content 改行 → exit 2" "2" "$exit_code"
+}
+
+printf "===== new-task-batch-update-smoke (task-34 Step 4 iter3, 13 cases) =====\n\n"
 
 case1_update_mode
 case2_append_mode
@@ -374,9 +521,13 @@ case3_5_performance_n10
 case4_id_diff_slug_pending_block
 case5_slug_substring_false_match
 case6_status_mixed_block
-case7_regex_injection_slug
+case7_extended_regex_and_backslash
 case8_no_trailing_eol_append
 case9_same_id_completed_block
+case9b_in_progress_status_block
+case9c_completed_status_block
+case10_parallel_race_3_processes
+case11_leading_zero_id_normalization
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"

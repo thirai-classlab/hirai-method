@@ -2,6 +2,7 @@
 # .claude/scripts/new-task-helper.sh
 # task-33 Phase 2 Step 2.2: /new-task の 📝 → 🔲 update or append helper
 # task-34 Step 4 iter2 fix: CRIT 3 + HIGH 8 件解消版
+# task-34 Step 4 iter3 fix: MUST FIX 7 + SHOULD FIX 3 件解消版
 #
 # 役割:
 #   list.md に対し、同 ID + 同 slug の AND 一致 grep で既存 📝 行を検出し:
@@ -15,7 +16,7 @@
 # 規範:
 #   .claude/rules/task-management.md §「plan-first 行先置きフロー (batch planning) — 2 経路分岐」
 #
-# 設計原則 (iter2 で追加):
+# 設計原則 (iter2 + iter3 で追加):
 #   - file-top に set -uo pipefail を書かない (CLAUDE.md Critical Lessons HIGH 遵守、H-06)
 #   - 各関数で subshell 関数 `func() ( ... )` 化で局所化
 #   - HC_TASK_DIR を config-loader 経由で参照 (Design Constraints 遵守、H-07)
@@ -27,6 +28,13 @@
 #   - status 混在 conflict check (C-03 解消)
 #   - slug 完全一致: `| <slug> |` の前後区切り照合 (C-02 substring 誤マッチ防止)
 #
+# iter3 追加 fix:
+#   - QA-C01/H-RC-01: atomic-mkdir lock で parallel race condition 解消
+#   - QA-C02: leading zero id 数値正規化 (10#$id で 8 進解釈防止)
+#   - QA-H01: row_content 改行 input validation
+#   - M-MV-01: tmp file を target_dir に配置 (cross-filesystem 非 atomic 回避)
+#   - L-SC-01: shellcheck SC2016 disable comment
+#
 # CLI entry point + source 両対応:
 #   - source して `update_or_append_task_row` 関数を call
 #   - 直接実行 `bash new-task-helper.sh update_or_append_task_row <id> <slug> <row_content> [list_md]`
@@ -36,6 +44,7 @@
 # id / slug を grep -E / awk regex に渡す前に必ず escape する (H-01)
 _new_task_escape_regex() (
     set -uo pipefail
+    # shellcheck disable=SC2016 # sed '&' is regex backref, not shell variable
     printf '%s' "$1" | sed 's/[][\.*+?^$(){}|/\\]/\\&/g'
 )
 
@@ -55,19 +64,19 @@ _new_task_ensure_eol() (
 
 # --- メイン関数: update or append ---
 # Arguments:
-#   $1 id           — task id (numeric, but treated as string)
+#   $1 id           — task id (numeric, leading zero 許容、内部で 10#$ 正規化)
 #   $2 slug         — kebab-case slug
-#   $3 row_content  — 完全な list.md row (`| id | 🔲 | ... |`)
+#   $3 row_content  — 完全な list.md row (`| id | 🔲 | ... |`)、改行不可
 #   $4 list_md      — list.md path (省略時 ${HC_TASK_DIR:-docs/tasks}/list.md)
 #
 # Return codes:
 #   0 = update or append 成功
 #   1 = BLOCK (誤連番 / 重複起動 / status 混在 / 複数マッチ)
-#   2 = usage error / file not found
+#   2 = usage error / file not found / lock timeout / invalid input
 update_or_append_task_row() (
     set -uo pipefail
 
-    local id="${1:-}"
+    local raw_id="${1:-}"
     local slug="${2:-}"
     local row_content="${3:-}"
     # config-loader が export 済なら HC_TASK_DIR を使う (H-07)。
@@ -75,15 +84,55 @@ update_or_append_task_row() (
     local list_md="${4:-${HC_TASK_DIR:-docs/tasks}/list.md}"
 
     # input validation
-    if [ -z "$id" ] || [ -z "$slug" ] || [ -z "$row_content" ]; then
+    if [ -z "$raw_id" ] || [ -z "$slug" ] || [ -z "$row_content" ]; then
         echo "ERROR: id / slug / row_content は必須" >&2
         return 2
     fi
+
+    # iter3 QA-C02: id 数値正規化 (leading zero 許容 → silent duplicate 防止)
+    # 非数値文字を含む場合は error
+    case "$raw_id" in
+        ''|*[!0-9]*)
+            echo "ERROR: id '$raw_id' は非負整数のみ (leading zero 許容、非数値文字不可)" >&2
+            return 2
+            ;;
+    esac
+    # 10 進数強制 (bash 構文、"08" を 8 進と解釈させない)。zero stripping して string 化
+    local id
+    id=$((10#$raw_id))
+
+    # iter3 QA-H01: row_content 改行 input validation
+    case "$row_content" in
+        *$'\n'*)
+            echo "ERROR: row_content に改行不可 (list.md 行数破壊防止)" >&2
+            return 2
+            ;;
+    esac
 
     if [ ! -f "$list_md" ]; then
         echo "ERROR: list.md not found: $list_md" >&2
         return 2
     fi
+
+    # iter3 QA-C01/H-RC-01: atomic-mkdir lock acquire (parallel race condition 解消)
+    # lockdir は list.md と同じ dir に配置。flock 不使用 (macOS portable)
+    local lockdir="${list_md}.lock.d"
+    local tries=0
+    local max_tries=100  # 100 retries × 50ms = 5 秒 timeout
+    while ! mkdir "$lockdir" 2>/dev/null; do
+        tries=$((tries+1))
+        if [ "$tries" -gt "$max_tries" ]; then
+            echo "ERROR: lock timeout (${lockdir}、${max_tries} retries × 50ms = 5 秒)" >&2
+            return 2
+        fi
+        sleep 0.05
+    done
+
+    # tmp file 用変数 (trap 内で参照、初期化必須)
+    local tmp=""
+    # cleanup: lockdir 削除 + tmp 削除を EXIT で保証
+    # shellcheck disable=SC2064 # 即時展開 (subshell exit 時の状態で実行)
+    trap "rmdir '$lockdir' 2>/dev/null; [ -n \"\$tmp\" ] && rm -f \"\$tmp\"" EXIT INT TERM HUP
 
     # regex escape (H-01)
     local esc_id esc_slug
@@ -168,26 +217,19 @@ update_or_append_task_row() (
 
     # --- Step 4: UPDATE mode (同 ID + 同 slug + 📝 1 件) ---
     if [ "$pending_match_count" -eq 1 ]; then
-        # tmp file 経由で atomic rewrite (H-05 解消、mktemp + trap)
-        local tmp
-        tmp=$(mktemp "${TMPDIR:-/tmp}/new-task-helper.XXXXXX") || {
-            echo "ERROR: mktemp failed" >&2
+        # iter3 M-MV-01: tmp を target_dir に配置 (cross-filesystem 非 atomic 回避)
+        local target_dir
+        target_dir=$(dirname "$list_md")
+        tmp=$(mktemp "${target_dir}/.list.md.XXXXXX") || {
+            echo "ERROR: mktemp failed in $target_dir" >&2
             return 2
         }
-        # cleanup は subshell exit で自動 (set -uo pipefail; trap 不要、$$ 経由で leak しない)
-        # ただし awk failure 時の partial file 防止に trap を入れる
-        # shellcheck disable=SC2064
-        trap "rm -f '$tmp'" EXIT INT TERM HUP
 
         # awk ENVIRON 経由で値受渡 (H-03 解消、backslash interpretation 回避)
         # 同 ID + 同 slug (kebab-word boundary) + 📝 にマッチする 1 行のみ row_content に置換
         # 注: row_content 内に `&` が含まれる場合の sed 干渉を完全回避するため awk を使う
         # ID_ESC / SLUG_ESC は呼出側で escape 済を渡す (regex injection 防止、H-01)
         ID_ESC="$esc_id" SLUG_ESC="$esc_slug" NEW_ROW="$row_content" awk '
-            function regex_quote_in_awk(s) {
-                # awk regex 中で使う際の追加 escape は不要 (sed escape 済)
-                return s
-            }
             BEGIN {
                 id_esc = ENVIRON["ID_ESC"]
                 slug_esc = ENVIRON["SLUG_ESC"]
@@ -213,14 +255,12 @@ update_or_append_task_row() (
         # awk が空 output (input read 失敗 等) を出した場合の guard
         if [ ! -s "$tmp" ]; then
             echo "ERROR: awk rewrite produced empty output, aborting" >&2
-            rm -f "$tmp"
-            trap - EXIT INT TERM HUP
             return 2
         fi
 
-        # atomic install
+        # atomic install (target_dir 配置で必ず同一 filesystem)
         mv "$tmp" "$list_md"
-        trap - EXIT INT TERM HUP
+        tmp=""  # trap での再削除防止
         echo "UPDATE: 📝 → 🔲 (id=${id}, slug=${slug})"
         return 0
     fi
