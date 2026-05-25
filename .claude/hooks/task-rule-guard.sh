@@ -152,10 +152,15 @@ case "$file" in
     #   将来 7 列拡張時も $5 概要列のみ除外 + 残列で検索 で対応可
     # false positive 回避: 概要列に偶然 slug substring が含まれるケースは $5 を空文字に置換して除外
     # awk 変数 injection 防止: draft_slug は basename 由来で英数字 + `.` + `-` のみ (kebab-case)、index() は literal 比較で安全
+    # [OFS rewrite 副作用の設計メモ]
+    # `$5 = ""` を実行すると awk は $0 を OFS (default: 空白) で再構築するため、
+    # `|` 区切りが空白に置換される。ただし index($0, slug) は literal 文字列比較であり、
+    # slug は kebab-case (英数字+ハイフンのみ) で空白を含まないため、誤検知ゼロで安全。
+    # 5列 / 6列 / 7列 format 進化耐性のため列番号非依存設計。
     if awk -F'|' -v slug="$draft_slug" '
       $3 !~ /📝/ { next }
       {
-        $5 = ""
+        $5 = ""  # 概要列除外 ($0 が OFS=空白で再構築されるが index() slug 検出には影響なし)
         if (index($0, slug) > 0) { found = 1; exit }
       }
       END { exit (found ? 0 : 1) }
