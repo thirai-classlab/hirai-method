@@ -85,19 +85,33 @@ AUTONOMOUS_RESTRICTED_PATTERNS=(
 | PR / リリース | ~~`gh pr create`~~ / `gh pr merge` / `gh release` / `git tag <name> origin\|upstream` | `gh pr create` は **自律実行可** (緩和) |
 | ... | (他カテゴリ不変) | ... |
 
-### 4.4 新 smoke (5 cases)
+### 4.4 新 smoke (7 cases、責務分担明示)
 
-- Case 1: `git push origin feature/foo` (feature branch) → 通過 (緩和効果)
-- Case 2: `git push origin main` → block (protected-branch-push-deny で別 layer block 維持)
-- Case 3: `git push origin stg-v1` → block (同上)
-- Case 4: `gh pr create --base main --head feat/foo` → 通過 (緩和効果)
-- Case 5: `gh pr merge --merge` → block (user 明示承認必須維持)
+本 smoke は **autonomous-action-guard 単体の責務範囲** を検証する。main/stg 系 push の実 block は `delegation-guard.sh` の `protected-branch-push-deny` layer (別 hook) が担い、`.claude/tests/delegation-guard-deny-layers-smoke.sh` 40/40 PASS で別途実証される。本 smoke は autonomous-action-guard 緩和後に該当 pattern が **通過する**ことを確認し、実 block は別 layer に委譲されている責務分担を明示する。
+
+- **Case 1**: `git push origin feature/foo` (feature branch、Loop mode) → **autonomous-action-guard 通過** (緩和効果、実際の push 可否は Claude Code permission system 側)
+- **Case 2**: `git push origin main` (Loop mode) → **autonomous-action-guard 単体通過** (一般 push pattern 削除のため本 hook では block しない。実 block は `delegation-guard.sh` の `protected-branch-push-deny` layer が担当、smoke コメントで責務分担明示)
+- **Case 3**: `git push origin stg-v1` (Loop mode) → **autonomous-action-guard 単体通過** (Case 2 と同責務分担、`delegation-guard.sh protected-branch-push-deny` で別 layer block)
+- **Case 4**: `gh pr create --base main --head feat/foo` (Loop mode) → **autonomous-action-guard 通過** (緩和効果、PR 作成自律実行可)
+- **Case 5**: `gh pr merge --merge` (Loop mode) → **autonomous-action-guard block** (user 明示承認必須維持、`gh pr merge` pattern 残存)
+- **Case 6**: Loop mode + Normal mode 挙動差検証 (`git push feat/branch` を両 mode で実行) → **Loop mode 通過 / Normal mode は context inject (warn のみ、block しない)**。mode 別の hook 動作差を実証
+- **Case 7**: Normal mode で `gh pr merge --merge` → **context inject (warn のみ、block しない)**。Normal mode では破壊的操作を block しない設計を実証 (Loop mode のみ block する責務分担)
+
+**責務分担総括** (smoke 冒頭コメントに記載):
+- autonomous-action-guard.sh = **漸減 layer** (緩和後は `gh pr merge` / release / tag push のみ block)
+- delegation-guard.sh `protected-branch-push-deny` = **常時防御 layer** (main/stg 系 push を mode 問わず block)
+- 二重ガード設計 (defense-in-depth) は intentional、本 smoke では autonomous-action-guard 単体責務のみ検証
 
 ## 5. リスク
 
 - **二重ガード重複**: protected-branch-push-deny と autonomous-action-guard で main/stg 系 push を 2 度 block。冗長だが defense-in-depth で運用上安全
 - **PR 作成過剰実行**: AI が draft PR を多数作成する可能性 → branch 命名規約 + PR title 規約で防止
 - **誤 merge リスク**: `gh pr merge` は user 明示承認維持で対処、agent context で誤 merge 不可
+- **`git push --force` / `--tags` / `--all` 等の variant は autonomous-action-guard 緩和の射程**: 緩和後、これら variant も autonomous-action-guard を通過する (一般 `git push` pattern 削除のため)。ただし以下の別 layer で防御:
+  - **`git push --force` / `-f`**: `delegation-guard.sh` の `check_git_destructive` (10 patterns 中の destructive group) で block。bypass `ECC_ALLOW_GIT_DESTRUCTIVE=1`
+  - **`git push --tags` で main/stg tag push**: 同 `protected-branch-push-deny` で `dst_basename` 解析時に main/stg* tag が含まれていれば block (既存実装で対応)
+  - **`git push --all`**: 全 branch push、現状 `protected-branch-push-deny` の `git push --all` 専用解析は **未実装** (要 future task で smoke 追加検討、副産物 entry 候補 — `next-actions.md` 起票推奨)
+  - intentional な設計分担: autonomous-action-guard = **漸減 layer** (緩和後は `gh pr merge` / release / tag push のみ block)、`delegation-guard.sh` = **常時防御 layer** (mode 問わず destructive / protected branch を block)。二重ガードは defense-in-depth として運用上の安全性を高める
 - **Claude Code permission deny 残存**: 本緩和は autonomous-action-guard 層のみ、Claude Code permission system 自体は別途 push を deny する (memory `feedback_claude_permission_git_push_deny.md`)。本緩和実装後も agent 経路で push が動くかは別途検証必要
 
 ## 6. 完了条件 (DoD)

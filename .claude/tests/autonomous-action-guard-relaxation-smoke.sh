@@ -2,7 +2,7 @@
 # .claude/tests/autonomous-action-guard-relaxation-smoke.sh
 #
 # 目的:
-#   autonomous-action-guard.sh の緩和効果 (task #39) を 7 ケースで検証する。
+#   autonomous-action-guard.sh の緩和効果 (task #39) を 12 ケースで検証する。
 #
 #   draft §4.1 採用案 C:
 #     - `git push` 一般 pattern を DEFAULT_PATTERNS から削除 (feature branch push は通過)
@@ -12,21 +12,33 @@
 # 設計起源:
 #   docs/draft/autonomous-action-guard-relaxation.md §4.4 新 smoke 5 cases
 #   docs/tasks/task-39-autonomous-action-guard-relaxation.md Step 1 サブ C
+#   task-39 Step 2 iter1 R4 pr-test-analyzer 指摘 HIGH H1+H2 反映 (Case 8-12)
 #
 # テストケース:
-#   Case 1: Loop + `git push origin feat/foo` → 通過 (緩和効果、feature branch)
-#   Case 2: Loop + `git push origin main`     → 通過 (autonomous-action-guard 単体検証、
-#             delegation-guard 別 layer の block は本 smoke 対象外)
-#   Case 3: Loop + `git push origin stg-v1`   → 通過 (autonomous-action-guard 単体検証、同上)
-#   Case 4: Loop + `gh pr create --base main --head feat/foo` → 通過 (緩和効果、PR 作成許可)
-#   Case 5: Loop + `gh pr merge --merge`      → block (user 明示承認必須維持)
-#   Case 6: Normal + `git push origin feat/foo` → 通過 (Normal mode では元々 context inject のみ)
-#   Case 7: Normal + `gh pr merge --merge`    → 通過 (Normal mode は block しない、context inject のみ)
+#   Case 1:  Loop + `git push origin feat/foo`                → 通過 (緩和効果、feature branch)
+#   Case 2:  Loop + `git push origin main`                    → 通過 (autonomous-action-guard 単体検証、
+#              delegation-guard 別 layer の block は本 smoke 対象外)
+#   Case 3:  Loop + `git push origin stg-v1`                  → 通過 (autonomous-action-guard 単体検証、同上)
+#   Case 4:  Loop + `gh pr create --base main --head feat/foo` → 通過 (緩和効果、PR 作成許可)
+#   Case 5:  Loop + `gh pr merge --merge`                     → block (user 明示承認必須維持)
+#   Case 6:  Normal + `git push origin feat/foo`              → 通過 (Normal mode では元々 context inject のみ)
+#   Case 7:  Normal + `gh pr merge --merge`                   → 通過 (Normal mode は block しない、context inject のみ)
+#   Case 8:  Loop + `git push --force origin feat/foo`        → 通過 (autonomous-action-guard 単体; H1 反映)
+#   Case 9:  Loop + `git push --tags origin`                  → 通過 (autonomous-action-guard 単体; H1 反映)
+#   Case 10: Loop + `git push --all origin`                   → 通過 (autonomous-action-guard 単体; H1 反映)
+#   Case 11: Loop + `gh pr merge` (フラグなし)                 → block (H2 反映、flag なし variant)
+#   Case 12: Loop + `gh pr merge --squash`                    → block (H2 反映、--squash variant)
 #
 # 補足:
 #   Case 2/3 は本 smoke では autonomous-action-guard 単体の「通過」を assert する。
 #   main/stg への実際の push block は delegation-guard-deny-layers-smoke.sh が担保済み。
 #   Case 6/7 は mode 依存挙動の網羅性のため追加 (draft 5 cases → 7 cases)。
+#   Case 8:  意図的 — --force は autonomous-action-guard 射程外。
+#             delegation-guard.sh check_git_destructive が別 layer で block する責務。
+#   Case 9:  意図的 — tag push は autonomous-action-guard 緩和後の射程外。
+#             main/stg tag は delegation-guard.sh protected-branch-push-deny が dst_basename 解析で block。
+#   Case 10: 意図的、要 future smoke — --all は全 branch push。
+#             delegation-guard 側の専用解析は未実装 (副産物 entry 候補)。
 #
 # 実行:
 #   bash .claude/tests/autonomous-action-guard-relaxation-smoke.sh
@@ -310,6 +322,135 @@ case7() {
   fi
 }
 
+# Case 8: Loop + `git push --force origin feat/foo` → 通過 (autonomous-action-guard 単体)
+#
+# 意図的: --force は autonomous-action-guard の対象外。
+# `delegation-guard.sh check_git_destructive` (10 patterns 中の destructive group) が
+# 別 layer で block する責務。autonomous-action-guard 単体では通過することを実証。
+# 検証: exit=0 かつ stdout が {} (autonomous-action-guard は block しない)
+case8() {
+  _reset_state_dir
+  _set_mode "loop"
+  local stdin_json
+  stdin_json='{"tool_name":"Bash","tool_input":{"command":"git push --force origin feat/foo"}}'
+
+  _run_guard "$stdin_json"
+
+  local expected="exit=0, stdout='{}' (--force is out of autonomous-action-guard scope; delegation-guard handles it)"
+  local actual="exit=${LAST_CODE} stdout='${LAST_OUT}'"
+
+  if [ "$LAST_CODE" = "0" ] \
+     && [ "$LAST_OUT" = "{}" ] \
+     && ! printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
+    _record "Case 8: Loop+git push --force feat branch → autonomous-action-guard pass (H1)" "PASS" "$expected" "$actual"
+  else
+    _record "Case 8: Loop+git push --force feat branch → autonomous-action-guard pass (H1)" "FAIL" "$expected" "$actual"
+  fi
+}
+
+# Case 9: Loop + `git push --tags origin` → 通過 (autonomous-action-guard 単体)
+#
+# 意図的: tag push は autonomous-action-guard 緩和後の射程外。
+# main/stg tag は delegation-guard.sh protected-branch-push-deny が dst_basename 解析で block する。
+# 本 smoke では autonomous-action-guard 単体が通過することのみを検証。
+# 検証: exit=0 かつ stdout が {}
+case9() {
+  _reset_state_dir
+  _set_mode "loop"
+  local stdin_json
+  stdin_json='{"tool_name":"Bash","tool_input":{"command":"git push --tags origin"}}'
+
+  _run_guard "$stdin_json"
+
+  local expected="exit=0, stdout='{}' (--tags is out of autonomous-action-guard scope after relaxation)"
+  local actual="exit=${LAST_CODE} stdout='${LAST_OUT}'"
+
+  if [ "$LAST_CODE" = "0" ] \
+     && [ "$LAST_OUT" = "{}" ] \
+     && ! printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
+    _record "Case 9: Loop+git push --tags → autonomous-action-guard pass (H1)" "PASS" "$expected" "$actual"
+  else
+    _record "Case 9: Loop+git push --tags → autonomous-action-guard pass (H1)" "FAIL" "$expected" "$actual"
+  fi
+}
+
+# Case 10: Loop + `git push --all origin` → 通過 (autonomous-action-guard 単体)
+#
+# 意図的、要 future smoke: --all は全 branch push。
+# delegation-guard 側の専用解析は未実装 (副産物 entry 候補)。
+# 本 smoke では autonomous-action-guard 単体が通過することのみを検証。
+# 検証: exit=0 かつ stdout が {}
+case10() {
+  _reset_state_dir
+  _set_mode "loop"
+  local stdin_json
+  stdin_json='{"tool_name":"Bash","tool_input":{"command":"git push --all origin"}}'
+
+  _run_guard "$stdin_json"
+
+  local expected="exit=0, stdout='{}' (--all is out of autonomous-action-guard scope; delegation-guard analysis not yet implemented)"
+  local actual="exit=${LAST_CODE} stdout='${LAST_OUT}'"
+
+  if [ "$LAST_CODE" = "0" ] \
+     && [ "$LAST_OUT" = "{}" ] \
+     && ! printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
+    _record "Case 10: Loop+git push --all → autonomous-action-guard pass (H1)" "PASS" "$expected" "$actual"
+  else
+    _record "Case 10: Loop+git push --all → autonomous-action-guard pass (H1)" "FAIL" "$expected" "$actual"
+  fi
+}
+
+# Case 11: Loop + `gh pr merge` (フラグなし) → block
+#
+# Case 5 は `gh pr merge --merge` (flag 付き)。
+# Case 11 は flag なし variant が block されることを実証 (R4 H2 反映)。
+# regex `^gh[[:space:]]+pr[[:space:]]+merge` は subsequent flag に依存しないことを確認。
+# 検証: exit=0 かつ stdout に "decision":"block" を含む
+case11() {
+  _reset_state_dir
+  _set_mode "loop"
+  local stdin_json
+  stdin_json='{"tool_name":"Bash","tool_input":{"command":"gh pr merge"}}'
+
+  _run_guard "$stdin_json"
+
+  local expected='exit=0, stdout~"decision":"block" (gh pr merge no-flag variant still blocked; H2)'
+  local actual
+  actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 80)'"
+
+  if [ "$LAST_CODE" = "0" ] \
+     && printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
+    _record "Case 11: Loop+gh pr merge (no flag) → block (H2)" "PASS" "$expected" "$actual"
+  else
+    _record "Case 11: Loop+gh pr merge (no flag) → block (H2)" "FAIL" "$expected" "$actual"
+  fi
+}
+
+# Case 12: Loop + `gh pr merge --squash` → block
+#
+# `gh pr merge` の --squash flag variant も block されることを実証 (R4 H2 反映)。
+# regex `^gh[[:space:]]+pr[[:space:]]+merge` は subsequent flag に依存しない。
+# 検証: exit=0 かつ stdout に "decision":"block" を含む
+case12() {
+  _reset_state_dir
+  _set_mode "loop"
+  local stdin_json
+  stdin_json='{"tool_name":"Bash","tool_input":{"command":"gh pr merge --squash"}}'
+
+  _run_guard "$stdin_json"
+
+  local expected='exit=0, stdout~"decision":"block" (gh pr merge --squash variant still blocked; H2)'
+  local actual
+  actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 80)'"
+
+  if [ "$LAST_CODE" = "0" ] \
+     && printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
+    _record "Case 12: Loop+gh pr merge --squash → block (H2)" "PASS" "$expected" "$actual"
+  else
+    _record "Case 12: Loop+gh pr merge --squash → block (H2)" "FAIL" "$expected" "$actual"
+  fi
+}
+
 # === run all ===
 case1
 case2
@@ -318,6 +459,11 @@ case4
 case5
 case6
 case7
+case8
+case9
+case10
+case11
+case12
 
 # === report ===
 printf '\n=== autonomous-action-guard-relaxation smoke results ===\n'

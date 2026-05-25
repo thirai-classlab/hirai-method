@@ -44,7 +44,8 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 - **戦略的判断** — architecture 選択 / 採用技術スタック変更 / 既存 task の優先順入替
 - 承認外の設計変更、破壊的 DB 変更（DROP / 既存 RLS 削除）、データ削除
 - secrets ローテーション、`git push --force` / `git reset --hard` / `git branch -D`
-- `git push` (any branch、Loop モード自律実行禁止リスト)、`gh pr create` / `gh pr merge`
+- `git push origin main|stg*` (protected-branch-push-deny で別 layer block 維持)、`gh pr merge` (user 明示承認必須)
+- (緩和、task #39 由来) feature branch への `git push` および `gh pr create` は自律実行可 (modes.md 遵守事項 8 と整合)
 - main 以外への push、`<外部サービス quota 超過見込み>`
 - 同一エラーで 3 回連続失敗、サブエージェントの「要判断」報告
 - security-reviewer の CRITICAL、進行不可ブロッカー
