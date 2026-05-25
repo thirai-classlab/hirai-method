@@ -20,7 +20,7 @@
 # 起源:
 #   - 設計 draft: docs/draft/parallel-subagent-enforcement.md §4.2-4.5
 #   - 規範:       .claude/rules/development-process.md (parallel subagent 強制)
-#   - task:       docs/tasks/task-38-parallel-subagent-enforcement.md Step 1
+#   - task:       docs/tasks/task-38-parallel-subagent-enforcement.md Step 1-2
 #   - 既存類似:   loop-auto-progress-reminder.sh / autonomous-action-guard.sh の
 #                 JSON parse / fail-open pattern
 #
@@ -32,12 +32,17 @@
 # 環境変数 (env override > YAML > defaults):
 #   HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false  reminder 全停止 (bypass)
 #   HC_PARALLEL_SUBAGENT_TTL_SEC=300             state file TTL (秒)
+#   HC_PARALLEL_SUBAGENT_STATE_DIR=<path>        state dir override
+#                                                (production state 汚染回避用、
+#                                                 未設定なら repo_root/.claude/.parallel-subagent-state/)
 #   HC_AGENT_TYPE_KEYWORD_MAPPING=...            keyword → type mapping override
 #                                                (改行区切り "keyword|type" pair。
 #                                                空 / 未設定なら hook 内 default 使用)
+#   ECC_BYPASS_REASON=<text>                     bypass 理由 (bypass.log に記録)
 #
 # State:
 #   .claude/.parallel-subagent-state/recent.json   ... 直近 N=TTL 秒の起動履歴 (軽量 JSON 配列)
+#   ※ production state 汚染は HC_PARALLEL_SUBAGENT_STATE_DIR で隔離可能。
 #
 # Stdin:  PreToolUse(Agent) JSON
 # Stdout: 注入する system-reminder ({"hookSpecificOutput":{...,"additionalContext":...}})
@@ -58,8 +63,30 @@ if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
     source "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
 fi
 
-# --- 早期 bypass ---
+# --- 早期 bypass (HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false) ---
+# Fix 2 (R2 F-01 + R6 H-2): bypass.log に記録してから exit
 if [ "${HC_PARALLEL_SUBAGENT_REMINDER_ENABLED:-true}" = "false" ]; then
+    # bypass-logger.sh が存在すれば helper 使用、なければ inline で記録
+    if [ -f "$SCRIPT_DIR/lib/bypass-logger.sh" ]; then
+        # shellcheck disable=SC1091
+        source "$SCRIPT_DIR/lib/bypass-logger.sh" 2>/dev/null || true
+        if command -v log_bypass >/dev/null 2>&1; then
+            log_bypass "parallel-subagent-reminder" \
+                "HC_PARALLEL_SUBAGENT_REMINDER_ENABLED" \
+                "${ECC_BYPASS_REASON:-(not provided)}" 2>/dev/null || true
+        fi
+    else
+        # fallback: 直接 append (autonomous-action-guard.sh と同 pattern)
+        _repo_root_for_log="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+        _bypass_log_dir="${_repo_root_for_log}/.claude/.workflow-state"
+        _bypass_log_file="${_bypass_log_dir}/bypass.log"
+        mkdir -p "$_bypass_log_dir" 2>/dev/null || true
+        printf '%s | %s | parallel-subagent-reminder | HC_PARALLEL_SUBAGENT_REMINDER_ENABLED | %s\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" \
+            "${CLAUDE_SESSION_ID:-unknown}" \
+            "${ECC_BYPASS_REASON:-(not provided)}" \
+            >> "$_bypass_log_file" 2>/dev/null || true
+    fi
     echo '{}'
     exit 0
 fi
@@ -78,17 +105,36 @@ _psr_main() (
       ''|*[!0-9]*) ttl_sec=300 ;;
     esac
 
-    # state dir 決定
-    local repo_root
-    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
-        repo_root="$CLAUDE_PROJECT_DIR"
-    elif repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
-        :
+    # --- state dir 決定 ---
+    # Fix 5 (R3): production state 汚染対策
+    #   - HC_PARALLEL_SUBAGENT_STATE_DIR が設定済なら最優先採用 (production と test の隔離可能)
+    #   - 次に CLAUDE_PROJECT_DIR (Claude 公式の project root)
+    #   - 最後に git rev-parse でフォールバック
+    #   - すべて失敗時は fail-open (silent + warn stderr + exit 0)
+    local state_dir
+    if [ -n "${HC_PARALLEL_SUBAGENT_STATE_DIR:-}" ]; then
+        state_dir="${HC_PARALLEL_SUBAGENT_STATE_DIR}"
     else
-        repo_root="$(pwd)"
+        local repo_root=""
+        if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
+            repo_root="$CLAUDE_PROJECT_DIR"
+        elif repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+            :
+        else
+            # 解決失敗: fail-open (stderr に diagnostic、state 汚染を避けるため exit)
+            echo "[parallel-subagent-reminder] WARN: repo_root unresolved, skipping" >&2
+            echo '{}'
+            exit 0
+        fi
+        # repo_root が妥当な dir か最終 sanity check
+        if [ -z "$repo_root" ] || [ ! -d "$repo_root" ]; then
+            echo "[parallel-subagent-reminder] WARN: invalid repo_root '$repo_root', skipping" >&2
+            echo '{}'
+            exit 0
+        fi
+        state_dir="${repo_root}/.claude/.parallel-subagent-state"
     fi
 
-    local state_dir="${repo_root}/.claude/.parallel-subagent-state"
     local state_file="${state_dir}/recent.json"
     mkdir -p "$state_dir" 2>/dev/null || { echo '{}'; exit 0; }
 
@@ -101,18 +147,26 @@ _psr_main() (
     task_desc="${description}"$'\n'"${prompt}"
 
     # --- atomic-mkdir lock で recent.json read-modify-write ---
-    # state file race 回避 (task-34 iter3 pattern 流用):
-    # `<state_file>.lock.d` で mkdir-based atomic lock、100 retries x 50ms (合計 5sec 上限)
+    # Fix 1 (R5 H1): lock 取得失敗時の data loss + 他者 lock 破壊事故を防止
+    #   - acquired=0 を初期化、mkdir 成功時のみ acquired=1
+    #   - 100 retries (50ms x 100 = 5sec 上限) 失敗時は acquired=0 のまま break
+    #   - acquired=0 なら write back を skip + warn stderr
+    #   - 終了時 acquired=1 の場合のみ rmdir で解放 (所有判定)
     local lock_dir="${state_file}.lock.d"
+    local acquired=0
     local i=0
     while [ $i -lt 100 ]; do
         if mkdir "$lock_dir" 2>/dev/null; then
+            acquired=1
             break
         fi
         sleep 0.05
         i=$((i + 1))
     done
-    # lock 取れなくても fail-open (recent.json read-only に格下げして続行)
+    if [ "$acquired" -eq 0 ]; then
+        echo "[parallel-subagent-reminder] WARN: lock acquire failed (100 retries), skip write" >&2
+        # write back せず、判定のみ進める (read-only 格下げ)
+    fi
 
     local now
     now=$(date +%s 2>/dev/null || echo 0)
@@ -143,27 +197,54 @@ _psr_main() (
     esac
 
     # --- 本起動を append + write back ---
+    # Fix 3 (R5 H4): jq schema 不正時の偽 entry 混入を防止
+    #   - new_entry が空文字 / 不正 JSON / ts キー欠落なら append せず filtered のみ write back
+    #   - 検出: jq 'has("ts")' で ts キーの存在検証
     local new_entry
     new_entry=$(jq -nc --argjson ts "$now" --arg type "$subagent_type" \
-        '{ts: $ts, type: $type}' 2>/dev/null || echo "{}")
+        '{ts: $ts, type: $type}' 2>/dev/null || echo "")
+    local entry_valid=0
+    if [ -n "$new_entry" ]; then
+        if [ "$(printf '%s' "$new_entry" | jq -r 'has("ts")' 2>/dev/null)" = "true" ]; then
+            entry_valid=1
+        fi
+    fi
+
     local updated
-    updated=$(printf '%s' "$filtered" | jq --argjson e "$new_entry" '. + [$e]' 2>/dev/null || echo "$filtered")
-    if [ -d "$lock_dir" ]; then
-        # lock 保持中: atomic temp file + mv で書き込み
+    if [ "$entry_valid" -eq 1 ]; then
+        updated=$(printf '%s' "$filtered" | jq --argjson e "$new_entry" '. + [$e]' 2>/dev/null || echo "$filtered")
+    else
+        # new_entry 不正: filtered のみで上書き (偽 entry 混入を防ぐ)
+        updated="$filtered"
+    fi
+
+    # write back は lock 取得成功時のみ
+    if [ "$acquired" -eq 1 ]; then
         local tmp="${state_file}.tmp.$$"
         printf '%s' "$updated" > "$tmp" 2>/dev/null && mv -f "$tmp" "$state_file" 2>/dev/null
     fi
-    # lock 解放
-    rmdir "$lock_dir" 2>/dev/null || true
+    # Fix 1 続き: 所有 lock のみ解放 (acquired=1 のとき)
+    if [ "$acquired" -eq 1 ]; then
+        rmdir "$lock_dir" 2>/dev/null || true
+    fi
 
     # --- (A) 並列性 reminder 判定 (Case 1-5) ---
-    # 並列性 keyword 検出 (default、env override 可)
-    local parallel_keywords='実装|fix|refactor|設計|新設|拡張|改修'
+    # Fix 7 (R5 M2): `fix` keyword に word boundary `\b` を付与し、prefix/affix 等の
+    #                English word 内一致による誤検知を防ぐ。同様に `refactor` も `\b` で括る。
+    # 注: 日本語 keyword は word boundary 不要 (CJK は word boundary が機能しない)。
+    # Fix 8 (R4 M / R5 M1): `リファクタリング` (日本語長 word) を default mapping ではなく
+    #                並列性 keyword 側にも追加 (refactor の日本語表記)。
+    local parallel_keywords='実装|\bfix\b|\brefactor\b|リファクタリング|設計|新設|拡張|改修'
     local exclude_keywords='reviewer|review|監査|audit'
 
     local should_remind_parallel=0
+    # --- 境界値 recent_active_count -le 1 の意図 (Fix 4: R2 F-03 + R5 + R6) ---
+    # 判定: TTL filter 後の他 Agent 起動数が 1 件以下 → 単独起動扱い (本起動を含む count)
+    #   count=0: 完全初回起動 (本起動の append 後 0 になるケースは lock 失敗で write skip 時のみ)
+    #   count=1: 直前 TTL 内に 1 件 (本起動が初回 or 2 件目だが保守的に warning 出す)
+    #   count>=2: 並列起動済み、warning 不要
+    # 注: 本判定は append 前の recent_active_count を参照する (filtered で計算済み)。
     if [ "$recent_active_count" -le 1 ]; then
-        # 直近 TTL 内に他 Agent 起動なし (本起動含めて 1 件以下 = 単発)
         if printf '%s' "$task_desc" | grep -qE "$parallel_keywords" 2>/dev/null; then
             # 除外 keyword 含むなら skip
             if ! printf '%s' "$task_desc" | grep -qE "$exclude_keywords" 2>/dev/null; then
@@ -175,12 +256,14 @@ _psr_main() (
     # --- (B) agent type 選定 reminder 判定 (Case 6-8) ---
     # default keyword → type mapping (hardcode、draft §4.5.0 設定不要原則)
     # 形式: "<keyword>|<recommended_type>" の改行区切り
+    # Fix 8 (R4 M / R5 M1): `リファクタリング` を default mapping に追加 (日本語長 word)
     local default_mapping
     default_mapping='smoke 拡張|test-automator
 test 追加|test-automator
 test 修正|test-automator
 regression test|test-automator
 refactor|refactoring-specialist
+リファクタリング|refactoring-specialist
 関数分割|refactoring-specialist
 cleanup|refactoring-specialist
 dead code|refactoring-specialist
@@ -225,7 +308,7 @@ architecture review|architect-reviewer'
     if [ "$should_remind_parallel" -eq 1 ]; then
         msg+="[parallel-subagent-reminder] 並列性 hint:
 - 直近 ${ttl_sec}sec 内に他 Agent 起動が検出されません (本起動が単発)。
-- task description に並列性 keyword (実装/fix/refactor/設計/新設/拡張/改修) が含まれます。
+- task description に並列性 keyword (実装/fix/refactor/設計/新設/拡張/改修/リファクタリング) が含まれます。
 - 独立 file 領域 / 独立 task に分割可能なら、複数 subagent を **同一 message 内で並列起動**
   (run_in_background: true) すると wall-clock を短縮できます。
 - 規範: .claude/rules/development-process.md (parallel subagent)
@@ -258,5 +341,8 @@ architecture review|architect-reviewer'
     exit 0
 )
 
-_psr_main "$@"
+# Fix 6 (R5 H2): fail-open subshell exit code 統一
+#   - subshell が non-zero 終了でも親 shell の exit 0 で覆い隠す契約を明示
+#   - これにより hook 全体が常に exit 0 (BLOCK しない、fail-open) を保証
+_psr_main "$@" || true
 exit 0

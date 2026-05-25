@@ -179,6 +179,8 @@ paths:
 
 ### 6. 並列化義務（必須）
 
+> 表記方針: 本規範では「並列 subagent (= parallel subagent)」を同義語として扱う。実装 hook 名は `parallel-subagent-reminder` (英語ハイフン)、規範文書では文脈に応じて両方を使う。
+
 メインエージェントは独立 sub-task を 2 件以上検出した場合、**並列起動を default** とする。
 1 subagent への統合委譲は **明示的理由が必要**。
 
@@ -220,12 +222,34 @@ paths:
 
 state file は `.claude/.parallel-subagent-state/recent.json` (TTL 5 分、atomic-mkdir lock で race 防止)。
 
+#### 機械強制 hook の判定境界 (count ≤ 1 で warning)
+
+並列性 reminder hook (`parallel-subagent-reminder.sh`) は **TTL filter 後の他 Agent 起動数 ≤ 1** で「単独起動」と判定し warning 注入。意味:
+
+- `count=0`: 完全初回起動 (warning)
+- `count=1`: 直前 TTL 内に 1 件、本起動が 2 件目だが保守的に warning 注入 (並列化推奨継続)
+- `count≥2`: 並列起動済み (silent)
+
+「他 Agent 起動なし = 0 件」と読めた旧表現は **`≤ 1` 境界値** の正確な表現に修正。
+
+#### 関連 hook との発火順序
+
+PreToolUse(Agent|Task) で以下順序で発火 (`.claude/settings.json` 配線):
+
+1. `agent-marker-set.sh` (foreground 起動 warning)
+2. `parallel-subagent-reminder.sh` (本 hook)
+3. `observe.sh` (`*` wildcard、L4 学習観察)
+
+設計上の責務分担は維持、競合なし。
+
 #### bypass
 
 | 経路 | env | スコープ | 痕跡 |
 |---|---|---|---|
-| reminder 無効化 | `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false` | 1 セッション | bypass.log (parallel-subagent-reminder 行) |
+| reminder 無効化 | `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false` | 1 セッション | `.claude/.workflow-state/bypass.log` (parallel-subagent-reminder 行、iter2 で実装) |
 | TTL 変更 | `HC_PARALLEL_SUBAGENT_TTL_SEC=<秒>` | env-set 中 | (記録なし、TTL のみ) |
+| state dir 隔離 | `HC_PARALLEL_SUBAGENT_STATE_DIR=<path>` | env-set 中 | (記録なし、state dir のみ) ※iter2 で新設 |
+| 任意 override | `HC_AGENT_TYPE_KEYWORD_MAPPING="kw1|type1\nkw2|type2"` | env-set 中 | (記録なし、advanced 用途) |
 
 honor system: bypass 時は理由を `docs/tasks/<task-N>.md` 該当 entry に記録すること。
 

@@ -254,5 +254,12 @@ list_plan_first_reminder_enabled: true
 # env 上書き例:
 #   export HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false   # 一時的に黙らせる
 #   export HC_PARALLEL_SUBAGENT_TTL_SEC=600              # TTL 10 分に延長
+#   export HC_AGENT_TYPE_KEYWORD_MAPPING="smoke 拡張|tdd-guide,refactor|refactoring-specialist"
+#                                                        # advanced: keyword → agent type マッピング override
+#                                                        # (default は hook 内 hardcode、設定不要原則で動作)
+#
+# 注意: agent_type_keyword_mapping は yaml multi-line value 非対応のため
+# yaml 設定は **非推奨** (advanced 用途)、env 経由 override 推奨。
+# 設定不要原則 (draft §4.5.0) により hook 内 hardcode default が動作。
 parallel_subagent_reminder_enabled: true
 parallel_subagent_ttl_sec: 300
