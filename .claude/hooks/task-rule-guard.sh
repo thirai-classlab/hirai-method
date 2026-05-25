@@ -112,6 +112,12 @@ fi
 #   F1: Write 限定 (Edit は素通り) — draft の既存 update 時に warn を出さない
 #   F2: slug grep を col 限定 (awk) に変更 — 別 task の description/detail に slug が含まれる
 #       false negative (warn 抑制) を防ぐ。false positive は許容。
+#
+# task-36 Step 2 iter3 fix:
+#   F7: awk col 拡張 (MED-2、reviewer C) — 実 list.md 6 列 format
+#       `| # | Status | Task | 概要 | 依存 | 詳細 |` (awk NF=8、$4=Task / $5=概要 / $6=依存 / $7=詳細)
+#       で slug link が col 7 にある false negative を解消。概要列 ($5) のみ除外して
+#       行全体で slug index 検索 (false positive 回避 + 5 列/6 列 両 format サポート)。
 draft_glob_a="*/${HC_DRAFT_DIR}/*.md"
 draft_glob_b="*/${HC_DRAFT_DIR}/*.mdx"
 # shellcheck disable=SC2254  # 意図的な glob 展開 (case pattern として draft path 判定)
@@ -139,15 +145,19 @@ case "$file" in
       echo '{}'
       exit 0
     fi
-    # F2: 📝 行検出を col 限定 awk に変更 (false negative 0 を厳守)
-    # list.md table format: | # | Step Status | Task / Step | 概要 | 詳細 |
-    # awk -F'|' で分解時 (leading/trailing | あり) のカラム index:
-    #   $1=空, $2=# (id), $3=Step Status (📝 等), $4=Task/Step, $5=概要, $6=詳細, $7=空
-    # 判定: $3 に 📝 を含み、かつ ($4 または $6) に draft_slug を含む
-    # (Task 列に `Task: <slug>` 等、詳細列に `task-<id>-<slug>.md` link)
-    # awk pattern injection 防止: draft_slug は kebab-case (basename 由来) のため英数字 + - のみで安全
+    # F7 (iter3): 📝 行検出を「概要列 ($5) のみ除外 + 行全体 index 検索」に変更
+    # 対応する list.md 列構成:
+    #   5 列 format (規範): | # | Status | Task | 概要 | 詳細 |              awk NF=7、$5=概要、slug link は $6
+    #   6 列 format (実 list.md): | # | Status | Task | 概要 | 依存 | 詳細 | awk NF=8、$5=概要、slug link は $7
+    #   将来 7 列拡張時も $5 概要列のみ除外 + 残列で検索 で対応可
+    # false positive 回避: 概要列に偶然 slug substring が含まれるケースは $5 を空文字に置換して除外
+    # awk 変数 injection 防止: draft_slug は basename 由来で英数字 + `.` + `-` のみ (kebab-case)、index() は literal 比較で安全
     if awk -F'|' -v slug="$draft_slug" '
-      $3 ~ /📝/ && ($4 ~ slug || $6 ~ slug) { found = 1; exit }
+      $3 !~ /📝/ { next }
+      {
+        $5 = ""
+        if (index($0, slug) > 0) { found = 1; exit }
+      }
       END { exit (found ? 0 : 1) }
     ' "$list_md_path" 2>/dev/null; then
       # 既存 📝 行あり → pass (warn なし)

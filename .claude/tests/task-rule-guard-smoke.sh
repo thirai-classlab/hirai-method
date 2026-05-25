@@ -4,6 +4,7 @@
 #                          + task-21 W3 仕様変更 (Phase 最終 Step 2 段 → 3 段) 追従 (Case 7 更新 + Case 11 追加)
 #                          + task-36 Step 3 (Sub B) で plan-first warn 検証 case を追加 (Case 12/13)
 #                          + task-36 Step 2 iter2 fix で採用 6 条 (Task=Phase=N Step、2026-05-25) 追従 (Case 6/7/9 更新 + Case 13 強化 + Case 14 追加)
+#                          + task-36 Step 2 iter3 fix で F1 regression test (Case 15) + ヘッダ count 修正
 #
 # 設計起源:
 #   docs/draft/hook-reliability-uplift.md W3
@@ -11,12 +12,13 @@
 #   docs/tasks/task-21-system-reminder-attention-fix.md W3 (2026-05-23 user 仕様変更)
 #   docs/tasks/task-36-list-md-plan-first-draft-warn.md Step 3 (task-36 Sub B)
 #   docs/draft/task-equals-phase-step-status-list-normative.md (2026-05-25 採用 6 条、Phase 中間階層廃止)
+#   task-36 Step 2 iter3: F7 (awk col 拡張) + F8 (Edit positive case) + F9 (ヘッダ count 修正)
 #
 # 対象 hook / template:
 #   .claude/hooks/task-rule-guard.sh
 #   .claude/templates/docs/tasks/_TASK_TEMPLATE.md
 #
-# 検証範囲 (14 ケース):
+# 検証範囲 (17 ケース):
 #   既存 5 case (task-22 W3):
 #     Case 1: 新規 task Write、対応 draft 不在 → BLOCK
 #     Case 2: 新規 task Write、対応 draft 存在 → PASS (additionalContext)
@@ -43,6 +45,10 @@
 #     Case 14b: "-.md" (1 文字 slug "-") → hook が異常終了せず処理
 #     Case 14c: 日本語 slug "日本語タスク.md" → ASCII slug regex 範囲外、hook 異常終了なし
 #
+#   追加 1 case (task-36 Step 2 iter3 F8 — F1 (Edit on draft 素通り) regression test):
+#     Case 15: docs/draft/<existing-slug>.md への Edit tool 呼び出し → hook 素通り (additionalContext 不在)
+#              iter2 F1 で実装した「Edit は draft warn 判定対象外」の logic を直接検証する positive case
+#
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs)
 #   - tmp project root を /tmp/ に作って docs/tasks docs/draft を配置
@@ -55,7 +61,7 @@
 #   bash .claude/tests/task-rule-guard-smoke.sh
 #
 # 終了コード:
-#   0 = 14/14 PASS / 1 = 1 件以上 FAIL
+#   0 = 17/17 PASS / 1 = 1 件以上 FAIL
 
 set -uo pipefail
 
@@ -571,7 +577,44 @@ case14c_japanese_slug_no_crash() {
   fi
 }
 
-printf "===== task-rule-guard-smoke (task-22 W3.2 + task-29 Phase 4 Step 1 + task-21 W3 + task-36 Step 3 Sub B + task-36 Step 2 iter2 採用 6 条追従, 16 cases) =====\n\n"
+# === Case 15 (task-36 Step 2 iter3 F8): docs/draft/<existing-slug>.md への Edit → 素通り (additionalContext 不在) ===
+#
+# 設計起源: task-36 Step 2 iter2 F1 で導入した「Edit は draft warn 判定対象外」logic を直接検証する positive case
+# 期待: hook が Edit tool で呼ばれた場合、L121-124 の `if [ "$tool" != "Write" ]; then echo '{}'; exit 0; fi` 早期 return で素通り
+# 検証: additionalContext が hookSpecificOutput.additionalContext path で 不在 (empty)
+#        list.md に 📝 行が無い (本来 Write なら warn 注入されるべき条件) でも warn 不発火を確認
+case15_edit_on_draft_no_warn() {
+  local label="Case 15: Edit on docs/draft/<slug>.md → no warn (F1 regression test, iter3 F8)"
+
+  # fixture: list.md に対象 slug の 📝 行が無い状態 (Write だったら warn 発火する条件)
+  local list_md="${TMP_ROOT}/docs/tasks/list.md"
+  cat > "$list_md" <<'LISTEOF'
+| # | ステータス | Phase | 概要 | 依存 | 詳細 |
+|:---:|:---:|:---|:---|:---|:---|
+| 1 | ✅ | unrelated-task | ... | — | ... |
+LISTEOF
+
+  # fixture: Edit 対象の既存 draft file
+  local draft_fp="${TMP_ROOT}/docs/draft/test-edit-slug.md"
+  touch "$draft_fp"
+
+  local out additional_ctx
+  out=$(json_edit_input "$draft_fp" | env "${COMMON_ENV[@]}" bash "$HOOK" Edit 2>/dev/null)
+  additional_ctx=$(extract_additional_context "$out")
+
+  # Edit 素通り = additionalContext 不在 (empty) であること
+  # F1 guard が機能していれば Edit tool では plan-first warn は注入されない
+  if [ -z "$additional_ctx" ]; then
+    PASS=$((PASS + 1))
+    printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (Edit on draft で warn 注入された、F1 guard regression)")
+    printf "  FAIL: %s\n    additionalContext: %s\n    out: %s\n" "$label" "$additional_ctx" "$out"
+  fi
+}
+
+printf "===== task-rule-guard-smoke (task-22 W3.2 + task-29 Phase 4 Step 1 + task-21 W3 + task-36 Step 3 Sub B + task-36 Step 2 iter2 採用 6 条 + iter3 F7/F8/F9, 17 cases) =====\n\n"
 
 case1_no_draft_blocked
 case2_draft_exists_pass
@@ -589,6 +632,7 @@ case13_draft_write_planned_row_exists_passthrough
 case14a_empty_slug_silent_pass
 case14b_single_dash_slug
 case14c_japanese_slug_no_crash
+case15_edit_on_draft_no_warn
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"
