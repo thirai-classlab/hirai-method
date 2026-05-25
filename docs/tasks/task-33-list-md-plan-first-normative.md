@@ -113,7 +113,7 @@ flowchart LR
 
 ### Phase 2: `/new-task` の 📝 → 🔲 update 動作拡張 (P2)
 
-**ゴール**: list.md 同 ID (or 同 slug) の 📝 行が既存なら update (📝 → 🔲)、不在なら append する動作が `.claude/commands/new-task.md` で仕様化され helper script で機械実装される (観察可能: 同 ID 📝 行が既存の list.md に対し `/new-task` 実行後、行数増えず status のみ変化)
+**ゴール**: list.md **同 ID かつ 同 slug** (**ID + slug の AND 一致** 必須、ID 単独 / slug 単独 grep 禁止、task-management.md L163 規範整合) の 📝 行が既存なら update (📝 → 🔲)、不在なら append する動作が `.claude/commands/new-task.md` で仕様化され helper script で機械実装される (観察可能: 同 ID + 同 slug の 📝 行が既存の list.md に対し `/new-task` 実行後、行数増えず status のみ変化)
 
 **作業概要**:
 - `.claude/commands/new-task.md` に「📝 行 update or append」logic 明記
@@ -196,8 +196,8 @@ flowchart LR
 - **Step 4.3 (テスト合格)**: smoke 拡充 11→13 cases、Write(docs/draft/*.md) で 📝 不在 warn 検証
   - 完了条件: smoke exit 0、`bash .claude/tests/task-rule-guard-smoke.sh` exit 0、既存 11 cases regression 0
   - **新規 case 詳細 (pr-test-analyzer L-02 反映)**:
-    - **Case 12 (📝 不在 → warn)**: fixture で list.md に対応 slug の 📝 行が **無い**状態 + Write(`docs/draft/<slug>.md`) tool_input を hook stdin → output JSON の `additionalContext` に「先に list.md に 📝 行を先置きするか、master roadmap で計画段階を明示」keyword 含まれることを `jq -r '.additionalContext' | grep -q "plan-first"` で検証
-    - **Case 13 (📝 存在 → 素通り)**: fixture で list.md に対応 slug の 📝 行が **既存**状態 + 同 Write tool_input → output JSON に `additionalContext` が **無い** or warn keyword **含まれない**ことを検証 (`additionalContext` 別目的で出力されるケースは別 case で網羅)
+    - **Case 12 (📝 不在 → warn)**: fixture で list.md に対応 slug の 📝 行が **無い**状態 + Write(`docs/draft/<slug>.md`) tool_input を hook stdin → output JSON の `hookSpecificOutput.additionalContext` に「先に list.md に 📝 行を先置きするか、master roadmap で計画段階を明示」keyword 含まれることを `jq -r '.hookSpecificOutput.additionalContext' | grep -q "plan-first"` で検証 (jq path は task-rule-guard.sh の実出力構造 `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"..."}}` と整合、トップレベル `additionalContext` 参照は常時 null で偽陰性化するため禁止)
+    - **Case 13 (📝 存在 → 素通り)**: fixture で list.md に対応 slug の 📝 行が **既存**状態 + 同 Write tool_input → output JSON の `hookSpecificOutput.additionalContext` が **無い** or warn keyword **含まれない**ことを `jq -r '.hookSpecificOutput.additionalContext // ""' | grep -qv "plan-first"` で検証
 - **Step 4.4 (リファクタリング)**: skip (tdd-guide M-02 反映: 観察可能事実明記)
   - 完了条件: `skip: task-rule-guard.sh への 2 case 追加 (約 20 LOC) のみ、既存関数の汎用抽出余地なし、refactor 対象パターンなし` と Step 完了記録に明記
 
