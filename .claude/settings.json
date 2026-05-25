@@ -264,6 +264,12 @@
           },
           {
             "type": "command",
+            "command": "bash .claude/hooks/list-md-plan-first-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "list.md plan-first reminder 検証中 (task-35)..."
+          },
+          {
+            "type": "command",
             "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
             "timeout": 3,
             "statusMessage": "観察記録中 (SessionStart)..."

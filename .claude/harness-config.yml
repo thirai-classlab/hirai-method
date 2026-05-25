@@ -210,18 +210,20 @@ reviewer_registry_impl: [code-reviewer, refactoring-specialist, typescript-revie
 workflow_stages_new: [requirements, basic-design, detailed-design, test-design, design-review, user-approval, task-creation, tdd, module-review, local-test, system-review, ci-cd, scenario-test, finish]
 workflow_stages_modify: [branch-decision, checkout, recover-design, pre-test, redesign, retest-design, tdd, module-review, full-test, system-review]
 
-# === list-md plan-first reminder (task-33 Phase 3) ===
-# SessionStart hook が消費。
+# === list-md plan-first reminder (task-35) ===
+# SessionStart hook .claude/hooks/list-md-plan-first-reminder.sh が消費。
 # `docs/draft/*.md` ≥ 3 件 ∧ `docs/tasks/list.md` task エントリ行 == 0 を検出した場合、
-# <system-reminder> で「経路 B (batch planning) 適用検討」を強制注入する。
+# <system-reminder> で「経路 B (batch planning) 適用検討」を stderr 強制注入する。
 #
-# Phase 3 実装方針 (2 案、task-33 Phase 3 Step 3.1 で確定):
-#   (a) 既存 .claude/hooks/session-help-surface.sh 拡張
-#   (b) 新 hook .claude/hooks/list-md-plan-first-reminder.sh 新設
-# 実装後、本コメントを実 path に更新すること (Phase 3 Step 3.2 完了条件)。
+# 実装 (task-35、案 B 採用 — 責務分離 + 単体 smoke 容易化):
+#   - hook:     .claude/hooks/list-md-plan-first-reminder.sh (約 100 LOC、fail-open guard 含む)
+#   - smoke:    .claude/tests/list-md-plan-first-reminder-smoke.sh (6 cases)
+#   - 配線:    .claude/settings.json SessionStart (wrapper.sh 後配置、wrapper failure 時の独立発火維持)
+#   - 起源:    task-33 採用 6 条 supersede で task-35 へ分割
 #
-# - list_plan_first_reminder_enabled: false で reminder を完全停止 (Phase 1 完了時点では未実装、Phase 3 実装後に有効化)
-# - Phase 1 iter4 で config-loader.sh に _HC_KNOWN_KEYS / defaults / export 3 箇所登録済、env override 動作実証
+# - list_plan_first_reminder_enabled: false で reminder を完全停止
+# - 検出ロジック: grep -cE '^\| [0-9]' で task 行カウント、find -maxdepth 1 -name "*.md" -not -name "_*" で draft 件数
+# - fail-open guard: list.md or docs/draft 不在 → silent exit 0 (新規採用 project で誤発火しない)
 #
 # env 上書き例:
 #   export HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false   # 一時的に黙らせる
