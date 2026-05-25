@@ -3,18 +3,20 @@
 #                          + task-29 Phase 4 Step 1 で Phase/Step format 検証 case を追加
 #                          + task-21 W3 仕様変更 (Phase 最終 Step 2 段 → 3 段) 追従 (Case 7 更新 + Case 11 追加)
 #                          + task-36 Step 3 (Sub B) で plan-first warn 検証 case を追加 (Case 12/13)
+#                          + task-36 Step 2 iter2 fix で採用 6 条 (Task=Phase=N Step、2026-05-25) 追従 (Case 6/7/9 更新 + Case 13 強化 + Case 14 追加)
 #
 # 設計起源:
 #   docs/draft/hook-reliability-uplift.md W3
 #   docs/tasks/task-29-phase-step-task-structure.md Phase 4
 #   docs/tasks/task-21-system-reminder-attention-fix.md W3 (2026-05-23 user 仕様変更)
 #   docs/tasks/task-36-list-md-plan-first-draft-warn.md Step 3 (task-36 Sub B)
+#   docs/draft/task-equals-phase-step-status-list-normative.md (2026-05-25 採用 6 条、Phase 中間階層廃止)
 #
 # 対象 hook / template:
 #   .claude/hooks/task-rule-guard.sh
 #   .claude/templates/docs/tasks/_TASK_TEMPLATE.md
 #
-# 検証範囲 (13 ケース):
+# 検証範囲 (14 ケース):
 #   既存 5 case (task-22 W3):
 #     Case 1: 新規 task Write、対応 draft 不在 → BLOCK
 #     Case 2: 新規 task Write、対応 draft 存在 → PASS (additionalContext)
@@ -22,11 +24,11 @@
 #     Case 4: ID 重複 (同 id-* file 既存) で別 slug の Write → BLOCK
 #     Case 5: ECC_TASKGUARD=off で BLOCK ケース → PASS
 #
-#   新規 5 case (task-29 Phase 4 Step 1):
-#     Case 6: template に "## Phase 計画" + "### Phase 計画前の事前確認" 存在
-#     Case 7: template の Phase 計画以降に "テスト設計レビュー" + "テスト合格" + "リファクタリング" 3 段雛形存在 (2026-05-23 task-21 W3 仕様変更追従)
+#   採用 6 条追従 (task-36 Step 2 iter2 で更新):
+#     Case 6: template に "## Step 計画" + "### Step 計画前の事前確認" 存在 (旧 "## Phase 計画" → 新 "## Step 計画")
+#     Case 7: template の Step 計画以降に "テスト設計レビュー" + "テスト合格" + "リファクタリング" 3 段雛形存在
 #     Case 8: template に "### 小タスクモード" sub-section + "skip:" 例示存在
-#     Case 9: template frontmatter HTML comment に phase_count / total_steps placeholder 存在
+#     Case 9: template frontmatter HTML comment に total_steps placeholder 存在 (採用 6 条で phase_count 廃止)
 #     Case 10: template に旧 "## Wave 構成" section が残っていない (rename 済)
 #
 #   追加 1 case (task-21 W3 仕様変更追従):
@@ -34,7 +36,12 @@
 #
 #   追加 2 case (task-36 Step 3 Sub B — plan-first draft warn):
 #     Case 12: docs/draft/<slug>.md Write、list.md に 📝 行不在 → additionalContext に "plan-first" keyword 含む (warn)
-#     Case 13: docs/draft/<slug>.md Write、list.md に 📝 行存在 → additionalContext に "plan-first" keyword 含まない (素通り)
+#     Case 13: docs/draft/<slug>.md Write、list.md に 📝 行存在 → additionalContext に "plan-first" keyword 含まない + warn 出典文字列 (task-management.md §plan-first) 不在 strict assert (iter2 F4)
+#
+#   追加 3 sub-case (task-36 Step 2 iter2 F6 — edge case 強化):
+#     Case 14a: 空 basename (拡張子のみ ".md") → hook が異常終了せず silent pass
+#     Case 14b: "-.md" (1 文字 slug "-") → hook が異常終了せず処理
+#     Case 14c: 日本語 slug "日本語タスク.md" → ASCII slug regex 範囲外、hook 異常終了なし
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs)
@@ -42,13 +49,13 @@
 #   - hook は HC_TASK_DIR / HC_DRAFT_DIR / HC_TASKGUARD_STATE_DIR の env override に従う
 #   - subagent 短絡防止: CLAUDE_HARNESS_ROLE をクリア + HC_AGENT_MARKER_DIR を空 dir に向ける
 #   - 新規 case は実 template (_TASK_TEMPLATE.md) を読み、grep で検証する pure read-only
-#   - Case 12/13 は task-36 Sub A (hook 拡張) 完了後に PASS する想定 (TDD RED phase 許容)
+#   - 採用 6 条 (Task=Phase=N Step、2026-05-25) で template の `## Phase 計画` → `## Step 計画`、`phase_count` 廃止
 #
 # 実行:
 #   bash .claude/tests/task-rule-guard-smoke.sh
 #
 # 終了コード:
-#   0 = 13/13 PASS / 1 = 1 件以上 FAIL
+#   0 = 14/14 PASS / 1 = 1 件以上 FAIL
 
 set -uo pipefail
 
@@ -239,9 +246,11 @@ case5_bypass_env_pass() {
   fi
 }
 
-# === Case 6 (task-29 Phase 4): template に Phase 計画 + 事前確認 sub-section 存在 ===
+# === Case 6 (採用 6 条追従、task-36 Step 2 iter2): template に Step 計画 + 事前確認 sub-section 存在 ===
+# 採用 6 条 (2026-05-25): Task=Phase=N Step、Phase 中間階層廃止。
+# 旧 "## Phase 計画" → 新 "## Step 計画"、旧 "### Phase 計画前の事前確認" → 新 "### Step 計画前の事前確認"
 case6_template_phase_plan_section() {
-  local label="Case 6: _TASK_TEMPLATE.md has '## Phase 計画' + '### Phase 計画前の事前確認'"
+  local label="Case 6: _TASK_TEMPLATE.md has '## Step 計画' + '### Step 計画前の事前確認' (採用 6 条)"
   local pass=1
   local why=""
 
@@ -249,12 +258,12 @@ case6_template_phase_plan_section() {
     pass=0
     why="template file not found: $TASK_TEMPLATE"
   else
-    if ! grep -q '^## Phase 計画$' "$TASK_TEMPLATE"; then
+    if ! grep -q '^## Step 計画$' "$TASK_TEMPLATE"; then
       pass=0
-      why="missing '^## Phase 計画$'"
-    elif ! grep -q '### Phase 計画前の事前確認' "$TASK_TEMPLATE"; then
+      why="missing '^## Step 計画$' (採用 6 条で Phase → Step rename)"
+    elif ! grep -q '### Step 計画前の事前確認' "$TASK_TEMPLATE"; then
       pass=0
-      why="missing '### Phase 計画前の事前確認'"
+      why="missing '### Step 計画前の事前確認'"
     fi
   fi
 
@@ -268,9 +277,10 @@ case6_template_phase_plan_section() {
   fi
 }
 
-# === Case 7 (task-29 Phase 4 + task-21 W3 仕様変更追従): Phase 計画以降に 3 段 (テスト設計レビュー + テスト合格 + リファクタリング) 雛形存在 ===
+# === Case 7 (採用 6 条追従、task-36 Step 2 iter2): Step 計画以降に 3 段 (テスト設計レビュー + テスト合格 + リファクタリング) 雛形存在 ===
+# 採用 6 条 4: Task 最終 = テスト設計レビュー → テスト合格 → リファクタリング (3 段必須)
 case7_template_test_refactor_steps() {
-  local label="Case 7: Phase 計画 section has 'テスト設計レビュー' + 'テスト合格' + 'リファクタリング' Step 雛形 (3 段)"
+  local label="Case 7: Step 計画 section has 'テスト設計レビュー' + 'テスト合格' + 'リファクタリング' Step 雛形 (3 段、採用 6 条 4)"
   local pass=1
   local why=""
 
@@ -278,21 +288,21 @@ case7_template_test_refactor_steps() {
     pass=0
     why="template file not found"
   else
-    # Phase 計画 section 以降の slice を抽出して 3 keyword grep
+    # Step 計画 section 以降の slice を抽出して 3 keyword grep
     local slice
-    slice=$(awk '/^## Phase 計画$/{found=1} found' "$TASK_TEMPLATE")
+    slice=$(awk '/^## Step 計画$/{found=1} found' "$TASK_TEMPLATE")
     if [ -z "$slice" ]; then
       pass=0
-      why="Phase 計画 section not found by awk"
+      why="Step 計画 section not found by awk (採用 6 条で Phase → Step rename)"
     elif ! printf '%s' "$slice" | grep -q 'テスト設計レビュー'; then
       pass=0
-      why="missing 'テスト設計レビュー' after Phase 計画 section (3 段化 要求 by task-21 W3)"
+      why="missing 'テスト設計レビュー' after Step 計画 section (3 段化 要求 by 採用 6 条 4)"
     elif ! printf '%s' "$slice" | grep -q 'テスト合格'; then
       pass=0
-      why="missing 'テスト合格' after Phase 計画 section"
+      why="missing 'テスト合格' after Step 計画 section"
     elif ! printf '%s' "$slice" | grep -q 'リファクタリング'; then
       pass=0
-      why="missing 'リファクタリング' after Phase 計画 section"
+      why="missing 'リファクタリング' after Step 計画 section"
     fi
   fi
 
@@ -335,9 +345,10 @@ case8_template_small_task_mode() {
   fi
 }
 
-# === Case 9 (task-29 Phase 4): frontmatter HTML comment placeholder ===
+# === Case 9 (採用 6 条追従、task-36 Step 2 iter2): frontmatter HTML comment placeholder ===
+# 採用 6 条 (2026-05-25): Phase 中間階層廃止に伴い phase_count 廃止、total_steps のみ存在
 case9_template_metadata_placeholder() {
-  local label="Case 9: template has phase_count / total_steps placeholder"
+  local label="Case 9: template has total_steps placeholder (採用 6 条で phase_count 廃止)"
   local pass=1
   local why=""
 
@@ -345,12 +356,12 @@ case9_template_metadata_placeholder() {
     pass=0
     why="template file not found"
   else
-    if ! grep -q 'phase_count' "$TASK_TEMPLATE"; then
-      pass=0
-      why="missing 'phase_count' placeholder"
-    elif ! grep -q 'total_steps' "$TASK_TEMPLATE"; then
+    if ! grep -q 'total_steps' "$TASK_TEMPLATE"; then
       pass=0
       why="missing 'total_steps' placeholder"
+    elif grep -q 'phase_count' "$TASK_TEMPLATE"; then
+      pass=0
+      why="legacy 'phase_count' placeholder still present (採用 6 条で廃止)"
     fi
   fi
 
@@ -452,12 +463,12 @@ LISTEOF
   fi
 }
 
-# === Case 13 (task-36 Sub B): docs/draft/<slug>.md Write、list.md に 📝 行存在 → 素通り (plan-first keyword 含まない) ===
+# === Case 13 (task-36 Sub B + iter2 F4): docs/draft/<slug>.md Write、list.md に 📝 行存在 → 素通り (plan-first keyword + 出典文字列 共に不在) ===
 #
-# 設計起源: task-36 task file Step 3
-# TDD RED phase: Sub A (hook 拡張) 完了後に PASS する想定。Sub A 並走中は FAIL 許容。
+# 設計起源: task-36 task file Step 3 + iter2 reviewer A HIGH (trivial-pass 解消)
+# iter2 F4 強化: "plan-first" だけでなく、warn message 出典 "task-management.md" + "[task-rule-guard]" prefix も同時に不在 assert。
 case13_draft_write_planned_row_exists_passthrough() {
-  local label="Case 13: docs/draft/<slug> Write, list.md has 📝 row → no 'plan-first' warn"
+  local label="Case 13: docs/draft/<slug> Write, list.md has 📝 row → no plan-first warn (strict: 3 keyword 全て不在)"
 
   # fixture: list.md に対象 slug の 📝 行が存在する状態
   local list_md="${TMP_ROOT}/docs/tasks/list.md"
@@ -475,18 +486,92 @@ LISTEOF
   out=$(json_write_input "$draft_fp" | env "${COMMON_ENV[@]}" bash "$HOOK" Write 2>/dev/null)
   additional_ctx=$(extract_additional_context "$out")
 
-  # grep -qv は空文字列で exit 1 になるため ! grep -q で判定する
-  if ! printf '%s' "$additional_ctx" | grep -q "plan-first"; then
+  # F4 strict assert: 3 keyword すべて不在を確認
+  # 1. "plan-first" 不在 (warn message keyword)
+  # 2. "task-management.md" 不在 (warn message 出典 link)
+  # 3. "[task-rule-guard]" prefix 不在 (warn message header)
+  local why=""
+  local pass=1
+  if printf '%s' "$additional_ctx" | grep -q "plan-first"; then
+    pass=0
+    why="'plan-first' keyword unexpectedly present"
+  elif printf '%s' "$additional_ctx" | grep -q "task-management.md"; then
+    pass=0
+    why="warn 出典 'task-management.md' unexpectedly present"
+  elif printf '%s' "$additional_ctx" | grep -q '\[task-rule-guard\]'; then
+    pass=0
+    why="warn prefix '[task-rule-guard]' unexpectedly present"
+  fi
+
+  if [ "$pass" = "1" ]; then
     PASS=$((PASS + 1))
     printf "  PASS: %s\n" "$label"
   else
     FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (additionalContext unexpectedly contained 'plan-first')")
-    printf "  FAIL: %s\n    additionalContext: %s\n    out: %s\n" "$label" "$additional_ctx" "$out"
+    FAILED_CASES+=("$label ($why)")
+    printf "  FAIL: %s\n    why: %s\n    additionalContext: %s\n    out: %s\n" "$label" "$why" "$additional_ctx" "$out"
   fi
 }
 
-printf "===== task-rule-guard-smoke (task-22 W3.2 + task-29 Phase 4 Step 1 + task-21 W3 仕様変更追従 + task-36 Step 3 Sub B, 13 cases) =====\n\n"
+# === Case 14a/b/c (task-36 Step 2 iter2 F6): edge case (空 / 1 文字 / 日本語 slug) ===
+#
+# 設計起源: task-36 task file Step 2 iter2 reviewer A/C MED
+# 期待: 異常入力で hook は silent pass or 正常終了 (異常終了 / hang / parse_error なし)
+case14a_empty_slug_silent_pass() {
+  local label="Case 14a: empty basename '.md' (no slug) → hook silent pass (no crash)"
+  local fp="${TMP_ROOT}/docs/draft/.md"
+  # file は作らない (Write 前提、hook は file 存在 check しない)
+  local out decision
+  out=$(json_write_input "$fp" | env "${COMMON_ENV[@]}" bash "$HOOK" Write 2>/dev/null)
+  decision=$(extract_decision "$out")
+
+  # hook は異常終了せず JSON を返すか empty object を返す ("decision":"block" でも問題なし、crash しない事を確認)
+  # parse_error は許容しない (json 不正)
+  if [ "$decision" != "parse_error" ]; then
+    PASS=$((PASS + 1))
+    printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (hook output not valid JSON, decision=$decision)")
+    printf "  FAIL: %s\n    out: %s\n" "$label" "$out"
+  fi
+}
+
+case14b_single_dash_slug() {
+  local label="Case 14b: '-.md' (1 char slug '-') → hook handles without crash"
+  local fp="${TMP_ROOT}/docs/draft/-.md"
+  local out decision
+  out=$(json_write_input "$fp" | env "${COMMON_ENV[@]}" bash "$HOOK" Write 2>/dev/null)
+  decision=$(extract_decision "$out")
+
+  if [ "$decision" != "parse_error" ]; then
+    PASS=$((PASS + 1))
+    printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (hook output not valid JSON, decision=$decision)")
+    printf "  FAIL: %s\n    out: %s\n" "$label" "$out"
+  fi
+}
+
+case14c_japanese_slug_no_crash() {
+  local label="Case 14c: '日本語タスク.md' (non-ASCII slug) → hook handles without crash"
+  local fp="${TMP_ROOT}/docs/draft/日本語タスク.md"
+  local out decision
+  out=$(json_write_input "$fp" | env "${COMMON_ENV[@]}" bash "$HOOK" Write 2>/dev/null)
+  decision=$(extract_decision "$out")
+
+  if [ "$decision" != "parse_error" ]; then
+    PASS=$((PASS + 1))
+    printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (hook output not valid JSON, decision=$decision)")
+    printf "  FAIL: %s\n    out: %s\n" "$label" "$out"
+  fi
+}
+
+printf "===== task-rule-guard-smoke (task-22 W3.2 + task-29 Phase 4 Step 1 + task-21 W3 + task-36 Step 3 Sub B + task-36 Step 2 iter2 採用 6 条追従, 16 cases) =====\n\n"
 
 case1_no_draft_blocked
 case2_draft_exists_pass
@@ -501,6 +586,9 @@ case10_template_no_legacy_wave_section
 case11_template_test_design_review_dynamic_selection
 case12_draft_write_no_planned_row_warns
 case13_draft_write_planned_row_exists_passthrough
+case14a_empty_slug_silent_pass
+case14b_single_dash_slug
+case14c_japanese_slug_no_crash
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"

@@ -104,14 +104,24 @@ if [ -z "$file" ]; then
 fi
 
 # === ${draft_dir}/ 配下の Write は plan-first warn 判定 (block しない、honor system) ===
-# task-33 Phase 3 規範化 (list-md-plan-first-normative.md §3 P5、task-36 Step 1):
+# task-33 Phase 3 規範化 (list-md-plan-first-normative.md §3 P5、task-36 Step 1 / Step 2):
 #   新規 draft Write が発生した時点で list.md に対応 slug の 📝 行が不在なら warn 注入。
 #   既存 task_glob filter (L下) より前に挿入する必要あり (filter で early-exit するため)。
+#
+# task-36 Step 2 iter2 fix:
+#   F1: Write 限定 (Edit は素通り) — draft の既存 update 時に warn を出さない
+#   F2: slug grep を col 限定 (awk) に変更 — 別 task の description/detail に slug が含まれる
+#       false negative (warn 抑制) を防ぐ。false positive は許容。
 draft_glob_a="*/${HC_DRAFT_DIR}/*.md"
 draft_glob_b="*/${HC_DRAFT_DIR}/*.mdx"
 # shellcheck disable=SC2254  # 意図的な glob 展開 (case pattern として draft path 判定)
 case "$file" in
   $draft_glob_a|$draft_glob_b)
+    # F1: Write のみ判定 (Edit は素通り、既存 draft update に warn 不要)
+    if [ "$tool" != "Write" ]; then
+      echo '{}'
+      exit 0
+    fi
     # template (_DRAFT_TEMPLATE.md 等の underscore prefix) は exempt
     draft_basename=$(basename "$file")
     case "$draft_basename" in
@@ -129,10 +139,17 @@ case "$file" in
       echo '{}'
       exit 0
     fi
-    # 📝 行 grep (slug は word boundary で厳密一致、kebab-case 想定)
-    # pattern: 行頭 "| <id> | 📝" 以降に slug が含まれる行
-    # 複数マッチ時は最初の 1 件で良い (本判定は存在 / 不在のみ)
-    if grep -qE "^\| [0-9]+ \| 📝 .*[^a-z0-9-]${draft_slug}([^a-z0-9-]|$)" "$list_md_path" 2>/dev/null; then
+    # F2: 📝 行検出を col 限定 awk に変更 (false negative 0 を厳守)
+    # list.md table format: | # | Step Status | Task / Step | 概要 | 詳細 |
+    # awk -F'|' で分解時 (leading/trailing | あり) のカラム index:
+    #   $1=空, $2=# (id), $3=Step Status (📝 等), $4=Task/Step, $5=概要, $6=詳細, $7=空
+    # 判定: $3 に 📝 を含み、かつ ($4 または $6) に draft_slug を含む
+    # (Task 列に `Task: <slug>` 等、詳細列に `task-<id>-<slug>.md` link)
+    # awk pattern injection 防止: draft_slug は kebab-case (basename 由来) のため英数字 + - のみで安全
+    if awk -F'|' -v slug="$draft_slug" '
+      $3 ~ /📝/ && ($4 ~ slug || $6 ~ slug) { found = 1; exit }
+      END { exit (found ? 0 : 1) }
+    ' "$list_md_path" 2>/dev/null; then
       # 既存 📝 行あり → pass (warn なし)
       echo '{}'
       exit 0
