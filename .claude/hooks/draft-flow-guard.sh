@@ -20,12 +20,22 @@
 #     HIGH-D: file_path canonical 化 (../ / symlink 経由 BLOCK 回避を防止)
 #     HIGH-G: .claude/templates/** → .claude/templates/docs/** に縮小 (top-level 直下は対象外)
 #
-#   task-40 Step 7 iter3 (2026-05-26) — MEDIUM-1 fix:
-#     MEDIUM-1: ECC_DRAFT_FLOW_GUARD_OVERRIDE bypass 時に file_path / tool_name を
-#               log に記録 (audit trail 完全性向上)。jq 抽出を bypass 判定前に前倒し。
-#               tool_name filter (Edit/Write 以外早期 exit) は維持し、Edit/Write の
-#               場合のみ OVERRIDE bypass log を出す (Edit/Write 以外で OVERRIDE=1 は
-#               noise なので log しない)。jq 不在時の fail-open 動作も維持。
+#   task-40 Step 7 iter3 (2026-05-26) — HIGH 4 + MEDIUM 2 + LOW 1 fix:
+#     HIGH-2 (TA-H1 + SEC-H2 + LOW-1 内包):
+#       canonicalize_path に realpath -m 2nd choice + python3/realpath 両不在時の
+#       fail-open warn 化 + 呼び出し後の改行 reject (injection 疑い、NUL は bash 文字列で truncate される)。
+#     HIGH-3 (SEC-H1):
+#       retroactive=true 単独通過を悪用防止のため、approved_by 副次条件で厳格化。
+#       approved_by が空なら blocked-retroactive-no-approved-by として block。
+#     HIGH-5 (ARCH-H1):
+#       L236-242 の dead code (noop ブロック + 5 行コメント) を削除、1 行コメントに圧縮。
+#     MEDIUM-6 (SEC-MA):
+#       ECC_RULE_CHANGE_GUARD_OFF / HC_RULE_CHANGE_GUARD_ENABLED=false の log を
+#       path 評価前に集中、遅延 log block を廃止 (ECC_DRAFT_FLOW_GUARD_OVERRIDE と
+#       timing 整合化)。
+#     MEDIUM-8 (ARCH-M2):
+#       retroactive warn の stderr + JSON additionalContext 2 経路を _retro_msg
+#       単一変数で DRY 化。
 #
 # 設計起源:
 #   - docs/draft/system-reminder-attention-fix.md Wave 2.3 (2026-05-23)
@@ -112,22 +122,52 @@ fi
 [ -z "$file_path_raw" ] && exit 0
 
 # ----------------------------------------------------------------------
-# HIGH-D: file_path canonical 化
+# HIGH-D + HIGH-2 (iter3): file_path canonical 化
 # `..` 含み path / symlink 経由 BLOCK 回避を防止する。
-# macOS portable: python3 os.path.realpath (file 存在不要、symlink 解決)。
-# python3 不在時は raw のまま fallback (fail-open: 既存挙動維持)。
+# macOS portable:
+#   1st: python3 os.path.realpath (file 存在不要、symlink 解決)
+#   2nd (ARCH-L1): realpath -m (coreutils 系、macOS GNU coreutils 等で利用可)
+#   両不在: stderr WARN 出力 + raw のまま fallback (fail-open 維持、BLOCK 回避リスク
+#           を operator に通知)
 # ----------------------------------------------------------------------
 canonicalize_path() {
   local _p="$1"
+  local _result
   if command -v python3 >/dev/null 2>&1; then
-    python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$_p" 2>/dev/null || printf '%s' "$_p"
-  else
-    # python3 不在: fail-open (raw のまま、既存挙動維持)
-    printf '%s' "$_p"
+    # sys.stdout.write で末尾改行なし出力 (NUL/改行 reject 後段との整合)
+    _result=$(python3 -c "import os,sys; sys.stdout.write(os.path.realpath(sys.argv[1]))" "$_p" 2>/dev/null) && {
+      printf '%s' "$_result"
+      return
+    }
   fi
+  if command -v realpath >/dev/null 2>&1; then
+    # realpath -m 末尾改行は command substitution で strip される
+    _result=$(realpath -m "$_p" 2>/dev/null) && {
+      printf '%s' "$_result"
+      return
+    }
+  fi
+  # 両 tool 不在 → raw 返却 (fail-open 維持、stderr warn 出力)
+  printf '[draft-flow-guard] WARN: python3/realpath 不在、canonical 化 skip (BLOCK 回避リスクあり)\n' >&2
+  printf '%s' "$_p"
 }
 
 file_path=$(canonicalize_path "$file_path_raw")
+
+# HIGH-2 + LOW-1 (iter3): 改行 reject (injection 疑い)
+# canonical 化後の file_path に改行文字が含まれていたら BLOCK。
+# 通常の file_path には絶対に現れない文字列であり、含まれている場合は意図的な
+# injection / hook 回避試行の可能性が高い。
+# NOTE: NUL バイトは bash 文字列に格納された時点で truncate される
+#       (jq 経由で受領した時点で実質 reject 済) ため、本 case では検査せず
+#       改行のみ検査する。bash 3.2 で `*$'\0'*` glob pattern は何にでもマッチする
+#       bug 様挙動があるため、明示的に除外している。
+case "$file_path" in
+  *$'\n'*)
+    printf '[draft-flow-guard] BLOCK: file_path に改行文字 (injection 疑い)\n' >&2
+    exit 2
+    ;;
+esac
 
 # project root 解決
 # shellcheck source=lib/project-root.sh
@@ -158,6 +198,30 @@ rule_change_guard_enabled="${HC_RULE_CHANGE_GUARD_ENABLED:-true}"
 docs_root="$root/docs"
 
 # ----------------------------------------------------------------------
+# MEDIUM-6 (iter3): ECC_RULE_CHANGE_GUARD_OFF / HC_RULE_CHANGE_GUARD_ENABLED
+# の log を path_match 評価前に集中 (ECC_DRAFT_FLOW_GUARD_OVERRIDE と timing 整合化)。
+# 元々 new path (.claude/rules/, .claude/commands/, .claude/templates/docs/) 配下なのに
+# env で skip された場合のみ記録。
+# ----------------------------------------------------------------------
+_is_new_path_for_log=0
+case "$file_path" in
+  "$root/.claude/rules/"*|"$root/.claude/commands/"*|"$root/.claude/templates/docs/"*)
+    _is_new_path_for_log=1
+    ;;
+esac
+if [ "$_is_new_path_for_log" = "1" ]; then
+  if [ "${ECC_RULE_CHANGE_GUARD_OFF:-0}" = "1" ]; then
+    if declare -f log_bypass >/dev/null 2>&1; then
+      log_bypass "draft-flow-guard" "ECC_RULE_CHANGE_GUARD_OFF" "${ECC_BYPASS_REASON:-(not provided)} file=${file_path}"
+    fi
+  elif [ "$rule_change_guard_enabled" = "false" ]; then
+    if declare -f log_bypass >/dev/null 2>&1; then
+      log_bypass "draft-flow-guard" "HC_RULE_CHANGE_GUARD_ENABLED" "${ECC_BYPASS_REASON:-(config off)} file=${file_path}"
+    fi
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # frontmatter parser: HTML comment 内の `key: value` を抽出 (jq 不要)
 # 引数 1: draft_path
 # 引数 2: key (e.g. approved_at / retroactive)
@@ -177,10 +241,13 @@ extract_frontmatter_value() {
 }
 
 # ----------------------------------------------------------------------
-# draft 検証: approved_at 非空 → "approved"、retroactive: true → "retroactive"、
-#             それ以外 (draft 不在 / approved_at 空) → "blocked"
+# draft 検証:
+#   - approved_at 非空                                  → "approved"
+#   - retroactive: true ∧ approved_by 非空              → "retroactive"
+#   - retroactive: true ∧ approved_by 空 (HIGH-3 iter3) → "blocked-retroactive-no-approved-by"
+#   - それ以外 (draft 不在 / approved_at 空)            → "blocked"
 # 引数 1: slug (basename without .md)
-# stdout: status (approved / retroactive / blocked)
+# stdout: status
 # ----------------------------------------------------------------------
 verify_draft_status() {
   local _slug="$1"
@@ -192,7 +259,15 @@ verify_draft_status() {
   local _retroactive
   _retroactive=$(extract_frontmatter_value "$_draft_path" "retroactive")
   if [ "$_retroactive" = "true" ]; then
-    printf 'retroactive'
+    # HIGH-3 (iter3): retroactive=true は approved_by 副次条件で厳格化。
+    # 任意 draft で `retroactive: true` だけ書く悪用を防ぐ。
+    local _approved_by
+    _approved_by=$(extract_frontmatter_value "$_draft_path" "approved_by")
+    if [ -n "$_approved_by" ]; then
+      printf 'retroactive'
+      return 0
+    fi
+    printf 'blocked-retroactive-no-approved-by'
     return 0
   fi
   local _approved_at
@@ -249,14 +324,9 @@ if [ "$rule_change_guard_enabled" != "false" ] && [ "${ECC_RULE_CHANGE_GUARD_OFF
   esac
 fi
 
+# HIGH-5 (iter3): rule_change_guard 対応 path への新規 Write 判定
+# (env bypass の log は MEDIUM-6 で path 評価前に集中処理済)
 if [ "$rule_change_path_match" = "1" ]; then
-  # HIGH-A: rule_change_guard 系の env bypass 記録 (env で全 skip された場合)
-  # ※ rule_change_guard_enabled / ECC_RULE_CHANGE_GUARD_OFF で path_match が
-  #    0 になった分岐は上の if で除外されるため、ここでは到達しない。env で
-  #    skip された case の log 記録は path_match 評価前に行う必要があるため、
-  #    下記の env 判定ブロックを別途追加。
-  : # noop: actual log already handled in env-check above
-
   # 既存 file の Edit は無条件通過 (新規 Write のみ block 対象)
   if [ -f "$file_path" ]; then
     exit 0
@@ -277,27 +347,11 @@ if [ "$rule_change_path_match" = "1" ]; then
       # HIGH-C: retroactive case の悪用検知
       # - bypass.log に記録 (audit trail で誤用追跡)
       # - stderr warn + JSON additionalContext で main agent に強制注意喚起
+      # MEDIUM-8 (iter3): stderr + JSON 2 経路を _retro_msg 単一変数で DRY 化
       if declare -f log_bypass >/dev/null 2>&1; then
         log_bypass "draft-flow-guard" "retroactive-pass" "category=${rule_change_category} file=${file_path} draft=${draft_path}"
       fi
-      # stderr warn (既存) — interactive 操作者向け
-      cat <<EOF >&2
-[draft-flow-guard] WARN: retroactive draft 経由で通過
-
-  対象 file : $file_path (category: $rule_change_category)
-  対応 draft: $draft_path (frontmatter: retroactive: true)
-
-retroactive リカバリとして本回は pass。**規範遵守は次回から**:
-  1. /new-draft <slug>            # 先に設計を起こす
-  2. user 承認 (approved_at 非空)
-  3. /new-task <id> <slug>        # task 化してから着手
-
-bypass.log に記録済 (audit trail、誤用検知用)。
-
-設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)
-EOF
-      # JSON additionalContext (HIGH-C) — main agent への構造化注意喚起
-      retroactive_warn="[draft-flow-guard] retroactive=true 経由で通過しました (category: ${rule_change_category})。
+      _retro_msg="[draft-flow-guard] retroactive=true 経由で通過 (category: ${rule_change_category})
 
   対象 file : ${file_path}
   対応 draft: ${draft_path}
@@ -309,8 +363,43 @@ retroactive は **緊急 retroactive リカバリ専用** です。誤用検知�
   3. /new-task <id> <slug>        # task 化してから着手
 
 設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)"
-      jq -n --arg r "$retroactive_warn" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$r}}'
+      # stderr (interactive 用)
+      printf '%s\n' "$_retro_msg" >&2
+      # JSON additionalContext (main agent 用)
+      jq -n --arg r "$_retro_msg" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$r}}'
       exit 0
+      ;;
+    blocked-retroactive-no-approved-by)
+      # HIGH-3 (iter3): retroactive: true だけで approved_by 不在の draft は不正
+      cat <<EOF >&2
+[draft-flow-guard] BLOCK: retroactive draft に approved_by が必須
+
+  対象 file : $file_path (category: $rule_change_category)
+  対応 draft: $draft_path
+  状態      : frontmatter retroactive: true は記載されているが approved_by が空
+
+retroactive リカバリは緊急用途であり、誰が承認したかの監査痕跡が必要です。
+draft frontmatter に approved_by: <承認者名 or 役割> を追記してください。
+
+例:
+  <!--
+  approved_by: takuma hirai
+  retroactive: true
+  -->
+
+または通常フロー (推奨):
+  1. /new-draft $slug            # 先に設計を起こす
+  2. user 承認 (approved_at 非空)
+  3. /new-task <id> $slug        # task 化してから着手
+
+bypass (一時、緊急時のみ):
+  - ECC_RULE_CHANGE_GUARD_OFF=1 環境変数をセット (新 path のみ skip)
+  - ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 環境変数をセット (両 path 全 skip)
+  - HC_RULE_CHANGE_GUARD_ENABLED=false (config レベル、default true)
+
+設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40 Step 7 iter3 HIGH-3)
+EOF
+      exit 2
       ;;
     blocked)
       cat <<EOF >&2
@@ -327,7 +416,7 @@ retroactive は **緊急 retroactive リカバリ専用** です。誤用検知�
 
 bypass (一時、緊急時のみ):
   - 先に touch $draft_path してから frontmatter approved_at を埋める
-  - or 既存規範違反のリカバリなら frontmatter retroactive: true を立てる
+  - or 既存規範違反のリカバリなら frontmatter retroactive: true + approved_by を立てる
   - or ECC_RULE_CHANGE_GUARD_OFF=1 環境変数をセット (新 path のみ skip)
   - or ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 環境変数をセット (両 path 全 skip)
   - or HC_RULE_CHANGE_GUARD_ENABLED=false (config レベル、default true)
@@ -337,34 +426,6 @@ EOF
       exit 2
       ;;
   esac
-fi
-
-# ----------------------------------------------------------------------
-# HIGH-A: rule_change_guard 系 env bypass (path_match を弾く分岐) の log 記録
-# 上の判定で rule_change_guard_enabled=false or ECC_RULE_CHANGE_GUARD_OFF=1
-# が原因で path_match=0 になり new path block が skip された場合のみ記録。
-# 既存 docs/ 直下判定は引き続き有効なため exit はしない。
-# ----------------------------------------------------------------------
-# 判定: 元々 new path (.claude/rules/, .claude/commands/, .claude/templates/docs/)
-#       配下なのに env で path_match が 0 になった場合 → log
-if [ "$rule_change_path_match" = "0" ]; then
-  _is_new_path=0
-  case "$file_path" in
-    "$root/.claude/rules/"*|"$root/.claude/commands/"*|"$root/.claude/templates/docs/"*)
-      _is_new_path=1
-      ;;
-  esac
-  if [ "$_is_new_path" = "1" ]; then
-    if [ "${ECC_RULE_CHANGE_GUARD_OFF:-0}" = "1" ]; then
-      if declare -f log_bypass >/dev/null 2>&1; then
-        log_bypass "draft-flow-guard" "ECC_RULE_CHANGE_GUARD_OFF" "${ECC_BYPASS_REASON:-(not provided)} file=${file_path}"
-      fi
-    elif [ "$rule_change_guard_enabled" = "false" ]; then
-      if declare -f log_bypass >/dev/null 2>&1; then
-        log_bypass "draft-flow-guard" "HC_RULE_CHANGE_GUARD_ENABLED" "${ECC_BYPASS_REASON:-(config off)} file=${file_path}"
-      fi
-    fi
-  fi
 fi
 
 # ----------------------------------------------------------------------
