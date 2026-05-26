@@ -18,6 +18,13 @@
 #   - reason 未指定時は "(not provided)"
 #   - session_id 未取得時は "unknown"
 #
+# Security (task-40 Step 7 iter3 HIGH-1):
+#   - 全フィールド (hook_name / env_var / reason / session_id) に対し改行 -> 空白、
+#     pipe -> カンマの sanitize を実施。Claude tool_input から取得した file_path 等が
+#     reason に含まれる場合に改行/pipe 注入で bypass.log の audit trail (format:
+#     <ts> | <session> | <hook> | <env> | <reason>) が破壊・偽造されることを防止。
+#   - defense in depth: timestamp は date(1) 出力 (control 化済) だが念のため対象外。
+#
 # 使い方:
 #   source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/bypass-logger.sh"
 #   log_bypass "workflow-guard" "ECC_WORKFLOW_GUARD_OFF" "$ECC_BYPASS_REASON"
@@ -44,6 +51,27 @@ log_bypass() (
   local session_id="${CLAUDE_SESSION_ID:-unknown}"
   local timestamp
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
+
+  # ----------------------------------------------------------------------
+  # HIGH-1 (task-40 Step 7 iter3): audit trail 改行/pipe 注入 sanitize
+  # reason は Claude tool_input.file_path 等の untrusted source を含み得る。
+  # 改行 (\n) を空白に置換 -> 後続行偽造防止。
+  # pipe (|) をカンマに置換 -> 5-field format (<ts> | <s> | <h> | <e> | <r>) 破壊防止。
+  # 全フィールドに適用 (defense in depth、env_var / hook_name は通常静的だが念のため)。
+  # CR (\r) も改行扱いで sanitize (Windows-style line ending 経由の偽造防止)。
+  # ----------------------------------------------------------------------
+  hook_name="${hook_name//$'\n'/ }"
+  hook_name="${hook_name//$'\r'/ }"
+  hook_name="${hook_name//|/,}"
+  env_var="${env_var//$'\n'/ }"
+  env_var="${env_var//$'\r'/ }"
+  env_var="${env_var//|/,}"
+  reason="${reason//$'\n'/ }"
+  reason="${reason//$'\r'/ }"
+  reason="${reason//|/,}"
+  session_id="${session_id//$'\n'/ }"
+  session_id="${session_id//$'\r'/ }"
+  session_id="${session_id//|/,}"
 
   local log_dir="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/.workflow-state"
   local log_file="${log_dir}/bypass.log"

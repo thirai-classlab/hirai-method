@@ -91,16 +91,16 @@
 |    | ✅ | Step 2 | (テスト設計レビュー) 5+ reviewer 動的選定 (test-automator / qa-expert / tdd-guide / pr-test-analyzer + security-reviewer / harness-optimizer) | | |
 |    | ✅ | Step 3 | (テスト合格) 新 smoke 12 cases PASS + 既存 smoke regression 0 (delegation-guard-deny-layers 48/48 維持) | | |
 |    | ✅ | Step 4 | (リファクタリング) 3 観点判定 (skip 想定: 配列削減のみで refactor 余地なし) | | |
-| 40 | 🔄 | **Task: タスク管理ルール拡張 (依存先 + review 反復) + 規範違反防止 hook 機械強制化** | 本 session 規範違反 (規範変更時の `docs/draft/` 起案 + `/new-task` skip 違反) の retroactive リカバリ + 再発防止のため、ルール 1 (依存先タスク列 + 必読義務) + ルール 2 (reviewer 3+ / CRITICAL+HIGH+MEDIUM=0 反復) を規範化し、`draft-flow-guard.sh` を `.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/**/*.md` に拡張する。完成すれば AI が規範変更時に draft 経由なしで直接 Edit すると hook が BLOCK し、本 session 規範違反パターンが再発しなくなる (Step 1+2 ✅ 完了、Step 3 🔄 進行中、Step 4-9 🔲 未着手、本 session で Step 3 完遂、Step 4-9 は次 session 持ち越し想定) | — | [task-40-task-mgmt-rules-with-draft-flow-enforcement.md](task-40-task-mgmt-rules-with-draft-flow-enforcement.md) ← draft: [`docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md`](../draft/task-mgmt-rules-with-draft-flow-enforcement.md) |
+| 40 | ✅ | **Task: タスク管理ルール拡張 (依存先 + review 反復) + 規範違反防止 hook 機械強制化** | 本 session 規範違反 (規範変更時の `docs/draft/` 起案 + `/new-task` skip 違反) の retroactive リカバリ + 再発防止のため、ルール 1 (依存先タスク列 + 必読義務) + ルール 2 (reviewer 3+ / CRITICAL+HIGH+MEDIUM=0 反復) を規範化し、`draft-flow-guard.sh` を `.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/docs/**/*.md` に拡張する。完成すれば AI が規範変更時に draft 経由なしで直接 Edit すると hook が BLOCK し、本 session 規範違反パターンが再発しなくなる (Step 1-9 全 ✅、smoke 13/13 PASS、Step 9 refactor skip [規範違反防止が core 目的]) | — | [task-40-task-mgmt-rules-with-draft-flow-enforcement.md](task-40-task-mgmt-rules-with-draft-flow-enforcement.md) ← draft: [`docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md`](../draft/task-mgmt-rules-with-draft-flow-enforcement.md) |
 |    | ✅ | Step 1 | ルール 1 (依存先タスク列 + 必読義務) を 3 file (task-management.md / _TASK_TEMPLATE.md / list.md template) に規範化 | | |
 |    | ✅ | Step 2 | ルール 2 (reviewer 3+ / 反復) を 3 file (workflow.md / _DRAFT_TEMPLATE.md / design-review.md) に規範化 | | |
-|    | 🔄 | Step 3 | retroactive draft 起案 (本 file) + /new-task で list.md 反映 (本 subagent で実施中) | | |
-|    | 🔲 | Step 4 | draft-flow-guard.sh 拡張 (新 path pattern + retroactive draft case + bypass env) | | |
-|    | 🔲 | Step 5 | modes.md 遵守事項 2 例外条項追加 + CLAUDE.md Critical Lessons HIGH 級教訓追加 | | |
-|    | 🔲 | Step 6 | smoke test 新設 (rule-change-draft-flow-guard-smoke.sh) | | |
-|    | 🔲 | Step 7 | (テスト設計レビュー) reviewer 3+ 並列、CRITICAL+HIGH+MEDIUM=0 まで反復、本ルール 2 自己適用 | | |
-|    | 🔲 | Step 8 | (テスト合格) smoke 全 PASS + 既存 regression 0 + grep 検証 | | |
-|    | 🔲 | Step 9 | (リファクタリング) 3 観点判定、不要なら skip 明示 | | |
+|    | ✅ | Step 3 | retroactive draft 起案 + /new-task で list.md 反映 (PR #10 で完遂) | | |
+|    | ✅ | Step 4 | draft-flow-guard.sh 拡張 (新 path pattern + retroactive draft case + bypass env、commit `3f9068f` iter1 + `e828cf2` iter2 HIGH-A/C/D/G fix) | | |
+|    | ✅ | Step 5 | modes.md 遵守事項 2 例外条項追加 + CLAUDE.md Critical Lessons HIGH 級教訓追加 (commit `3f9068f` modes.md + `cdf436e` CLAUDE.md) | | |
+|    | ✅ | Step 6 | smoke test 新設 (rule-change-draft-flow-guard-smoke.sh、iter1 6 case `e75a435` + iter2 11+ case `ac086d3` HIGH-EFI + MEDIUM 1-4,10) | | |
+|    | ✅ | Step 7 | (テスト設計レビュー) iter1-3 で iter2 HIGH 6 + MEDIUM 8 全件解消、iter3 median confidence 0.892 で CRITICAL+HIGH=0 達成 (5 reviewer 並列、tdd 0.93/test-auto 0.88/qa 0.88/sec 0.85/arch 0.92)、残 MEDIUM 7 + LOW 11 は副産物 entry 転送 (user 意図的 task-40 完了化、上限 5 回中 3 回消費で済) | | |
+|    | ✅ | Step 8 | (テスト合格) iter3 smoke 13/13 PASS (Case 14 YAML skip) + iter4 X2 commit `f4f0939` 後も regression 0、grep 検証 PASS (modes.md「規範変更」2 hits + CLAUDE.md「ECC_RULE_CHANGE_GUARD_OFF」1 hit) | | |
+|    | ✅ | Step 9 | (リファクタリング) skip 明示: 規範違反防止が core 目的、refactor 余地少。iter3 X commit `001041e` で dead code 削除 + retroactive warn DRY 化、iter4 X2 commit `f4f0939` で approved_by leading trim + awk ^--> 行頭アンカー実施済 | | |
 
 <!--
 記入ルール:

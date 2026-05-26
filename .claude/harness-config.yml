@@ -83,6 +83,17 @@ bash_whitelist_path: .claude/bash-whitelist.txt
 #   export HC_DOCS_APPROVED_DIR=design,research  # CSV 複数値
 docs_approved_dir: ""
 
+# === Rule Change Guard (task-40) ===
+# draft-flow-guard.sh が消費。.claude/rules/*.md / .claude/commands/*.md / .claude/templates/docs/**/*.md
+# への新規 Write 時に対応 draft の approved_at 非空を要求する規範変更 BLOCK 機構。
+# 既存 docs/ 直下 block (task-21 W2.3) と独立に enable/disable 可能。
+#
+# - rule_change_guard_enabled: false で task-40 拡張部のみ完全停止 (docs/ 直下 block は維持)
+#
+# env 上書き例:
+#   export HC_RULE_CHANGE_GUARD_ENABLED=false   # task-40 拡張のみ無効化
+rule_change_guard_enabled: true
+
 # === Hook state ディレクトリ ===
 # 各 hook が cleared/marker 等の状態を書き出す位置。
 # プロジェクトルートからの相対 path。.gitignore で .claude/.* を除外推奨。
