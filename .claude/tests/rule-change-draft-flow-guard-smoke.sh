@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# rule-change-draft-flow-guard-smoke.sh — task-40 Step 7 iter2 smoke
+# rule-change-draft-flow-guard-smoke.sh — task-40 Step 7 iter3 smoke
 #
 # 設計起源:
 #   docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)
 #   Step 4 で拡張した draft-flow-guard.sh の新 path pattern + frontmatter parse +
 #   bypass env + 既存 docs/ 直下 BLOCK 回帰の検証。
 #   Step 7 iter2 (HIGH-EFI + MEDIUM 1-4, 10) で 6 case → 12 case へ拡張。
+#   Step 7 iter3 (MEDIUM-A/B) で Case 3 fixture 仕様明確化 + Case 9 WARN 分離。
 #
 # 対象 hook:
 #   .claude/hooks/draft-flow-guard.sh (PreToolUse Edit/Write、task-40 拡張版)
@@ -13,13 +14,17 @@
 # 検証範囲 (12 ケース):
 #   Case 1:  .claude/rules/foo.md 新規 Write + 対応 draft 不在 → BLOCK (exit 2) + stderr "BLOCK"
 #   Case 2:  .claude/rules/foo.md 新規 Write + 対応 draft あり (approved_at 非空) → PASS
-#   Case 3:  .claude/rules/foo.md 新規 Write + 対応 draft あり (approved_at 空) → BLOCK + stderr "BLOCK"
+#   Case 3:  .claude/rules/foo.md 新規 Write + 対応 draft あり (approved_at key 不在) → BLOCK + stderr "BLOCK"
+#            ※ key 不在 (draft 存在のみ) の境界値。Case 10 (空白のみ) / Case 11 (key only 値なし) と
+#               合わせて 3 境界値を網羅:
+#               Case 3 = approved_at key 不在 / Case 10 = 空白のみ / Case 11 = key only
 #   Case 4:  .claude/templates/docs/tasks/foo.md 新規 Write + retroactive: true → PASS + warn
 #   Case 5:  .claude/rules/foo.md 新規 Write + ECC_RULE_CHANGE_GUARD_OFF=1 → PASS
 #   Case 6:  docs/new-feature.md 新規 Write + 対応 draft 不在 → BLOCK (既存挙動回帰)
 #   Case 7:  .claude/commands/foo.md 新規 Write + 対応 draft 不在 → BLOCK (HIGH-E)
 #   Case 8:  既存 .claude/rules/<existing>.md Edit (tool_name=Edit) → PASS (HIGH-F)
 #   Case 9:  ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 で .claude/rules/foo.md Write → PASS + bypass.log (HIGH-I)
+#            ※ bypass.log 記録は best-effort: 記録あり=PASS、記録なし=WARN (PASS 扱いだが別カウント)
 #   Case 10: approved_at: (空白のみ) draft → BLOCK (MEDIUM-1a)
 #   Case 11: approved_at: (key only、値なし) draft → BLOCK (MEDIUM-1b)
 #   Case 12: .claude/rules/sub/foo.md (深さ 2、out of scope) Write → PASS (MEDIUM-10)
@@ -34,7 +39,7 @@
 #   bash .claude/tests/rule-change-draft-flow-guard-smoke.sh
 #
 # 終了コード:
-#   0 = 全 PASS / 1 = 1 件以上 FAIL
+#   0 = 全 PASS (WARN あり含む) / 1 = 1 件以上 FAIL
 
 set -uo pipefail
 
@@ -65,7 +70,9 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 
 PASS=0
 FAIL=0
+WARN=0
 FAILED_CASES=()
+WARNED_CASES=()
 
 # hook input JSON (PreToolUse Edit/Write)
 hook_input() {
@@ -159,7 +166,7 @@ case1_rules_no_draft_block() {
 case2_rules_approved_pass() {
   local label="Case 2: .claude/rules/case2.md w/ approved draft → PASS"
   local fp="${TMP_ROOT}/.claude/rules/case2.md"
-  write_draft "${TMP_ROOT}/docs/draft/case2.md" "2026-05-26" ""
+  write_draft "${TMP_ROOT}/docs/draft/case2.md" "2026-05-26"
   local rc=0
   run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
 
@@ -173,11 +180,18 @@ case2_rules_approved_pass() {
   fi
 }
 
-# === Case 3: .claude/rules/foo.md + draft (approved_at 空) → BLOCK + stderr "BLOCK" ===
+# === Case 3: .claude/rules/foo.md + draft (approved_at key 不在) → BLOCK + stderr "BLOCK" ===
+# 仕様 (MEDIUM-A 案 b): draft は存在するが frontmatter に approved_at key 自体が不在。
+# write_draft に "" を渡すと [ -n "$approved_at" ] が false で key 自体が生成されない。
+# これは意図通りの境界値 = "draft 存在 + approved_at key 不在"。
+# 3 境界値全網羅:
+#   Case 3  = approved_at key 不在 (本 Case)
+#   Case 10 = approved_at: <空白のみ> (key あり・値が空白)
+#   Case 11 = approved_at: (key only・値なし改行直後)
 case3_rules_unapproved_block() {
-  local label="Case 3: .claude/rules/case3.md w/ unapproved draft → BLOCK (exit 2) + stderr BLOCK"
+  local label="Case 3: .claude/rules/case3.md w/ draft (approved_at key absent) → BLOCK (exit 2) + stderr BLOCK"
   local fp="${TMP_ROOT}/.claude/rules/case3.md"
-  # draft 存在するが approved_at 空 (frontmatter に key 自体なし)
+  # draft 存在するが approved_at key 自体が frontmatter に不在 (write_draft に "" 渡しで key skip)
   write_draft "${TMP_ROOT}/docs/draft/case3.md" "" ""
   local rc=0
   local stderr_out
@@ -287,6 +301,12 @@ case8_existing_rules_edit_pass() {
 }
 
 # === Case 9 (HIGH-I): ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 + .claude/rules/foo.md Write → PASS + bypass.log ===
+# MEDIUM-B: bypass.log 記録を 3 段階に分離:
+#   完全 PASS: rc=0 && bypass_logged=1  → "PASS"
+#   部分 PASS: rc=0 && bypass_logged=0  → "WARN: bypass.log 未記録" (PASS 扱い、WARN カウント)
+#   FAIL:      rc!=0                    → "FAIL"
+# WARN は exit code 0 を維持しつつ summary で別途報告。
+# iter3-A で bypass-logger.sh sanitize が完了していれば bypass_logged=1 (完全 PASS) に到達可。
 case9_override_env_pass_and_bypass_log() {
   local label="Case 9 (HIGH-I): ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 → PASS + bypass.log"
   local fp="${TMP_ROOT}/.claude/rules/case9.md"
@@ -306,11 +326,14 @@ case9_override_env_pass_and_bypass_log() {
     PASS=$((PASS + 1))
     printf "  PASS: %s\n" "$label"
   elif [ "$rc" -eq 0 ] && [ "$bypass_logged" -eq 0 ]; then
-    # bypass.log 未記録は bypass-logger.sh が tmp 環境で機能しない場合。
-    # PASS (exit 0) のみ必須要件とし、bypass.log は best-effort として warn のみ
+    # MEDIUM-B: bypass.log 未記録は WARN 扱い (PASS カウント + WARN カウント)
+    # bypass-logger.sh が tmp 環境で機能しない場合に発生する可能性がある。
+    # exit code は 0 維持 (PASS_COUNT に算入)、WARN_COUNT を別途インクリメント。
     PASS=$((PASS + 1))
-    printf "  PASS (bypass.log best-effort): %s\n" "$label"
-    printf "    NOTE: bypass.log not recorded (bypass-logger.sh may need CLAUDE_PROJECT_DIR to real project)\n"
+    WARN=$((WARN + 1))
+    WARNED_CASES+=("$label: bypass.log 未記録 (bypass-logger.sh が CLAUDE_PROJECT_DIR を解決できていない可能性)")
+    printf "  WARN: %s\n" "$label"
+    printf "    NOTE: bypass.log not recorded — verify bypass-logger.sh is working correctly\n"
   else
     FAIL=$((FAIL + 1))
     FAILED_CASES+=("$label (rc=$rc, bypass_logged=$bypass_logged)")
@@ -372,7 +395,7 @@ case12_rules_subdirectory_depth2_pass() {
   fi
 }
 
-printf "===== rule-change-draft-flow-guard-smoke (task-40 Step 7 iter2, 12 cases) =====\n\n"
+printf "===== rule-change-draft-flow-guard-smoke (task-40 Step 7 iter3, 12 cases) =====\n\n"
 
 case1_rules_no_draft_block
 case2_rules_approved_pass
@@ -390,6 +413,12 @@ case12_rules_subdirectory_depth2_pass
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"
 printf "PASS: %d / %d\n" "$PASS" "$TOTAL"
+if [ "$WARN" -gt 0 ]; then
+  printf "WARN: %d (PASS 扱い、要確認)\n" "$WARN"
+  for w in "${WARNED_CASES[@]}"; do
+    printf "  - %s\n" "$w"
+  done
+fi
 printf "FAIL: %d / %d\n" "$FAIL" "$TOTAL"
 
 if [ "$FAIL" -gt 0 ]; then
@@ -397,9 +426,17 @@ if [ "$FAIL" -gt 0 ]; then
   for c in "${FAILED_CASES[@]}"; do
     printf "  - %s\n" "$c"
   done
-  printf "\nsummary: %d/%d PASS\n" "$PASS" "$TOTAL"
+  printf "\nsummary: %d/%d PASS" "$PASS" "$TOTAL"
+  if [ "$WARN" -gt 0 ]; then
+    printf " (%d WARN)" "$WARN"
+  fi
+  printf "\n"
   exit 1
 fi
 
-printf "\nsummary: %d/%d PASS\n" "$PASS" "$TOTAL"
+printf "\nsummary: %d/%d PASS" "$PASS" "$TOTAL"
+if [ "$WARN" -gt 0 ]; then
+  printf " (%d WARN)" "$WARN"
+fi
+printf "\n"
 exit 0
