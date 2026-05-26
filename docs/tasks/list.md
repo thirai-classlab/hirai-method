@@ -98,9 +98,9 @@
 |    | ✅ | Step 4 | draft-flow-guard.sh 拡張 (新 path pattern + retroactive draft case + bypass env、commit `3f9068f` iter1 + `e828cf2` iter2 HIGH-A/C/D/G fix) | | |
 |    | ✅ | Step 5 | modes.md 遵守事項 2 例外条項追加 + CLAUDE.md Critical Lessons HIGH 級教訓追加 (commit `3f9068f` modes.md + `cdf436e` CLAUDE.md) | | |
 |    | ✅ | Step 6 | smoke test 新設 (rule-change-draft-flow-guard-smoke.sh、iter1 6 case `e75a435` + iter2 11+ case `ac086d3` HIGH-EFI + MEDIUM 1-4,10) | | |
-|    | 🔄 | Step 7 | (テスト設計レビュー) iter1 (5 reviewer 並列、C0/H13/M21/L11) + iter2 主要 4 commit 反映済 + iter2 reviewer 5 並列検証中 (収束条件 CRITICAL+HIGH+MEDIUM=0、上限 5 回中残 4 回) | | |
-|    | 🔲 | Step 8 | (テスト合格) smoke 11+ 全 PASS + 既存 regression 0 + grep 検証 | | |
-|    | 🔲 | Step 9 | (リファクタリング) 3 観点判定、不要なら skip 明示 | | |
+|    | ✅ | Step 7 | (テスト設計レビュー) iter1-3 で iter2 HIGH 6 + MEDIUM 8 全件解消、iter3 median confidence 0.892 で CRITICAL+HIGH=0 達成 (5 reviewer 並列、tdd 0.93/test-auto 0.88/qa 0.88/sec 0.85/arch 0.92)、残 MEDIUM 7 + LOW 11 は副産物 entry 転送 (user 意図的 task-40 完了化、上限 5 回中 3 回消費で済) | | |
+|    | 🔄 | Step 8 | (テスト合格) iter3 smoke 13/13 PASS (Case 14 YAML skip) + 既存 regression 0、grep 検証 (modes.md 例外条項 + CLAUDE.md HIGH 教訓) PASS | | |
+|    | 🔄 | Step 9 | (リファクタリング) skip 明示: 規範違反防止が core 目的、refactor 余地少。iter3 内で X が dead code 削除 + retroactive warn DRY 化を実施済 | | |
 
 <!--
 記入ルール:
