@@ -87,7 +87,7 @@ unset -f _hc_resolve_config
 # (= 既存の挙動: env で先行設定してあっても YAML が上書きする)。
 # 新規キーを追加した場合は本リストにも追加すること。
 #
-# task-44 (2026-05-27): feature toggle 21 + review 13 = 新 34 key 追加。
+# task-44 (2026-05-27): feature toggle 21 + review 15 = 新 36 key 追加。
 # 各 key は yml 未設定でも本 file 内 defaults で fallback 動作可能 (backward compat)。
 _HC_KNOWN_KEYS="\
 TASK_DIR \
@@ -169,8 +169,12 @@ REVIEW_ITERATION_MAX"
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
 # preset key 一覧は _HC_PRESET_KEYS に保持し、step 4 で復元時に参照する。
+# task-44 iter 2: known keys 一覧自体も _HC_KNOWN_KEYS_SNAPSHOT に保存
+# (Step 3 の env > YAML priority guard で「既知 key 外 = 動的 env check」判定用)
 _HC_PRESET_KEYS=""
+_HC_KNOWN_KEYS_SNAPSHOT=""
 for _hc_k in $_HC_KNOWN_KEYS; do
+  _HC_KNOWN_KEYS_SNAPSHOT="$_HC_KNOWN_KEYS_SNAPSHOT $_hc_k"
   eval "_hc_v=\${HC_${_hc_k}-}"
   eval "_hc_set=\${HC_${_hc_k}+set}"
   # 「未設定」 と 「空文字列で設定済」 を区別するため `+set` を使う。
@@ -287,6 +291,40 @@ HC_REVIEW_REQUIRED_SECURITY="false"
 HC_REVIEW_MIN_COUNT_SECURITY="1"
 HC_REVIEW_ITERATION_MAX="5"
 
+# --- 行末コメント strip helper (task-44 iter 2 MEDIUM-2) ---
+# yml `key: value   # comment` の value 側から行末 ` # comment` を除去する。
+# 値内に # を含めたい場合は quote 必須 ('foo#bar' or "foo#bar")。
+# クォート内の # は strip しない (`'foo # not comment'` → `'foo # not comment'` のまま、
+# 後段の _hc_normalize でクォート strip される)。
+#
+# 注意:
+#   - `[[:space:]]#*` で空白 + # 以降を除去 (非クォート値のみ)
+#   - クォート始まりの値は閉じクォートまでを保持、それ以降は無視
+_hc_strip_trailing_comment() {
+  local v="$1"
+  case "$v" in
+    \"*)
+      # ダブルクォート: 開始 \" 後の閉じ \" までを内容として保持
+      local rest="${v#\"}"
+      local inside="${rest%%\"*}"
+      printf '%s' "\"${inside}\""
+      return
+      ;;
+    \'*)
+      # シングルクォート: 開始 ' 後の閉じ ' までを内容として保持
+      local rest="${v#\'}"
+      local inside="${rest%%\'*}"
+      printf '%s' "'${inside}'"
+      return
+      ;;
+  esac
+  # 非クォート値: ` #` (スペース + #) 以降を strip
+  v="${v%%[[:space:]]#*}"
+  # 末尾空白 trim (strip 後の trailing space を除去)
+  v="${v%"${v##*[![:space:]]}"}"
+  printf '%s' "$v"
+}
+
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
 _hc_normalize() {
@@ -342,16 +380,52 @@ else
     # 値の前後空白 trim
     _hc_val="${_hc_val#"${_hc_val%%[![:space:]]*}"}"
     _hc_val="${_hc_val%"${_hc_val##*[![:space:]]}"}"
-    # env > YAML priority guard (task-44 hot fix):
-    # 既に env で `HC_<KEY>` が設定済 (空文字含む) ならば YAML 値で上書きしない。
-    # _HC_KNOWN_KEYS の Step 1 snapshot は known keys のみ対象だったが、
-    # 任意 key (例: HC_FEATURE_<NAME>_ENABLED) でも env > YAML を機能させる。
-    eval "_hc_preset=\${HC_${_hc_key_upper}+set}"
-    if [ "${_hc_preset:-}" = "set" ]; then
-      unset _hc_preset
-      continue
-    fi
-    unset _hc_preset
+    # 行末コメント strip (task-44 iter 2 MEDIUM-2)
+    # `key: value   # comment` → `value`、quote 内 # は保持
+    _hc_val=$(_hc_strip_trailing_comment "$_hc_val")
+    # env > YAML priority guard (task-44 iter 2 CRITICAL-1 fix):
+    # 2 段判定で env > YAML を保証する:
+    #
+    # (a) _HC_KNOWN_KEYS 内の既知 key:
+    #     Step 1 snapshot (_HC_PRESET_KEYS) のみを参照し、env で先行設定された場合のみ
+    #     YAML 上書きをスキップする。
+    #     旧実装は Step 2 defaults 適用後の env を check していたため、
+    #     defaults で set 済の既知 key は yml で上書きできない regression を起こしていた。
+    #
+    # (b) _HC_KNOWN_KEYS 外の任意 key (例: 採用先固有 key、テスト架空 key):
+    #     Step 1 snapshot にない場合のみ、現在 env を動的 check (旧実装の挙動を維持)。
+    #     これらの key は Step 2 defaults で set されないため、env に既に set されていれば
+    #     preset として確定し YAML 上書きをスキップする。
+    #
+    # _HC_PRESET_KEYS は Step 1 snapshot 時に space-separated で構築されている。
+    # 先頭末尾に space を付けて完全一致 match を保証。
+    case " $_HC_PRESET_KEYS " in
+      *" ${_hc_key_upper} "*)
+        # (a) 既知 key かつ Step 1 で env preset 済 → YAML skip
+        continue
+        ;;
+      *)
+        # (b) 既知 key 外 → 動的 env check (旧実装の挙動を維持)
+        #     既知 key の場合は Step 2 defaults で set 済なので必ず "set" 判定
+        #     → これだと regression なので、(b) は known key 外でのみ走らせる必要あり。
+        #     case " $_HC_KNOWN_KEYS " のチェックで known key か判定する。
+        case " $_HC_KNOWN_KEYS_SNAPSHOT " in
+          *" ${_hc_key_upper} "*)
+            # 既知 key で Step 1 snapshot に無い → env preset されていない → YAML 採用
+            : # fall through to YAML parse
+            ;;
+          *)
+            # 未知 key → 動的 env check
+            eval "_hc_preset=\${HC_${_hc_key_upper}+set}"
+            if [ "${_hc_preset:-}" = "set" ]; then
+              unset _hc_preset
+              continue
+            fi
+            unset _hc_preset
+            ;;
+        esac
+        ;;
+    esac
     # 配列構文 [a, b, c] 判定
     case "$_hc_val" in
       \[*\])
@@ -400,7 +474,7 @@ done
 for _hc_k in $_HC_PRESET_KEYS; do
   unset "_HC_PRESET_${_hc_k}"
 done
-unset _HC_PRESET_KEYS _HC_KNOWN_KEYS
+unset _HC_PRESET_KEYS _HC_KNOWN_KEYS _HC_KNOWN_KEYS_SNAPSHOT
 unset _hc_k _hc_v
 
 # --- protected_paths 派生値 ---
@@ -517,6 +591,13 @@ unset _hc_val _hc_inner _hc_inner_trim _hc_list _hc_items _hc_item _hc_norm _hc_
 # 値判定:
 #   "false" / "False" / "FALSE" / "0" / "off" / "no" → disabled (return 1)
 #   それ以外 (空文字含む) → enabled (return 0、backward compat for safety)
+#
+# 注意 (task-44 iter 2 MEDIUM-2):
+#   - 行末コメントは yml load 時 (Step 3 parser) に strip 済
+#     例: `feature_foo_enabled: false  # disable temporarily` も "false" として load
+#   - quote 内 # は保持 (yml `feature_foo_enabled: 'false # keep'` → "'false # keep'" → quote
+#     strip 後 "false # keep" は上記判定外で enabled 扱い、quote する場合は false trigger 不可能)
+#   - 引数欠如時 (`is_feature_enabled ""` or 引数なし) は safe default として ON (return 0) + stderr WARN
 #
 # 例:
 #   if ! is_feature_enabled loop_mode_enforcement; then

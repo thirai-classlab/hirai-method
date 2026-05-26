@@ -19,7 +19,7 @@
 
 ## Task 完了条件 (DoD)
 
-- [ ] `.claude/harness-config.yml` に新 36 key 追加 (`grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13)
+- [ ] `.claude/harness-config.yml` に新 36 key 追加 (`grep -cE '^feature_[a-z0-9_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z0-9_]+:' .claude/harness-config.yml` ≥ 15、digit-inclusive で `feature_why_x5_enforcement_enabled` の `5` 計上)
 - [ ] `.claude/hooks/lib/config-loader.sh` で 34 key load + `is_feature_enabled` 関数追加 (`declare -f is_feature_enabled` で関数存在確認)
 - [ ] smoke `.claude/tests/config-feature-toggles-smoke.sh` 6 cases PASS
 - [ ] 既存 smoke regression 0 (config-loader 経由の全 hook smoke)
@@ -39,10 +39,10 @@ feature toggle と reviewer 制御の yml 化基盤を整えるため、`harness
 
 | Step | Status | 作業概要 | 完了条件 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 13) | `grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13 |
-| 2 | 🔲 | `config-loader.sh` 拡張 (34 key load + `is_feature_enabled` 関数) | `bash -c 'source .claude/hooks/lib/config-loader.sh && declare -f is_feature_enabled'` で関数存在確認 |
-| 3 | 🔲 | smoke `config-feature-toggles-smoke.sh` 新設 (6 cases) | `bash .claude/tests/config-feature-toggles-smoke.sh` 6/6 PASS |
-| 4 | 🔲 | (テスト設計レビュー) reviewer 5+ 並列 iter 1+ (yml schema + shell 両軸、subagent 並列) | iter 5 回上限内で収束 (CRITICAL+HIGH+MEDIUM=0) |
+| 1 | ✅ | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 15) | `grep -cE '^feature_[a-z0-9_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z0-9_]+:' .claude/harness-config.yml` ≥ 15 (digit-inclusive、iter 2 で実測 21 + 15 = 36 hit 確認) |
+| 2 | ✅ | `config-loader.sh` 拡張 (36 key load + `is_feature_enabled` 関数 + iter 2 CRITICAL-1 fix: `_HC_PRESET_KEYS` snapshot ベース env guard + 行末コメント strip) | iter 2 で関数存在確認 + Case 7 CRITICAL-1 regression 解消確認 |
+| 3 | ✅ | smoke `config-feature-toggles-smoke.sh` 新設 (iter 1 6 cases + iter 2 で 3 cases 追加 = 9 cases) | iter 2 実測 9/9 PASS |
+| 4 | 🔄 | (テスト設計レビュー) reviewer 5+ 並列 iter 1 完了 → iter 2 統合 fix 実施 (CRITICAL+HIGH+MEDIUM=0 目標) | iter 5 回上限内で収束 (iter 2 で C-1/C-2/H-1〜H-6/M-1〜M-3 fix 完了、iter 3 で再 review 予定) |
 | 5 | 🔲 | (テスト合格) 新 smoke + 既存 smoke regression 0 (config-loader 関連) | 新 3 case + 既存 smoke 全 PASS |
 | 6 | 🔲 | (リファクタリング) 3 観点判定 (持続可能性 / 汎用性 / 非冗長化) | skip 明示 or 実施 |
 

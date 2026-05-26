@@ -144,10 +144,14 @@ feature_failure_loop_detect_enabled: true         # failure-loop-detect
 
 ```bash
 # Feature toggle 参照 (Phase 2)
-if [[ "${HC_FEATURE_<NAME>_ENABLED:-true}" == "false" ]]; then
+# config-loader.sh の is_feature_enabled 関数で env > yml > defaults priority を統一的に判定
+# (大小文字無視 / 行末コメント strip / 引数欠如時 safe default ON 等の挙動を関数に集約)
+if ! is_feature_enabled <name>; then
   exit 0   # feature OFF で no-op
 fi
 ```
+
+> ⚠️ 旧サンプル (`[[ "${HC_FEATURE_<NAME>_ENABLED:-true}" == "false" ]]`) は **大小文字無視 / 行末コメント strip / 0|off|no も同義扱い** が効かないため非推奨。task-44 iter 2 で `is_feature_enabled` 関数経由に統一 (MEDIUM-3 fix)。
 
 既存 hook level env (`HC_<HOOK>_ENABLED`) は subordinate として保持 (Phase 2 で feature key を新 layer 追加、hook level は backward compat)。
 
@@ -277,7 +281,7 @@ fi
 ## §6 DoD
 
 - [ ] `docs/draft/config-yml-feature-toggles-and-editor.md` 存在 + `approved_at` 非空
-- [ ] `.claude/harness-config.yml` に新 36 key 追加 (`feature_*_enabled` 21 + `review_*_*` 15: required 5 + min_count 5 + max_count 4 + iteration_max 1)
+- [ ] `.claude/harness-config.yml` に新 36 key 追加 (`grep -cE '^feature_[a-z0-9_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z0-9_]+:' .claude/harness-config.yml` ≥ 15、digit-inclusive で `feature_why_x5_enforcement_enabled` の `5` 計上)
 - [ ] `.claude/hooks/lib/config-loader.sh` で 34 key load + `is_feature_enabled` 関数追加
 - [ ] 21+ 件 hook に feature check 追加 (各 hook 冒頭、staging 戦略)
 - [ ] 4 件 review command に yml 参照 logic 追加

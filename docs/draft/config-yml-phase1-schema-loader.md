@@ -45,7 +45,7 @@ reviewer 制御の smoke は task-45 で扱う (本 task は yml + loader のみ
 
 | Step | Status | 作業概要 | 完了条件 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 13) | `grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13 |
+| 1 | 🔲 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 15) | `grep -cE '^feature_[a-z0-9_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z0-9_]+:' .claude/harness-config.yml` ≥ 15 (digit-inclusive、`feature_why_x5_enforcement_enabled` の `5` 計上) |
 | 2 | 🔲 | `config-loader.sh` 拡張 (34 key load + `is_feature_enabled` 関数) | `bash -c 'source .claude/hooks/lib/config-loader.sh && declare -f is_feature_enabled'` で関数存在確認 |
 | 3 | 🔲 | smoke `config-feature-toggles-smoke.sh` 新設 (6 cases) | `bash .claude/tests/config-feature-toggles-smoke.sh` 6/6 PASS |
 | 4 | 🔲 | (テスト設計レビュー) reviewer 5+ 並列 iter 1+ (yml schema + shell 両軸、subagent 並列) | iter 5 回上限内で収束 (CRITICAL+HIGH+MEDIUM=0) |
@@ -54,7 +54,7 @@ reviewer 制御の smoke は task-45 で扱う (本 task は yml + loader のみ
 
 ## §6 DoD
 
-- [ ] `.claude/harness-config.yml` に新 36 key 追加 (grep 検証 21 + 13)
+- [ ] `.claude/harness-config.yml` に新 36 key 追加 (grep 検証 `^feature_[a-z0-9_]+_enabled:` ≥ 21 + `^review_[a-z0-9_]+:` ≥ 15、digit-inclusive)
 - [ ] `.claude/hooks/lib/config-loader.sh` で 34 key load + `is_feature_enabled` 関数追加
 - [ ] smoke `config-feature-toggles-smoke.sh` 6 cases PASS
 - [ ] 既存 smoke regression 0 (config-loader 経由の hook 全件)

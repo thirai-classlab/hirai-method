@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# .claude/tests/config-feature-toggles-smoke.sh — task-44 Step 3
+# .claude/tests/config-feature-toggles-smoke.sh — task-44 Step 3 + iter 2
 #
 # 目的:
-#   config-loader.sh に追加される is_feature_enabled 関数の動作を 6 ケースで検証する。
+#   config-loader.sh に追加される is_feature_enabled 関数の動作を 9 ケースで検証する。
 #
 #   - Case 1: feature toggle ON (yml default true + env unset) で exit 0
 #   - Case 2: feature toggle OFF (HC_FEATURE_*_ENABLED=false) で exit 1
@@ -10,6 +10,10 @@
 #   - Case 4: env override 優先 (yml false + env HC_FEATURE_*_ENABLED=true) で exit 0
 #   - Case 5: case insensitive (HC_FEATURE_FOO_ENABLED=False) で exit 1
 #   - Case 6: 関数存在確認 (declare -f is_feature_enabled で定義を確認)
+#   - Case 7: (iter 2 追加) yml false + env unset で OFF
+#             production feature 名 loop_mode_enforcement 使用 (CRITICAL-1 regression 検出)
+#   - Case 8: (iter 2 追加) review_* key 動作確認 (yml override で int 値 + bool 値 load)
+#   - Case 9: (iter 2 追加) 引数なし呼び出し `is_feature_enabled ""` で safe default ON
 #
 # 設計:
 #   - 一時 yml file を /tmp/ に Write してテスト用 yml として使用
@@ -75,20 +79,25 @@ _record() {
 
 # 一時 yml を作成して HC_CONFIG_PATH を設定するヘルパー
 # $1 = yml content string
+# $2 = case id (file 名 衝突回避用、default = "default")
 # sets TMP_YML (path) に書き込む
 _write_tmp_yml() {
   local content="$1"
-  TMP_YML="${TMP_DIR}/test-harness-config-$$.yml"
+  local case_id="${2:-default}"
+  TMP_YML="${TMP_DIR}/test-harness-config-${case_id}-$$.yml"
   printf '%s\n' "$content" > "$TMP_YML"
 }
 
-# env 汚染防止: HC_FEATURE_* 系をすべて unset
+# env 汚染防止: HC_FEATURE_* 系 + HC_REVIEW_* 系をすべて unset
 _cleanup_feature_envs() {
   unset HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED 2>/dev/null || true
   unset HC_FEATURE_FOO_ENABLED 2>/dev/null || true
   unset HC_FEATURE_BAR_ENABLED 2>/dev/null || true
   unset HC_FEATURE_NONEXISTENT_FEATURE_ENABLED 2>/dev/null || true
   unset HC_FEATURE_X_ENABLED 2>/dev/null || true
+  # iter 2 追加 (Case 8 review_* 系)
+  unset HC_REVIEW_REQUIRED_DESIGN 2>/dev/null || true
+  unset HC_REVIEW_MIN_COUNT_TEST 2>/dev/null || true
   unset HC_CONFIG_PATH 2>/dev/null || true
 }
 
@@ -100,7 +109,7 @@ _cleanup_feature_envs() {
 _case_1() (
   set -uo pipefail
   _cleanup_feature_envs
-  _write_tmp_yml "feature_loop_mode_enforcement_enabled: true"
+  _write_tmp_yml "feature_loop_mode_enforcement_enabled: true" "case1"
   export HC_CONFIG_PATH="$TMP_YML"
   unset HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED 2>/dev/null || true
   # config-loader を source して関数 load
@@ -121,7 +130,7 @@ _case_1() (
 _case_2() (
   set -uo pipefail
   _cleanup_feature_envs
-  _write_tmp_yml "feature_loop_mode_enforcement_enabled: true"
+  _write_tmp_yml "feature_loop_mode_enforcement_enabled: true" "case2"
   export HC_CONFIG_PATH="$TMP_YML"
   export HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED="false"
   # shellcheck source=/dev/null
@@ -146,7 +155,7 @@ _case_3() (
   set -uo pipefail
   _cleanup_feature_envs
   # yml に feature_nonexistent_feature_enabled は含まない (空 yml)
-  _write_tmp_yml "task_dir: docs/tasks"
+  _write_tmp_yml "task_dir: docs/tasks" "case3"
   export HC_CONFIG_PATH="$TMP_YML"
   unset HC_FEATURE_NONEXISTENT_FEATURE_ENABLED 2>/dev/null || true
   # shellcheck source=/dev/null
@@ -166,7 +175,7 @@ _case_3() (
 _case_4() (
   set -uo pipefail
   _cleanup_feature_envs
-  _write_tmp_yml "feature_x_enabled: false"
+  _write_tmp_yml "feature_x_enabled: false" "case4"
   export HC_CONFIG_PATH="$TMP_YML"
   export HC_FEATURE_X_ENABLED="true"
   # shellcheck source=/dev/null
@@ -186,7 +195,7 @@ _case_4() (
 _case_5() (
   set -uo pipefail
   _cleanup_feature_envs
-  _write_tmp_yml "feature_foo_enabled: true"
+  _write_tmp_yml "feature_foo_enabled: true" "case5"
   export HC_CONFIG_PATH="$TMP_YML"
   export HC_FEATURE_FOO_ENABLED="False"
   # shellcheck source=/dev/null
@@ -208,11 +217,81 @@ _case_5() (
 _case_6() (
   set -uo pipefail
   _cleanup_feature_envs
-  _write_tmp_yml "task_dir: docs/tasks"
+  _write_tmp_yml "task_dir: docs/tasks" "case6"
   export HC_CONFIG_PATH="$TMP_YML"
   # shellcheck source=/dev/null
   . "$CONFIG_LOADER"
   declare -f is_feature_enabled >/dev/null 2>&1
+)
+
+# ============================================================
+# Case 7 (iter 2 追加): yml false + env unset で OFF
+# production feature 名 loop_mode_enforcement を使用、CRITICAL-1 regression を検出。
+# Step 2 defaults で HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED="true" が set 済の状態で
+# yml の false が正しく上書きできるか確認。
+# 旧実装 (Step 2 後の env を check) では BUG (yml false が無視されて enabled に判定)。
+# iter 2 fix (_HC_PRESET_KEYS snapshot ベース) で yml false が反映されて disabled になる。
+# ============================================================
+_case_7() (
+  set -uo pipefail
+  _cleanup_feature_envs
+  _write_tmp_yml "feature_loop_mode_enforcement_enabled: false" "case7"
+  export HC_CONFIG_PATH="$TMP_YML"
+  unset HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED 2>/dev/null || true
+  # shellcheck source=/dev/null
+  . "$CONFIG_LOADER"
+  if ! declare -f is_feature_enabled >/dev/null 2>&1; then
+    printf 'SKIP: is_feature_enabled not found\n' >&2
+    return 1
+  fi
+  # yml false が反映されて disabled (exit 1) を期待 → 反転して確認
+  if is_feature_enabled "loop_mode_enforcement"; then
+    # exit 0 は予期しない (CRITICAL-1 regression、yml false が無視されている)
+    return 1
+  fi
+  return 0
+)
+
+# ============================================================
+# Case 8 (iter 2 追加): review_* key 動作確認
+# yml で review_required_design=false + review_min_count_test=3 を設定し、
+# それぞれ HC_REVIEW_REQUIRED_DESIGN="false" / HC_REVIEW_MIN_COUNT_TEST="3" として
+# 正しく load されることを確認する (env 値が yml から書き込まれていることを確認)。
+# ============================================================
+_case_8() (
+  set -uo pipefail
+  _cleanup_feature_envs
+  # yml で bool false と int 3 を override
+  _write_tmp_yml "$(printf '%s\n%s' 'review_required_design: false' 'review_min_count_test: 3')" "case8"
+  export HC_CONFIG_PATH="$TMP_YML"
+  unset HC_REVIEW_REQUIRED_DESIGN 2>/dev/null || true
+  unset HC_REVIEW_MIN_COUNT_TEST 2>/dev/null || true
+  # shellcheck source=/dev/null
+  . "$CONFIG_LOADER"
+  # 値検証 (yml から書き込まれた値が export されているか)
+  [ "${HC_REVIEW_REQUIRED_DESIGN:-}" = "false" ] || return 1
+  [ "${HC_REVIEW_MIN_COUNT_TEST:-}" = "3" ] || return 1
+  return 0
+)
+
+# ============================================================
+# Case 9 (iter 2 追加): 引数なし呼び出しで safe default ON
+# is_feature_enabled "" or 引数なしで safe side (exit 0 = enabled) + stderr WARN
+# (test-automator MEDIUM-3、防御的プログラミング検証)
+# ============================================================
+_case_9() (
+  set -uo pipefail
+  _cleanup_feature_envs
+  _write_tmp_yml "task_dir: docs/tasks" "case9"
+  export HC_CONFIG_PATH="$TMP_YML"
+  # shellcheck source=/dev/null
+  . "$CONFIG_LOADER"
+  if ! declare -f is_feature_enabled >/dev/null 2>&1; then
+    printf 'SKIP: is_feature_enabled not found\n' >&2
+    return 1
+  fi
+  # 引数なし or 空文字 で exit 0 (safe default ON) を期待 (stderr WARN は許容)
+  is_feature_enabled "" 2>/dev/null
 )
 
 # ============================================================
@@ -243,6 +322,18 @@ fi
 
 if _case_6 2>/dev/null; then _record PASS 6 "is_feature_enabled function exists (declare -f)"
 else                         _record FAIL 6 "is_feature_enabled function exists (declare -f)"
+fi
+
+if _case_7 2>/dev/null; then _record PASS 7 "yml false + env unset → OFF (CRITICAL-1 regression check)"
+else                         _record FAIL 7 "yml false + env unset → OFF (CRITICAL-1 regression check)"
+fi
+
+if _case_8 2>/dev/null; then _record PASS 8 "review_* yml override (bool false + int 3)"
+else                         _record FAIL 8 "review_* yml override (bool false + int 3)"
+fi
+
+if _case_9 2>/dev/null; then _record PASS 9 "empty arg → safe default ON (exit 0)"
+else                         _record FAIL 9 "empty arg → safe default ON (exit 0)"
 fi
 
 # ============================================================
