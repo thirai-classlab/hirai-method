@@ -94,6 +94,26 @@ docs_approved_dir: ""
 #   export HC_RULE_CHANGE_GUARD_ENABLED=false   # task-40 拡張のみ無効化
 rule_change_guard_enabled: true
 
+# === Loop モード確認質問検出 hook (task-41) ===
+# Stop hook (.claude/hooks/loop-confirmation-detector.sh) が消費。
+# Loop モード稼働中、AI 最終 assistant message を regex 検出し「進めてもよいですか」「OK ですか」
+# 「お待ちします」等の確認質問パターンが含まれていれば `<system-reminder>` で次 turn 自律是正を強制。
+# Normal モードでは早期 exit (no-op)。
+#
+# - loop_confirmation_detection_enabled: false で hook 完全停止 (1 セッション、bypass.log 記録)
+# - loop_confirmation_patterns: 改行区切り regex リスト。空なら hook 内 default (13 pattern) 使用。
+#
+# env 上書き例:
+#   export HC_LOOP_CONFIRMATION_DETECTION_ENABLED=false
+#   export ECC_LOOP_CONFIRMATION_OFF=1   # session-scoped 一時 OFF
+#   export HC_LOOP_CONFIRMATION_PATTERNS=$'pattern_1\npattern_2'   # custom regex
+#
+# 設計起源: docs/draft/loop-confirmation-detector-hook.md §3.3
+loop_confirmation_detection_enabled: true
+# loop_confirmation_patterns: |
+#   custom_pattern_1
+#   custom_pattern_2
+
 # === Hook state ディレクトリ ===
 # 各 hook が cleared/marker 等の状態を書き出す位置。
 # プロジェクトルートからの相対 path。.gitignore で .claude/.* を除外推奨。
