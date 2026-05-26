@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# .claude/tests/loop-confirmation-detector-smoke.sh — task-41 Step 6 iter3
+# .claude/tests/loop-confirmation-detector-smoke.sh — task-41 Step 6 iter3 + 2026-05-27 拡張
 #
 # 設計起源:
 #   docs/draft/loop-confirmation-detector-hook.md §4 TDD 戦略
+#   2026-05-27 拡張: 自主ターン区切り keyword 6 件追加 (user 直接指示
+#     「続行可能なのに勝手に止まらないようにハーネス側で修正」)
 #
 # 対象 hook:
 #   .claude/hooks/loop-confirmation-detector.sh (Stop hook)
 #
-# 検証範囲 (12 ケース):
+# 検証範囲 (18 ケース、既存 12 + 新 6):
 #   Case 1: Loop モード、AI message に「進めてよいですか」→ additionalContext 注入確認
 #   Case 2: Loop モード、AI message に「OK ですか」→ additionalContext 注入確認
 #   Case 3: Loop モード、AI message に「次の指示をお待ちします」→ additionalContext 注入確認
@@ -20,6 +22,12 @@
 #   Case 10: Loop モード、AI message に「進めてよいですか」(Pattern 1 短形) → 注入確認
 #   Case 11: HC_LOOP_CONFIRMATION_PATTERNS=$'\n' (空行のみ) → default fallback → 確認質問検出 → 注入確認
 #   Case 12: jq 不在環境 → fail-open (exit 0、additionalContext 不在)
+#   Case 13: Loop + 「本 turn 完遂」 → 新 keyword で additionalContext 注入 (2026-05-27 拡張)
+#   Case 14: Loop + 「ターン区切り」 → 新 keyword で additionalContext 注入 (2026-05-27 拡張)
+#   Case 15: Loop + 「次 turn で Step 2 着手予定」 → 新 keyword で additionalContext 注入 (2026-05-27 拡張)
+#   Case 16: Loop + 「次回 fresh prompt」 → 新 keyword で additionalContext 注入 (2026-05-27 拡張)
+#   Case 17: Loop + 「context budget 警戒」 → 新 keyword で additionalContext 注入 (2026-05-27 拡張)
+#   Case 18: Loop + 「ここで一旦」 → 新 keyword で additionalContext 注入 (2026-05-27 拡張)
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs)
@@ -489,9 +497,124 @@ case12_jq_missing_fail_open() {
 }
 
 # --------------------------------------------------------------------------
+# Case 13 (2026-05-27 拡張): Loop モード、「本 turn 完遂」→ 新 keyword で注入
+# 起源: 2026-05-27 user 提示 transcript「本 turn 完遂: ...」予防的自主停止
+# --------------------------------------------------------------------------
+case13_loop_honturn_kanzui_inject() {
+  local label="Case 13: Loop + '本 turn 完遂' (新 keyword) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case13.jsonl"
+  _make_transcript "$tp" "本 turn 完遂: hook 実装 + smoke PASS。次 turn 開始時に Step 2 を予定。"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 14 (2026-05-27 拡張): Loop モード、「ターン区切り」→ 新 keyword で注入
+# 起源: 2026-05-27 user 提示 transcript「context budget 警戒のため本 turn ターン区切り」
+# --------------------------------------------------------------------------
+case14_loop_turn_kugiri_inject() {
+  local label="Case 14: Loop + 'ターン区切り' (新 keyword) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case14.jsonl"
+  _make_transcript "$tp" "本 task 主要部完了のためここで一区切り。ターン区切りとし新 session で継続。"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 15 (2026-05-27 拡張): Loop モード、「次 turn で Step 2 着手予定」→ 新 keyword で注入
+# 起源: 2026-05-27 user 提示 transcript「次 turn で Step 2 着手予定」予防的自主停止
+# --------------------------------------------------------------------------
+case15_loop_next_turn_chakushu_inject() {
+  local label="Case 15: Loop + '次 turn で Step 2 着手' (新 keyword) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case15.jsonl"
+  _make_transcript "$tp" "Step 1 完了。次 turn で Step 2 着手予定。本 session ここで停止。"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 16 (2026-05-27 拡張): Loop モード、「次回 fresh prompt」→ 新 keyword で注入
+# 起源: 2026-05-27 user 提示 transcript「次回 fresh prompt で...」予防的自主停止
+# --------------------------------------------------------------------------
+case16_loop_fresh_prompt_inject() {
+  local label="Case 16: Loop + '次回 fresh prompt' (新 keyword) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case16.jsonl"
+  _make_transcript "$tp" "本 turn 主要 work 完了。次回 fresh prompt で残り作業を進めます。"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 17 (2026-05-27 拡張): Loop モード、「context budget 警戒」→ 新 keyword で注入
+# 起源: 2026-05-27 user 提示 transcript「context budget 警戒のため本 turn ターン区切り」
+# --------------------------------------------------------------------------
+case17_loop_context_budget_keikai_inject() {
+  local label="Case 17: Loop + 'context budget 警戒' (新 keyword) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case17.jsonl"
+  # tier 警告未発火下での予防的自主停止 keyword
+  _make_transcript "$tp" "context budget 警戒のため一旦停止します。"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 18 (2026-05-27 拡張): Loop モード、「ここで一旦」→ 新 keyword で注入
+# 起源: 2026-05-27 自主ターン区切り発話の代表 phrase
+# --------------------------------------------------------------------------
+case18_loop_kokode_ittan_inject() {
+  local label="Case 18: Loop + 'ここで一旦' (新 keyword) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case18.jsonl"
+  _make_transcript "$tp" "Step 完了報告。ここで一旦停止します。"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # run all cases
 # --------------------------------------------------------------------------
-printf "===== loop-confirmation-detector-smoke (task-41 Step 6 iter3, 12 cases) =====\n\n"
+printf "===== loop-confirmation-detector-smoke (task-41 + 2026-05-27 拡張, 18 cases) =====\n\n"
 
 case1_loop_shimete_yoidesuka_inject
 case2_loop_ok_desuka_inject
@@ -505,6 +628,12 @@ case9_pattern7_alone
 case10_pattern1_susumete_yoi
 case11_pattern_empty_fallback_to_default
 case12_jq_missing_fail_open
+case13_loop_honturn_kanzui_inject
+case14_loop_turn_kugiri_inject
+case15_loop_next_turn_chakushu_inject
+case16_loop_fresh_prompt_inject
+case17_loop_context_budget_keikai_inject
+case18_loop_kokode_ittan_inject
 
 # --------------------------------------------------------------------------
 # result summary
