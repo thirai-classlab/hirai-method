@@ -24,7 +24,7 @@
 #   5. 確認質問 regex (default 13 パターン or HC_LOOP_CONFIRMATION_PATTERNS で override)
 #      に対し grep -E で照合
 #   6. 検出時:
-#      - bypass.log に violation-detected 記録
+#      - bypass.log に VIOLATION 記録
 #      - stdout に JSON `{"hookSpecificOutput":{"hookEventName":"Stop",
 #        "additionalContext":"..."}}` を出力
 #   7. 検出なしなら silent exit 0
@@ -33,6 +33,7 @@
 #   ECC_LOOP_CONFIRMATION_OFF=1                       ... 一時 OFF (1 セッション)
 #   HC_LOOP_CONFIRMATION_DETECTION_ENABLED=false      ... config レベル無効化
 #   HC_LOOP_CONFIRMATION_PATTERNS=<改行区切り>        ... regex 上書き
+#                                                       (空 / whitespace のみは無視し default に戻す)
 #
 # 失敗時の挙動:
 #   - exit 0 のみ (fail-open)。block しない (additionalContext 注入のみ)。
@@ -107,6 +108,12 @@ if [ -z "$transcript_path" ] || [ ! -f "$transcript_path" ]; then
   exit 0
 fi
 
+# システム機密 path への traversal を拒否 (security-M1)
+case "$transcript_path" in
+  /etc/*|/usr/*|/bin/*|/sbin/*|/sys/*|/proc/*|/var/log/*)
+    exit 0 ;;
+esac
+
 # --- 直前 assistant text 抽出 (末尾 50 行) ---
 # why-x5-violation-detect.sh と同じ抽出戦略 (transcript 形式変動への耐性確保)
 last_assistant=$(tail -n 50 "$transcript_path" 2>/dev/null | jq -rs '
@@ -134,13 +141,17 @@ fi
 
 # --- 検出 regex (default 13 パターン、env override 可) ---
 # 改行区切り。Bash 連想配列等は使わず、while read で 1 行ずつ照合する。
-DEFAULT_PATTERNS='進めて(も|よろ)?(し)?い(い)?(ですか|でしょうか)
-OK\s?(ですか|でしょうか)
+# Pattern 1 (進めて...): 「進めて」「進めてよ」「進めても」「進めてもよ」
+#   「進めてもよろ」「進めてよろ」「進めてもよろし」全パターンを cover (tdd-H2 fix)
+# Pattern 7 (お待ちし...): BSD grep で empty alternation (て|) 不可、(て)? に修正 (tdd-H1 fix)
+# Pattern 2 (OK...): \s は POSIX 非 portable、[[:space:]] に修正 (architect-M2 fix)
+DEFAULT_PATTERNS='進めて((も)?よろ|よ|も)?(し)?い(い)?(ですか|でしょうか)
+OK[[:space:]]?(ですか|でしょうか)
 どちら(に|を)?します?か?
 どうします?か?
 実行(し|して)も(よろし|よ)い?(ですか|でしょうか)
 次の指示をお待ちします
-お待ちし(て|)(い|お)?ます
+お待ちし(て)?(い|お)?ます
 user 判断待ち
 user 確認待ち
 進めますか
@@ -148,7 +159,11 @@ user 確認待ち
 停止しますか
 よろしいですか'
 
-PATTERNS="${HC_LOOP_CONFIRMATION_PATTERNS:-$DEFAULT_PATTERNS}"
+# PATTERNS env override は空 / whitespace のみなら default に戻す (sec-H1 fix)
+PATTERNS="${HC_LOOP_CONFIRMATION_PATTERNS:-}"
+if ! printf '%s' "$PATTERNS" | grep -qE '[^[:space:]]'; then
+  PATTERNS="$DEFAULT_PATTERNS"
+fi
 
 matched=""
 while IFS= read -r pat; do
@@ -164,14 +179,18 @@ if [ -z "$matched" ]; then
   exit 0
 fi
 
+# matched 制御文字 escape (security-M2 fix) — warn_message 埋め込み前
+matched_safe=$(printf '%s' "$matched" | tr -d '\n\r\0')
+
 # --- 検出: bypass.log 記録 + additionalContext 注入 ---
+# env_var label を VIOLATION に変更し filter で bypass と区別可能化 (security-M3 fix)
 if command -v log_bypass >/dev/null 2>&1; then
-  log_bypass "loop-confirmation-detector" "violation-detected" "pattern=${matched}"
+  log_bypass "loop-confirmation-detector" "VIOLATION" "pattern=${matched_safe}"
 fi
 
 # additionalContext を jq で安全に JSON エンコード (改行 / 引用符 / 特殊文字を escape)
 warn_message=$(cat <<EOF
-[loop-confirmation-detector] Loop モード違反検出: 確認質問パターン '${matched}' を検出。Loop モード遵守事項 2 (中間確認の停止) 違反。次 turn で確認質問せず自律実行に切替えてください。詳細: \`.claude/rules/modes.md\` 遵守事項 2。
+[loop-confirmation-detector] Loop モード違反検出: 確認質問パターン '${matched_safe}' を検出。Loop モード遵守事項 2 (中間確認の停止) 違反。次 turn で確認質問せず自律実行に切替えてください。詳細: \`.claude/rules/modes.md\` 遵守事項 2。
 EOF
 )
 
