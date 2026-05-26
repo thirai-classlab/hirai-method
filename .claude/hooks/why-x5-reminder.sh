@@ -17,6 +17,18 @@
 
 set -uo pipefail  # task-22 W1: errexit 外し SIGPIPE 141 サイレント死を防止 (CLAUDE.md Critical Lessons HIGH)
 
+# config-loader.sh source (is_feature_enabled 関数取得用、task-45 Phase 2)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
+  # shellcheck source=lib/config-loader.sh
+  source "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+fi
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled why_x5_enforcement; then
+  exit 0   # feature OFF で no-op
+fi
+
 # stdin を必ず消費（消費しないと caller が pipe block する可能性がある）
 cat > /dev/null 2>&1 || true
 

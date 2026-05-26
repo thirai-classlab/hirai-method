@@ -200,6 +200,12 @@ if [ -f "$script_dir/lib/config-loader.sh" ]; then
   # shellcheck disable=SC1091
   . "$script_dir/lib/config-loader.sh" >/dev/null 2>&1 || true
 fi
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled draft_flow_guard; then
+  exit 0
+fi
+
 task_dir="${HC_TASK_DIR:-docs/tasks}"
 draft_dir="${HC_DRAFT_DIR:-docs/draft}"
 whitelist_raw="${HC_DRAFT_FLOW_GUARD_WHITELIST:-}"

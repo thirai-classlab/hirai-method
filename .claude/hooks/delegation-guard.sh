@@ -20,6 +20,12 @@ set -u
 SCRIPT_DIR="$(dirname "$0")"
 # shellcheck source=lib/config-loader.sh
 source "$SCRIPT_DIR/lib/config-loader.sh"
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled delegation_guard; then
+  exit 0   # feature OFF で no-op
+fi
+
 # bypass logger (log_bypass 関数を提供)
 # shellcheck source=lib/bypass-logger.sh
 source "$SCRIPT_DIR/lib/bypass-logger.sh"

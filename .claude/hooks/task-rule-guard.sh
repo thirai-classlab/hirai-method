@@ -34,6 +34,12 @@ set -u
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
 
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled task_rule_guard; then
+  echo '{}'
+  exit 0
+fi
+
 # Phase β: F2 disable for SWE-bench grid evaluation (fail-open)
 # ECC_F{1,2,3}_OFF env vars allow runner.py to bypass gates per-task
 # while measuring gate effectiveness. Production usage MUST NOT set these.

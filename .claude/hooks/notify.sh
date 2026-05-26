@@ -9,6 +9,11 @@ set -u
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
 
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled notify; then
+  exit 0   # feature OFF で no-op
+fi
+
 input=$(cat)
 
 # task-22 W2: jq 不在環境では fail-open (msg = default、通知音のみ鳴らす)

@@ -37,6 +37,18 @@ if [ -f "${_project_dir}/.claude/hooks/lib/bypass-logger.sh" ]; then
   source "${_project_dir}/.claude/hooks/lib/bypass-logger.sh"
 fi
 
+# === config-loader.sh (best-effort、HC_* env 解決 + is_feature_enabled) ===
+if [ -f "${_project_dir}/.claude/hooks/lib/config-loader.sh" ]; then
+  # shellcheck source=lib/config-loader.sh
+  # shellcheck disable=SC1091
+  source "${_project_dir}/.claude/hooks/lib/config-loader.sh" 2>/dev/null || true
+fi
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled byproduct_discharge; then
+  exit 0
+fi
+
 # === Bypass: ECC_BYPASS_DISCHARGE_GUARD ===
 if [ "${ECC_BYPASS_DISCHARGE_GUARD:-0}" = "1" ] || [ "${ECC_BYPASS_DISCHARGE_GUARD:-}" = "true" ]; then
   # bypass log: session_id を含めて記録 (要件: reason 列に「{session_id}: discharge-guard bypass」と明記)
