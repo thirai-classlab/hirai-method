@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .claude/tests/loop-confirmation-detector-smoke.sh — task-41 Step 6 iter2
+# .claude/tests/loop-confirmation-detector-smoke.sh — task-41 Step 6 iter3
 #
 # 設計起源:
 #   docs/draft/loop-confirmation-detector-hook.md §4 TDD 戦略
@@ -18,7 +18,7 @@
 #   Case 8: pattern override HC_LOOP_CONFIRMATION_PATTERNS="custom" + AI message に "custom" → 注入確認
 #   Case 9: Loop モード、AI message に「お待ちしています」(Pattern 7 単独) → 注入確認
 #   Case 10: Loop モード、AI message に「進めてよいですか」(Pattern 1 短形) → 注入確認
-#   Case 11: HC_LOOP_CONFIRMATION_PATTERNS=$'\n' (空行のみ) → default fallback で検出 → 注入確認
+#   Case 11: HC_LOOP_CONFIRMATION_PATTERNS=$'\n' (空行のみ) → default fallback → 確認質問検出 → 注入確認
 #   Case 12: jq 不在環境 → fail-open (exit 0、additionalContext 不在)
 #
 # 重要制約:
@@ -26,6 +26,7 @@
 #   - mock transcript file は tmp dir に作成 (cleanup trap)
 #   - CLAUDE_PROJECT_DIR="$TMP_ROOT" で hook 環境を isolate
 #   - mode は .claude/mode.yml を tmp dir 内に作成して制御 (loop / normal)
+#   - env -i PATH 固定化 (SAFE_PATH) で呼び出し元 PATH injection を防止 (iter3 sec-M5 fix)
 #
 # 実行:
 #   bash .claude/tests/loop-confirmation-detector-smoke.sh
@@ -131,7 +132,7 @@ print(json.dumps(payload))
 '
 }
 
-# hook を実行
+# hook を実行 (iter3 sec-M5 fix: SAFE_PATH 固定で injection 防止)
 # $1 = transcript path (空文字可)
 # $2... = 追加環境変数 KEY=VAL
 _run_hook() {
@@ -141,8 +142,11 @@ _run_hook() {
   out_file="$(mktemp "${TMP_ROOT}/out.XXXXXX")"
   err_file="$(mktemp "${TMP_ROOT}/err.XXXXXX")"
 
+  # SAFE_PATH 固定 (呼び出し元 PATH 継承を回避、PATH injection を構造的に防止)
+  local SAFE_PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+
   env -i \
-    PATH="$PATH" \
+    PATH="$SAFE_PATH" \
     HOME="$HOME" \
     CLAUDE_PROJECT_DIR="$TMP_ROOT" \
     "$@" \
@@ -381,14 +385,14 @@ case8_pattern_override_inject() {
 # --------------------------------------------------------------------------
 # Case 9: Loop モード、「お待ちしています」(Pattern 7 単独 hit) → additionalContext 注入
 # HIGH-1: Pattern 7 が BSD grep -P 非対応環境でも動作することを確認。
-# hook は grep -E を使用しており、Pattern 7 は 'お待ちし(て|)(い|お)?ます' (POSIX ERE)。
+# hook は grep -E を使用しており、Pattern 7 は 'お待ちし(て)?(い|お)?ます' (POSIX ERE)。
 # 「お待ちしています」は Pattern 6「次の指示をお待ちします」とは別 hit。
 # --------------------------------------------------------------------------
 case9_pattern7_alone() {
   local label="Case 9: Loop + 'お待ちしています' (Pattern 7 単独) → additionalContext 注入"
   _set_mode "loop"
   local tp="${TMP_ROOT}/case9.jsonl"
-  # Pattern 6「次の指示をお待ちします」は含まない、Pattern 7「お待ちし(て|)(い|お)?ます」のみ
+  # Pattern 6「次の指示をお待ちします」は含まない、Pattern 7「お待ちし(て)?(い|お)?ます」のみ
   _make_transcript "$tp" "全件確認しました。お待ちしています。"
 
   _run_hook "$tp"
@@ -403,7 +407,7 @@ case9_pattern7_alone() {
 # --------------------------------------------------------------------------
 # Case 10: Loop モード、「進めてよいですか」(Pattern 1 短形) → additionalContext 注入
 # HIGH-2: iter1 reviewer 指摘「進めてよいですか が Pattern 1 regex で未検出の可能性」を確認。
-# Pattern 1: '進めて(も|よろ)?(し)?い(い)?(ですか|でしょうか)'
+# Pattern 1: '進めて((も)?よろ|よ|も)?(し)?い(い)?(ですか|でしょうか)'
 # 「進めてよいですか」は「進めて + よ + い + ですか」で Pattern 1 に該当する。
 # --------------------------------------------------------------------------
 case10_pattern1_susumete_yoi() {
@@ -422,37 +426,37 @@ case10_pattern1_susumete_yoi() {
 }
 
 # --------------------------------------------------------------------------
-# Case 11: HC_LOOP_CONFIRMATION_PATTERNS に空行のみ設定 → default fallback で検出 → 注入確認
-# HIGH-3: pattern 全無効化 edge case。
-# hook の実装: PATTERNS="${HC_LOOP_CONFIRMATION_PATTERNS:-$DEFAULT_PATTERNS}"
-# HC_LOOP_CONFIRMATION_PATTERNS が設定されていても値が改行のみなら、
-# while read ループで [ -z "$pat" ] && continue が全行スキップし matched="" のまま。
-# これは fail-silent (silent pass) となる動作。
-# 本 case では「空 pattern → default は使われず silent pass」という動作を確認する。
-# (hook 実装で空文字列時に default fallback する場合は注入確認に変更する)
+# Case 11: HC_LOOP_CONFIRMATION_PATTERNS=$'\n' (空行のみ) → default fallback → 注入確認
+# HIGH-3 + iter2 sec-H1 fix: pattern 全無効化 edge case の動作確認。
+#
+# hook iter2 fix の動作:
+#   PATTERNS="${HC_LOOP_CONFIRMATION_PATTERNS:-}"  # 改行のみの値は ":-" 展開で fallback しない
+#   if ! printf '%s' "$PATTERNS" | grep -qE '[^[:space:]]'; then  # whitespace-only 判定で default 復元
+#     PATTERNS="$DEFAULT_PATTERNS"
+#   fi
+#
+# 期待動作: HC_LOOP_CONFIRMATION_PATTERNS が改行 / whitespace のみなら default に fallback、
+# AI message に default pattern (例「進めてもいいですか」) が含まれれば確認質問検出 → 注入。
 # --------------------------------------------------------------------------
-case11_pattern_empty_fallback() {
-  local label="Case 11: HC_LOOP_CONFIRMATION_PATTERNS=空行のみ → silent pass (全 pattern スキップ)"
+case11_pattern_empty_fallback_to_default() {
+  local label="Case 11: HC_LOOP_CONFIRMATION_PATTERNS=\$'\n' → default fallback → 注入"
   _set_mode "loop"
   local tp="${TMP_ROOT}/case11.jsonl"
   # デフォルト pattern にマッチする text を使用
   _make_transcript "$tp" "次のフェーズに進めてもいいですか？"
 
-  # 空行のみ (改行文字のみの値) を設定
-  # hook の PATTERNS 変数: HC_LOOP_CONFIRMATION_PATTERNS が non-empty string なら使用、
-  # :- 展開は "unset or empty" のみ default fallback。
-  # 改行のみの値 ($'\n') は "not empty" なので default に fallback しない。
-  # → while read で全行 continue → matched="" → silent exit 0
+  # 空行のみ (改行文字のみの値) を設定 — hook iter2 fix で default 復元される
+  # 注: double-quote 内で $'\n' は ANSI-C quoting 展開されない (literal 文字列扱い)
+  # local NL=$'\n' で改行文字に展開してから env arg に埋め込む必要がある
+  local NL=$'\n'
   _run_hook "$tp" \
-    "HC_LOOP_CONFIRMATION_PATTERNS=$'\n'"
+    "HC_LOOP_CONFIRMATION_PATTERNS=${NL}"
 
-  # 実際の動作確認: exit 0 であることを確認
-  # additionalContext 有無は hook 実装依存 (fallback するなら注入、しないなら不在)
-  if [ "$LAST_CODE" -eq 0 ]; then
-    # exit 0 (fail-open) であればいずれの動作でも PASS
+  # hook iter2 fix の挙動: default fallback → 確認質問検出 → additionalContext 注入
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
     _record_pass "$label"
   else
-    _record_fail "$label" "rc=${LAST_CODE} (expected 0/fail-open)"
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) (expected default fallback should detect 進めてもいいですか)"
   fi
 }
 
@@ -487,7 +491,7 @@ case12_jq_missing_fail_open() {
 # --------------------------------------------------------------------------
 # run all cases
 # --------------------------------------------------------------------------
-printf "===== loop-confirmation-detector-smoke (task-41 Step 6 iter2, 12 cases) =====\n\n"
+printf "===== loop-confirmation-detector-smoke (task-41 Step 6 iter3, 12 cases) =====\n\n"
 
 case1_loop_shimete_yoidesuka_inject
 case2_loop_ok_desuka_inject
@@ -499,7 +503,7 @@ case7_ecc_off_bypass_log
 case8_pattern_override_inject
 case9_pattern7_alone
 case10_pattern1_susumete_yoi
-case11_pattern_empty_fallback
+case11_pattern_empty_fallback_to_default
 case12_jq_missing_fail_open
 
 # --------------------------------------------------------------------------
