@@ -31,30 +31,33 @@
 > - Task: 「**何のため × 何をやる × 何ができる**」3 要素
 > - Step: **作業概要**のみ (1-2 文)
 
-| # | Step Status | Task / Step | 概要 | 詳細 |
-|:---:|:---:|:---|:---|:---|
-| <!-- 例: 1 --> | <!-- ✅ --> | <!-- **Task: <タスク名>** --> | <!-- Task 概要 (何のため × 何をやる × 何ができる) --> | <!-- [task-1-foo.md](task-1-foo.md) --> |
-| <!-- 空 --> | <!-- ✅ --> | <!-- Step 1 --> | <!-- 作業概要 --> | <!-- 空 --> |
-| <!-- 空 --> | <!-- 🔄 --> | <!-- Step 2 --> | <!-- 作業概要 --> | <!-- 空 --> |
+| # | Step Status | Task / Step | 概要 | 依存先 | 詳細 |
+|:---:|:---:|:---|:---|:---|:---|
+| <!-- 例: 1 --> | <!-- ✅ --> | <!-- **Task: <タスク名>** --> | <!-- Task 概要 (何のため × 何をやる × 何ができる) --> | <!-- task-N1, task-N2 or — --> | <!-- [task-1-foo.md](task-1-foo.md) --> |
+| <!-- 空 --> | <!-- ✅ --> | <!-- Step 1 --> | <!-- 作業概要 --> | <!-- 空 --> | <!-- 空 --> |
+| <!-- 空 --> | <!-- 🔄 --> | <!-- Step 2 --> | <!-- 作業概要 --> | <!-- 空 --> | <!-- 空 --> |
 
 <!--
-記入ルール (採用 6 条準拠):
+記入ルール (採用 6 条準拠、2026-05-26 依存先列追加):
 - # は Task 単位の連番。Task header row にのみ記載、Step sub-row は空欄
 - Step Status 列: Task header は集約 status、Step sub-row は個別 status (📝/🔲/🔄/✅/⏸️)
 - Task / Step 列: Task header は `**Task: <タスク名>**` (太字)、Step sub-row は `Step N` (Step 番号、N は 1 から連番)
 - 概要列:
   - Task: 「<何のため> のため、<何をやる> する。完成すれば <何ができる>。」3 要素を 1 段落で
   - Step: 作業概要のみ (1-2 文)
+- 依存先列 (採用 6 条 2 + 6、2026-05-26 追加):
+  - Task header: `task-N1, task-N2` 形式で ID 列挙 (複数はカンマ区切り)、依存なしは `—` (long-dash、空欄禁止)
+  - Step sub-row: 空欄 (Step 単位の依存は _TASK_TEMPLATE.md 内 §「Step 一覧 (サマリ表)」の `依存` 列に記載)
 - 詳細列: Task header にのみ task ファイル link、Step sub-row は空欄
 - ステータス変更時は完了日 + commit hash + 主要 metric を Task 概要末尾に追記
   例: "（Step 1-3 完了 @ 2026-04-29、commit `abc1234`、+15 tests=215 PASS）"
 
 記入例 (実 entry):
-| 33 | ✅ | **Task: list-md plan-first 規範追加** | recall_poc plan-first 不在事案再発防止のため、task-management.md §plan-first を追加し batch planning 時の 📝 行先置きフロー 2 経路分岐 (経路 A/B) と凡例 📝 用途 (2 用途) を明文化する。完成すれば AI が batch planning 時に list.md plan-first 先置きを規範通り実行できるようになる。 | [task-33-list-md-plan-first-normative-rules.md](task-33-list-md-plan-first-normative-rules.md) |
-|    | ✅ | Step 1 | task-management.md §plan-first 新規 subsection 追加 (経路 A/B 分岐 + 凡例 📝 用途明文化) | |
-|    | ✅ | Step 2 | テスト設計レビュー (5 reviewer 並列 × 5 iter で strict 0-finding 収束) | |
-|    | ✅ | Step 3 | テスト合格 (4-grep + smoke 11/11 + env override PASS) | |
-|    | ✅ | Step 4 | リファクタリング (skip 明示: 規範文書追記のみ refactor 余地なし) | |
+| 33 | ✅ | **Task: list-md plan-first 規範追加** | recall_poc plan-first 不在事案再発防止のため、task-management.md §plan-first を追加し batch planning 時の 📝 行先置きフロー 2 経路分岐 (経路 A/B) と凡例 📝 用途 (2 用途) を明文化する。完成すれば AI が batch planning 時に list.md plan-first 先置きを規範通り実行できるようになる。 | task-34, task-35, task-36 | [task-33-list-md-plan-first-normative-rules.md](task-33-list-md-plan-first-normative-rules.md) |
+|    | ✅ | Step 1 | task-management.md §plan-first 新規 subsection 追加 (経路 A/B 分岐 + 凡例 📝 用途明文化) | | |
+|    | ✅ | Step 2 | テスト設計レビュー (5 reviewer 並列 × 5 iter で strict 0-finding 収束) | | |
+|    | ✅ | Step 3 | テスト合格 (4-grep + smoke 11/11 + env override PASS) | | |
+|    | ✅ | Step 4 | リファクタリング (skip 明示: 規範文書追記のみ refactor 余地なし) | | |
 -->
 
 ## 依存関係図

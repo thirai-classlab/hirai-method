@@ -209,9 +209,22 @@ draft 本文を grep して以下キーワードを検出し、不要な reviewe
 
 ### 集約
 
-各 reviewer の SubagentStop 通知を受けたら findings を `docs/draft/<slug>-review.md` に append。全件完了後に severity 別件数サマリ表 + blocking findings (CRITICAL / HIGH) + 各 reviewer の confidence score 一覧を提示。
+各 reviewer の SubagentStop 通知を受けたら findings を `docs/draft/<slug>-review.md` に append。全件完了後に severity 別件数サマリ表 + blocking findings (CRITICAL / HIGH / MEDIUM) + 各 reviewer の confidence score 一覧を提示。
 
-CRITICAL / HIGH が 0 件 → draft「承認待ち」へ、1 件以上 → 「修正待ち」状態を明示。
+### 収束条件 (反復ループ、2026-05-26 追加)
+
+draft レビューは「修正 → 再レビュー」を **CRITICAL + HIGH + MEDIUM = 0** になるまで反復する (LOW は許容、cosmetic finding として記録のみ)。採用 6 条 4 「テスト設計レビュー」と同じ収束パターン (5+ reviewer 動的選定 / 上限 5 回 / 全 reviewer approve) を draft 設計レビューに統一適用。
+
+| 規約 | 内容 |
+|---|---|
+| **reviewer 最低数** | **3 体以上** 並列起動 (default は reviewer-registry 全件 + stack heuristic 絞り込み、`--max-reviewers N` 指定時も `N ≥ 3` 必須、registry 件数不足で 3 体起動不能なら user escalation) |
+| **件数取得 severity** | CRITICAL / HIGH / MEDIUM / LOW の 4 段階 (各 reviewer prompt で severity 分類強制) |
+| **収束条件** | CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW は許容) |
+| **反復上限** | 5 回 (default、超過時 user escalation) |
+| **iteration 記録** | 各 iter の reviewer 一覧 + 件数 + 修正 commit hash を `docs/draft/<slug>.md` §「レビューサイクル」table (`_DRAFT_TEMPLATE.md` §8) に append |
+| **bypass** | `ECC_DESIGN_REVIEW_OFF=1` (反復 5 回上限超過時の user escalation 後の継続用、`.claude/.workflow-state/bypass.log` に append) |
+
+CRITICAL / HIGH / MEDIUM 全て 0 件 → draft「承認待ち」へ遷移可、1 件以上 → 「修正待ち」状態を明示し draft 修正 → 再 `/design-review` で round-N+1 review。
 
 ## 副産物 discharge (本セッション task #5 で実装)
 

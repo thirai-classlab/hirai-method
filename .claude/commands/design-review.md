@@ -15,9 +15,10 @@ description: 設計 draft に対し reviewer-registry の design + security カ�
 ## 使い方
 
 ```
-/design-review <slug>                        # 既定: design + security 全 agent 並列起動
+/design-review <slug>                        # 既定: design + security 全 agent 並列起動 (min 3 強制、2026-05-26)
 /design-review <slug> --categories design    # design カテゴリのみ
-/design-review <slug> --max-reviewers 3      # 上限指定 (cost 制御)
+/design-review <slug> --max-reviewers 5      # 上限指定 (cost 制御、N ≥ 3 必須)
+/design-review <slug> --min-reviewers 3      # 下限指定 (default 3、N ≥ 3 必須、registry 件数不足時は user escalation)
 /design-review <slug> --skip-stack-filter    # stack heuristic 絞り込みを無効化
 ```
 
@@ -55,17 +56,23 @@ description: 設計 draft に対し reviewer-registry の design + security カ�
      - prompt: 共通テンプレ「対象 draft 全文 + 観点 (reviewer 別) + findings format (CRITICAL/HIGH/MED/LOW 分類, 具体修正提案) + confidence: 0.X 必須」
 2. 全 agent 起動後、メインは即座に user 制御に戻る (notification を待たない、ユーザは次操作可能)
 
-### Phase 4: 集約 (各 agent 完了通知到着時)
+### Phase 4: 集約 + 収束判定 + 反復ループ (各 agent 完了通知到着時、2026-05-26 拡張)
 
 1. SubagentStop notification を受信したら以下を順次:
    - findings を `docs/draft/<slug>-review.md` に追記 (reviewer 名 + severity 別)
    - 並行起動中の他 reviewer はそのまま継続
 2. 全 reviewer 完了後、集約レポートを作成:
-   - severity 別件数サマリ表
-   - blocking findings (CRITICAL / HIGH) ハイライト
+   - severity 別件数サマリ表 (CRITICAL / HIGH / MEDIUM / LOW の 4 段階、各 reviewer prompt で severity 分類強制)
+   - blocking findings (CRITICAL / HIGH / MEDIUM) ハイライト
    - 各 reviewer の confidence score 一覧
-3. CRITICAL/HIGH 件数が 0 件 → draft ステータスを「承認待ち」に遷移可能
-   1 件以上 → 「修正待ち」状態を明示し draft 修正必要
+3. **収束判定** (workflow.md §「収束条件」準拠、2026-05-26 追加):
+   - CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 → 「収束」、draft ステータスを「承認待ち」に遷移可能 (LOW は許容、cosmetic finding として記録のみ)
+   - 1 件以上 → 「修正待ち」、draft 修正 → 再度 /design-review で **round-N+1 review**
+4. **反復ループ**:
+   - **reviewer 最低数**: 各 iter で **3 体以上** 並列起動 (default は reviewer-registry 全件 + stack heuristic 絞り込み、`--max-reviewers N` 指定時も `N ≥ 3` 必須、registry 件数不足で 3 体起動不能なら user escalation)
+   - **反復上限**: **5 回** (default)、超過時は user escalation
+   - **bypass**: `ECC_DESIGN_REVIEW_OFF=1` (反復 5 回上限超過時の user escalation 後の継続用、`.claude/.workflow-state/bypass.log` に append + draft §9 承認履歴末尾に bypass 理由追記)
+   - **iteration 記録**: 各 iter の reviewer 一覧 + 件数 (CRITICAL/HIGH/MEDIUM/LOW) + 修正 commit hash を `docs/draft/<slug>.md` §「レビューサイクル」table (`_DRAFT_TEMPLATE.md` §8) に append
 
 ### Phase 5: ユーザ報告
 
