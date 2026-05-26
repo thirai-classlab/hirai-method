@@ -9,10 +9,16 @@
 #   限定される。
 #
 #   task-40 拡張 (2026-05-26):
-#     .claude/rules/*.md / .claude/commands/*.md / .claude/templates/**/*.md
+#     .claude/rules/*.md / .claude/commands/*.md / .claude/templates/docs/**/*.md
 #     への新規 Write も block 対象に追加。対応 draft が存在し
 #     frontmatter (HTML comment 内) で `approved_at:` が非空 (or
 #     `retroactive: true`) なら pass。
+#
+#   task-40 Step 7 iter2 (2026-05-26) — HIGH 4 件 fix:
+#     HIGH-A: bypass.log 記録追加 (audit trail)
+#     HIGH-C: retroactive case の悪用検知 (bypass.log 記録 + JSON additionalContext で注意喚起)
+#     HIGH-D: file_path canonical 化 (../ / symlink 経由 BLOCK 回避を防止)
+#     HIGH-G: .claude/templates/** → .claude/templates/docs/** に縮小 (top-level 直下は対象外)
 #
 # 設計起源:
 #   - docs/draft/system-reminder-attention-fix.md Wave 2.3 (2026-05-23)
@@ -28,7 +34,8 @@
 #   - path1: <root>/docs/<basename>.md (深さ 1 のみ、既存挙動)
 #   - path2 (task-40): <root>/.claude/rules/<basename>.md (深さ 1)
 #   - path3 (task-40): <root>/.claude/commands/<basename>.md (深さ 1)
-#   - path4 (task-40): <root>/.claude/templates/**/<basename>.md (再帰)
+#   - path4 (task-40, iter2 縮小): <root>/.claude/templates/docs/**/<basename>.md
+#                                    (深さ 2 以上、top-level 直下は対象外)
 #   - 除外: <root>/docs/draft/** / <root>/docs/tasks/** / 深さ 2 以上
 #   - 除外: 既存 file の Edit (新規 Write のみ)
 #   - 除外 (task-24 W3): HC_DOCS_APPROVED_DIR 配下 (CSV 複数値対応)
@@ -57,8 +64,23 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
+# project root 解決 (bypass-logger は project root 解決前に呼ばないため、
+# 関連 source は env bypass 判定の **前** に行う必要がある)
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# bypass-logger.sh source (best-effort、HIGH-A)
+# shellcheck source=lib/bypass-logger.sh
+if [ -f "$script_dir/lib/bypass-logger.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$script_dir/lib/bypass-logger.sh"
+fi
+
 # bypass env (既存 docs/ + 新 path 両方カバー)
+# HIGH-A: bypass.log 記録追加
 if [ "${ECC_DRAFT_FLOW_GUARD_OVERRIDE:-0}" = "1" ]; then
+  if declare -f log_bypass >/dev/null 2>&1; then
+    log_bypass "draft-flow-guard" "ECC_DRAFT_FLOW_GUARD_OVERRIDE" "${ECC_BYPASS_REASON:-(not provided)}"
+  fi
   exit 0
 fi
 
@@ -70,11 +92,28 @@ case "$tool_name" in
 esac
 
 # file_path 抽出
-file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/null)
-[ -z "$file_path" ] && exit 0
+file_path_raw=$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/null)
+[ -z "$file_path_raw" ] && exit 0
+
+# ----------------------------------------------------------------------
+# HIGH-D: file_path canonical 化
+# `..` 含み path / symlink 経由 BLOCK 回避を防止する。
+# macOS portable: python3 os.path.realpath (file 存在不要、symlink 解決)。
+# python3 不在時は raw のまま fallback (fail-open: 既存挙動維持)。
+# ----------------------------------------------------------------------
+canonicalize_path() {
+  local _p="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$_p" 2>/dev/null || printf '%s' "$_p"
+  else
+    # python3 不在: fail-open (raw のまま、既存挙動維持)
+    printf '%s' "$_p"
+  fi
+}
+
+file_path=$(canonicalize_path "$file_path_raw")
 
 # project root 解決
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/project-root.sh
 if [ -f "$script_dir/lib/project-root.sh" ]; then
   # shellcheck disable=SC1091
@@ -85,6 +124,8 @@ if command -v resolve_project_root >/dev/null 2>&1; then
 else
   root="$(pwd)"
 fi
+# root も canonical 化 (path 比較の安全性確保)
+root=$(canonicalize_path "$root")
 
 # config (task_dir / draft_dir / whitelist) 読み込み
 # shellcheck source=lib/config-loader.sh
@@ -148,7 +189,8 @@ verify_draft_status() {
 }
 
 # ----------------------------------------------------------------------
-# task-40 新 path pattern 判定 (.claude/rules / .claude/commands / .claude/templates)
+# task-40 新 path pattern 判定 (.claude/rules / .claude/commands / .claude/templates/docs)
+# HIGH-G: .claude/templates/** → .claude/templates/docs/** に縮小
 # ----------------------------------------------------------------------
 rule_change_path_match=0
 rule_change_category=""
@@ -157,7 +199,6 @@ if [ "$rule_change_guard_enabled" != "false" ] && [ "${ECC_RULE_CHANGE_GUARD_OFF
   case "$file_path" in
     "$root/.claude/rules/"*)
       # 深さ 1 のみ (.claude/rules/<basename>.md)
-      _rel=".claude/rules/${file_path#$root/.claude/rules/}"
       _sub="${file_path#$root/.claude/rules/}"
       case "$_sub" in
         */*) ;;  # 深さ 2 以上は対象外
@@ -178,9 +219,10 @@ if [ "$rule_change_guard_enabled" != "false" ] && [ "${ECC_RULE_CHANGE_GUARD_OFF
           ;;
       esac
       ;;
-    "$root/.claude/templates/"*)
-      # 再帰 (.claude/templates/**/<basename>.md)
-      _sub="${file_path#$root/.claude/templates/}"
+    "$root/.claude/templates/docs/"*)
+      # HIGH-G: 再帰だが templates/docs/ 配下に限定
+      # (.claude/templates/foo.md のような top-level 直下は対象外)
+      _sub="${file_path#$root/.claude/templates/docs/}"
       case "$_sub" in
         *.md|*.mdx)
           rule_change_path_match=1
@@ -192,6 +234,13 @@ if [ "$rule_change_guard_enabled" != "false" ] && [ "${ECC_RULE_CHANGE_GUARD_OFF
 fi
 
 if [ "$rule_change_path_match" = "1" ]; then
+  # HIGH-A: rule_change_guard 系の env bypass 記録 (env で全 skip された場合)
+  # ※ rule_change_guard_enabled / ECC_RULE_CHANGE_GUARD_OFF で path_match が
+  #    0 になった分岐は上の if で除外されるため、ここでは到達しない。env で
+  #    skip された case の log 記録は path_match 評価前に行う必要があるため、
+  #    下記の env 判定ブロックを別途追加。
+  : # noop: actual log already handled in env-check above
+
   # 既存 file の Edit は無条件通過 (新規 Write のみ block 対象)
   if [ -f "$file_path" ]; then
     exit 0
@@ -209,7 +258,13 @@ if [ "$rule_change_path_match" = "1" ]; then
       exit 0
       ;;
     retroactive)
-      # retroactive case: pass + warn (stderr に注意喚起、block しない)
+      # HIGH-C: retroactive case の悪用検知
+      # - bypass.log に記録 (audit trail で誤用追跡)
+      # - stderr warn + JSON additionalContext で main agent に強制注意喚起
+      if declare -f log_bypass >/dev/null 2>&1; then
+        log_bypass "draft-flow-guard" "retroactive-pass" "category=${rule_change_category} file=${file_path} draft=${draft_path}"
+      fi
+      # stderr warn (既存) — interactive 操作者向け
       cat <<EOF >&2
 [draft-flow-guard] WARN: retroactive draft 経由で通過
 
@@ -221,8 +276,24 @@ retroactive リカバリとして本回は pass。**規範遵守は次回から*
   2. user 承認 (approved_at 非空)
   3. /new-task <id> <slug>        # task 化してから着手
 
+bypass.log に記録済 (audit trail、誤用検知用)。
+
 設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)
 EOF
+      # JSON additionalContext (HIGH-C) — main agent への構造化注意喚起
+      retroactive_warn="[draft-flow-guard] retroactive=true 経由で通過しました (category: ${rule_change_category})。
+
+  対象 file : ${file_path}
+  対応 draft: ${draft_path}
+
+retroactive は **緊急 retroactive リカバリ専用** です。誤用検知のため bypass.log に記録済。
+次回以降は通常フローを遵守してください:
+  1. /new-draft <slug>            # 先に設計を起こす
+  2. user 承認 (approved_at 非空)
+  3. /new-task <id> <slug>        # task 化してから着手
+
+設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)"
+      jq -n --arg r "$retroactive_warn" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$r}}'
       exit 0
       ;;
     blocked)
@@ -250,6 +321,34 @@ EOF
       exit 2
       ;;
   esac
+fi
+
+# ----------------------------------------------------------------------
+# HIGH-A: rule_change_guard 系 env bypass (path_match を弾く分岐) の log 記録
+# 上の判定で rule_change_guard_enabled=false or ECC_RULE_CHANGE_GUARD_OFF=1
+# が原因で path_match=0 になり new path block が skip された場合のみ記録。
+# 既存 docs/ 直下判定は引き続き有効なため exit はしない。
+# ----------------------------------------------------------------------
+# 判定: 元々 new path (.claude/rules/, .claude/commands/, .claude/templates/docs/)
+#       配下なのに env で path_match が 0 になった場合 → log
+if [ "$rule_change_path_match" = "0" ]; then
+  _is_new_path=0
+  case "$file_path" in
+    "$root/.claude/rules/"*|"$root/.claude/commands/"*|"$root/.claude/templates/docs/"*)
+      _is_new_path=1
+      ;;
+  esac
+  if [ "$_is_new_path" = "1" ]; then
+    if [ "${ECC_RULE_CHANGE_GUARD_OFF:-0}" = "1" ]; then
+      if declare -f log_bypass >/dev/null 2>&1; then
+        log_bypass "draft-flow-guard" "ECC_RULE_CHANGE_GUARD_OFF" "${ECC_BYPASS_REASON:-(not provided)} file=${file_path}"
+      fi
+    elif [ "$rule_change_guard_enabled" = "false" ]; then
+      if declare -f log_bypass >/dev/null 2>&1; then
+        log_bypass "draft-flow-guard" "HC_RULE_CHANGE_GUARD_ENABLED" "${ECC_BYPASS_REASON:-(config off)} file=${file_path}"
+      fi
+    fi
+  fi
 fi
 
 # ----------------------------------------------------------------------
