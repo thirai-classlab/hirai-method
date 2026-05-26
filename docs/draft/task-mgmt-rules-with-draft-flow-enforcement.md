@@ -181,7 +181,7 @@ flowchart LR
 |:---:|---|---|:---:|:---:|:---:|:---:|---|---|
 | 1 | 2026-05-26 | tdd-guide, test-automator, qa-expert, security-reviewer, architect-reviewer (5) | 0 | 9 | 11 | 11 | (修正なし、finding 集約のみ) | 集約完了、iter2 で修正実施 |
 | 2 | 2026-05-26 | tdd-guide, test-automator, qa-expert, security-reviewer, architect-reviewer (5) | 0 | 1 | 6 | 13 | a95abcd / ac086d3 / e828cf2 / 2db0102 / 238af0f | 部分収束、iter3 で残 HIGH 1 + MEDIUM 6 修正 |
-| 3 | 2026-05-26 | (予定) tdd-guide, test-automator, qa-expert, security-reviewer, architect-reviewer (5) | TBD | TBD | TBD | TBD | (iter3 修正 3 並列 commit、本 subagent で iter3-B として記録中) | 収束待ち |
+| 3 | 2026-05-26 | tdd-guide, test-automator, qa-expert, security-reviewer, architect-reviewer (5) | 0 | 0 | 1 (§8 TBD、本 commit で解消) | 8+ | 79607fb / 6922ea7 / 0550ade | 収束達成 (median 0.93、qa MEDIUM-1 本 commit で 0 化) |
 
 **収束判定**: CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW は許容、cosmetic finding として記録のみ)
 
