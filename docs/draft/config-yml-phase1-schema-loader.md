@@ -11,7 +11,7 @@ approved_by: user
 
 ## §1 真因
 
-master draft §1 参照。本 task は **Phase 1 (yml schema 拡張 + config-loader.sh 拡張)** のみを扱う。yml に新 34 key (feature toggle 21 + review 13) を追加し、`config-loader.sh` に load logic + `is_feature_enabled <name>` 共通関数を追加することで、task-45 (hook feature check) と task-46 (config-editor sh) の基盤を整える。
+master draft §1 参照。本 task は **Phase 1 (yml schema 拡張 + config-loader.sh 拡張)** のみを扱う。yml に新 36 key (feature toggle 21 + review 13) を追加し、`config-loader.sh` に load logic + `is_feature_enabled <name>` 共通関数を追加することで、task-45 (hook feature check) と task-46 (config-editor sh) の基盤を整える。
 
 ## §2 採用案
 
@@ -21,13 +21,13 @@ master draft §2 「D ハイブリッド」採用。本 task は Phase 1 単独�
 
 ### 3.1 yml schema 拡張
 
-- 新 34 key 追加: `feature_*_enabled` 21 件 + `review_*_*` 12 件 + `review_iteration_max` 1 件 (詳細値は master §3.1.1 + §3.1.2)
+- 新 36 key 追加: `feature_*_enabled` 21 件 + `review_*_*` 12 件 + `review_iteration_max` 1 件 (詳細値は master §3.1.1 + §3.1.2)
 - 既存 key (`reviewer_registry_*` / `workflow_stages_*` / `*_state_dir` 等) は touch しない
 - 採用先で既存 yml に新 key 不在でも、hook 内 fallback で default 値使用
 
 ### 3.2 config-loader.sh 拡張
 
-- 新 34 key load logic 追加 (既存パーサ仕様: フラット `key: value`)
+- 新 36 key load logic 追加 (既存パーサ仕様: フラット `key: value`)
 - `is_feature_enabled <feature_name>` 共通関数追加 (戻り値: 0=enabled / 1=disabled、env override `HC_FEATURE_<NAME>_ENABLED` 優先)
 - 既存 hook level env (`HC_<HOOK>_ENABLED`) は subordinate として保持 (backward compat)
 
@@ -45,18 +45,18 @@ reviewer 制御の smoke は task-45 で扱う (本 task は yml + loader のみ
 
 | Step | Status | 作業概要 | 完了条件 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | `harness-config.yml` に新 34 key 追加 (feature_* 21 + review_* 13) | `grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13 |
+| 1 | 🔲 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 13) | `grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13 |
 | 2 | 🔲 | `config-loader.sh` 拡張 (34 key load + `is_feature_enabled` 関数) | `bash -c 'source .claude/hooks/lib/config-loader.sh && declare -f is_feature_enabled'` で関数存在確認 |
-| 3 | 🔲 | smoke `config-feature-toggles-smoke.sh` 新設 (3 cases) | `bash .claude/tests/config-feature-toggles-smoke.sh` 3/3 PASS |
+| 3 | 🔲 | smoke `config-feature-toggles-smoke.sh` 新設 (6 cases) | `bash .claude/tests/config-feature-toggles-smoke.sh` 6/6 PASS |
 | 4 | 🔲 | (テスト設計レビュー) reviewer 5+ 並列 iter 1+ (yml schema + shell 両軸、subagent 並列) | iter 5 回上限内で収束 (CRITICAL+HIGH+MEDIUM=0) |
 | 5 | 🔲 | (テスト合格) 新 smoke + 既存 smoke regression 0 (config-loader 関連) | 新 3 case + 既存 smoke 全 PASS |
 | 6 | 🔲 | (リファクタリング) 3 観点判定 (持続可能性 / 汎用性 / 非冗長化) | skip 明示 or 実施 |
 
 ## §6 DoD
 
-- [ ] `.claude/harness-config.yml` に新 34 key 追加 (grep 検証 21 + 13)
+- [ ] `.claude/harness-config.yml` に新 36 key 追加 (grep 検証 21 + 13)
 - [ ] `.claude/hooks/lib/config-loader.sh` で 34 key load + `is_feature_enabled` 関数追加
-- [ ] smoke `config-feature-toggles-smoke.sh` 3 cases PASS
+- [ ] smoke `config-feature-toggles-smoke.sh` 6 cases PASS
 - [ ] 既存 smoke regression 0 (config-loader 経由の hook 全件)
 - [ ] reviewer iter 5 上限内収束
 - [ ] commit + push + PR create (feature branch `feat/config-yml-phase1-schema-loader`)
@@ -67,7 +67,7 @@ reviewer 制御の smoke は task-45 で扱う (本 task は yml + loader のみ
 | 範囲 | 詳細 |
 |---|---|
 | 新規 file | `docs/draft/config-yml-phase1-schema-loader.md` / `docs/tasks/task-44-config-yml-phase1-schema-loader.md` / `.claude/tests/config-feature-toggles-smoke.sh` |
-| 修正 file | `.claude/harness-config.yml` (新 34 key) / `.claude/hooks/lib/config-loader.sh` (load + 共通関数) |
+| 修正 file | `.claude/harness-config.yml` (新 36 key) / `.claude/hooks/lib/config-loader.sh` (load + 共通関数) |
 | 環境変数 | 34 件新規 (`HC_FEATURE_*_ENABLED` 21 + `HC_REVIEW_*_*` 13) |
 | 互換性 | 既存 yml 値 touch しない (新 key default 動作)、採用 4 リポ既存 yml 不変 |
 

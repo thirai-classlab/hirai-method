@@ -7,11 +7,11 @@
 
 ## Task ゴール
 
-`.claude/harness-config.yml` に新 34 key (feature toggle 21 件 + review 制御 13 件) を追加し、`.claude/hooks/lib/config-loader.sh` に load logic + `is_feature_enabled <name>` 共通関数を追加する。task-45 (hook feature check) と task-46 (config-editor sh) の基盤を整える。
+`.claude/harness-config.yml` に新 36 key (feature toggle 21 件 + review 制御 13 件) を追加し、`.claude/hooks/lib/config-loader.sh` に load logic + `is_feature_enabled <name>` 共通関数を追加する。task-45 (hook feature check) と task-46 (config-editor sh) の基盤を整える。
 
 ## Task 作業概要
 
-- yml schema 拡張: 新 34 key (`feature_*_enabled` 21 + `review_*_*` 12 + `review_iteration_max` 1) 追加
+- yml schema 拡張: 新 36 key (`feature_*_enabled` 21 + `review_*_*` 12 + `review_iteration_max` 1) 追加
 - config-loader.sh 拡張: 34 key load logic + `is_feature_enabled <name>` 共通関数 (戻り値 0/1、env override 優先)
 - smoke 新設: `config-feature-toggles-smoke.sh` 3 cases (ON / OFF / 未設定 backward compat)
 - reviewer 5+ 並列 iter 収束 + 既存 smoke regression 0
@@ -19,9 +19,9 @@
 
 ## Task 完了条件 (DoD)
 
-- [ ] `.claude/harness-config.yml` に新 34 key 追加 (`grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13)
+- [ ] `.claude/harness-config.yml` に新 36 key 追加 (`grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13)
 - [ ] `.claude/hooks/lib/config-loader.sh` で 34 key load + `is_feature_enabled` 関数追加 (`declare -f is_feature_enabled` で関数存在確認)
-- [ ] smoke `.claude/tests/config-feature-toggles-smoke.sh` 3 cases PASS
+- [ ] smoke `.claude/tests/config-feature-toggles-smoke.sh` 6 cases PASS
 - [ ] 既存 smoke regression 0 (config-loader 経由の全 hook smoke)
 - [ ] reviewer iter 5 上限内収束 (CRITICAL+HIGH+MEDIUM=0)
 - [ ] PR create (`feat/config-yml-phase1-schema-loader`)
@@ -29,7 +29,7 @@
 
 ## Task 概要欄 (list.md 用、3 要素)
 
-feature toggle と reviewer 制御の yml 化基盤を整えるため、`harness-config.yml` に新 34 key 追加し `config-loader.sh` に load logic + `is_feature_enabled` 共通関数を追加する。完成すれば task-45/46 が yml 経由で feature toggle と reviewer 制御を参照できるようになる。
+feature toggle と reviewer 制御の yml 化基盤を整えるため、`harness-config.yml` に新 36 key 追加し `config-loader.sh` に load logic + `is_feature_enabled` 共通関数を追加する。完成すれば task-45/46 が yml 経由で feature toggle と reviewer 制御を参照できるようになる。
 
 ## Task 依存先タスク
 
@@ -39,9 +39,9 @@ feature toggle と reviewer 制御の yml 化基盤を整えるため、`harness
 
 | Step | Status | 作業概要 | 完了条件 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | `harness-config.yml` に新 34 key 追加 (feature_* 21 + review_* 13) | `grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13 |
+| 1 | 🔲 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 13) | `grep -cE '^feature_[a-z_]+_enabled:' .claude/harness-config.yml` ≥ 21 + `grep -cE '^review_[a-z_]+:' .claude/harness-config.yml` ≥ 13 |
 | 2 | 🔲 | `config-loader.sh` 拡張 (34 key load + `is_feature_enabled` 関数) | `bash -c 'source .claude/hooks/lib/config-loader.sh && declare -f is_feature_enabled'` で関数存在確認 |
-| 3 | 🔲 | smoke `config-feature-toggles-smoke.sh` 新設 (3 cases) | `bash .claude/tests/config-feature-toggles-smoke.sh` 3/3 PASS |
+| 3 | 🔲 | smoke `config-feature-toggles-smoke.sh` 新設 (6 cases) | `bash .claude/tests/config-feature-toggles-smoke.sh` 6/6 PASS |
 | 4 | 🔲 | (テスト設計レビュー) reviewer 5+ 並列 iter 1+ (yml schema + shell 両軸、subagent 並列) | iter 5 回上限内で収束 (CRITICAL+HIGH+MEDIUM=0) |
 | 5 | 🔲 | (テスト合格) 新 smoke + 既存 smoke regression 0 (config-loader 関連) | 新 3 case + 既存 smoke 全 PASS |
 | 6 | 🔲 | (リファクタリング) 3 観点判定 (持続可能性 / 汎用性 / 非冗長化) | skip 明示 or 実施 |
@@ -61,7 +61,7 @@ reviewer 制御の smoke は task-45 で扱う (本 task は yml + loader のみ
 | 範囲 | 詳細 |
 |---|---|
 | 新規 file | `docs/draft/config-yml-phase1-schema-loader.md` / `docs/tasks/task-44-config-yml-phase1-schema-loader.md` / `.claude/tests/config-feature-toggles-smoke.sh` |
-| 修正 file | `.claude/harness-config.yml` (新 34 key) / `.claude/hooks/lib/config-loader.sh` (load + 共通関数) |
+| 修正 file | `.claude/harness-config.yml` (新 36 key) / `.claude/hooks/lib/config-loader.sh` (load + 共通関数) |
 | 環境変数 | 34 件新規 (`HC_FEATURE_*_ENABLED` 21 + `HC_REVIEW_*_*` 13) |
 | 互換性 | 既存 yml 値 touch しない (新 key default 動作)、採用 4 リポ既存 yml 不変 |
 

@@ -86,6 +86,9 @@ unset -f _hc_resolve_config
 # ここに無いキーは YAML から動的に load されるが、env override は適用されない
 # (= 既存の挙動: env で先行設定してあっても YAML が上書きする)。
 # 新規キーを追加した場合は本リストにも追加すること。
+#
+# task-44 (2026-05-27): feature toggle 21 + review 13 = 新 34 key 追加。
+# 各 key は yml 未設定でも本 file 内 defaults で fallback 動作可能 (backward compat)。
 _HC_KNOWN_KEYS="\
 TASK_DIR \
 DRAFT_DIR \
@@ -125,7 +128,43 @@ WORKFLOW_STAGES_MODIFY \
 DOCS_APPROVED_DIR \
 RULE_CHANGE_GUARD_ENABLED \
 LOOP_CONFIRMATION_DETECTION_ENABLED \
-LOOP_CONFIRMATION_PATTERNS"
+LOOP_CONFIRMATION_PATTERNS \
+FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED \
+FEATURE_DRAFT_FLOW_GUARD_ENABLED \
+FEATURE_TASK_RULE_GUARD_ENABLED \
+FEATURE_DELEGATION_GUARD_ENABLED \
+FEATURE_WORKFLOW_ENFORCEMENT_ENABLED \
+FEATURE_CONFIDENCE_GATE_ENABLED \
+FEATURE_GATEGUARD_ENABLED \
+FEATURE_CONTEXT_BUDGET_ENABLED \
+FEATURE_PARALLEL_SUBAGENT_REMINDER_ENABLED \
+FEATURE_AUTONOMOUS_ACTION_GUARD_ENABLED \
+FEATURE_BYPRODUCT_DISCHARGE_ENABLED \
+FEATURE_WHY_X5_ENFORCEMENT_ENABLED \
+FEATURE_SESSION_HELP_SURFACE_ENABLED \
+FEATURE_IMPROVEMENT_PROPOSAL_ENABLED \
+FEATURE_MODE_SESSION_START_ENABLED \
+FEATURE_CHECK_SERENA_MCP_ENABLED \
+FEATURE_CHECK_REQUIRED_ENV_ENABLED \
+FEATURE_INIT_TASKS_ON_START_ENABLED \
+FEATURE_NOTIFY_ENABLED \
+FEATURE_CHECK_MD_MERMAID_ENABLED \
+FEATURE_FAILURE_LOOP_DETECT_ENABLED \
+REVIEW_REQUIRED_DESIGN \
+REVIEW_MIN_COUNT_DESIGN \
+REVIEW_MAX_COUNT_DESIGN \
+REVIEW_REQUIRED_TEST \
+REVIEW_MIN_COUNT_TEST \
+REVIEW_MAX_COUNT_TEST \
+REVIEW_REQUIRED_MODULE \
+REVIEW_MIN_COUNT_MODULE \
+REVIEW_MAX_COUNT_MODULE \
+REVIEW_REQUIRED_SYSTEM \
+REVIEW_MIN_COUNT_SYSTEM \
+REVIEW_MAX_COUNT_SYSTEM \
+REVIEW_REQUIRED_SECURITY \
+REVIEW_MIN_COUNT_SECURITY \
+REVIEW_ITERATION_MAX"
 
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
@@ -200,6 +239,54 @@ HC_LOOP_CONFIRMATION_DETECTION_ENABLED="true"
 # 空文字なら hook 内 default 使用 (推奨)。env override 経由でのみ上書き可。
 HC_LOOP_CONFIRMATION_PATTERNS=""
 
+# --- Feature toggles (task-44 Phase 1、2026-05-27 追加) ---
+# 機能単位 on/off スイッチ (21 件)。default true (全 feature 有効)。
+# 各 feature は関連 hook 群を統括する上位 layer。
+# 採用先 yml に key 不在でも本 defaults で fallback 動作 (backward compat)。
+# env override: HC_FEATURE_<NAME>_ENABLED=false で個別 OFF 可能。
+HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED="true"
+HC_FEATURE_DRAFT_FLOW_GUARD_ENABLED="true"
+HC_FEATURE_TASK_RULE_GUARD_ENABLED="true"
+HC_FEATURE_DELEGATION_GUARD_ENABLED="true"
+HC_FEATURE_WORKFLOW_ENFORCEMENT_ENABLED="true"
+HC_FEATURE_CONFIDENCE_GATE_ENABLED="true"
+HC_FEATURE_GATEGUARD_ENABLED="true"
+HC_FEATURE_CONTEXT_BUDGET_ENABLED="true"
+HC_FEATURE_PARALLEL_SUBAGENT_REMINDER_ENABLED="true"
+HC_FEATURE_AUTONOMOUS_ACTION_GUARD_ENABLED="true"
+HC_FEATURE_BYPRODUCT_DISCHARGE_ENABLED="true"
+HC_FEATURE_WHY_X5_ENFORCEMENT_ENABLED="true"
+HC_FEATURE_SESSION_HELP_SURFACE_ENABLED="true"
+HC_FEATURE_IMPROVEMENT_PROPOSAL_ENABLED="true"
+HC_FEATURE_MODE_SESSION_START_ENABLED="true"
+HC_FEATURE_CHECK_SERENA_MCP_ENABLED="true"
+HC_FEATURE_CHECK_REQUIRED_ENV_ENABLED="true"
+HC_FEATURE_INIT_TASKS_ON_START_ENABLED="true"
+HC_FEATURE_NOTIFY_ENABLED="true"
+HC_FEATURE_CHECK_MD_MERMAID_ENABLED="true"
+HC_FEATURE_FAILURE_LOOP_DETECT_ENABLED="true"
+
+# --- Reviewer 制御 (task-44 Phase 1、2026-05-27 追加) ---
+# review_required_* (bool default true、security のみ false): false で当該 review command を skip
+# review_min_count_* (int): reviewer 並列起動最低数 (採用 6 条 4 同期)
+# review_max_count_* (int): reviewer 並列起動上限 (registry 件数で絞り込み)
+# review_iteration_max: 反復上限 (default 5、超過時 user escalation)
+HC_REVIEW_REQUIRED_DESIGN="true"
+HC_REVIEW_MIN_COUNT_DESIGN="3"
+HC_REVIEW_MAX_COUNT_DESIGN="7"
+HC_REVIEW_REQUIRED_TEST="true"
+HC_REVIEW_MIN_COUNT_TEST="5"
+HC_REVIEW_MAX_COUNT_TEST="10"
+HC_REVIEW_REQUIRED_MODULE="true"
+HC_REVIEW_MIN_COUNT_MODULE="2"
+HC_REVIEW_MAX_COUNT_MODULE="5"
+HC_REVIEW_REQUIRED_SYSTEM="true"
+HC_REVIEW_MIN_COUNT_SYSTEM="2"
+HC_REVIEW_MAX_COUNT_SYSTEM="5"
+HC_REVIEW_REQUIRED_SECURITY="false"
+HC_REVIEW_MIN_COUNT_SECURITY="1"
+HC_REVIEW_ITERATION_MAX="5"
+
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
 _hc_normalize() {
@@ -255,6 +342,16 @@ else
     # 値の前後空白 trim
     _hc_val="${_hc_val#"${_hc_val%%[![:space:]]*}"}"
     _hc_val="${_hc_val%"${_hc_val##*[![:space:]]}"}"
+    # env > YAML priority guard (task-44 hot fix):
+    # 既に env で `HC_<KEY>` が設定済 (空文字含む) ならば YAML 値で上書きしない。
+    # _HC_KNOWN_KEYS の Step 1 snapshot は known keys のみ対象だったが、
+    # 任意 key (例: HC_FEATURE_<NAME>_ENABLED) でも env > YAML を機能させる。
+    eval "_hc_preset=\${HC_${_hc_key_upper}+set}"
+    if [ "${_hc_preset:-}" = "set" ]; then
+      unset _hc_preset
+      continue
+    fi
+    unset _hc_preset
     # 配列構文 [a, b, c] 判定
     case "$_hc_val" in
       \[*\])
@@ -373,6 +470,81 @@ export HC_DOCS_APPROVED_DIR
 export HC_RULE_CHANGE_GUARD_ENABLED
 export HC_LOOP_CONFIRMATION_DETECTION_ENABLED HC_LOOP_CONFIRMATION_PATTERNS
 
+# Feature toggles (task-44 Phase 1)
+export HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED HC_FEATURE_DRAFT_FLOW_GUARD_ENABLED
+export HC_FEATURE_TASK_RULE_GUARD_ENABLED HC_FEATURE_DELEGATION_GUARD_ENABLED
+export HC_FEATURE_WORKFLOW_ENFORCEMENT_ENABLED HC_FEATURE_CONFIDENCE_GATE_ENABLED
+export HC_FEATURE_GATEGUARD_ENABLED HC_FEATURE_CONTEXT_BUDGET_ENABLED
+export HC_FEATURE_PARALLEL_SUBAGENT_REMINDER_ENABLED HC_FEATURE_AUTONOMOUS_ACTION_GUARD_ENABLED
+export HC_FEATURE_BYPRODUCT_DISCHARGE_ENABLED HC_FEATURE_WHY_X5_ENFORCEMENT_ENABLED
+export HC_FEATURE_SESSION_HELP_SURFACE_ENABLED HC_FEATURE_IMPROVEMENT_PROPOSAL_ENABLED
+export HC_FEATURE_MODE_SESSION_START_ENABLED HC_FEATURE_CHECK_SERENA_MCP_ENABLED
+export HC_FEATURE_CHECK_REQUIRED_ENV_ENABLED HC_FEATURE_INIT_TASKS_ON_START_ENABLED
+export HC_FEATURE_NOTIFY_ENABLED HC_FEATURE_CHECK_MD_MERMAID_ENABLED
+export HC_FEATURE_FAILURE_LOOP_DETECT_ENABLED
+
+# Reviewer 制御 (task-44 Phase 1)
+export HC_REVIEW_REQUIRED_DESIGN HC_REVIEW_MIN_COUNT_DESIGN HC_REVIEW_MAX_COUNT_DESIGN
+export HC_REVIEW_REQUIRED_TEST HC_REVIEW_MIN_COUNT_TEST HC_REVIEW_MAX_COUNT_TEST
+export HC_REVIEW_REQUIRED_MODULE HC_REVIEW_MIN_COUNT_MODULE HC_REVIEW_MAX_COUNT_MODULE
+export HC_REVIEW_REQUIRED_SYSTEM HC_REVIEW_MIN_COUNT_SYSTEM HC_REVIEW_MAX_COUNT_SYSTEM
+export HC_REVIEW_REQUIRED_SECURITY HC_REVIEW_MIN_COUNT_SECURITY
+export HC_REVIEW_ITERATION_MAX
+
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper
 unset _hc_val _hc_inner _hc_inner_trim _hc_list _hc_items _hc_item _hc_norm _hc_p
+
+# --- is_feature_enabled <feature_name> 共通関数 (task-44 Phase 1) ---
+# 用途: hook 冒頭で `if ! is_feature_enabled <name>; then exit 0; fi` で feature OFF 即 skip
+#
+# 引数:
+#   $1: feature 名 (lowercase、例: "loop_mode_enforcement" / "draft_flow_guard")
+#       env / yml key は `HC_FEATURE_<UPPER>_ENABLED` / `feature_<lower>_enabled` を参照
+#
+# 戻り値:
+#   0 = enabled (feature ON、hook 続行)
+#   1 = disabled (feature OFF、hook skip)
+#
+# 値解決の優先順 (高 → 低):
+#   1. 直接 export された env `HC_FEATURE_<UPPER>_ENABLED` (config-loader.sh Step 4 で復元済)
+#   2. yml `feature_<lower>_enabled` の load 値 (Step 3 で eval 済)
+#   3. 本 file 内 defaults "true" (Step 2 で設定済)
+#
+#   1〜3 はすべて同名 env として export 済なので、本関数は env を indirect read する。
+#   bash 3.2 互換のため `${!var}` ではなく eval を使う。
+#
+# 値判定:
+#   "false" / "False" / "FALSE" / "0" / "off" / "no" → disabled (return 1)
+#   それ以外 (空文字含む) → enabled (return 0、backward compat for safety)
+#
+# 例:
+#   if ! is_feature_enabled loop_mode_enforcement; then
+#     exit 0  # feature OFF、hook を no-op skip
+#   fi
+is_feature_enabled() {
+  local name="$1"
+  if [ -z "$name" ]; then
+    # 引数欠如は安全側 (enabled) で扱う、stderr WARN
+    printf '[is_feature_enabled] WARN: feature name required\n' >&2
+    return 0
+  fi
+  # lowercase → uppercase 化、非英数を _ に正規化 (config-loader 命名と同期)
+  local upper
+  upper=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]_' '_')
+  upper="${upper%_}"
+  # env indirect read (bash 3.2 互換: eval ベース)
+  local value=""
+  eval "value=\${HC_FEATURE_${upper}_ENABLED-}"
+  # value lowercase 化して判定 (大小文字無視)
+  local lc
+  lc=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+  case "$lc" in
+    false|0|off|no)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}

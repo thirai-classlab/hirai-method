@@ -302,3 +302,77 @@ parallel_subagent_ttl_sec: 300
 #   parallel_subagent_state_dir: "/tmp/my-isolated-state"
 # env 上書き例:
 #   export HC_PARALLEL_SUBAGENT_STATE_DIR=/tmp/parallel-state-test
+
+# === Feature Toggles (機能単位 on/off、Phase 2 で hook level 上位 layer) ===
+# 各 feature key は **上位 layer**、関連 hook の `HC_<HOOK>_ENABLED` は subordinate。
+# feature 単位で OFF にすれば、hook level に関わらず全 hook 停止 (feature 内 hook 一括 OFF)。
+# 設計起源: docs/draft/config-yml-feature-toggles-and-editor.md §3.1.2 (task-44)
+#
+# Phase 1 (本 commit): yml schema 拡張のみ、各 hook での feature check は Phase 2 で追加。
+# 各 key が false でも本 Phase では hook 動作は変わらない (yml schema 追加のみ)。
+#
+# env 上書き例:
+#   export HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED=false   # Loop モード 3 hook を一括 OFF
+#   export HC_FEATURE_DRAFT_FLOW_GUARD_ENABLED=false        # draft-flow-guard OFF
+
+feature_loop_mode_enforcement_enabled: true       # loop-confirmation-detector + loop-auto-progress-reminder + mode-enforce
+feature_draft_flow_guard_enabled: true            # draft-flow-guard
+feature_task_rule_guard_enabled: true             # task-rule-guard + list-md-plan-first-reminder
+feature_delegation_guard_enabled: true            # delegation-guard
+feature_workflow_enforcement_enabled: true        # workflow-guard
+feature_confidence_gate_enabled: true             # confidence-gate (F3)
+feature_gateguard_enabled: true                   # gateguard (F1)
+feature_context_budget_enabled: true              # context-budget
+feature_parallel_subagent_reminder_enabled: true  # parallel-subagent-reminder
+feature_autonomous_action_guard_enabled: true     # autonomous-action-guard
+feature_byproduct_discharge_enabled: true         # byproduct-discharge-guard + next-actions-surface
+feature_why_x5_enforcement_enabled: true          # why-x5-reminder + why-x5-violation-detect
+feature_session_help_surface_enabled: true        # session-help-surface
+feature_improvement_proposal_enabled: true        # improvement-proposal
+feature_mode_session_start_enabled: true          # mode-session-start
+feature_check_serena_mcp_enabled: true            # check-serena-mcp
+feature_check_required_env_enabled: true          # check-required-env
+feature_init_tasks_on_start_enabled: true         # init-tasks-on-start
+feature_notify_enabled: true                      # notify + stop (sound)
+feature_check_md_mermaid_enabled: true            # check-md-mermaid
+feature_failure_loop_detect_enabled: true         # failure-loop-detect
+
+# === Reviewer Required / Min Count / Iteration (採用 6 条 4 reviewer 制御) ===
+# /design-review / /test-design / /module-review / /system-review command が消費 (Phase 2)。
+# yml 値 default で動作、env override 可 (HC_REVIEW_*)。
+# 設計起源: docs/draft/config-yml-feature-toggles-and-editor.md §3.1.1 (task-44)
+#
+# Phase 1 (本 commit): yml schema 拡張のみ、各 review command での参照 logic は Phase 2 で追加。
+# 本 Phase では値変更しても review command 動作は変わらない (yml schema 追加のみ)。
+#
+# env 上書き例:
+#   export HC_REVIEW_REQUIRED_DESIGN=false           # /design-review を no-op skip
+#   export HC_REVIEW_MIN_COUNT_TEST=3                # テスト設計レビュー min 3 体
+#   export HC_REVIEW_ITERATION_MAX=3                 # 反復上限 3 回
+
+# 設計レビュー (W2 /design-review)
+review_required_design: true          # false なら /design-review が no-op skip
+review_min_count_design: 3            # default 3、reviewer_registry_design 件数下限
+review_max_count_design: 7            # default registry 全件、上限指定
+
+# テスト設計レビュー (W1 /test-design、採用 6 条 4)
+review_required_test: true            # false なら採用 6 条 4「テスト設計レビュー」step skip 可
+review_min_count_test: 5              # default 5 (採用 6 条 4 で 5+ 動的選定)
+review_max_count_test: 10             # default registry 全件、上限指定
+
+# モジュールレビュー (W3 /module-review)
+review_required_module: true          # false なら /module-review skip 可
+review_min_count_module: 2            # default 2 (code-reviewer + refactoring-specialist)
+review_max_count_module: 5            # default registry 全件、上限指定
+
+# システムレビュー (W3 /system-review)
+review_required_system: true          # false なら /system-review skip 可
+review_min_count_system: 2            # default 2 (architect-reviewer + refactoring-specialist)
+review_max_count_system: 5            # default registry 全件、上限指定
+
+# security レビュー (W2 /design-review 内 security category)
+review_required_security: false       # default false (security 影響 task のみ)
+review_min_count_security: 1          # default 1 (security-reviewer)
+
+# 反復制御
+review_iteration_max: 5               # default 5 (採用 6 条 4 で 5 回上限)

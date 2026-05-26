@@ -48,7 +48,7 @@ approved_by: user
 
 ### 3.1 yml schema 拡張 (Phase 1)
 
-#### 3.1.1 reviewer 制御 (新規 13 key)
+#### 3.1.1 reviewer 制御 (新規 15 key: required 5 + min_count 5 + max_count 4 + iteration_max 1)
 
 ```yaml
 # === Reviewer Required / Min Count / Iteration (採用 6 条 4 の制御) ===
@@ -277,7 +277,7 @@ fi
 ## §6 DoD
 
 - [ ] `docs/draft/config-yml-feature-toggles-and-editor.md` 存在 + `approved_at` 非空
-- [ ] `.claude/harness-config.yml` に新 34 key 追加 (`feature_*` 21 + `review_*_*` 12 + `review_iteration_max` 1)
+- [ ] `.claude/harness-config.yml` に新 36 key 追加 (`feature_*_enabled` 21 + `review_*_*` 15: required 5 + min_count 5 + max_count 4 + iteration_max 1)
 - [ ] `.claude/hooks/lib/config-loader.sh` で 34 key load + `is_feature_enabled` 関数追加
 - [ ] 21+ 件 hook に feature check 追加 (各 hook 冒頭、staging 戦略)
 - [ ] 4 件 review command に yml 参照 logic 追加
