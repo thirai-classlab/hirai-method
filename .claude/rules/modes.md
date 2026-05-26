@@ -88,6 +88,7 @@ HIRAI メソッドは 2 つの動作モードを持つ。
 | 3 | `.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) | Bash 実行前 | 11 カテゴリ regex 照合 → Loop なら `{"decision":"block"}` / Normal なら context 注入 |
 | 4 | `.claude/settings.json` 配線 | (機構接続) | UserPromptSubmit 末尾 + PreToolUse Bash 先頭に配置 |
 | 5 | `.claude/tests/loop-auto-progress-smoke.sh` | 検証 | 9 ケースで両 hook の動作検証 |
+| 6 | `.claude/hooks/loop-confirmation-detector.sh` (Stop) | AI 最終 message 出力後 | 確認質問 regex 検出 (「進めてよいですか」「OK ですか」「お待ちします」等) → `<system-reminder>` 強制注入で次 turn 自律是正、bypass: `HC_LOOP_CONFIRMATION_DETECTION_ENABLED=false` / `ECC_LOOP_CONFIRMATION_OFF=1`、起源: task-41 (2026-05-26、user 「Loopモードなのに聞いてきます」指摘) |
 
 ### 禁止 11 カテゴリ (default、`HC_AUTONOMOUS_ACTION_PATTERNS` で上書き可)
 
