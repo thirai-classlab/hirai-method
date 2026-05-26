@@ -39,7 +39,7 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
 
 1. **Task = Phase = N Step (2 階層、Phase 廃止)** — 1 task は 1 つの Goal + N Steps から成る。Phase という中間階層は廃止し、**Task と Phase を同義化**。Phase / Step 以外の独自階層 (Wave / Sub-Phase / Stage 等) は禁止。Wave / Phase 階層を使っていた既存 task は次回着手時に新構造へ再構造化する (後述「既存 task 移行ガイド」参照)。
 
-2. **Task 必須項目**: 「**ゴール** (1 文、観察可能)」+ 「**作業概要** (箇条書き 3-5 件)」+ 「**完了条件** (定量 or 観察可能な事実、DoD)」+ 「**概要欄** (list.md 用、規約: 「**何のため × 何をやる × 何ができるようになる**」3 要素必須)」 — Task 見出し直下に上記 4 項目を必ず記載。「観察可能」とは PASS/FAIL or 数値 or before/after diff のように第三者が客観確認できる粒度を指す (例: 「全テスト 92/92 PASS」「list.md に新 entry 1 行追加」)。
+2. **Task 必須項目**: 「**ゴール** (1 文、観察可能)」+ 「**作業概要** (箇条書き 3-5 件)」+ 「**完了条件** (定量 or 観察可能な事実、DoD)」+ 「**概要欄** (list.md 用、規約: 「**何のため × 何をやる × 何ができるようになる**」3 要素必須)」+ 「**依存先タスク** (0 以上、複数可、2026-05-26 追加)」 — Task 見出し直下に上記 5 項目を必ず記載。「観察可能」とは PASS/FAIL or 数値 or before/after diff のように第三者が客観確認できる粒度を指す (例: 「全テスト 92/92 PASS」「list.md に新 entry 1 行追加」)。依存先タスクは「**`task-N1, task-N2` 形式で ID 列挙** (依存なしは `—`、空欄禁止) + 各依存先について Task header section に **影響内容 (1-2 文) + 依存先 task.md へのリンク** を記載」。本 task 開発開始時 (`/start-task` 直後) に依存先 task.md + 関連 draft を **必ず Read** すること (詳細は本 .md §「開発開始時の必読義務」参照)。
 
 3. **Step 必須項目**: 「**作業概要** (1-2 文 actionable description)」+ 「**完了条件** (定量 or 観察可能な事実)」+ 「**Step status** (📝/🔲/🔄/✅/⏸️)」+ 「**概要欄** (list.md 用、規約: **作業概要のみ**、Task のような 3 要素は不要)」 — Step 見出し直下に上記 4 項目を必ず記載。「test PASS」のような曖昧表現ではなく、「`bash .claude/tests/foo-smoke.sh` exit 0」のように再現可能な検証コマンドを書く。
 
@@ -67,10 +67,11 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
 
 5. **小タスク許容: 1 Task + 1 Step OK** — hot fix / typo 修正 / config 1 行追加 等の小タスクでは「1 Task + 1 Step (作業概要 + 完了条件)」で OK。条 4 の「最終 3 Step」は本ケースでは「1 Step 内に test 検証 + refactor 判定を併記」で代替可。
 
-6. **list.md 表現規約 (Task header + Step sub-rows、概要欄 2 種規約)** — list.md は新 table 構造で表現:
-   - **column**: `# | Step Status | Task / Step | 概要 | 詳細`
-   - **Task header row**: `| <id> | <集約 status> | **Task: <タスク名>** | <Task 概要欄: 何のため × 何をやる × 何ができる> | [task-<id>-<slug>.md] |`
-   - **Step sub-row**: `|    | <Step status> | Step N | <作業概要> | |` (第 1 列 (#) は空、Task header の連続として表現)
+6. **list.md 表現規約 (Task header + Step sub-rows、概要欄 2 種規約、依存先列追加 2026-05-26)** — list.md は新 table 構造で表現:
+   - **column** (6 列、2026-05-26 「依存先」列追加): `# | Step Status | Task / Step | 概要 | 依存先 | 詳細`
+   - **Task header row**: `| <id> | <集約 status> | **Task: <タスク名>** | <Task 概要欄: 何のため × 何をやる × 何ができる> | <依存先 ID 列挙 or —> | [task-<id>-<slug>.md] |`
+   - **Step sub-row**: `|    | <Step status> | Step N | <作業概要> | | |` (第 1 列 (#) + 第 5 列 (依存先) は空、Task header の連続として表現)
+   - **依存先列 format** (採用 6 条 2 連動): `task-N1, task-N2, task-N3` (カンマ区切り ID 列挙)、依存なしは `—` (long-dash) で空欄禁止。Task header section に各依存先について **影響内容 + リンク** 記載必須
    - **集約 status 規則**: 全 Step ✅ なら ✅、Step に 🔄 / 🔲 が混在なら 🔄、全 🔲 なら 🔲、全 📝 なら 📝、⏸️ 含むなら ⏸️
    - **status 凡例**: 📝 (設計未承認、batch planning 経路 B 中間状態) / 🔲 (未着手) / 🔄 (進行中) / ✅ (完了) / ⏸️ (保留)
    - **概要欄 2 種規約**:
@@ -89,6 +90,40 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
 | テスト設計レビュー (採用 6 条 4 第 1 段) 無効化 | `ECC_TEST_DESIGN_REVIEW_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` に append (反復 5 回上限超過時の user escalation 後の継続用、旧採用 5 条 4 と同義) |
 
 honor system: bypass 時は理由を CLAUDE.md or `docs/tasks/<task-N>.md` の該当 entry に記録すること。機械強制 hook (`task-rule-guard.sh` 拡張で Task 内容解析) は本規範採用フェーズでは未実装、効果観察後に別 task で検討する。
+
+## 開発開始時の必読義務 (2026-05-26 採用)
+
+**起源**: user 指示「list.md やタスク詳細へ後続のタスクへどう影響するのかを意識させるために list.md へ依存先タスク (table 列追加)、タスク詳細.md へどのように影響するのかとタスク.md へのリンクを表記すること。開発時はそれとリンク先を必ず読むこと」(2026-05-26)。
+
+採用 6 条 2 で Task 必須項目に追加された **依存先タスク** を実効化するため、Task 開発開始時 (`/start-task <id>` 直後) に以下を **必ず Read** する。
+
+### 必読対象
+
+| 対象 | 読み方 |
+|---|---|
+| **本 task の `docs/tasks/task-<id>-<slug>.md`** | 全文 Read (Task ゴール / 依存先タスク / 作業概要 / DoD / Step 計画 / TDD 戦略 / 影響範囲) |
+| **本 task の `docs/draft/<slug>.md`** (設計起源、存在時) | 全文 Read (真因 / 採用案 / リスク / レビューサイクル / 承認履歴) |
+| **依存先 task の `docs/tasks/task-<N>-<slug>.md` 全件** (`docs/tasks/list.md` の依存先列 + 本 task ファイル §「Task 依存先タスク」table のリンク先) | 各 task の Task ゴール + 完了条件 + 影響範囲 を最低限 Read (依存先が ✅ 完了済なら主に「何が確定したか」、🔄/🔲 進行中なら「現状」と「本 task が前提とする部分」) |
+| **依存先 task の `docs/draft/<dep-slug>.md`** (存在時) | 採用案 + リスク sections を Read (本 task が依存先の設計判断にどう影響を受けるか把握) |
+
+### 違反検出 (当面 honor system、将来機械強制化)
+
+| 段階 | 検出方法 | 動作 |
+|---|---|---|
+| **現状 (2026-05-26〜)** | honor system | main agent が `/start-task` 直後に必読対象を Read する宣言 (Why × 5 で「依存先 task-N1 / N2 の影響を確認するため、それぞれの task.md + draft を Read する」と明示) |
+| **将来 (案、別 task で起票)** | `task-rule-guard.sh` 拡張 | `/start-task <id>` 検出時に対象 task ファイル + 依存先 task ファイルが本 session で Read 済か判定、未 Read なら warn 注入 (block しない、honor system 維持で過剰防止) |
+
+### 例外
+
+- **依存先 0 件 (依存なし)**: 本 task の `task-<id>-<slug>.md` + `draft/<slug>.md` のみ Read で OK
+- **小タスク (1 Task + 1 Step、採用 6 条 5)**: typo 修正 / 1 行 fix 等で依存先が「— (依存なし)」の場合は本 task ファイルのみで OK
+- **依存先が parking-lot.md の 🧊 / ❌**: 履歴として Read 推奨 (本 task との関連を理解するため)、ただし完了済 / 不採用情報として参照
+
+### 効果
+
+- 後続タスクへの影響を **着手前に意識** することで、依存先の設計判断 / 完了状態を踏まえた実装が可能
+- 「依存先 task は完了済と思い込み実装着手 → 実は ⏸️ 保留中で前提崩壊」のような事故を構造的に防止
+- list.md 依存先列で **DAG 視覚化** + task.md 依存先 section で **影響内容明示** + 開始時必読義務で **実 Read 強制** の 3 層で依存関係の暗黙知化を防ぐ
 
 ## 既存 task 移行ガイド
 

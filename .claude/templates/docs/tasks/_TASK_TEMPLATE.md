@@ -28,6 +28,17 @@ total_steps: 0
 
 例: 「`.claude/rules/task-management.md` に §「plan-first」が追加され、batch planning 時の 📝 行先置きフロー 2 経路分岐 (経路 A/B) と凡例 📝 用途 (2 用途) が明文化される」
 
+## Task 依存先タスク
+
+> **規約 (採用 6 条 2、2026-05-26 追加)**: 0 以上の複数可。依存なしは「— (依存なし)」と明示 (空欄禁止)。各依存先について **影響内容 (1-2 文)** + **依存先 task.md へのリンク** を記載。本 task 開発開始時 (`/start-task` 直後) に依存先 task.md + 関連 draft を **必ず Read** すること (詳細: `.claude/rules/task-management.md` §「開発開始時の必読義務」)。
+
+| 依存先 task | 影響内容 | リンク |
+|---|---|---|
+| task-N1 | <本 task が task-N1 の何にどう影響を受ける / 何を前提とするか> | [task-N1-<slug>.md](task-N1-<slug>.md) |
+| task-N2 | <影響内容 2> | [task-N2-<slug>.md](task-N2-<slug>.md) |
+
+(依存なしの場合は table を削除し「— (依存なし)」と記載)
+
 ## Task 作業概要
 
 - <作業項目 1>
