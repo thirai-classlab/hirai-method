@@ -37,7 +37,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled why_x5_enforcement; then
-  exit 0   # feature OFF で no-op
+  echo '{}'
+  exit 0   # feature OFF で no-op (PostToolUse hook response 規約: empty JSON)
 fi
 
 # stdin を必ず消費
