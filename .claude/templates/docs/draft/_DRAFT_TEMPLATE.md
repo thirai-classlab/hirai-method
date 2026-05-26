@@ -130,7 +130,24 @@ flowchart LR
 
 ---
 
-## 8. 承認履歴
+## 8. レビューサイクル (workflow.md §「収束条件」準拠、2026-05-26 追加)
+
+> draft レビューは **reviewer 最低 3 体以上 並列起動** + **CRITICAL/HIGH/MEDIUM = 0 まで反復** (LOW 許容、上限 5 回)。
+> 各 iter の reviewer 名 + 件数 + 修正 commit を以下 table に append する。詳細: `.claude/rules/workflow.md` §「収束条件」+ `.claude/commands/design-review.md`。
+
+| iter | 日付 | reviewer (起動数) | CRITICAL | HIGH | MEDIUM | LOW | 修正 commit | 状態 |
+|:---:|---|---|:---:|:---:|:---:|:---:|---|---|
+| 1 | YYYY-MM-DD | architect, security-reviewer, code-architect, ... (5) | 0 | 2 | 5 | 3 | `<sha1>` | 修正待ち |
+| 2 | YYYY-MM-DD | (同上、5) | 0 | 0 | 1 | 2 | `<sha2>` | 修正待ち |
+| 3 | YYYY-MM-DD | (同上、5) | 0 | 0 | 0 | 1 | — | **収束 (承認待ちへ)** |
+
+**収束判定**: CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW は許容、cosmetic finding として記録のみ)
+
+**上限超過時 (iter 5 でも未収束)**: user escalation → `ECC_DESIGN_REVIEW_OFF=1` で bypass + `.claude/.workflow-state/bypass.log` 記録 + bypass 理由を §9 承認履歴末尾に追記
+
+---
+
+## 9. 承認履歴
 
 | 日付 | 承認者 | 結果 |
 |---|---|---|
@@ -138,7 +155,7 @@ flowchart LR
 
 ---
 
-## 9. 関連
+## 10. 関連
 
 - 既存設計: [<file>](../<file>.md)
 - 監査: [<audit>](<url>)
