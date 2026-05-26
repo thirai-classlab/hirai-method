@@ -30,7 +30,7 @@ retroactive: true
 |---|---|
 | **規範違反 (本 session 主)** | user 指示「タスク管理にルール追加」+ 「承認します」を受けて、main agent が `docs/draft/` 起案 + `/new-task` を skip し直接 6 file 規範編集に着手 (10 Edit)。`task-management.md` §「設計→承認→タスク追加フロー」step 2-4 を skip |
 | **dogfooding 失敗** | 新規ルール 1 (依存先タスク列・必読義務) + 新規ルール 2 (reviewer 3+ / 反復) を新設しながら、本 task 自身に適用していない (自己矛盾) |
-| **機械強制 gap** | 既存 `draft-flow-guard.sh` は `docs/` 直下のみ block、`.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/**/*.md` への draft 経由なし直接 Edit を block する hook が不在 |
+| **機械強制 gap** | 既存 `draft-flow-guard.sh` は `docs/` 直下のみ block、`.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/docs/**/*.md` への draft 経由なし直接 Edit を block する hook が不在 |
 | **CLAUDE.md Critical Lessons 欠落** | hook BLOCK 強制済の 3 教訓を本 session 直前に slim 化したが、本 case (規範変更 draft skip) に該当する HIGH 級教訓が未追加 |
 
 ```mermaid
@@ -59,7 +59,7 @@ flowchart LR
 | 案 | 内容 | 工数 | メリット | デメリット |
 |:---:|:---|---:|:---|:---|
 | **A** | 規範文書のみ追記 (`modes.md` 遵守事項 2 例外条項を強化 + CLAUDE.md Critical Lessons HIGH 級教訓追加)、hook 強制化なし (honor system) | 0.5h | 軽実装 | 「ルールに書いて守らせる」default、AI が忘れたら再発確実 |
-| **B** | `draft-flow-guard.sh` 拡張で `.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/**/*.md` を block + 規範文書追記なし | 2.0h | 機械強制 = 物理防止 | hook 強制理由が文書化されないと bypass 乱用される、honor system 補完なし |
+| **B** | `draft-flow-guard.sh` 拡張で `.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/docs/**/*.md` を block + 規範文書追記なし | 2.0h | 機械強制 = 物理防止 | hook 強制理由が文書化されないと bypass 乱用される、honor system 補完なし |
 | **C ハイブリッド (推奨)** | A + B 段階: (a) 規範追記 (`modes.md` 例外条項強化 + CLAUDE.md HIGH 教訓追加) + (b) `draft-flow-guard.sh` 拡張 (新 path pattern + retroactive draft case 対応 + bypass env) + (c) 本 task で retroactive draft 化 + /new-task で dogfooding + reviewer 3+ レビュー反復 | 3.5h | 機械強制 (hook BLOCK) + 文書化 (再発時の理解促進) + dogfooding (本ルール 1/2 自己適用で妥当性検証)、CLAUDE.md slim 化方針と整合 (BLOCK 強制済は委譲 section へ) | 工数大、hook 拡張テストが必要 |
 
 → **C ハイブリッド** を推奨。理由:
@@ -80,7 +80,7 @@ flowchart LR
 | 1 | ✅ | ルール 1 (依存先タスク列 + 必読義務) を 3 file に規範化 | 0.5h | — |
 | 2 | ✅ | ルール 2 (reviewer 3+ / 反復) を 3 file に規範化 | 0.5h | — |
 | 3 | 🔄 | retroactive draft 起案 (本 file) + `/new-task` で `list.md` 反映 (本ルール 1 dogfooding、依存先列に — 記入) | 0.3h | Step 1, 2 |
-| 4 | 🔲 | `draft-flow-guard.sh` 拡張: 新 path pattern (`.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/**/*.md`) を block 対象に追加、対応 draft (`docs/draft/<slug>.md` で `approved_at` 非空) 存在で pass、bypass `ECC_RULE_CHANGE_GUARD_OFF=1` | 1.0h | Step 3 |
+| 4 | 🔲 | `draft-flow-guard.sh` 拡張: 新 path pattern (`.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/docs/**/*.md`) を block 対象に追加、対応 draft (`docs/draft/<slug>.md` で `approved_at` 非空) 存在で pass、bypass `ECC_RULE_CHANGE_GUARD_OFF=1` | 1.0h | Step 3 |
 | 5 | 🔲 | `modes.md` 遵守事項 2 例外条項に「規範変更 (`.claude/rules/*.md` 等)」を明示追加 + CLAUDE.md Critical Lessons HIGH 級教訓追加 (hook BLOCK 強制済) | 0.3h | Step 4 |
 | 6 | 🔲 | smoke test 新設 (`.claude/tests/rule-change-draft-flow-guard-smoke.sh`): N cases (新 path pattern block / 対応 draft あり pass / bypass env / retroactive case / 既存 docs/ block 回帰 0) | 0.5h | Step 5 |
 | 7 | 🔲 | (テスト設計レビュー、本ルール 2 dogfooding) reviewer 3+ 並列、CRITICAL+HIGH+MEDIUM=0 まで反復 (上限 5)、§8 レビューサイクル table に iter 記録 | 0.5h | Step 6 |
@@ -105,7 +105,7 @@ flowchart LR
 - .claude/rules/*.md
 - .claude/commands/*.md
 - .claude/templates/docs/{tasks,draft}/*.md
-- .claude/templates/**/*.md (より広い場合)
+- .claude/templates/docs/**/*.md (より広い場合)
 
 [追加判定ロジック]
 1. tool_input.file_path が上記 pattern に match
@@ -113,7 +113,8 @@ flowchart LR
 3. 対応 draft (`docs/draft/<slug>.md` for the change scope) 検索
 4. draft frontmatter `approved_at` が非空 → pass
 5. draft 不在 or `approved_at` 空 → BLOCK + 「先に /new-draft <slug> で設計を起こせ」案内
-6. retroactive case (frontmatter `retroactive: true`) → pass + warn 注入 ("retroactive draft 経由、規範遵守は次回から")
+6. retroactive case (frontmatter `retroactive: true` AND `approved_by:` 非空) → pass + bypass.log 記録 + JSON additionalContext warn 注入 ("retroactive draft 経由、規範遵守は次回から")
+   - `approved_by` 空 → blocked-retroactive-no-approved-by 扱いで BLOCK (任意 draft で `retroactive: true` だけ書く悪用を防止、iter3 SEC-H1 対応)
 
 [bypass]
 - ECC_RULE_CHANGE_GUARD_OFF=1 (1 セッション全体 OFF、bypass.log 記録)
@@ -123,8 +124,8 @@ flowchart LR
 
 ### Step 5 詳細 (規範文書更新)
 
-- `.claude/rules/modes.md` 遵守事項 2 例外条項に追加: 「規範変更 (`.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/**/*.md` への Edit/Write) は user 承認必須、`draft-flow-guard.sh` が機械強制 BLOCK」
-- `CLAUDE.md` Critical Lessons の「hook で完全 BLOCK 強制済の旧教訓」section に追加: 「**`.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/**/*.md` を draft 経由なしで直接 Edit/Write しない** → `draft-flow-guard.sh` 拡張 (本 task で実装)、bypass: `ECC_RULE_CHANGE_GUARD_OFF=1`」
+- `.claude/rules/modes.md` 遵守事項 2 例外条項に追加: 「規範変更 (`.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/docs/**/*.md` への Edit/Write) は user 承認必須、`draft-flow-guard.sh` が機械強制 BLOCK」
+- `CLAUDE.md` Critical Lessons の「hook で完全 BLOCK 強制済の旧教訓」section に追加: 「**`.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/docs/**/*.md` を draft 経由なしで直接 Edit/Write しない** → `draft-flow-guard.sh` 拡張 (本 task で実装)、bypass: `ECC_RULE_CHANGE_GUARD_OFF=1`」
 
 ---
 
@@ -153,7 +154,7 @@ flowchart LR
 
 ## 6. 完了条件（DoD）
 
-- [ ] 新 path pattern (`.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/**/*.md`) への draft 経由なし Edit が `draft-flow-guard.sh` で BLOCK される
+- [ ] 新 path pattern (`.claude/rules/*.md` `.claude/commands/*.md` `.claude/templates/docs/**/*.md`) への draft 経由なし Edit が `draft-flow-guard.sh` で BLOCK される
 - [ ] 対応 draft (`approved_at` 非空) ありなら pass、`retroactive: true` の retroactive draft も pass
 - [ ] bypass env (`ECC_RULE_CHANGE_GUARD_OFF=1`) で 1 セッション OFF、`bypass.log` 記録
 - [ ] smoke `.claude/tests/rule-change-draft-flow-guard-smoke.sh` 全 PASS (5+ cases)

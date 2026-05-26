@@ -21,7 +21,7 @@ HIRAI メソッドは 2 つの動作モードを持つ。
      - **設計文書の新規追加** (`docs/draft/<slug>.md` の新規起こし + user 承認依頼)
      - **仕様変更 / scope 拡張** (承認済 draft の §3 採用案からの逸脱)
      - **戦略的判断** (architecture 選択 / 採用技術スタック変更 / 既存 task の優先順入替)
-     - **規範変更** (`.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/**/*.md` への Edit/Write) — `draft-flow-guard.sh` が機械強制 BLOCK
+     - **規範変更** (`.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/docs/**/*.md` への Edit/Write) — `draft-flow-guard.sh` が機械強制 BLOCK
    - 禁止対象は **戦術判断のみ**: 実装中の方式選択 / branch 命名 / commit メッセージ / 一時的なエラー対処 / build green までの試行錯誤
    - 起源: 2026-05-23 user 観察「recall_poc/docs/01-03 が draft 経由なしで docs/ 直下に直接 Write された事案」、`task-management.md` の「設計→承認→タスク追加フロー」と相反していた構造問題を例外条項で解消
    - 起源 (規範変更): 2026-05-26 task-40 Step 5、本 session 規範違反 (規範変更時 draft skip) の再発防止
