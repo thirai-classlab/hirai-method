@@ -108,9 +108,10 @@ if [ -z "$transcript_path" ] || [ ! -f "$transcript_path" ]; then
   exit 0
 fi
 
-# システム機密 path への traversal を拒否 (security-M1)
+# システム機密 path への traversal を拒否 (security-M1 + sec-H2 拡張)
+# writable system path (/dev/*) も追加して traversal を構造的に防止
 case "$transcript_path" in
-  /etc/*|/usr/*|/bin/*|/sbin/*|/sys/*|/proc/*|/var/log/*)
+  /etc/*|/usr/*|/bin/*|/sbin/*|/sys/*|/proc/*|/var/log/*|/dev/*)
     exit 0 ;;
 esac
 
@@ -179,8 +180,9 @@ if [ -z "$matched" ]; then
   exit 0
 fi
 
-# matched 制御文字 escape (security-M2 fix) — warn_message 埋め込み前
-matched_safe=$(printf '%s' "$matched" | tr -d '\n\r\0')
+# matched 制御文字 + regex metachar escape (security-M2 fix + sec-M4 拡張)
+# 改行 / CR / null + single quote / backslash / dollar / backtick を除去 — warn_message 埋め込み前
+matched_safe=$(printf '%s' "$matched" | tr -d '\n\r\0\\`$' | tr -d "'")
 
 # --- 検出: bypass.log 記録 + additionalContext 注入 ---
 # env_var label を VIOLATION に変更し filter で bypass と区別可能化 (security-M3 fix)
