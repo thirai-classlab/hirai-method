@@ -20,6 +20,13 @@
 #     HIGH-D: file_path canonical 化 (../ / symlink 経由 BLOCK 回避を防止)
 #     HIGH-G: .claude/templates/** → .claude/templates/docs/** に縮小 (top-level 直下は対象外)
 #
+#   task-40 Step 7 iter3 (2026-05-26) — MEDIUM-1 fix:
+#     MEDIUM-1: ECC_DRAFT_FLOW_GUARD_OVERRIDE bypass 時に file_path / tool_name を
+#               log に記録 (audit trail 完全性向上)。jq 抽出を bypass 判定前に前倒し。
+#               tool_name filter (Edit/Write 以外早期 exit) は維持し、Edit/Write の
+#               場合のみ OVERRIDE bypass log を出す (Edit/Write 以外で OVERRIDE=1 は
+#               noise なので log しない)。jq 不在時の fail-open 動作も維持。
+#
 # 設計起源:
 #   - docs/draft/system-reminder-attention-fix.md Wave 2.3 (2026-05-23)
 #   - 観察証拠: recall_poc/docs/01-03 が draft 経由なしで docs/ 直下に
@@ -75,24 +82,33 @@ if [ -f "$script_dir/lib/bypass-logger.sh" ]; then
   . "$script_dir/lib/bypass-logger.sh"
 fi
 
-# bypass env (既存 docs/ + 新 path 両方カバー)
-# HIGH-A: bypass.log 記録追加
-if [ "${ECC_DRAFT_FLOW_GUARD_OVERRIDE:-0}" = "1" ]; then
-  if declare -f log_bypass >/dev/null 2>&1; then
-    log_bypass "draft-flow-guard" "ECC_DRAFT_FLOW_GUARD_OVERRIDE" "${ECC_BYPASS_REASON:-(not provided)}"
-  fi
-  exit 0
-fi
-
-# tool_name 抽出
+# ----------------------------------------------------------------------
+# MEDIUM-1 (task-40 Step 7 iter3): tool_name / file_path 抽出を bypass 判定前に前倒し
+# 既存挙動 preserve:
+#   - jq 不在は L65 で fail-open 済 (本ブロック到達時点で jq 必ず存在)
+#   - tool_name が Edit/Write 以外なら早期 exit 0 (元 L88-92 と同じ動作)
+#   - file_path が空でも tool_name filter は通過 (元動作と同じ、後段の空 check に委譲)
+# OVERRIDE bypass log に file_path / tool_name を含めて audit trail 完全性を向上。
+# ----------------------------------------------------------------------
 tool_name=$(printf '%s' "$input" | jq -r '.tool_name // ""' 2>/dev/null)
 case "$tool_name" in
   Edit|Write) ;;
   *) exit 0 ;;
 esac
 
-# file_path 抽出
 file_path_raw=$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/null)
+
+# bypass env (既存 docs/ + 新 path 両方カバー)
+# HIGH-A: bypass.log 記録追加
+# MEDIUM-1: file_path / tool_name を reason に含める (audit trail 完全性)
+if [ "${ECC_DRAFT_FLOW_GUARD_OVERRIDE:-0}" = "1" ]; then
+  if declare -f log_bypass >/dev/null 2>&1; then
+    log_bypass "draft-flow-guard" "ECC_DRAFT_FLOW_GUARD_OVERRIDE" "${ECC_BYPASS_REASON:-(not provided)} tool=${tool_name} file=${file_path_raw}"
+  fi
+  exit 0
+fi
+
+# file_path 空 check (元 L96 と同じ、tool_name filter 通過後)
 [ -z "$file_path_raw" ] && exit 0
 
 # ----------------------------------------------------------------------
