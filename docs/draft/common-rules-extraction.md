@@ -122,15 +122,15 @@ skip 想定 (機械的切り出し)。
 
 ## §6 DoD
 
-- [ ] `.claude/CommonRules.md` 存在
-- [ ] CLAUDE.md に `@.claude/CommonRules.md` 1 行追加
-- [ ] CLAUDE.md slim 化 (約 185 行 → 約 60-80 行想定)
-- [ ] smoke 4+ case PASS
-- [ ] grep CommonRules.md 「Critical Operational Lessons」 1+ hit
-- [ ] grep CLAUDE.md 「Tech Stack」 1+ hit
-- [ ] reviewer 3+ 並列収束
-- [ ] PR create + user merge 案内
-- [ ] 4 リポ install + `@import` 追加案内
+- [x] `.claude/CommonRules.md` 存在 (125 行新設、commit `b2d6fad` 前)
+- [x] CLAUDE.md に `@.claude/CommonRules.md` 1 行追加 (L9、grep count==1)
+- [x] CLAUDE.md slim 化 (185 → 75 行、Case 5 上限 120 行 PASS)
+- [x] smoke 4+ case PASS (実 7/7 PASS, exit 0)
+- [x] grep CommonRules.md 「Critical Operational Lessons」 1+ hit (実 2 hits)
+- [x] grep CLAUDE.md 「Tech Stack」 1+ hit (実 1 hit)
+- [x] reviewer 3+ 並列収束 (iter1 3 並列 + iter2 cosmetic 解消 + iter3 smoke 修正で MEDIUM=0 達成)
+- [ ] PR create + user merge 案内 (Step 8、本セッションで実施)
+- [ ] 4 リポ install + `@import` 追加案内 (Step 9、user manual 経路)
 
 ## §7 影響範囲
 
@@ -149,7 +149,8 @@ skip 想定 (機械的切り出し)。
 | iter | reviewer | CRITICAL | HIGH | MEDIUM | LOW | 状態 |
 |---|---|---|---|---|---|---|
 | iter1 | qa-expert / tdd-guide / architect | 0 | 1 | 5 | 0 | 修正待ち |
-| iter2 | — (smoke 拡張で自動修正) | 0 | 0 | 0 | 0 | 収束 → 承認待ち |
+| iter2 | tdd / architect 2/3 完了 (cosmetic LOW のみ) + smoke 拡張 4→7 case | 0 | 0 | 2 (cosmetic) | 2 | 修正待ち |
+| iter3 | (smoke header case 数 `6 → 7` 修正で MEDIUM-1 解消、MEDIUM-2 既修正) | 0 | 0 | 0 | 2 | 収束 → 承認 |
 
 ## §9 関連
 

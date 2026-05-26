@@ -4,7 +4,7 @@
 #
 # 確認: CommonRules.md 存在 + CLAUDE.md @import + project 固有 retain + 共通規範削除 + 追加検証
 #
-# Case 一覧 (6 cases):
+# Case 一覧 (7 cases):
 #   Case 1: .claude/CommonRules.md 存在 + 7 section 全件 grep + 各 section sentinel keyword
 #   Case 2: CLAUDE.md に @.claude/CommonRules.md が count==1 行存在
 #   Case 3: CLAUDE.md に project 固有 section retain
@@ -181,7 +181,7 @@ case6_claude_md_import_line_position() {
   fi
 }
 
-printf "===== common-rules-import-smoke (task-42 Step 5 iter2, 6 cases) =====\n\n"
+printf "===== common-rules-import-smoke (task-42 Step 5 iter2, 7 cases) =====\n\n"
 
 case1_commonrules_7_sections
 case2_claude_md_import_line
