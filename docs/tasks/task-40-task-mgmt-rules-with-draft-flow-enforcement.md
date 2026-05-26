@@ -8,7 +8,7 @@ retroactive: true
 
 # Task #40: タスク管理ルール拡張 (依存先 + review 反復) + 規範違反防止 hook 機械強制化
 
-> Status: **🔄 進行中** (Step 1+2 ✅ 完了 / Step 3 🔄 進行中 / Step 4-9 🔲 未着手)
+> Status: **🔄 進行中** (Step 1-7 ✅ 完了 / Step 8 🔄 進行中 / Step 9 🔲 未着手)
 > 起案: 2026-05-26 (retroactive)
 > 関連: #21 (system-reminder-attention、`draft-flow-guard.sh` 新設の起源)
 > 設計起源: [`docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md`](../draft/task-mgmt-rules-with-draft-flow-enforcement.md)
@@ -136,14 +136,14 @@ draft §3 採用案を参照。主要要素:
 
 | Step | Status | 作業概要 | 完了条件 | 依存 |
 |:---:|:---:|:---|:---|:---|
-| 1 | ✅ | ルール 1 (依存先タスク列 + 必読義務) を 3 file (task-management.md / _TASK_TEMPLATE.md / list.md template) に規範化 | grep `依存先` で 3 file hit (本 session ターン完了済、10 Edit のうち相当分) | — |
-| 2 | ✅ | ルール 2 (reviewer 3+ / 反復) を 3 file (workflow.md / _DRAFT_TEMPLATE.md / design-review.md) に規範化 | grep `収束条件` で 3 file hit、`_DRAFT_TEMPLATE.md` §8 新設確認 (本 session ターン完了済) | — |
-| 3 | 🔄 | retroactive draft 起案 (本 file 元 draft) + `/new-task` で list.md 反映 (本ルール 1 dogfooding、依存先列に — 記入) | `docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md` 存在 + `docs/tasks/task-40-*.md` 存在 + list.md task-40 行 append (10 行: header + Step 1-9) | Step 1, 2 |
-| 4 | 🔲 | `draft-flow-guard.sh` 拡張: 新 path pattern (`.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/**/*.md`) を block 対象に追加、対応 draft (`docs/draft/<slug>.md` で `approved_at` 非空) 存在で pass、bypass `ECC_RULE_CHANGE_GUARD_OFF=1` | smoke 新 5 case 全 PASS + 既存 `docs/` 直下 block (task-21 W2.3) 回帰 0 | Step 3 |
-| 5 | 🔲 | `modes.md` 遵守事項 2 例外条項に「規範変更 (`.claude/rules/*.md` 等)」を明示追加 + CLAUDE.md Critical Lessons HIGH 級教訓追加 (hook BLOCK 強制済) | `grep "規範変更" .claude/rules/modes.md` 1+ hit + `grep "ECC_RULE_CHANGE_GUARD_OFF" CLAUDE.md` 1+ hit | Step 4 |
-| 6 | 🔲 | smoke test 新設 (`.claude/tests/rule-change-draft-flow-guard-smoke.sh`): N cases (新 path pattern block / 対応 draft あり pass / bypass env / retroactive case / 既存 docs/ block 回帰 0) | smoke 全 PASS (exit 0) | Step 5 |
-| 7 | 🔲 | (テスト設計レビュー、本ルール 2 dogfooding) reviewer 3+ 並列、CRITICAL+HIGH+MEDIUM=0 まで反復 (上限 5)、draft §8 レビューサイクル table に iter 記録 | iter 1+ 実施 + 全 reviewer approve / CRITICAL+HIGH+MEDIUM=0 収束 | Step 6 |
-| 8 | 🔲 | (テスト合格) smoke 全 PASS + 既存 regression 0 + grep 検証 (CLAUDE.md 教訓 + modes.md 例外条項) | 上記 3 検証全 PASS | Step 7 |
+| 1 | ✅ | ルール 1 (依存先タスク列 + 必読義務) を 3 file (task-management.md / _TASK_TEMPLATE.md / list.md template) に規範化 | grep `依存先` で 3 file hit (PR #10 完遂) | — |
+| 2 | ✅ | ルール 2 (reviewer 3+ / 反復) を 3 file (workflow.md / _DRAFT_TEMPLATE.md / design-review.md) に規範化 | grep `収束条件` で 3 file hit、`_DRAFT_TEMPLATE.md` §8 新設確認 (PR #10 完遂) | — |
+| 3 | ✅ | retroactive draft 起案 (本 file 元 draft) + `/new-task` で list.md 反映 (本ルール 1 dogfooding) | PR #10 で完遂 (`6c000db`) | Step 1, 2 |
+| 4 | ✅ | `draft-flow-guard.sh` 拡張: 新 path pattern を block 対象に追加、retroactive case、bypass env | iter1 commit `3f9068f` (193→363 行) + iter2 commit `e828cf2` (HIGH-A/C/D/G fix: bypass.log 記録 + retroactive 悪用検知 + canonical 化 + `.claude/templates/docs/` 限定縮小) | Step 3 |
+| 5 | ✅ | `modes.md` 遵守事項 2 例外条項に「規範変更」を明示追加 + CLAUDE.md Critical Lessons HIGH 級教訓追加 | commit `3f9068f` (modes.md +2 行) + commit `cdf436e` (CLAUDE.md HIGH 教訓追加) | Step 4 |
+| 6 | ✅ | smoke test 新設 (`.claude/tests/rule-change-draft-flow-guard-smoke.sh`) | iter1 commit `e75a435` (6 case 全 PASS) + iter2 commit `ac086d3` (HIGH-EFI + MEDIUM 1-4,10 で 11+ case 拡張) | Step 5 |
+| 7 | ✅ | (テスト設計レビュー、本ルール 2 dogfooding) reviewer 5 並列、CRITICAL+HIGH+MEDIUM=0 まで反復 | iter1 (C0/H9/M11/L11 unique) → iter2 (C0/H1/M6/L13) → iter3 (C0/H0/M0/L 多、収束達成、median conf 0.93)、§8 table iter1+2+3 記録 (`6922ea7` / `c4d7a91`)、iter3 commit: `79607fb` (sanitize + OVERRIDE log) + `6922ea7` (§8 predictive + list.md) + `0550ade` (smoke Case 3 docstring + Case 9 WARN 分離) + `c4d7a91` (§8 iter3 行実値 fill-in)、上限 5 中 iter3 で収束 | Step 6 |
+| 8 | 🔄 | (テスト合格) smoke 11+ 全 PASS + 既存 regression 0 + grep 検証 (CLAUDE.md 教訓 + modes.md 例外条項) | Step 8 subagent 進行中 | Step 7 |
 | 9 | 🔲 | (リファクタリング) 3 観点判定 (持続可能性 / 汎用性 / 非冗長化)、不要なら skip 明示 | skip 想定の場合 `skip: <理由>` 明示記録 | Step 8 |
 
 ## 工数見積
