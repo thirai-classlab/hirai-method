@@ -9,7 +9,7 @@ approved_by: user
 
 # Task #41: Loop モード確認質問検出 hook (loop-confirmation-detector) 新設
 
-> Status: **🔄 進行中** (Step 1 ✅ / Step 2-10 🔲)
+> Status: **✅ 完了** (Step 1-10 全 ✅、iter1-3 reviewer 9 並列、収束 CRITICAL+HIGH+MEDIUM=0)
 > 起案: 2026-05-26
 > 関連: #40 (draft-flow-guard.sh 拡張、retroactive 方式の起源) / `mode-enforce.sh` (UserPromptSubmit、本 hook と相補)
 > 設計起源: [`docs/draft/loop-confirmation-detector-hook.md`](../draft/loop-confirmation-detector-hook.md)
