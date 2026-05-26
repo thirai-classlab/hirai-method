@@ -37,6 +37,17 @@
 #       retroactive warn の stderr + JSON additionalContext 2 経路を _retro_msg
 #       単一変数で DRY 化。
 #
+#   task-40 Step 7 iter4 (2026-05-26) — security MEDIUM 2 件 fix:
+#     MEDIUM-NEW-1 (SEC-iter4):
+#       extract_frontmatter_value に leading whitespace trim を追加。
+#       approved_by / approved_at / retroactive の whitespace-only 値による
+#       retroactive bypass を構造的に防止 (SEC-H1 完全性向上)。
+#     MEDIUM-NEW-2 (SEC-iter4):
+#       awk frontmatter parser の `-->` 終端を行頭アンカー (`^-->`) に限定 +
+#       `next` でフラグ切替行を skip。本文中の `foo --> bar` でコメントブロック
+#       誤閉鎖を防ぐ + malformed frontmatter で本文中の偽 key 行が誤マッチ
+#       する逆向き risk も解消。
+#
 # 設計起源:
 #   - docs/draft/system-reminder-attention-fix.md Wave 2.3 (2026-05-23)
 #   - 観察証拠: recall_poc/docs/01-03 が draft 経由なしで docs/ 直下に
@@ -226,17 +237,24 @@ fi
 # 引数 1: draft_path
 # 引数 2: key (e.g. approved_at / retroactive)
 # stdout: value (trim 済、不在は空文字)
+#
+# iter4 MEDIUM-NEW-1 + MEDIUM-NEW-2 fix:
+#   - awk `-->` 終端を行頭アンカー `^-->` に限定 + `next` でフラグ切替行 skip
+#     (本文中の `foo --> bar` でコメントブロック誤閉鎖を防ぐ)
+#   - sed pipeline に leading whitespace trim 追加
+#     (approved_by 等の whitespace-only 値による retroactive bypass を防ぐ)
 # ----------------------------------------------------------------------
 extract_frontmatter_value() {
   local _draft_path="$1"
   local _key="$2"
   [ -f "$_draft_path" ] || { printf ''; return 0; }
   # <!-- ... --> ブロック内の最初の `<key>:` 行を抽出
-  # awk で <!-- → --> 範囲を抽出 + grep で key 行 + sed で value 取得
-  awk '/^<!--/{flag=1; next} /-->/{flag=0} flag' "$_draft_path" 2>/dev/null \
+  # awk で ^<!-- → ^--> 範囲を抽出 (行頭アンカー限定) + grep で key 行 + sed で value 取得 + leading/trailing trim
+  awk '/^<!--/{flag=1; next} /^-->/{flag=0; next} flag' "$_draft_path" 2>/dev/null \
     | grep -E "^[[:space:]]*${_key}:" \
     | head -1 \
     | sed -E "s/^[[:space:]]*${_key}:[[:space:]]*//" \
+    | sed -E 's/^[[:space:]]+//' \
     | sed -E 's/[[:space:]]+$//'
 }
 
@@ -261,6 +279,8 @@ verify_draft_status() {
   if [ "$_retroactive" = "true" ]; then
     # HIGH-3 (iter3): retroactive=true は approved_by 副次条件で厳格化。
     # 任意 draft で `retroactive: true` だけ書く悪用を防ぐ。
+    # iter4 MEDIUM-NEW-1: extract_frontmatter_value の leading trim 強化により
+    # whitespace-only 値も空判定される (`-n` で長さ 0 として扱われる)。
     local _approved_by
     _approved_by=$(extract_frontmatter_value "$_draft_path" "approved_by")
     if [ -n "$_approved_by" ]; then
