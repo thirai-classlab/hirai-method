@@ -131,6 +131,43 @@ state JSON 本体 (`<slug>.json`) は `.claude/.workflow-state/.gitignore` で�
 
 honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリにも記録すること (env 系統だけだと持続的なトレースができない)。
 
+## draft-flow-guard.sh による規範変更強制 (task-40 拡張、2026-05-26)
+
+`.claude/hooks/draft-flow-guard.sh` は **PreToolUse(Edit/Write)** で `docs/` 直下の新規設計文書 Write を BLOCK する既存挙動に加え、task-40 拡張で **規範文書の draft 経由必須化** も強制する。
+
+### 監視対象 path (task-40 で 3 path 追加)
+
+| # | path pattern | 既存 / 新規 | 動作 |
+|---|---|---|---|
+| 1 | `<root>/docs/<basename>.md` (深さ 1) | 既存 | 対応 `docs/draft/<basename>.md` 不在で **BLOCK** |
+| 2 | `<root>/.claude/rules/<basename>.md` (深さ 1) | **task-40 新規** | 対応 draft で `approved_at:` 非空 or `retroactive: true` 必要 |
+| 3 | `<root>/.claude/commands/<basename>.md` (深さ 1) | **task-40 新規** | 同上 |
+| 4 | `<root>/.claude/templates/docs/**/<basename>.md` (深さ 2 以上) | **task-40 新規 (iter2 縮小)** | 同上 |
+
+### 規範変更時の hook 役割 (新 1 行)
+
+| シナリオ | 動作 |
+|---|---|
+| `.claude/rules/<basename>.md` / `.claude/commands/<basename>.md` / `.claude/templates/docs/**/<basename>.md` の Write、対応 draft `docs/draft/<basename>.md` で `approved_at:` 空 or 不在 | **BLOCK** — 「先に `/new-draft <slug>` で規範変更設計を起こせ」と提示 (task-40 拡張、bypass: `ECC_RULE_CHANGE_GUARD_OFF=1` / `HC_RULE_CHANGE_GUARD_ENABLED=false`) |
+| 既存 file の Edit | **PASS** — 新規 Write のみ block 対象 (`if [ -f "$file_path" ]; then exit 0; fi` L196) |
+
+### bypass 経路 (task-40 新規含む)
+
+| 方法 | 系統 | スコープ | 痕跡 |
+|---|---|---|---|
+| `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` | env 系統 (両 path カバー) | 1 セッション | `.claude/.workflow-state/bypass.log` に append |
+| `ECC_RULE_CHANGE_GUARD_OFF=1` | env 系統 (task-40 新 path のみ) | 1 セッション | 同上 |
+| `HC_RULE_CHANGE_GUARD_ENABLED=false` | config 系統 (task-40 default `true`) | 1 セッション | 同上 |
+| `HC_DOCS_APPROVED_DIR=<dir>[,<dir>...]` | config 系統 (`docs/<dir>/` 配下を承認済扱い) | 1 セッション | (記録なし、config レベル) |
+
+honor system: bypass の根拠は `docs/tasks/<task-N>.md` の該当 entry に記録すること。
+
+### 起源
+
+- 2026-05-26 task-40、本 session で規範変更時の draft skip 違反が発生 → retroactive リカバリ後に hook 拡張で再発防止
+- 設計起源: `docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md` (frontmatter `retroactive: true`)
+- 関連: [`task-management.md`](./task-management.md) §「設計→承認→タスク追加フロー」/ [`modes.md`](./modes.md) 遵守事項 2 例外条項「規範変更」
+
 ## リファクタリング強制 (W3)
 
 `/module-review` と `/system-review` は workflow の **必須 stage** であり、skip は default 禁止 (workflow-guard.sh が `/finish-task` で BLOCK)。
