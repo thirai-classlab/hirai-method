@@ -104,12 +104,12 @@
 |    | ✅ | Step 7 | (テスト設計レビュー) iter1-3 で iter2 HIGH 6 + MEDIUM 8 全件解消、iter3 median confidence 0.892 で CRITICAL+HIGH=0 達成 (5 reviewer 並列、tdd 0.93/test-auto 0.88/qa 0.88/sec 0.85/arch 0.92)、残 MEDIUM 7 + LOW 11 は副産物 entry 転送 (user 意図的 task-40 完了化、上限 5 回中 3 回消費で済) | | |
 |    | ✅ | Step 8 | (テスト合格) iter3 smoke 13/13 PASS (Case 14 YAML skip) + iter4 X2 commit `f4f0939` 後も regression 0、grep 検証 PASS (modes.md「規範変更」2 hits + CLAUDE.md「ECC_RULE_CHANGE_GUARD_OFF」1 hit) | | |
 |    | ✅ | Step 9 | (リファクタリング) skip 明示: 規範違反防止が core 目的、refactor 余地少。iter3 X commit `001041e` で dead code 削除 + retroactive warn DRY 化、iter4 X2 commit `f4f0939` で approved_by leading trim + awk ^--> 行頭アンカー実施済 | | |
-| 47 | 🔄 | **Task: Loop モード Phase 6 拡張 (list.md task 自動 enque + 閾値到達自動 /save-state)** | Loop モード Phase 6 が `session/context` 着手手順のみで停止する制約解消のため、`/resume-state loop` を拡張し list.md の 🔄 + 🔲 task を依存解決順で自動 enque + 着手し、context 閾値 / 続行不可 / user 明示停止で自動 `/save-state` する動作を実装する。完成すれば Loop モード起動で list.md 全 task を連続自律実行できるようになり、user は閾値到達まで指示不要で session が継続する | #42, #43, #39 | [task-47-loop-mode-list-md-auto-enque.md](task-47-loop-mode-list-md-auto-enque.md) ← draft: [`docs/draft/loop-mode-list-md-auto-enque.md`](../draft/loop-mode-list-md-auto-enque.md) |
-|    | 🔲 | Step 1 | `.claude/commands/resume-state.md` Phase 6 改修 (step 3 拡張 + stop 条件統合 + auto save-state) | | |
-|    | 🔲 | Step 2 | `.claude/rules/modes.md` 遵守事項 9 新設 (Loop モード = list.md 全 task 連続自律実行) | | |
-|    | 🔲 | Step 3 | (テスト設計レビュー) skip 明示: 規範文書 + spec 改修のみで 5+ reviewer overkill、user 引数承認で代替 | | |
-|    | 🔲 | Step 4 | (テスト合格) grep 検証 4 件 PASS + 既存 smoke regression 0 | | |
-|    | 🔲 | Step 5 | (リファクタリング) skip 明示: 規範文書 + spec 改修のみで refactor 余地なし | | |
+| 47 | ✅ | **Task: Loop モード Phase 6 拡張 (list.md task 自動 enque + 閾値到達自動 /save-state)** | Loop モード Phase 6 が `session/context` 着手手順のみで停止する制約解消のため、`/resume-state loop` を拡張し list.md の 🔄 + 🔲 task を依存解決順で自動 enque + 着手し、context 閾値 / 続行不可 / user 明示停止で自動 `/save-state` する動作を実装する。完成すれば Loop モード起動で list.md 全 task を連続自律実行できるようになり、user は閾値到達まで指示不要で session が継続する。**完了** (2026-05-27、commit `b6b3185`、grep 検証 4 件全 PASS、PR #15 同 branch 流用) | #42, #43, #39 | [task-47-loop-mode-list-md-auto-enque.md](task-47-loop-mode-list-md-auto-enque.md) ← draft: [`docs/draft/loop-mode-list-md-auto-enque.md`](../draft/loop-mode-list-md-auto-enque.md) |
+|    | ✅ | Step 1 | `.claude/commands/resume-state.md` Phase 6 改修 (step 3 拡張 + stop 条件統合 + auto save-state) | | |
+|    | ✅ | Step 2 | `.claude/rules/modes.md` 遵守事項 9 新設 (Loop モード = list.md 全 task 連続自律実行) | | |
+|    | ✅ | Step 3 | (テスト設計レビュー) skip 明示: 規範文書 + spec 改修のみで 5+ reviewer overkill、user 引数承認で代替 | | |
+|    | ✅ | Step 4 | (テスト合格) grep 検証 4 件 PASS + 既存 smoke regression 0 | | |
+|    | ✅ | Step 5 | (リファクタリング) skip 明示: 規範文書 + spec 改修のみで refactor 余地なし | | |
 
 <!--
 記入ルール:

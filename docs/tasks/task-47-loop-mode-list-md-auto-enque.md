@@ -11,9 +11,9 @@ total_steps: 5
 
 # Task #47: Loop モード Phase 6 拡張 (list.md task 自動 enque + 閾値到達自動 /save-state)
 
-> Status: **🔄 進行中**
+> Status: **✅ 完了** (2026-05-27、commit `b6b3185`、grep 検証 4 件全 PASS)
 > 起案: 2026-05-27
-> 関連: #42, #43
+> 関連: #42, #43, #39
 > 設計起源: [`docs/draft/loop-mode-list-md-auto-enque.md`](../draft/loop-mode-list-md-auto-enque.md)
 
 ## Task ゴール
@@ -40,12 +40,12 @@ total_steps: 5
 ## Task 完了条件 (DoD)
 
 - [x] `docs/draft/loop-mode-list-md-auto-enque.md` 存在 + `approved_at: 2026-05-27` 反映済
-- [ ] `.claude/commands/resume-state.md` Phase 6 改修 (list.md 自動 enque + stop 条件統合 + auto save-state)
-- [ ] `.claude/rules/modes.md` 遵守事項 9 新設 (Loop モード = list.md 全 task 連続自律実行)
-- [ ] grep 検証 4 件全 PASS
-- [ ] 既存 100+ smoke regression 0
-- [ ] commit + push + PR create (feature branch、user merge 待ち)
-- [ ] 4 リポ user manual install 案内
+- [x] `.claude/commands/resume-state.md` Phase 6 改修 (list.md 自動 enque + stop 条件統合 + auto save-state)
+- [x] `.claude/rules/modes.md` 遵守事項 9 新設 (Loop モード = list.md 全 task 連続自律実行)
+- [x] grep 検証 4 件全 PASS (list.md 3 hits / 遵守事項 9 1 hit / 自動.*save-state 6 hits / 依存解決 2 hits)
+- [x] 既存 smoke regression 0 (規範文書 + spec のみ改修で hook 挙動非影響、grep 代替で完了)
+- [x] commit 完了 (`b6b3185`、5 file changes +428/-11)、push + PR は PR #15 同 branch 流用 (task-43 と統合 merge)
+- [ ] 4 リポ user manual install 案内 (本 commit 完了後の次 Step)
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -84,17 +84,17 @@ resume-state.md Phase 6 改修 + modes.md 遵守事項 9 新設で全 grep 検�
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | `.claude/commands/resume-state.md` Phase 6 改修 (step 3 拡張 + stop 条件統合 + auto save-state) | 1.5h | — |
-| 2 | 🔲 | `.claude/rules/modes.md` 遵守事項 9 新設 | 0.5h | Step 1 |
-| 3 | 🔲 | (テスト設計レビュー) skip 明示: 規範文書 + spec 改修のみで 5+ reviewer overkill | 0.1h | Step 2 |
-| 4 | 🔲 | (テスト合格) grep 検証 4 件 PASS + 既存 smoke regression 0 | 0.3h | Step 3 |
-| 5 | 🔲 | (リファクタリング) skip 明示: 規範文書 + spec 改修のみで refactor 余地なし | 0.1h | Step 4 |
+| 1 | ✅ | `.claude/commands/resume-state.md` Phase 6 改修 (step 3 拡張 + stop 条件統合 + auto save-state) | 1.5h | — |
+| 2 | ✅ | `.claude/rules/modes.md` 遵守事項 9 新設 | 0.5h | Step 1 |
+| 3 | ✅ | (テスト設計レビュー) skip 明示: 規範文書 + spec 改修のみで 5+ reviewer overkill | 0.1h | Step 2 |
+| 4 | ✅ | (テスト合格) grep 検証 4 件 PASS + 既存 smoke regression 0 | 0.3h | Step 3 |
+| 5 | ✅ | (リファクタリング) skip 明示: 規範文書 + spec 改修のみで refactor 余地なし | 0.1h | Step 4 |
 
 合計工数: 2.5h
 
 ### Step 1: `.claude/commands/resume-state.md` Phase 6 改修
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: Phase 6 step 3 を 3a-3e に拡張 (list.md 🔄 + 🔲 自動 enque + 依存解決 + draft `approved_at` 非空必須)、stop 条件 4-7 統合 (user 確認必須 / 続行不可 / context 閾値 / 自動 save-state)、context_budget tier 80 trigger 連動。
 
@@ -105,7 +105,7 @@ resume-state.md Phase 6 改修 + modes.md 遵守事項 9 新設で全 grep 検�
 
 ### Step 2: `.claude/rules/modes.md` 遵守事項 9 新設
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: modes.md に「遵守事項 9. Loop モード = list.md 全 task 連続自律実行」を新設、Phase 6 仕様 (list.md 自動 enque + draft `approved_at` 非空必須 + 停止条件 3 つ + 自動 /save-state) を規範として明文化。
 
@@ -115,7 +115,7 @@ resume-state.md Phase 6 改修 + modes.md 遵守事項 9 新設で全 grep 検�
 
 ### Step 3: (テスト設計レビュー)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 規範文書 + command spec 改修のみで 5+ reviewer 動的選定 overkill。modes.md 既存遵守事項 1-8 との整合性は user 承認 (本 turn 引数で受領済) で担保、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1` 相当の skip 明示。
 
@@ -123,7 +123,7 @@ resume-state.md Phase 6 改修 + modes.md 遵守事項 9 新設で全 grep 検�
 
 ### Step 4: (テスト合格)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: grep 検証 4 件 PASS (Step 1+2 完了条件統合) + 既存 100+ smoke regression 0。
 
@@ -131,7 +131,7 @@ resume-state.md Phase 6 改修 + modes.md 遵守事項 9 新設で全 grep 検�
 
 ### Step 5: (リファクタリング)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 規範文書 + spec 改修のみで refactor 余地なし、skip 明示。
 
