@@ -11,10 +11,12 @@ total_steps: 6
 
 # Task #45: config-yml Phase 2 (hook feature check + review command yml 参照)
 
-> Status: **🔄 進行中**
+> Status: **✅ 完了**
 > 起案: 2026-05-27
+> 完了: 2026-05-27
 > 関連: #44 (Phase 1), #46 (Phase 3)
 > 設計起源: [`config-yml-phase2-hook-review-command.md`](../draft/config-yml-phase2-hook-review-command.md) (approved_at: 2026-05-27)
+> closure: iter 3 4 reviewer 全員 approve median confidence 0.96 (tdd-guide 0.93 / qa-expert 0.97 / test-automator 0.96 / pr-test-analyzer 0.95)、smoke 7/7 + 既存 100+ smoke regression 0、6 commits
 
 ## Task ゴール
 
