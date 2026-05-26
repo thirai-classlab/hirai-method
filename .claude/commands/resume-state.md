@@ -82,19 +82,39 @@ stdout に以下 4 項目を構造化して提示:
    | **user 確認必須** (modes.md 遵守事項 2 例外) | 設計文書新規追加 / 仕様変更 / scope 拡張 / 戦略判断 (architecture / 技術スタック / 既存 task 優先順入替) | 提示のみ、user 承認待ち停止 |
    | **自律実行禁止** (modes.md 遵守事項 8、11 カテゴリ) | main/stg* push / `gh pr merge` / 本番 deploy / DB migration / secrets ローテーション / 等 | 提示のみ、user 明示承認必須 |
 
-3. **自律実行可項目を順次実行**:
-   - 各 step 前に Why × 5 (v10 1 行 format「<何のため> のため、<何をやる> を行う」) 出力 (`.claude/rules/why-x5-output.md`)
-   - subagent 委譲時は `run_in_background: true` 必須 (`development-process.md` §3 No. 1)
-   - 起動前 / 直後に TaskCreate で内蔵 task list に登録 (`development-process.md` §3 No. 4)
-   - 並列化義務遵守: 独立 sub-task 2 件以上は並列起動 default (`development-process.md` §6)
-   - 完了報告は `confidence: 0.X` 必須 (F3 ConfidenceGate)
-   - 適切な粒度で commit (modes.md 遵守事項 5、1 機能 / 1 修正 / 1 リファクタごと)
+3. **自律実行可項目を順次実行** (2026-05-27 task-47 拡張、`docs/tasks/list.md` 自動 enque 統合):
+
+   各 step 前に Why × 5 (v10 1 行 format) 出力 + subagent 委譲時は `run_in_background: true` 必須 + TaskCreate で内蔵 task list に登録 + 並列化義務遵守 + 完了報告に `confidence: 0.X` 必須 + 適切な粒度で commit (modes.md 遵守事項 5、1 機能 / 1 修正 / 1 リファクタごと)。enqueue 順序:
+
+   - **3a**: `session/context` の「次セッション着手手順」を最優先 enque (既存動作)
+   - **3b**: 3a 完了後、`docs/tasks/list.md` から status **🔄 進行中** の task を 1 件選択し、各 Step を順次着手
+   - **3c**: 進行中 task の Step 完遂後、status **🔲 未着手** の task から **依存解決順** で 1 件選択し、着手
+     - **依存解決**: list.md「依存先タスク」列の ID 列挙を参照、依存先が全て ✅ 完了なら着手可 (一部 🔄 / 🔲 / 📝 残存なら skip して次候補へ)
+     - **draft 承認確認**: 各 task の設計 draft で `approved_at:` 非空を必須 (= user 承認済のみ自律着手、設計新規追加は `modes.md` 遵守事項 2 例外条項のため自律 enque 不可、draft 不在 / 未承認 task は user 確認必須項目として step 4 stop)
+   - **3d**: 各 task の DoD 達成で status ✅ 完了 + commit + push + PR create (task #39 緩和で feature branch push + `gh pr create` 自律実行可)
+   - **3e**: 全 task ✅ 完了 or 全 🔲 task が user 確認必須 (draft 不在 / approved_at 空) なら step 4 (user 確認 stop) へ遷移
 
 4. **user 確認必須項目で stop**:
-   - 次アクションが user 確認必須項目 (上記表 (b) (c) 分類) に到達したら、「次は <項目>。承認後に進めます」と提示
-   - 次の user message を待機 (Phase 7 context 監視は継続)
+   - 次アクションが user 確認必須項目 (modes.md 遵守事項 2 例外条項到達 = 設計新規 / 仕様変更 / scope 拡張 / 戦略判断 / 規範変更) に到達したら、「次は <項目>。承認後に進めます」と提示
+   - 提示後 user message を待機 (Phase 7 context 監視は継続)
 
-5. **完了通知**: 自律実行可項目が全て完遂したら「全自律実行項目完遂、待機中の user 確認項目: <list>」と報告して継続待機
+5. **続行不可 stop** (2026-05-27 task-47 新設):
+   - 同一 error 3 回連続失敗
+   - subagent の「要判断」報告
+   - `security-reviewer` の CRITICAL 検出
+   - 致命的 error (権限拒否 / 復旧不能 / データ破壊リスク)
+   - いずれかで step 7 (自動 /save-state) へ遷移
+
+6. **context 閾値到達 stop** (Phase 7 統合):
+   - tier 80 (`context_budget_threshold` 越え + 上位 tier) 到達で **強制 stop**
+   - 自動 `/save-state` 実行 (step 7 に遷移)
+   - 次 session 案内: 「新 session で `/resume-state loop` で継続。残 task: <id 列挙>」
+
+7. **stop 時自動 /save-state** (2026-05-27 task-47 新設、step 4/5/6 で stop 時の共通処理):
+   - 上記 4 / 5 / 6 のいずれかで stop 時、即時 `/save-state` 実行
+   - `session/context` に「Loop モード自律実行で <stop 理由> 到達、次 session で `/resume-state loop` で継続。残 task: <id 列挙>」を記録
+   - stdout に再開コマンド提示
+   - 全 task ✅ 完了で step 3e 経由到達した場合は「全自律実行項目完遂、未着手 task 0 / draft 承認待ち task <list>」と報告して継続待機 (自動 /save-state は context tier 80 以上の場合のみ)
 
 ### Phase 7: Context budget 監視 + 自動 `/save-state` (引数 `loop` 時のみ、2026-05-26 追加)
 

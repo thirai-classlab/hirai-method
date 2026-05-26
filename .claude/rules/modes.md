@@ -72,6 +72,15 @@ HIRAI メソッドは 2 つの動作モードを持つ。
 
    honor system (hook 未実装パスの場合): メインは自律実行せず、user に「実行を承認しますか?」と提示してから実行する。
 
+9. **Loop モード = list.md 全 task 連続自律実行** (必須、2026-05-27 task-47 新設): `/resume-state loop` 起動時、`session/context` 着手手順完遂後も `docs/tasks/list.md` の **🔄 進行中 + 🔲 未着手** task を依存解決順で自動 enque + 着手する。draft `approved_at:` 非空 (= user 承認済) task のみ自律着手可、draft 不在 / 未承認 task は user 確認必須項目として stop。停止条件 3 つ:
+   - context 閾値到達 (tier 80 以上で強制 /save-state、`.claude/hooks/context-budget.sh` `ratio >= 0.80` で発火)
+   - 続行不可 (同一 error 3 連続失敗 / 致命的 error / security CRITICAL / subagent 「要判断」報告)
+   - user 明示停止 (`stop` / 「止めて」等)
+
+   停止時は **自動 `/save-state`** + 「新 session で `/resume-state loop` で継続。残 task: <id 列挙>」案内を実行。Phase 6 実装仕様の詳細は `.claude/commands/resume-state.md` Phase 6 step 3a-3e + step 4-7 を参照。
+
+   起源: 2026-05-27 user 直接指示「ループモードはタスクリストから可能な限り進めて欲しい + 閾値到達か続行不可で自動 save-state」、設計 draft `docs/draft/loop-mode-list-md-auto-enque.md`、規範化 task `#47` (本「遵守事項 9」新設の起源)。
+
 **停止条件は以下 3 つのみ**:
 - ユーザの明示的な停止指示（"stop" / "ストップ" / "止めて" 等）
 - タスクの完了
