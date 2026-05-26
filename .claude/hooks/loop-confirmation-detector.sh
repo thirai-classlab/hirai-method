@@ -7,7 +7,8 @@
 #   「予防的自主ターン区切りパターン」(例: 「本 turn 完遂」「ターン区切り」
 #   「次 turn で <X> 着手」「次回 fresh prompt」「context budget 警戒」
 #   「ここで一旦」) が含まれていた場合、
-#   `<system-reminder>` (hookSpecificOutput.additionalContext) を次 turn に注入し、
+#   top-level `{"decision":"block","reason":"..."}` を出力して AI を停止させず
+#   次 turn に warn context を注入する。
 #   「Loop モード遵守事項 2 (中間確認の停止) / 遵守事項 9 (list.md 全 task 連続自律実行)
 #   違反 → 自律実行に切替えよ」と是正を促す。
 #   Normal モードでは no-op。
@@ -18,6 +19,8 @@
 #   task-41 Step 2
 #   2026-05-27 拡張: 自主ターン区切り keyword 6 件追加 + warn_message に遵守事項 9 言及
 #     (user 直接指示「続行可能なのに勝手に止まらないようにハーネス側で修正」)
+#   2026-05-27 hot fix: Stop hook JSON output schema 違反修正
+#     (hookSpecificOutput.additionalContext → top-level decision/reason)
 #
 # 発火 timing:
 #   Stop hook (AI 最終 assistant message 完了時、PostToolUse の後段)
@@ -32,8 +35,7 @@
 #      に対し grep -E で照合
 #   6. 検出時:
 #      - bypass.log に VIOLATION 記録
-#      - stdout に JSON `{"hookSpecificOutput":{"hookEventName":"Stop",
-#        "additionalContext":"..."}}` を出力
+#      - stdout に JSON `{"decision":"block","reason":"..."}` を出力
 #   7. 検出なしなら silent exit 0
 #
 # 環境変数:
@@ -43,7 +45,9 @@
 #                                                       (空 / whitespace のみは無視し default に戻す)
 #
 # 失敗時の挙動:
-#   - exit 0 のみ (fail-open)。block しない (additionalContext 注入のみ)。
+#   - exit 0 のみ (fail-open)。block しない (decision:block で AI を停止させず reason 注入)。
+#     Stop hook の `decision:"block"` は「停止させない (AI が続行)」意味、通常の
+#     PreToolUse block と意味反転している点に注意。
 #   - jq 不在 / transcript 不在 / parse 失敗 → silent skip。
 #
 # bash flags の方針 (重要、CLAUDE.md Critical Lessons HIGH 準拠):
@@ -199,13 +203,13 @@ fi
 # 改行 / CR / null + single quote / backslash / dollar / backtick を除去 — warn_message 埋め込み前
 matched_safe=$(printf '%s' "$matched" | tr -d '\n\r\0\\`$' | tr -d "'")
 
-# --- 検出: bypass.log 記録 + additionalContext 注入 ---
+# --- 検出: bypass.log 記録 + reason 注入 ---
 # env_var label を VIOLATION に変更し filter で bypass と区別可能化 (security-M3 fix)
 if command -v log_bypass >/dev/null 2>&1; then
   log_bypass "loop-confirmation-detector" "VIOLATION" "pattern=${matched_safe}"
 fi
 
-# additionalContext を jq で安全に JSON エンコード (改行 / 引用符 / 特殊文字を escape)
+# reason を jq で安全に JSON エンコード (改行 / 引用符 / 特殊文字を escape)
 # 2026-05-27 拡張: 遵守事項 9 (list.md 全 task 連続自律実行) 言及追加、
 # context tier 警告 (60/80/95) 未発火下での予防的自主ターン区切り禁止を明示
 warn_message=$(cat <<EOF
@@ -213,24 +217,19 @@ warn_message=$(cat <<EOF
 EOF
 )
 
-# JSON 出力 (hookSpecificOutput.additionalContext)
-# jq でエンコードし control 文字等を安全に embed する
+# JSON 出力 (top-level decision:"block" + reason)
+# Stop hook の decision:"block" は「AI を停止させず reason を次 turn に注入」の意味。
+# 通常の PreToolUse block (実行阻止) とは semantics が反転している。
+# jq でエンコードし control 文字等を安全に embed する。
 if printf '%s' "$warn_message" | jq -Rsc '{
-  hookSpecificOutput: {
-    hookEventName: "Stop",
-    additionalContext: .
-  }
+  decision: "block",
+  reason: .
 }' 2>/dev/null; then
   :
 else
-  # jq fail 時は plain text fallback (fail-open)
+  # jq fail 時は top-level JSON fallback (fail-open)
   cat <<'FALLBACK'
-<system-reminder>
-[loop-confirmation-detector] Loop モード違反検出: 確認質問 / 予防的自主ターン区切りパターンを検出。
-Loop モード遵守事項 2 (中間確認の停止) / 遵守事項 9 (list.md 全 task 連続自律実行) 違反の可能性。
-次 turn で確認質問せず自律実行に切替えてください。
-詳細: `.claude/rules/modes.md` 遵守事項 2 + 遵守事項 9。
-</system-reminder>
+{"decision":"block","reason":"[loop-confirmation-detector] Loop モード違反検出: 確認質問 / 予防的自主ターン区切りパターンを検出。Loop モード遵守事項 2 (中間確認の停止) / 遵守事項 9 (list.md 全 task 連続自律実行) 違反の可能性。次 turn で確認質問せず自律実行に切替えてください。詳細: .claude/rules/modes.md 遵守事項 2 + 遵守事項 9。"}
 FALLBACK
 fi
 
