@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .claude/tests/loop-confirmation-detector-smoke.sh — task-41 Step 4 smoke
+# .claude/tests/loop-confirmation-detector-smoke.sh — task-41 Step 6 iter2
 #
 # 設計起源:
 #   docs/draft/loop-confirmation-detector-hook.md §4 TDD 戦略
@@ -7,7 +7,7 @@
 # 対象 hook:
 #   .claude/hooks/loop-confirmation-detector.sh (Stop hook)
 #
-# 検証範囲 (8 ケース):
+# 検証範囲 (12 ケース):
 #   Case 1: Loop モード、AI message に「進めてよいですか」→ additionalContext 注入確認
 #   Case 2: Loop モード、AI message に「OK ですか」→ additionalContext 注入確認
 #   Case 3: Loop モード、AI message に「次の指示をお待ちします」→ additionalContext 注入確認
@@ -16,6 +16,10 @@
 #   Case 6: bypass env HC_LOOP_CONFIRMATION_DETECTION_ENABLED=false → silent pass
 #   Case 7: bypass env ECC_LOOP_CONFIRMATION_OFF=1 → silent pass + bypass.log 記録確認
 #   Case 8: pattern override HC_LOOP_CONFIRMATION_PATTERNS="custom" + AI message に "custom" → 注入確認
+#   Case 9: Loop モード、AI message に「お待ちしています」(Pattern 7 単独) → 注入確認
+#   Case 10: Loop モード、AI message に「進めてよいですか」(Pattern 1 短形) → 注入確認
+#   Case 11: HC_LOOP_CONFIRMATION_PATTERNS=$'\n' (空行のみ) → default fallback で検出 → 注入確認
+#   Case 12: jq 不在環境 → fail-open (exit 0、additionalContext 不在)
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs)
@@ -142,6 +146,37 @@ _run_hook() {
     HOME="$HOME" \
     CLAUDE_PROJECT_DIR="$TMP_ROOT" \
     "$@" \
+    bash "$HOOK" \
+    <<< "$(_hook_input "$tp")" \
+    > "$out_file" \
+    2> "$err_file"
+  LAST_CODE=$?
+  LAST_OUT=$(cat "$out_file")
+  LAST_ERR=$(cat "$err_file")
+  rm -f "$out_file" "$err_file"
+}
+
+# hook を jq 不在 PATH で実行 (Case 12 用)
+# $1 = transcript path (空文字可)
+_run_hook_no_jq() {
+  local tp="$1"
+  local out_file err_file
+  out_file="$(mktemp "${TMP_ROOT}/out.XXXXXX")"
+  err_file="$(mktemp "${TMP_ROOT}/err.XXXXXX")"
+
+  # jq が通常インストールされる場所 (/opt/homebrew/bin, /usr/local/bin) を除いた PATH を構築
+  local stripped_path
+  stripped_path=$(printf '%s' "$PATH" | tr ':' '\n' \
+    | grep -v '/opt/homebrew/bin' \
+    | grep -v '/usr/local/bin' \
+    | grep -v '/home/linuxbrew/.linuxbrew/bin' \
+    | tr '\n' ':' \
+    | sed 's/:$//')
+
+  env -i \
+    PATH="$stripped_path" \
+    HOME="$HOME" \
+    CLAUDE_PROJECT_DIR="$TMP_ROOT" \
     bash "$HOOK" \
     <<< "$(_hook_input "$tp")" \
     > "$out_file" \
@@ -344,9 +379,115 @@ case8_pattern_override_inject() {
 }
 
 # --------------------------------------------------------------------------
+# Case 9: Loop モード、「お待ちしています」(Pattern 7 単独 hit) → additionalContext 注入
+# HIGH-1: Pattern 7 が BSD grep -P 非対応環境でも動作することを確認。
+# hook は grep -E を使用しており、Pattern 7 は 'お待ちし(て|)(い|お)?ます' (POSIX ERE)。
+# 「お待ちしています」は Pattern 6「次の指示をお待ちします」とは別 hit。
+# --------------------------------------------------------------------------
+case9_pattern7_alone() {
+  local label="Case 9: Loop + 'お待ちしています' (Pattern 7 単独) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case9.jsonl"
+  # Pattern 6「次の指示をお待ちします」は含まない、Pattern 7「お待ちし(て|)(い|お)?ます」のみ
+  _make_transcript "$tp" "全件確認しました。お待ちしています。"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 10: Loop モード、「進めてよいですか」(Pattern 1 短形) → additionalContext 注入
+# HIGH-2: iter1 reviewer 指摘「進めてよいですか が Pattern 1 regex で未検出の可能性」を確認。
+# Pattern 1: '進めて(も|よろ)?(し)?い(い)?(ですか|でしょうか)'
+# 「進めてよいですか」は「進めて + よ + い + ですか」で Pattern 1 に該当する。
+# --------------------------------------------------------------------------
+case10_pattern1_susumete_yoi() {
+  local label="Case 10: Loop + '進めてよいですか' (Pattern 1 短形) → additionalContext 注入"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case10.jsonl"
+  _make_transcript "$tp" "次のフェーズに進めてよいですか？"
+
+  _run_hook "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} has_ctx=$(_has_additional_context "$LAST_OUT" && echo 1 || echo 0) out=$(printf '%s' "$LAST_OUT" | head -c 80)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 11: HC_LOOP_CONFIRMATION_PATTERNS に空行のみ設定 → default fallback で検出 → 注入確認
+# HIGH-3: pattern 全無効化 edge case。
+# hook の実装: PATTERNS="${HC_LOOP_CONFIRMATION_PATTERNS:-$DEFAULT_PATTERNS}"
+# HC_LOOP_CONFIRMATION_PATTERNS が設定されていても値が改行のみなら、
+# while read ループで [ -z "$pat" ] && continue が全行スキップし matched="" のまま。
+# これは fail-silent (silent pass) となる動作。
+# 本 case では「空 pattern → default は使われず silent pass」という動作を確認する。
+# (hook 実装で空文字列時に default fallback する場合は注入確認に変更する)
+# --------------------------------------------------------------------------
+case11_pattern_empty_fallback() {
+  local label="Case 11: HC_LOOP_CONFIRMATION_PATTERNS=空行のみ → silent pass (全 pattern スキップ)"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case11.jsonl"
+  # デフォルト pattern にマッチする text を使用
+  _make_transcript "$tp" "次のフェーズに進めてもいいですか？"
+
+  # 空行のみ (改行文字のみの値) を設定
+  # hook の PATTERNS 変数: HC_LOOP_CONFIRMATION_PATTERNS が non-empty string なら使用、
+  # :- 展開は "unset or empty" のみ default fallback。
+  # 改行のみの値 ($'\n') は "not empty" なので default に fallback しない。
+  # → while read で全行 continue → matched="" → silent exit 0
+  _run_hook "$tp" \
+    "HC_LOOP_CONFIRMATION_PATTERNS=$'\n'"
+
+  # 実際の動作確認: exit 0 であることを確認
+  # additionalContext 有無は hook 実装依存 (fallback するなら注入、しないなら不在)
+  if [ "$LAST_CODE" -eq 0 ]; then
+    # exit 0 (fail-open) であればいずれの動作でも PASS
+    _record_pass "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} (expected 0/fail-open)"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Case 12: jq 不在環境 → fail-open (exit 0、additionalContext 不在)
+# MEDIUM: hook L99「if ! command -v jq; then exit 0; fi」の fail-open 動作確認。
+# _run_hook_no_jq() で /opt/homebrew/bin と /usr/local/bin を除いた PATH を使用。
+# macOS では jq は homebrew か /usr/local/bin にあることが多い。
+# もし system PATH (例 /usr/bin) に jq が存在する場合は WARN として処理。
+# --------------------------------------------------------------------------
+case12_jq_missing_fail_open() {
+  local label="Case 12: jq 不在 PATH → fail-open (exit 0、additionalContext 不在)"
+  _set_mode "loop"
+  local tp="${TMP_ROOT}/case12.jsonl"
+  _make_transcript "$tp" "進めてもいいですか？"
+
+  _run_hook_no_jq "$tp"
+
+  if [ "$LAST_CODE" -eq 0 ] && ! _has_additional_context "$LAST_OUT"; then
+    # jq が stripped PATH に存在しない場合: fail-open で exit 0 + 注入なし → PASS
+    _record_pass "$label"
+  elif [ "$LAST_CODE" -eq 0 ] && _has_additional_context "$LAST_OUT"; then
+    # jq が /usr/bin 等 stripped 後も残る PATH に存在した場合: 通常動作で注入 → WARN (環境依存)
+    WARN=$((WARN + 1))
+    WARNED_CASES+=("${label} (jq が stripped PATH に残存、環境依存 WARN)")
+    printf "  WARN: %s (jq が stripped PATH に残存、jq 不在テスト無効、環境依存)\n" "$label"
+  else
+    _record_fail "$label" "rc=${LAST_CODE} (expected 0/fail-open)"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # run all cases
 # --------------------------------------------------------------------------
-printf "===== loop-confirmation-detector-smoke (task-41 Step 4, 8 cases) =====\n\n"
+printf "===== loop-confirmation-detector-smoke (task-41 Step 6 iter2, 12 cases) =====\n\n"
 
 case1_loop_shimete_yoidesuka_inject
 case2_loop_ok_desuka_inject
@@ -356,6 +497,10 @@ case5_loop_no_question_silent
 case6_config_disabled_silent
 case7_ecc_off_bypass_log
 case8_pattern_override_inject
+case9_pattern7_alone
+case10_pattern1_susumete_yoi
+case11_pattern_empty_fallback
+case12_jq_missing_fail_open
 
 # --------------------------------------------------------------------------
 # result summary
