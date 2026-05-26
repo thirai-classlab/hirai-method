@@ -7,6 +7,11 @@ paths:
   - "docs/draft/**/*"
   - "doc/**/*"
   - "force-app/**/*"
+  - "**/*.js"
+  - "**/*.php"
+  - "**/*.jsx"
+  - "**/*.html"
+  - "**/*.css"
 ---
 
 # 開発プロセスルール
@@ -27,7 +32,38 @@ paths:
 
 メインエージェントは各作業ステップで「Why × 5 階層 / 現在行っていること / 他の選択肢を取らなかった理由」の 3 点を必ず明示する。詳細は [`why-x5-output.md`](./why-x5-output.md)。`.claude/hooks/why-x5-reminder.sh` が UserPromptSubmit hook で本ルールを毎ターン強制する。
 
-## TDD（テスト駆動開発）
+## 研究と再利用 (research-reuse、必読)
+
+新規実装 / 既存改修の **前** に、外部 library / framework / API の仕様を確認する義務がある。「training data で知っている」を理由に推測実装せず、最新の公式 docs を確認する。
+
+### 仕様確認の fallback chain
+
+1. **context7 MCP を最初に試行**: `mcp__context7__resolve-library-id` + `mcp__context7__query-docs` で公式 docs を fetch
+   - 対象: API syntax / config / version migration / lifecycle / deprecation 等の library-specific 内容
+   - 既知 library (Next.js / React / Prisma / Vercel AI SDK / Tailwind / Django / Spring Boot / Express 等) でも **必ず確認** (training data outdated 回避、本 hook なしだと「知っているつもり」で不正確な API を使用するリスク)
+2. **WebFetch で公式 docs 補完**: context7 が library 未対応 / 結果不足の場合、公式 docs URL を WebFetch
+3. **GitHub code search / Exa**: 実装例 / battle-tested pattern が必要な場合 `gh search code` / Exa neural search で探索
+
+### 適用対象 task
+
+- 新 library / package 採用前 (npm install / pnpm add / pip install 等の **直前**)
+- 既存 library の major version migration (例: React 18 → 19、Next.js 14 → 16)
+- API syntax / config / option の確認 (新 hook / 新 API 利用時)
+- error message debug (library 由来の error の場合、stack trace を context7 / 公式 docs と照合)
+- 新機能 / lifecycle hook の利用 (例: Next.js Cache Components / use cache directive 等)
+
+### bypass
+
+- MCP server fail (context7 unreachable / npx fail 等) で loop 停止しない (§「サブエージェント委譲の必須要件」5「Bash deny / whitelist 不在時の subagent 委譲反射」と類似構造、fail → WebFetch fallback chain に自動 retry、停止理由にしない)
+- 「training data で確信あり」を理由に context7 skip しない (verify before recommending 原則、memory `feedback_verify_path_before_implementation.md` 起源)
+
+### 関連
+
+- `.mcp.json` の context7 entry (`npx -y @upstash/context7-mcp@latest`、stdio transport)
+- 採用 4 リポへ portable 同期済 (本 repo `.mcp.json` SSoT + `install.sh --update` で同期、本 repo PR merge 後に各 repo で `bash install.sh --update <target>` 実行)
+- subagent 委譲時も同 chain 適用 (Agent prompt に「library 仕様確認は context7 を最初に」と明示)
+
+## TDD(テスト駆動開発)
 
 すべての実装はTDDで進める。
 

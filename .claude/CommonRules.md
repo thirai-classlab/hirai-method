@@ -20,8 +20,9 @@
   - **Bash deny / whitelist 不在 / 委譲ガード block は loop 停止理由にしない**(自動的に Agent 委譲で再試行 — `development-process.md` §5)
   - 詳細は [`.claude/rules/development-process.md`](.claude/rules/development-process.md)
 - **指摘対応**: 根本原因 → 修正 → 再発防止策を `.claude/rules/` に追加提案
-- **タスク管理（メイン専任）**: `docs/tasks/list.md` で一元管理、サブエージェントに委譲しない
+- **タスク管理(メイン専任)**: `docs/tasks/list.md` で一元管理、サブエージェントに委譲しない
 - **設計→承認→タスク追加**: `docs/draft/` 起案 → user 承認 → `docs/tasks/` 反映。設計なしのタスク追加禁止
+- **外部 library / framework 仕様確認**: context7 MCP を default 利用 (既知 library でも training data outdated 回避)、fallback chain (context7 → WebFetch → GitHub code search / Exa) の詳細は `.claude/rules/development-process.md` §「研究と再利用」参照
 
 ## Autonomous Progression（自律進行ルール）
 
