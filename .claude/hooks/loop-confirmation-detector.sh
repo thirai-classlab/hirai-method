@@ -3,15 +3,21 @@
 #
 # 役割:
 #   Loop モード稼働中、AI 最終 assistant message に「確認質問パターン」
-#   (例: 「進めてよいですか?」「OK ですか?」「お待ちします」) が含まれていた場合、
+#   (例: 「進めてよいですか?」「OK ですか?」「お待ちします」) または
+#   「予防的自主ターン区切りパターン」(例: 「本 turn 完遂」「ターン区切り」
+#   「次 turn で <X> 着手」「次回 fresh prompt」「context budget 警戒」
+#   「ここで一旦」) が含まれていた場合、
 #   `<system-reminder>` (hookSpecificOutput.additionalContext) を次 turn に注入し、
-#   「Loop モード遵守事項 2 (中間確認の停止) 違反 → 自律実行に切替えよ」と是正を促す。
+#   「Loop モード遵守事項 2 (中間確認の停止) / 遵守事項 9 (list.md 全 task 連続自律実行)
+#   違反 → 自律実行に切替えよ」と是正を促す。
 #   Normal モードでは no-op。
 #
 # 設計起源:
 #   docs/draft/loop-confirmation-detector-hook.md (frontmatter retroactive: true,
 #   approved_by: user, 2026-05-26)
 #   task-41 Step 2
+#   2026-05-27 拡張: 自主ターン区切り keyword 6 件追加 + warn_message に遵守事項 9 言及
+#     (user 直接指示「続行可能なのに勝手に止まらないようにハーネス側で修正」)
 #
 # 発火 timing:
 #   Stop hook (AI 最終 assistant message 完了時、PostToolUse の後段)
@@ -21,7 +27,8 @@
 #   2. bypass env 判定 (ECC_LOOP_CONFIRMATION_OFF=1 / HC_LOOP_CONFIRMATION_DETECTION_ENABLED=false)
 #   3. stdin JSON から transcript_path を抽出 (jq 不在で fail-open)
 #   4. transcript 末尾から最後の assistant text を抽出
-#   5. 確認質問 regex (default 13 パターン or HC_LOOP_CONFIRMATION_PATTERNS で override)
+#   5. 確認質問 regex + 自主ターン区切り regex
+#      (default 19 パターン or HC_LOOP_CONFIRMATION_PATTERNS で override)
 #      に対し grep -E で照合
 #   6. 検出時:
 #      - bypass.log に VIOLATION 記録
@@ -140,12 +147,14 @@ if [ -z "$last_assistant" ]; then
   exit 0
 fi
 
-# --- 検出 regex (default 13 パターン、env override 可) ---
+# --- 検出 regex (default 19 パターン、env override 可) ---
 # 改行区切り。Bash 連想配列等は使わず、while read で 1 行ずつ照合する。
 # Pattern 1 (進めて...): 「進めて」「進めてよ」「進めても」「進めてもよ」
 #   「進めてもよろ」「進めてよろ」「進めてもよろし」全パターンを cover (tdd-H2 fix)
 # Pattern 7 (お待ちし...): BSD grep で empty alternation (て|) 不可、(て)? に修正 (tdd-H1 fix)
 # Pattern 2 (OK...): \s は POSIX 非 portable、[[:space:]] に修正 (architect-M2 fix)
+# Pattern 14-19 (2026-05-27 拡張): 予防的自主ターン区切りパターン
+#   遵守事項 9 (list.md 全 task 連続自律実行) 違反検出のため追加
 DEFAULT_PATTERNS='進めて((も)?よろ|よ|も)?(し)?い(い)?(ですか|でしょうか)
 OK[[:space:]]?(ですか|でしょうか)
 どちら(に|を)?します?か?
@@ -158,7 +167,13 @@ user 確認待ち
 進めますか
 続行しますか
 停止しますか
-よろしいですか'
+よろしいですか
+本[[:space:]]?turn[[:space:]]?完遂
+ターン区切り
+次[[:space:]]?turn[[:space:]]+で.*着手
+次回[[:space:]]+fresh[[:space:]]+prompt
+context[[:space:]]+budget[[:space:]]+警戒
+ここで一旦'
 
 # PATTERNS env override は空 / whitespace のみなら default に戻す (sec-H1 fix)
 PATTERNS="${HC_LOOP_CONFIRMATION_PATTERNS:-}"
@@ -191,8 +206,10 @@ if command -v log_bypass >/dev/null 2>&1; then
 fi
 
 # additionalContext を jq で安全に JSON エンコード (改行 / 引用符 / 特殊文字を escape)
+# 2026-05-27 拡張: 遵守事項 9 (list.md 全 task 連続自律実行) 言及追加、
+# context tier 警告 (60/80/95) 未発火下での予防的自主ターン区切り禁止を明示
 warn_message=$(cat <<EOF
-[loop-confirmation-detector] Loop モード違反検出: 確認質問パターン '${matched_safe}' を検出。Loop モード遵守事項 2 (中間確認の停止) 違反。次 turn で確認質問せず自律実行に切替えてください。詳細: \`.claude/rules/modes.md\` 遵守事項 2。
+[loop-confirmation-detector] Loop モード違反検出: パターン '${matched_safe}' を検出。 Loop モード遵守事項 2 (中間確認の停止) / 遵守事項 9 (list.md 全 task 連続自律実行) 違反の可能性。 context tier 警告 (60/80/95) 未発火下での予防的自主ターン区切りは禁止。 context tier 80 到達まで自律実行を継続し、tier 80 以上で自動 /save-state してください。 詳細: \`.claude/rules/modes.md\` 遵守事項 2 + 遵守事項 9 + \`.claude/commands/resume-state.md\` Phase 6 step 6/7。
 EOF
 )
 
@@ -209,9 +226,10 @@ else
   # jq fail 時は plain text fallback (fail-open)
   cat <<'FALLBACK'
 <system-reminder>
-[loop-confirmation-detector] Loop モード違反検出: 確認質問パターンを検出。
-Loop モード遵守事項 2 (中間確認の停止) 違反。次 turn で確認質問せず自律実行に切替えてください。
-詳細: `.claude/rules/modes.md` 遵守事項 2。
+[loop-confirmation-detector] Loop モード違反検出: 確認質問 / 予防的自主ターン区切りパターンを検出。
+Loop モード遵守事項 2 (中間確認の停止) / 遵守事項 9 (list.md 全 task 連続自律実行) 違反の可能性。
+次 turn で確認質問せず自律実行に切替えてください。
+詳細: `.claude/rules/modes.md` 遵守事項 2 + 遵守事項 9。
 </system-reminder>
 FALLBACK
 fi
