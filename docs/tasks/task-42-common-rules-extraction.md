@@ -8,8 +8,9 @@ approved_by: user
 
 # Task #42: CLAUDE.md 共通規範を `.claude/CommonRules.md` に切り出し + `@import` 構文採用
 
-> Status: **🔄 進行中** (Step 1-7 ✅ / Step 8 closure 中 / Step 9 user manual 案内待ち)
+> Status: **✅ 完了** (Step 1-9 ✅、closure commit `fb227a1`、smoke 7/7 PASS + DoD grep 3 件 PASS、iter3 strict 0-finding 収束)
 > 起案: 2026-05-26
+> 完了: 2026-05-26
 > 関連: task-40 / task-41 (CLAUDE.md 補強反映漏れの典型例)
 > 設計起源: [`docs/draft/common-rules-extraction.md`](../draft/common-rules-extraction.md)
 
