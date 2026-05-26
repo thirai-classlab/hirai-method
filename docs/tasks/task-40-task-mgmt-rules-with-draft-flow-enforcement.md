@@ -144,7 +144,7 @@ draft §3 採用案を参照。主要要素:
 | 6 | ✅ | smoke test 新設 (`.claude/tests/rule-change-draft-flow-guard-smoke.sh`) | iter1 commit `e75a435` (6 case 全 PASS) + iter2 commit `ac086d3` (HIGH-EFI + MEDIUM 1-4,10 で 11+ case 拡張) | Step 5 |
 | 7 | ✅ | (テスト設計レビュー、本ルール 2 dogfooding) reviewer 5 並列、CRITICAL+HIGH+MEDIUM=0 まで反復 | iter1 (C0/H9/M11/L11 unique) → iter2 (C0/H1/M6/L13) → iter3 (C0/H0/M0/L 多、収束達成、median conf 0.93)、§8 table iter1+2+3 記録 (`6922ea7` / `c4d7a91`)、iter3 commit: `79607fb` (sanitize + OVERRIDE log) + `6922ea7` (§8 predictive + list.md) + `0550ade` (smoke Case 3 docstring + Case 9 WARN 分離) + `c4d7a91` (§8 iter3 行実値 fill-in)、上限 5 中 iter3 で収束 | Step 6 |
 | 8 | ✅ | (テスト合格) smoke 11+ 全 PASS + 既存 regression 0 + grep 検証 (CLAUDE.md 教訓 + modes.md 例外条項) | smoke 13/13 PASS (Case 14 YAML skip)、CLAUDE.md HIGH 教訓 + modes.md 例外条項 grep hit 確認済 | Step 7 |
-| 9 | ✅ | (リファクタリング) 3 観点判定 (持続可能性 / 汎用性 / 非冗長化)、不要なら skip 明示 | 3 観点判定: skip (規範違反防止が core 目的、refactor 余地少。LOW-1 noop 削減は iter3 で commit `001041e` 完了済、LOW-2/4 は副産物 entry で次 task 検討)、smoke 13/13 PASS 再確認、commit `<step9-commit-hash>` で task closure | Step 8 |
+| 9 | ✅ | (リファクタリング) 3 観点判定 (持続可能性 / 汎用性 / 非冗長化)、不要なら skip 明示 | 3 観点判定: skip (規範違反防止が core 目的、refactor 余地少。LOW-1 noop 削減は iter3 で commit `001041e` 完了済、LOW-2/4 は副産物 entry で次 task 検討)、smoke 13/13 PASS 再確認、commit `a4b558d` で task closure | Step 8 |
 
 ## 工数見積
 
@@ -181,7 +181,7 @@ draft §10 関連 file list:
 | 2026-05-26 | Step 3 進行中 | 本 subagent で retroactive draft + task file + list.md 反映を実施 |
 | (TBD) | Step 4-9 着手 | 次 session 持ち越し想定 (4-9 残 3.6h) |
 | 2026-05-26 | Step 4-9 完遂 | iter1→iter2→iter3 で hook 拡張収束、smoke 13/13 PASS、Step 9 refactor skip (規範違反防止が core 目的) |
-| 2026-05-26 | 完了 | commit `<step9-commit-hash>`、+13 smoke cases、PR (次 task で起票) |
+| 2026-05-26 | 完了 | commit `a4b558d`、+13 smoke cases、PR (次 task で起票) |
 
 ## 派生 task / 次アクション候補
 
