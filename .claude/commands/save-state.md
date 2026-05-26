@@ -58,12 +58,14 @@ PDCA cycle 中の進捗が `session/context` より新しい場合のみ:
 stdout に以下を出力:
 
 ```
-✅ Session state saved to Serena memory.
-   - session/context (full snapshot)
-   - session/last (1-2 paragraph summary)
-   - session/checkpoint (if incremental progress)
+✅ Session 状態を Serena memory に保存しました。
+   - session/context (完全 snapshot)
+   - session/last (1-2 段落の要約)
+   - session/checkpoint (進捗 checkpoint がある場合)
 
-Resume with `/resume-state` in next session.
+次セッションでの復元オプション:
+  - `/resume-state`      — 復元のみ (Phase 1-5)。user が手動で次アクション選択
+  - `/resume-state loop` — 復元 + Loop モード自律実行 (Phase 1-7)。context 閾値 (`harness-config.yml` `context_budget_threshold`、現 0.66) 到達まで継続、user 確認必須項目 (設計新規 / 仕様変更 / 戦略判断 / 自律禁止 11 カテゴリ) で停止
 ```
 
 ## 引数
