@@ -29,6 +29,19 @@ description: TDD 完了直後のモジュール単位レビュー + リファク
 
 ## 動作
 
+### Phase 0: yml 参照 (task-45 Phase 2、reviewer 制御 yml 経由化)
+
+本 command 開始前に `harness-config.yml` から以下 4 値を参照 (env > yml > default、`config-loader.sh` 仕様):
+
+| 環境変数 | yml key | default | 用途 |
+|---|---|---:|---|
+| `HC_REVIEW_REQUIRED_MODULE` | `review_required_module` | `true` | `false` なら本 command を **no-op skip** (理由付きでユーザに報告 + 終了、`/new-feature` Step 9 / `/modify-feature` Step 7 で skip 可) |
+| `HC_REVIEW_MIN_COUNT_MODULE` | `review_min_count_module` | `2` | reviewer 最低数 (default 2 = code-reviewer + refactoring-specialist) |
+| `HC_REVIEW_MAX_COUNT_MODULE` | `review_max_count_module` | `5` | reviewer 上限 (`--max-reviewers` 未指定時の default) |
+| `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | findings 修正後の反復ループ上限 |
+
+`HC_REVIEW_REQUIRED_MODULE=false` で skip した場合は、bypass.log に記録し、ユーザに「review_required_module=false のため /module-review を skip した、Phase 1 以降を実行しない」と明示。
+
 ### Phase 1: 前提チェック
 
 1. `<module>` が valid な path か (`^[a-zA-Z0-9_./-]+$`)、`..` 含まないこと

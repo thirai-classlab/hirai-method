@@ -30,6 +30,19 @@ description: 設計 draft に対し reviewer-registry の design + security カ�
 
 ## 動作
 
+### Phase 0: yml 参照 (task-45 Phase 2、reviewer 制御 yml 経由化)
+
+本 command 開始前に `harness-config.yml` から以下 4 値を参照 (env > yml > default、`config-loader.sh` 仕様):
+
+| 環境変数 | yml key | default | 用途 |
+|---|---|---:|---|
+| `HC_REVIEW_REQUIRED_DESIGN` | `review_required_design` | `true` | `false` なら本 command を **no-op skip** (理由付きでユーザに報告 + 終了) |
+| `HC_REVIEW_MIN_COUNT_DESIGN` | `review_min_count_design` | `3` | reviewer 最低数 (`--min-reviewers` 未指定時の default、N ≥ 3 必須) |
+| `HC_REVIEW_MAX_COUNT_DESIGN` | `review_max_count_design` | `7` | reviewer 上限 (`--max-reviewers` 未指定時の default) |
+| `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | Phase 4 反復ループ上限 (収束まで再 review、超過時 user escalation) |
+
+`HC_REVIEW_REQUIRED_DESIGN=false` で skip した場合は、bypass.log に記録し、ユーザに「review_required_design=false のため /design-review を skip した、Phase 1 以降を実行しない」と明示。
+
 ### Phase 1: 前提チェック
 
 1. slug を validation regex でチェック (不正なら reject)
