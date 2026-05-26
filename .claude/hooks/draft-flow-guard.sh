@@ -8,16 +8,27 @@
 #   を妨げない)。task-rule-guard.sh の鏡像版で、対象 path が docs/ 直下に
 #   限定される。
 #
+#   task-40 拡張 (2026-05-26):
+#     .claude/rules/*.md / .claude/commands/*.md / .claude/templates/**/*.md
+#     への新規 Write も block 対象に追加。対応 draft が存在し
+#     frontmatter (HTML comment 内) で `approved_at:` が非空 (or
+#     `retroactive: true`) なら pass。
+#
 # 設計起源:
 #   - docs/draft/system-reminder-attention-fix.md Wave 2.3 (2026-05-23)
 #   - 観察証拠: recall_poc/docs/01-03 が draft 経由なしで docs/ 直下に
 #     直接 Write された事案
 #   - docs/draft/taskmanagesystem-recovery.md Q2 (task-24 W3, 2026-05-23):
 #     HC_DOCS_APPROVED_DIR で承認済 dir を harness-config から override 可能化
+#   - docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40, 2026-05-26):
+#     .claude/rules/*.md 等の規範文書も draft 経由必須化、機械強制 BLOCK
 #
 # 監視対象:
 #   - tool: Edit / Write
-#   - path: <root>/docs/<basename>.md (深さ 1 のみ)
+#   - path1: <root>/docs/<basename>.md (深さ 1 のみ、既存挙動)
+#   - path2 (task-40): <root>/.claude/rules/<basename>.md (深さ 1)
+#   - path3 (task-40): <root>/.claude/commands/<basename>.md (深さ 1)
+#   - path4 (task-40): <root>/.claude/templates/**/<basename>.md (再帰)
 #   - 除外: <root>/docs/draft/** / <root>/docs/tasks/** / 深さ 2 以上
 #   - 除外: 既存 file の Edit (新規 Write のみ)
 #   - 除外 (task-24 W3): HC_DOCS_APPROVED_DIR 配下 (CSV 複数値対応)
@@ -27,7 +38,9 @@
 # bypass:
 #   - 対応する <root>/docs/draft/<basename>.md を先に作る (推奨)
 #   - HC_DOCS_APPROVED_DIR=<dir>[,<dir>...] を harness-config / env で設定
-#   - 環境変数 ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 (一時)
+#   - 環境変数 ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 (一時、両 path カバー)
+#   - 環境変数 ECC_RULE_CHANGE_GUARD_OFF=1 (task-40 新 path のみ skip)
+#   - HC_RULE_CHANGE_GUARD_ENABLED=false (task-40 config レベル、default true)
 #   - harness-config.yml の draft_flow_guard_whitelist に basename 追加
 #
 # 失敗時:
@@ -44,7 +57,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-# bypass env
+# bypass env (既存 docs/ + 新 path 両方カバー)
 if [ "${ECC_DRAFT_FLOW_GUARD_OVERRIDE:-0}" = "1" ]; then
   exit 0
 fi
@@ -83,8 +96,165 @@ task_dir="${HC_TASK_DIR:-docs/tasks}"
 draft_dir="${HC_DRAFT_DIR:-docs/draft}"
 whitelist_raw="${HC_DRAFT_FLOW_GUARD_WHITELIST:-}"
 approved_dir_raw="${HC_DOCS_APPROVED_DIR:-}"
+rule_change_guard_enabled="${HC_RULE_CHANGE_GUARD_ENABLED:-true}"
 
 docs_root="$root/docs"
+
+# ----------------------------------------------------------------------
+# frontmatter parser: HTML comment 内の `key: value` を抽出 (jq 不要)
+# 引数 1: draft_path
+# 引数 2: key (e.g. approved_at / retroactive)
+# stdout: value (trim 済、不在は空文字)
+# ----------------------------------------------------------------------
+extract_frontmatter_value() {
+  local _draft_path="$1"
+  local _key="$2"
+  [ -f "$_draft_path" ] || { printf ''; return 0; }
+  # <!-- ... --> ブロック内の最初の `<key>:` 行を抽出
+  # awk で <!-- → --> 範囲を抽出 + grep で key 行 + sed で value 取得
+  awk '/^<!--/{flag=1; next} /-->/{flag=0} flag' "$_draft_path" 2>/dev/null \
+    | grep -E "^[[:space:]]*${_key}:" \
+    | head -1 \
+    | sed -E "s/^[[:space:]]*${_key}:[[:space:]]*//" \
+    | sed -E 's/[[:space:]]+$//'
+}
+
+# ----------------------------------------------------------------------
+# draft 検証: approved_at 非空 → "approved"、retroactive: true → "retroactive"、
+#             それ以外 (draft 不在 / approved_at 空) → "blocked"
+# 引数 1: slug (basename without .md)
+# stdout: status (approved / retroactive / blocked)
+# ----------------------------------------------------------------------
+verify_draft_status() {
+  local _slug="$1"
+  local _draft_path="$root/$draft_dir/${_slug}.md"
+  if [ ! -f "$_draft_path" ]; then
+    printf 'blocked'
+    return 0
+  fi
+  local _retroactive
+  _retroactive=$(extract_frontmatter_value "$_draft_path" "retroactive")
+  if [ "$_retroactive" = "true" ]; then
+    printf 'retroactive'
+    return 0
+  fi
+  local _approved_at
+  _approved_at=$(extract_frontmatter_value "$_draft_path" "approved_at")
+  if [ -n "$_approved_at" ]; then
+    printf 'approved'
+    return 0
+  fi
+  printf 'blocked'
+}
+
+# ----------------------------------------------------------------------
+# task-40 新 path pattern 判定 (.claude/rules / .claude/commands / .claude/templates)
+# ----------------------------------------------------------------------
+rule_change_path_match=0
+rule_change_category=""
+
+if [ "$rule_change_guard_enabled" != "false" ] && [ "${ECC_RULE_CHANGE_GUARD_OFF:-0}" != "1" ]; then
+  case "$file_path" in
+    "$root/.claude/rules/"*)
+      # 深さ 1 のみ (.claude/rules/<basename>.md)
+      _rel=".claude/rules/${file_path#$root/.claude/rules/}"
+      _sub="${file_path#$root/.claude/rules/}"
+      case "$_sub" in
+        */*) ;;  # 深さ 2 以上は対象外
+        *.md|*.mdx)
+          rule_change_path_match=1
+          rule_change_category="rules"
+          ;;
+      esac
+      ;;
+    "$root/.claude/commands/"*)
+      # 深さ 1 のみ (.claude/commands/<basename>.md)
+      _sub="${file_path#$root/.claude/commands/}"
+      case "$_sub" in
+        */*) ;;  # 深さ 2 以上は対象外
+        *.md|*.mdx)
+          rule_change_path_match=1
+          rule_change_category="commands"
+          ;;
+      esac
+      ;;
+    "$root/.claude/templates/"*)
+      # 再帰 (.claude/templates/**/<basename>.md)
+      _sub="${file_path#$root/.claude/templates/}"
+      case "$_sub" in
+        *.md|*.mdx)
+          rule_change_path_match=1
+          rule_change_category="templates"
+          ;;
+      esac
+      ;;
+  esac
+fi
+
+if [ "$rule_change_path_match" = "1" ]; then
+  # 既存 file の Edit は無条件通過 (新規 Write のみ block 対象)
+  if [ -f "$file_path" ]; then
+    exit 0
+  fi
+
+  basename_md=$(basename "$file_path")
+  slug="${basename_md%.md}"
+  slug="${slug%.mdx}"
+
+  status=$(verify_draft_status "$slug")
+  draft_path="$root/$draft_dir/${slug}.md"
+
+  case "$status" in
+    approved)
+      exit 0
+      ;;
+    retroactive)
+      # retroactive case: pass + warn (stderr に注意喚起、block しない)
+      cat <<EOF >&2
+[draft-flow-guard] WARN: retroactive draft 経由で通過
+
+  対象 file : $file_path (category: $rule_change_category)
+  対応 draft: $draft_path (frontmatter: retroactive: true)
+
+retroactive リカバリとして本回は pass。**規範遵守は次回から**:
+  1. /new-draft <slug>            # 先に設計を起こす
+  2. user 承認 (approved_at 非空)
+  3. /new-task <id> <slug>        # task 化してから着手
+
+設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)
+EOF
+      exit 0
+      ;;
+    blocked)
+      cat <<EOF >&2
+[draft-flow-guard] BLOCK: $rule_change_category 直下への新規規範文書 Write を検出
+
+  対象 file : $file_path
+  対応 draft: $draft_path (不在 or approved_at 空)
+
+「設計→承認→タスク追加」フロー (task-management.md) を尊重してください:
+
+  1. /new-draft $slug            # docs/draft/${slug}.md を起こす
+  2. user 承認を受ける (frontmatter に approved_at: YYYY-MM-DD 記入)
+  3. /new-task <id> $slug        # docs/tasks/ に反映 + 承認版を配置
+
+bypass (一時、緊急時のみ):
+  - 先に touch $draft_path してから frontmatter approved_at を埋める
+  - or 既存規範違反のリカバリなら frontmatter retroactive: true を立てる
+  - or ECC_RULE_CHANGE_GUARD_OFF=1 環境変数をセット (新 path のみ skip)
+  - or ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 環境変数をセット (両 path 全 skip)
+  - or HC_RULE_CHANGE_GUARD_ENABLED=false (config レベル、default true)
+
+設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)
+EOF
+      exit 2
+      ;;
+  esac
+fi
+
+# ----------------------------------------------------------------------
+# 既存 docs/ 直下判定 (回帰維持)
+# ----------------------------------------------------------------------
 
 # file_path が docs/ 配下か
 case "$file_path" in
