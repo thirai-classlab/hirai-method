@@ -110,6 +110,15 @@
 |    | ✅ | Step 3 | (テスト設計レビュー) skip 明示: 規範文書 + spec 改修のみで 5+ reviewer overkill、user 引数承認で代替 | | |
 |    | ✅ | Step 4 | (テスト合格) grep 検証 4 件 PASS + 既存 smoke regression 0 | | |
 |    | ✅ | Step 5 | (リファクタリング) skip 明示: 規範文書 + spec 改修のみで refactor 余地なし | | |
+| 44 | 🔄 | **Task: config-yml Phase 1 (yml schema 拡張 + config-loader.sh)** | feature toggle と reviewer 制御の yml 化基盤を整えるため、`harness-config.yml` に新 36 key 追加し `config-loader.sh` に load logic + `is_feature_enabled` 共通関数を追加する。完成すれば task-45/46 が yml 経由で feature toggle と reviewer 制御を参照できるようになる。 | — | [task-44-config-yml-phase1-schema-loader.md](task-44-config-yml-phase1-schema-loader.md) ← draft: [`docs/draft/config-yml-phase1-schema-loader.md`](../draft/config-yml-phase1-schema-loader.md) |
+|    | 🔲 | Step 1 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 15) | | |
+|    | 🔲 | Step 2 | `config-loader.sh` 拡張 (36 key load + `is_feature_enabled` 関数) | | |
+|    | 🔲 | Step 3 | smoke `config-feature-toggles-smoke.sh` 新設 (6 cases) | | |
+|    | 🔲 | Step 4 | (テスト設計レビュー) reviewer 5+ 並列 iter 1+ | | |
+|    | 🔲 | Step 5 | (テスト合格) 新 smoke + 既存 smoke regression 0 | | |
+|    | 🔲 | Step 6 | (リファクタリング) 3 観点判定 | | |
+| 45 | 📝 | **Task: config-yml Phase 2 (hook feature check + review command yml 参照)** | 機能単位 on/off と reviewer 制御の機械強制のため、21+ 件 hook 冒頭に feature check を追加し、4 件 review command に yml 参照 logic を追加する。完成すれば feature toggle OFF で関連 hook が一括停止し、reviewer 制御 (required / min / max / iteration) が yml 値で動作する。 | task-44 | [task-45-config-yml-phase2-hook-review-command.md](task-45-config-yml-phase2-hook-review-command.md) ← draft: [`docs/draft/config-yml-phase2-hook-review-command.md`](../draft/config-yml-phase2-hook-review-command.md) |
+| 46 | 📝 | **Task: config-yml Phase 3 (対話的 config-editor hc-config.sh + 規範文書更新)** | yml 設定値の編集経路を整備するため、対話 menu + CLI args + 値型 validation + atomic 操作付き `hc-config.sh` を新設し、規範文書 5 file を更新する。完成すれば user が yml 直接編集なしで全 36 key を安全に変更でき、規範側でも yml 参照経路が明文化される。 | task-44, task-45 | [task-46-config-yml-phase3-hc-config-script.md](task-46-config-yml-phase3-hc-config-script.md) ← draft: [`docs/draft/config-yml-phase3-hc-config-script.md`](../draft/config-yml-phase3-hc-config-script.md) |
 
 <!--
 記入ルール:
