@@ -123,7 +123,9 @@ REVIEWER_REGISTRY_IMPL \
 WORKFLOW_STAGES_NEW \
 WORKFLOW_STAGES_MODIFY \
 DOCS_APPROVED_DIR \
-RULE_CHANGE_GUARD_ENABLED"
+RULE_CHANGE_GUARD_ENABLED \
+LOOP_CONFIRMATION_DETECTION_ENABLED \
+LOOP_CONFIRMATION_PATTERNS"
 
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
@@ -190,6 +192,13 @@ HC_DOCS_APPROVED_DIR=""
 # 規範変更 BLOCK 機構を on/off するスイッチ。default true (機械強制 BLOCK 有効)。
 # false で task-40 拡張のみ完全停止 (docs/ 直下 block は維持)。
 HC_RULE_CHANGE_GUARD_ENABLED="true"
+# LOOP_CONFIRMATION_DETECTION_ENABLED (task-41): Stop hook loop-confirmation-detector.sh の
+# Loop モード確認質問検出機構を on/off するスイッチ。default true。
+# false で hook を完全停止 (Normal モードと等価動作)。
+HC_LOOP_CONFIRMATION_DETECTION_ENABLED="true"
+# LOOP_CONFIRMATION_PATTERNS (task-41): 確認質問検出 regex リスト (改行区切り)。
+# 空文字なら hook 内 default 使用 (推奨)。env override 経由でのみ上書き可。
+HC_LOOP_CONFIRMATION_PATTERNS=""
 
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
@@ -362,6 +371,7 @@ export HC_REVIEWER_REGISTRY_TEST HC_REVIEWER_REGISTRY_IMPL
 export HC_WORKFLOW_STAGES_NEW HC_WORKFLOW_STAGES_MODIFY
 export HC_DOCS_APPROVED_DIR
 export HC_RULE_CHANGE_GUARD_ENABLED
+export HC_LOOP_CONFIRMATION_DETECTION_ENABLED HC_LOOP_CONFIRMATION_PATTERNS
 
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper
