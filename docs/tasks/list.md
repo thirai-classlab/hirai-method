@@ -124,7 +124,13 @@
 |    | ✅ | Step 4 | (テスト設計レビュー) iter 1 (6 reviewer median 0.90) HIGH 2+MEDIUM 9 → iter 2 fix → iter 3 (4 reviewer median 0.96) 全員 approve 収束 | | |
 |    | ✅ | Step 5 | (テスト合格) review-required-min-count 7/7 + why-x5 4/4 + 既存 100+ smoke regression 0 (pr-test-analyzer iter 3 実証) | | |
 |    | ✅ | Step 6 | (リファクタリング) skip 明示: `is_feature_enabled` は config-loader.sh で既に共通化済、各 hook 3-7 行 inline は適切な粒度 (YAGNI) | | |
-| 46 | 📝 | **Task: config-yml Phase 3 (対話的 config-editor hc-config.sh + 規範文書更新)** | yml 設定値の編集経路を整備するため、対話 menu + CLI args + 値型 validation + atomic 操作付き `hc-config.sh` を新設し、規範文書 5 file を更新する。完成すれば user が yml 直接編集なしで全 36 key を安全に変更でき、規範側でも yml 参照経路が明文化される。 | task-44, task-45 | [task-46-config-yml-phase3-hc-config-script.md](task-46-config-yml-phase3-hc-config-script.md) ← draft: [`docs/draft/config-yml-phase3-hc-config-script.md`](../draft/config-yml-phase3-hc-config-script.md) |
+| 46 | 🔄 | **Task: config-yml Phase 3 (対話的 config-editor hc-config.sh + 規範文書更新)** | yml 設定値の編集経路整備のため、対話 menu + CLI args + 値型 validation + atomic 操作付き `hc-config.sh` を新設し、規範文書 5 file 更新で yml 参照経路を明文化する。完成すれば user が yml 直接編集なしで全 34+ key を安全に変更でき、規範側でも feature toggle / reviewer 制御の経路が AI / user 双方に明示される。 | task-44, task-45 | [task-46-config-yml-phase3-hc-config-script.md](task-46-config-yml-phase3-hc-config-script.md) ← draft: [`docs/draft/config-yml-phase3-hc-config-script.md`](../draft/config-yml-phase3-hc-config-script.md) |
+|    | 🔲 | Step 1 | smoke `hc-config-script-smoke.sh` 新設 (7 cases、TDD RED commit、entry #52 (1) 順序遵守) | | |
+|    | 🔲 | Step 2 | `hc-config.sh` 実装 (対話 menu + CLI args + 値型 validation + atomic + backup、subagent staging) | | |
+|    | 🔲 | Step 3 | 規範文書 5 file 更新 + 6 hook 冒頭コメント追加 + draft §3.1 共有 toggle mapping 整理 (entry #52 (2)(3) 統合) | | |
+|    | 🔲 | Step 4 | (テスト設計レビュー) 6 reviewer 並列 (tdd-guide / test-automator / qa-expert / code-reviewer + security-reviewer + harness-optimizer) | | |
+|    | 🔲 | Step 5 | (テスト合格) 全 smoke 統合実行 (新 7 + 既存 100+) regression 0 | | |
+|    | 🔲 | Step 6 | (リファクタリング) script 関数分割 + 3 観点判定、closure commit + push + PR create | | |
 
 <!--
 記入ルール:
