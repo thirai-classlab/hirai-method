@@ -24,11 +24,11 @@ total_steps: 6
 
 | 依存先 task | 影響内容 | リンク |
 |---|---|---|
-| task-46 | hc-config.sh (1112 LOC、73 key、cmd_interactive 番号選択 menu + --list 4 列) を本 task で TUI 化 + 説明列拡張する。既存 CLI args 10 種 + atomic write は維持 | [task-46-config-yml-phase3-hc-config-script.md](task-46-config-yml-phase3-hc-config-script.md) |
+| task-46 | hc-config.sh (1112 LOC、74 key、cmd_interactive 番号選択 menu + --list 4 列) を本 task で TUI 化 + 説明列拡張する。既存 CLI args 10 種 + atomic write は維持 | [task-46-config-yml-phase3-hc-config-script.md](task-46-config-yml-phase3-hc-config-script.md) |
 
 ## Task 作業概要
 
-- `lib/hc-config-metadata.sh` 新設 (73 key 全てに description + effect、inline comment 35 抽出 + hardcode 38)
+- `lib/hc-config-metadata.sh` 新設 (74 key 全てに description + effect、inline comment 35 抽出 + hardcode 39)
 - 矢印キー TUI 実装 (↑↓ ナビ + Enter 決定 + effect panel + 編集フロー)
 - TTY fallback (非 TTY で現行番号選択に自動降格、`HC_HC_CONFIG_FORCE_NUMERIC=1` 強制)
 - `--list` 説明列拡張 + `--list --verbose` 6 列 (category 別グルーピング)
@@ -36,7 +36,7 @@ total_steps: 6
 
 ## Task 完了条件 (DoD)
 
-- [ ] `lib/hc-config-metadata.sh` 新設 (73 key 全てに description + effect)
+- [ ] `lib/hc-config-metadata.sh` 新設 (74 key 全てに description + effect)
 - [ ] 矢印キー TUI (↑↓ ナビ + Enter 決定 + effect panel + 編集フロー)
 - [ ] TTY fallback (非 TTY で番号選択に自動降格、`HC_HC_CONFIG_FORCE_NUMERIC=1` 強制)
 - [ ] `--list` 説明列拡張 + `--list --verbose` 6 列 (category グルーピング)
@@ -49,7 +49,7 @@ total_steps: 6
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
-hc-config.sh の UX 改善のため、番号選択 menu を矢印キー TUI (↑↓ + Enter + effect panel) に拡張し、73 key 全てに「説明 + 変更効果」metadata を定義して対話時 + --list 両方に表示する。完成すれば user が実 terminal で各 key の意味と変更影響を視認しながら gcloud/gh CLI 風に設定編集でき、非 TTY 環境では現行番号選択に自動 fallback する。
+hc-config.sh の UX 改善のため、番号選択 menu を矢印キー TUI (↑↓ + Enter + effect panel) に拡張し、74 key 全てに「説明 + 変更効果」metadata を定義して対話時 + --list 両方に表示する。完成すれば user が実 terminal で各 key の意味と変更影響を視認しながら gcloud/gh CLI 風に設定編集でき、非 TTY 環境では現行番号選択に自動 fallback する。
 
 ## 背景・目的
 
@@ -62,7 +62,7 @@ task-46 で hc-config.sh を新設したが、(1) 対話 menu が番号選択の
 ### RED (先に smoke 新設)
 
 `.claude/tests/hc-config-tui-smoke.sh` 新設 (7 cases、impl 不在で 7/7 FAIL):
-- Case 1: metadata 完全性 (73 key 全てに description + effect)
+- Case 1: metadata 完全性 (74 key 全てに description + effect)
 - Case 2: category グルーピング (6 category 全 key 分類)
 - Case 3: --list 説明列拡張
 - Case 4: --list --verbose 6 列
@@ -72,7 +72,7 @@ task-46 で hc-config.sh を新設したが、(1) 対話 menu が番号選択の
 
 ### GREEN
 
-- `lib/hc-config-metadata.sh` (73 key metadata) → Case 1/2/7 PASS
+- `lib/hc-config-metadata.sh` (74 key metadata) → Case 1/2/7 PASS
 - `hc-config.sh` 拡張 (TUI + fallback + --list 説明列) → Case 3-6 PASS
 
 ### REFACTOR
@@ -88,7 +88,7 @@ TUI 描画は TTY 必須で自動 smoke 困難。自動 smoke は非 TTY fallbac
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
 | 1 | 🔲 | smoke `hc-config-tui-smoke.sh` 新設 (7 cases、TDD RED commit) | 1.0h | — |
-| 2 | 🔲 | `lib/hc-config-metadata.sh` 新設 (73 key description + effect、inline comment 抽出 + hardcode) | 2.5h | Step 1 |
+| 2 | 🔲 | `lib/hc-config-metadata.sh` 新設 (74 key description + effect、inline comment 抽出 + hardcode) | 2.5h | Step 1 |
 | 3 | 🔲 | `hc-config.sh` 拡張 (矢印キー TUI + TTY fallback + --list 説明列、subagent staging) | 3.0h | Step 2 |
 | 4 | 🔲 | (テスト設計レビュー) 6 reviewer (tdd-guide / test-automator / qa-expert / code-reviewer + ui-designer + pr-test-analyzer) | 1.5h | Step 3 |
 | 5 | 🔲 | (テスト合格) 全 smoke 統合 + 既存 regression 0 + 手動 TUI 検証 | 1.0h | Step 4 |
@@ -108,9 +108,9 @@ TUI 描画は TTY 必須で自動 smoke 困難。自動 smoke は非 TTY fallbac
 
 **Step status**: 🔲
 
-**作業概要**: 73 key 全てに `{category, description, effect}` metadata 定義。inline comment 35 抽出 + hardcode 38 のハイブリッド (CSV here-doc、bash 3.2 互換)
+**作業概要**: 74 key 全てに `{category, description, effect}` metadata 定義。inline comment 35 抽出 + hardcode 39 のハイブリッド (CSV here-doc、bash 3.2 互換)
 
-**完了条件**: 全 73 key metadata、Case 1 (完全性) + Case 2 (category) + Case 7 (comment 抽出) PASS、subagent confidence ≥ 0.8
+**完了条件**: 全 74 key metadata、Case 1 (完全性) + Case 2 (category) + Case 7 (comment 抽出) PASS、subagent confidence ≥ 0.8
 
 ### Step 3: `hc-config.sh` 拡張 (TDD GREEN 後半)
 

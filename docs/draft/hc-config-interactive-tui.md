@@ -12,11 +12,11 @@ approved_by: user
 
 ## §1 真因
 
-task-46 で新設した `hc-config.sh` (1112 LOC、73 key 対応) は以下の UX 課題を持つ:
+task-46 で新設した `hc-config.sh` (1112 LOC、74 key 対応) は以下の UX 課題を持つ:
 
 1. **対話 menu が番号選択のみ**: `cmd_interactive` は `read -r choice` の単行 text input で 5 選択肢を番号入力。gcloud / gh CLI のような ↑↓ ナビゲーション体験がない。
 2. **key の意味が不明**: `--list` は KEY / CURRENT / DEFAULT / TYPE の 4 列のみ。各 key が「何のキーなのか (説明)」「変更するとどう動作が変わるか (効果)」が表示されず、user が yml を理解せず編集するリスク。
-3. **inline comment が活用されていない**: harness-config.yml の inline comment 密度は 47% (35/73 key、特に feature_* / review_* / confidence_* は 100%) だが、hc-config.sh はこれを説明として表示に使っていない。
+3. **inline comment が活用されていない**: harness-config.yml の inline comment 密度は 47% (35/74 key、特に feature_* / review_* / confidence_* は 100%) だが、hc-config.sh はこれを説明として表示に使っていない。
 
 ## §2 採用案
 
@@ -34,10 +34,10 @@ task-46 で新設した `hc-config.sh` (1112 LOC、73 key 対応) は以下の U
 
 ### 3.1 key metadata ソース (`.claude/scripts/lib/hc-config-metadata.sh` 新設)
 
-73 key 全てに `{description, effect}` metadata を定義。ソースは 2 系統のハイブリッド:
+74 key 全てに `{description, effect}` metadata を定義。ソースは 2 系統のハイブリッド:
 
 - **inline comment 抽出 (35 key)**: harness-config.yml の `key: value  # comment` の comment 部を description として regex 抽出 (既存資産活用、DRY)
-- **metadata table hardcode (残り 38 key + 効果補完)**: inline comment にない key (protected_paths / state_dir / task_dir 等) + 全 key の「変更時の効果 (effect)」を `lib/hc-config-metadata.sh` に集約
+- **metadata table hardcode (残り 39 key + 効果補完)**: inline comment にない key (protected_paths / state_dir / task_dir 等) + 全 key の「変更時の効果 (effect)」を `lib/hc-config-metadata.sh` に集約
 
 format (associative array or CSV、bash 3.2 互換のため CSV here-doc 推奨):
 
@@ -46,10 +46,10 @@ format (associative array or CSV、bash 3.2 互換のため CSV here-doc 推奨)
 feature_notify_enabled|feature|macOS 通知音 (stop / notify hook)|false -> セッション完了音が鳴らない
 review_iteration_max|reviewer|レビュー反復上限 (採用 6 条 4)|小さくすると reviewer cycle が早期打ち切り、大きくすると収束まで反復増
 protected_paths|protected|メインからの直接 Edit/Write を block する path|追加すると該当 path が main 直接編集禁止に、削除すると委譲ガード解除
-...(73 key)
+...(74 key)
 ```
 
-`hc-config.sh` は本 metadata を source して description / effect を取得する。**metadata 完全性は smoke で強制** (全 73 key に description + effect 必須)。
+`hc-config.sh` は本 metadata を source して description / effect を取得する。**metadata 完全性は smoke で強制** (全 74 key に description + effect 必須)。
 
 ### 3.2 category グルーピング (6 分類)
 
@@ -96,7 +96,7 @@ fi
 ### RED (先に smoke 新設)
 
 `.claude/tests/hc-config-tui-smoke.sh` 新設:
-- Case 1: metadata 完全性 (全 73 key に description + effect が存在、`--validate-metadata` 相当)
+- Case 1: metadata 完全性 (全 74 key に description + effect が存在、`--validate-metadata` 相当)
 - Case 2: category グルーピング (6 category 全 key が分類済、未分類 key 0)
 - Case 3: `--list` 説明列拡張 (説明列が表示される)
 - Case 4: `--list --verbose` 6 列 (変更効果列が表示される)
@@ -106,7 +106,7 @@ fi
 
 ### GREEN
 
-- `lib/hc-config-metadata.sh` 実装 (73 key metadata)
+- `lib/hc-config-metadata.sh` 実装 (74 key metadata)
 - `hc-config.sh` 拡張 (TUI + fallback + --list 説明列)
 
 ### REFACTOR
@@ -126,7 +126,7 @@ fi
 | Step | Status | 作業概要 | 完了条件 |
 |:---:|:---:|:---|:---|
 | 1 | 🔲 | smoke `hc-config-tui-smoke.sh` 新設 (7 cases、TDD RED) | impl 不在で 7/7 FAIL (EXPECTED FAIL marker) |
-| 2 | 🔲 | `lib/hc-config-metadata.sh` 新設 (73 key の description + effect、inline comment 抽出 + hardcode) | 全 73 key に metadata、Case 1/2/7 PASS |
+| 2 | 🔲 | `lib/hc-config-metadata.sh` 新設 (74 key の description + effect、inline comment 抽出 + hardcode) | 全 74 key に metadata、Case 1/2/7 PASS |
 | 3 | 🔲 | `hc-config.sh` 拡張 (矢印キー TUI + TTY fallback + --list 説明列) | Case 3-6 PASS、TTY fallback 動作 |
 | 4 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / code-reviewer + ui-designer [TUI UX] + pr-test-analyzer) | iter 5 上限内収束 (CRIT+HIGH+MED=0) |
 | 5 | 🔲 | (テスト合格) 全 smoke 統合 + 既存 regression 0 + 手動 TUI 検証 | 新 7 case + 既存 smoke 全 PASS + 手動 ↑↓ 確認 |
@@ -134,7 +134,7 @@ fi
 
 ## §6 DoD
 
-- [ ] `lib/hc-config-metadata.sh` 新設 (73 key 全てに description + effect)
+- [ ] `lib/hc-config-metadata.sh` 新設 (74 key 全てに description + effect)
 - [ ] 矢印キー TUI (↑↓ ナビ + Enter 決定 + effect panel + 編集フロー)
 - [ ] TTY fallback (非 TTY で番号選択に自動降格、`HC_HC_CONFIG_FORCE_NUMERIC=1` 強制)
 - [ ] `--list` 説明列拡張 + `--list --verbose` 6 列 (category グルーピング)
@@ -159,14 +159,25 @@ fi
 
 | iter | reviewer | CRITICAL | HIGH | MEDIUM | LOW | 状態 |
 |---|---|---|---|---|---|---|
-| iter1 (予定) | tdd-guide / test-automator / qa-expert / code-reviewer + ui-designer (TUI UX) + pr-test-analyzer | TBD | TBD | TBD | TBD | 未実施 |
+| iter1 | tdd-guide / test-automator / qa-expert / code-reviewer + ui-designer (TUI UX) + pr-test-analyzer (全 6、median confidence 0.87) | 3 | 13 | 10 | 8 | 修正中 → iter2 |
+| iter2 (予定) | 同 6 reviewer | TBD | TBD | TBD | TBD | 修正反映後 re-review |
+
+### iter1 CRITICAL 3 件 (必須修正)
+
+1. **TUI が bash 3.2 (macOS 標準) で非動作**: `read -t 0.01` が `invalid timeout specification` + stty raw mode 不在で矢印キーが全て QUIT に化ける (code-reviewer / qa-expert)
+2. **smoke Case 6 env passing bug**: `HC_..=1 printf | bash` で env が printf にしか効かず bash に伝わらない偽陽性 (test-automator / code-reviewer / qa-expert / pr-test-analyzer / tdd-guide の 5 者一致)
+3. **`required_env` metadata の CSV `|` 破壊**: description 内 `(NAME|severity|purpose 形式)` の `|` が field 境界を破壊し description 途中切れ + effect に断片 (pr-test-analyzer)
+
+### iter1 HIGH 主要 (必須修正)
+
+stty raw mode 設定/復元 + trap / 新値入力時 canonical 復帰 / TUI category グルーピング欠如 (draft §3.3 設計乖離) / effect panel が Enter 後消失 / 非 TTY fallback UX 断絶 / [y/N]=N rollback 未検証 / 空 yml --list 未検証 / Case 5/6 symbol grep 依存で振る舞い未検証 / Case 7 tautology (動的抽出 regression 不検出) / TUI 本体自動テスト皆無 / Case 1 assertion 弱さ (非空のみ) / key 数双方向検証欠如 / 73→74 文書不整合 (docs 側で修正済)
 
 ui-designer 追加理由: 矢印キー TUI の UX (ハイライト / effect panel レイアウト / 操作性) を専門観点でレビュー。
 
 ## §9 関連
 
 - 前提 task: task-46 (config-yml Phase 3、hc-config.sh 新設)
-- 設計調査: subagent aef203d58008a374f (confidence 0.85、73 key / inline comment 47% / 既存 raw terminal 0 件)
+- 設計調査: subagent aef203d58008a374f (confidence 0.85、74 key / inline comment 47% / 既存 raw terminal 0 件)
 - UI 方針確定: AskUserQuestion 2026-05-27 (矢印キー TUI + 対話/--list 両方)
 - 関連 memory: [[python3-pyyaml-detection-alias-trap]] (hc-config.sh の python 検出と同じ subprocess context 留意)
 
@@ -174,7 +185,7 @@ ui-designer 追加理由: 矢印キー TUI の UX (ハイライト / effect pane
 
 **✅ 承認済 (2026-05-27、user「問題ありません。」)** — 確認 3 点すべて OK:
 1. **TUI scope**: 矢印キー TUI を本 task に統合 (TUI 描画は手動検証、自動 smoke は非 TTY fallback + metadata 中心) — 承認
-2. **metadata 工数**: 73 key 全てに「説明 + 変更効果」定義 (inline comment 35 + hardcode 38) — 承認
+2. **metadata 工数**: 74 key 全てに「説明 + 変更効果」定義 (inline comment 35 + hardcode 38) — 承認
 3. **--list 既定列変更**: `--list` 既定を説明列に置換 + `--list --show-default` で従来列復活 — 承認
 
 `/new-task 48 hc-config-interactive-tui` で task 化済、実装着手。

@@ -280,7 +280,7 @@ _yml_get_raw() {
   if [ -z "$line" ]; then
     return 1
   fi
-  val="${line#${key}:}"
+  val="${line#"${key}":}"
   # 前後空白 trim (quote 判定の前に実行、comment strip より前)
   val="${val#"${val%%[![:space:]]*}"}"
   val="${val%"${val##*[![:space:]]}"}"
@@ -1091,6 +1091,9 @@ _menu_opt_reviewer() {
 #   非 TTY (Claude Code session / pipe / CI) では raw terminal が効かないため本 path に降格、
 #   HC_HC_CONFIG_FORCE_NUMERIC=1 で TTY でも強制番号選択。
 _cmd_interactive_numeric() {
+  # H5: 非 TTY fallback の UX 断絶を埋める案内 (1 行)。
+  #   pipe / CI / Claude Code session では raw terminal が効かないため番号選択に降格する。
+  _out "(非 TTY 環境のため番号選択モード。TTY 起動で矢印キー TUI が使えます)"
   while true; do
     cat <<'EOF'
 
@@ -1151,13 +1154,26 @@ _TUI_CLEAR=$'\033[2J\033[H'
 
 # 1 文字キー入力を読み取り、矢印キーは UP/DOWN/RIGHT/LEFT に正規化して stdout 出力
 # Enter → ENTER、q → QUIT、それ以外は raw 文字。
+#
+# iter1 C1 fix (bash 3.2 互換):
+#   旧実装の `read -rsn2 -t 0.01 rest` は bash 3.2 (macOS 標準) で
+#   "invalid timeout specification" になり ESC sequence が全て QUIT に化けて
+#   矢印キー TUI が動作しなかった。小数 `-t` を完全に排除し、ESC sequence の
+#   inter-byte 読取は端末側の min/time 設定 (`stty min 0 time 1`、_cmd_interactive_tui で
+#   一時設定) に委ねる。`read -rsn2 rest` (タイムアウト指定なし) は端末タイムアウトで
+#   「続きが来なければ空」を実現する。bash 3.2 / 5.x 両対応。
+#   呼び出し元 (_cmd_interactive_tui) は既に raw/cbreak mode (stty -icanon -echo min 1 time 0)。
 _tui_read_key() {
   local key rest
   IFS= read -rsn1 key 2>/dev/null || { printf 'QUIT'; return 0; }
   case "$key" in
     $'\x1b')
-      # ESC sequence: 続く 2 文字を読む ([A 等)。timeout で単独 ESC も拾う。
-      IFS= read -rsn2 -t 0.01 rest 2>/dev/null || rest=""
+      # ESC sequence: 続く 2 文字を読む ([A 等)。
+      # 端末を一時的に min 0 time 1 (0.1 秒 inter-byte timeout) にして
+      # 単独 ESC でも block しないようにする。小数 read -t は使わない (bash 3.2 互換)。
+      stty min 0 time 1 2>/dev/null || true
+      IFS= read -rsn2 rest 2>/dev/null || rest=""
+      stty min 1 time 0 2>/dev/null || true
       case "$rest" in
         '[A') printf 'UP' ;;
         '[B') printf 'DOWN' ;;
@@ -1172,17 +1188,70 @@ _tui_read_key() {
   esac
 }
 
-# key 一覧の選択画面 + effect panel を描画
-# $1: 全 key 改行区切り (1 行 1 key), $2: 選択 index (0-based)
+# 全 key を category 順に並べ替えて改行区切りで stdout 出力 (H3: category グルーピング)
+# metadata category 順 (保護パス → ファイル配置 → state_dir → Gate/Confidence →
+# feature_toggle → reviewer_control) に並べ、未分類 key は末尾に回す。
+# metadata 不在時 / 全 key 未分類時は入力順そのまま (fallback)。
+# $1: 全 key 改行区切り (yml 出現順)
+_tui_order_keys_by_category() {
+  local all_keys="$1"
+  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  local ordered="" key cat seen_cat=0
+  # category 順に key を集める
+  for cat in $categories; do
+    while IFS= read -r key; do
+      [ -z "$key" ] && continue
+      if [ "$(_meta_category "$key")" = "$cat" ]; then
+        ordered="${ordered}${key}"$'\n'
+        seen_cat=1
+      fi
+    done <<< "$all_keys"
+  done
+  # 未分類 key (metadata 不在 / category 空) を末尾に追加
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    local kc
+    kc=$(_meta_category "$key")
+    case "$kc" in
+      保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control) ;;
+      *) ordered="${ordered}${key}"$'\n' ;;
+    esac
+  done <<< "$all_keys"
+  # category 一致 0 件 (metadata 完全不在) なら入力順そのまま
+  if [ "$seen_cat" -eq 0 ]; then
+    printf '%s\n' "$all_keys"
+    return 0
+  fi
+  printf '%s' "$ordered"
+}
+
+# key 一覧の選択画面 + effect panel を描画 (H3: category 境界に区切り行を挿入)
+# $1: category 順に並んだ全 key 改行区切り (1 行 1 key), $2: 選択 index (0-based、key のみ counts)
+# 区切り行 (=== <category> (N keys) ===) は選択対象外。sel は key の連番。
 _tui_render() {
   local all_keys="$1"
   local sel="$2"
   printf '%s' "$_TUI_CLEAR"
   printf '%s=== hc-config TUI ===%s  (↑/↓ 選択, Enter 決定, q 終了)\n\n' "$_TUI_BOLD" "$_TUI_RESET"
 
-  local idx=0 key
+  # category ごとの key 数を事前集計 (区切り行の "(N keys)" 用)
+  local idx=0 key prev_cat="" cur_cat
+  # 各 category の件数を求めるため、まず category→count を作る (出現順)
   while IFS= read -r key; do
     [ -z "$key" ] && continue
+    cur_cat=$(_meta_category "$key")
+    [ -z "$cur_cat" ] && cur_cat="(未分類)"
+    if [ "$cur_cat" != "$prev_cat" ]; then
+      # category 境界: 区切り行を挿入 (dim 表示、選択対象外)
+      local cat_count
+      cat_count=$(printf '%s\n' "$all_keys" | while IFS= read -r k; do
+        [ -z "$k" ] && continue
+        local kc; kc=$(_meta_category "$k"); [ -z "$kc" ] && kc="(未分類)"
+        [ "$kc" = "$cur_cat" ] && printf 'x\n'
+      done | grep -c .)
+      printf '%s=== %s (%s keys) ===%s\n' "$_TUI_DIM" "$cur_cat" "$cat_count" "$_TUI_RESET"
+      prev_cat="$cur_cat"
+    fi
     if [ "$idx" -eq "$sel" ]; then
       printf '%s> %-46s%s\n' "$_TUI_REVERSE" "$key" "$_TUI_RESET"
     else
@@ -1192,6 +1261,9 @@ _tui_render() {
   done <<< "$all_keys"
 
   # 選択中 key の effect panel
+  # perf (MED, Step 6 defer): 本 panel は毎 keypress で _get_default (mktemp + config-loader
+  #   source) を呼ぶため keypress ごとに subprocess fork が発生する。Step 6 refactor 担当が
+  #   render loop の metadata/default をキャッシュ化する (本 iter は動作正しさ優先で defer)。
   local cur_key
   cur_key=$(printf '%s' "$all_keys" | sed -n "$((sel + 1))p")
   if [ -n "$cur_key" ]; then
@@ -1213,15 +1285,32 @@ _tui_render() {
 }
 
 # TUI 本体: 選択 → effect 確認 → 新値入力 → 確認 → cmd_set
+#
+# iter1 C1 fix (bash 3.2 互換 stty raw mode + trap 復元):
+#   矢印キーを 1 文字ずつ受け取るため端末を raw/cbreak mode に設定する。
+#   異常終了 (Ctrl-C / kill / pipe 断) でも端末が壊れないよう trap で復元 + 表示属性 reset。
+#   trap EXIT は「関数 return」では発火しないため、正常 return 前にも明示復元する。
+# iter1 H4 fix (effect panel が Enter 後に消える):
+#   ENTER で新値入力に入る際、入力プロンプト直上に「変更効果: <effect>」を 1 行再掲。
+#   ENTER 時は canonical mode へ戻して行編集 (backspace 等) を効かせ、入力後 raw に復帰。
 _cmd_interactive_tui() {
   local all_keys
   all_keys=$(_yml_list_keys "$CONFIG_PATH")
+  # H3: category 順に並べ替え (区切り行表示は _tui_render が担当)
+  all_keys=$(_tui_order_keys_by_category "$all_keys")
   local total
   total=$(printf '%s' "$all_keys" | grep -c '.')
   if [ "$total" -eq 0 ]; then
     _err "no keys found in ${CONFIG_PATH}"
     return 1
   fi
+
+  # C1: raw mode 設定 + trap 復元 (異常終了でも端末を壊さない)
+  local _stty_saved
+  _stty_saved=$(stty -g 2>/dev/null) || _stty_saved=""
+  # shellcheck disable=SC2064
+  trap "[ -n \"$_stty_saved\" ] && stty \"$_stty_saved\" 2>/dev/null; printf '%s' \"$_TUI_RESET\"" EXIT INT TERM
+  stty -icanon -echo min 1 time 0 2>/dev/null || true
 
   local sel=0
   while true; do
@@ -1231,18 +1320,25 @@ _cmd_interactive_tui() {
     case "$k" in
       UP)    [ "$sel" -gt 0 ] && sel=$((sel - 1)) ;;
       DOWN)  [ "$sel" -lt "$((total - 1))" ] && sel=$((sel + 1)) ;;
-      QUIT)  printf '%s\n' "$_TUI_RESET"; _out "bye."; return 0 ;;
+      QUIT)
+        # 正常終了: canonical 復帰 + 表示属性 reset + trap 解除
+        [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+        trap - EXIT INT TERM
+        printf '%s\n' "$_TUI_RESET"; _out "bye."; return 0 ;;
       ENTER|RIGHT)
         local cur_key
         cur_key=$(printf '%s' "$all_keys" | sed -n "$((sel + 1))p")
         [ -z "$cur_key" ] && continue
-        # raw terminal 解除して新値入力
-        printf '%s\n\n新値を入力 (空で skip): ' "$_TUI_RESET"
+        # H4 + C1: canonical mode に戻して行編集可能な入力を受ける
+        [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+        local effect
+        effect=$(_meta_effect "$cur_key")
+        # H4: 入力プロンプト直上に変更効果を再掲
+        printf '%s\n\n%s変更効果:%s %s\n新値を入力 (空で skip): ' \
+          "$_TUI_RESET" "$_TUI_BOLD" "$_TUI_RESET" "$effect"
         local newval
         IFS= read -r newval || newval=""
         if [ -n "$newval" ]; then
-          local effect
-          effect=$(_meta_effect "$cur_key")
           printf '変更後の効果: %s\n続行? [y/N]: ' "$effect"
           local confirm
           IFS= read -r confirm || confirm=""
@@ -1257,8 +1353,10 @@ _cmd_interactive_tui() {
           printf '(Enter で menu に戻る) '
           IFS= read -r _ || true
         fi
+        # raw mode に復帰してループ継続
+        stty -icanon -echo min 1 time 0 2>/dev/null || true
         ;;
-      *) : ;;  # その他キーは無視
+      *) : ;;  # その他キーは無視 (区切り行は選択不可なので skip 不要)
     esac
   done
 }
