@@ -15,7 +15,7 @@
 |---|---|
 | **🎯 なんのため** | AI エージェントの fabrication (捏造) / scope creep (範囲逸脱) / silent failure (隠れた失敗) を **hook によるコード強制レベル** で抑止し、Claude Code を「設計通り動かす」ためのハーネス |
 | **⚡ 何ができる** | (1) 委譲ガード + 事実検証ゲート (F1-F3) (2) 5 層自己改善 (L1-L5) (3) Workflow 強制 (W1-W4) (4) 副産物 discharge registry (5) Session 永続化 + PM Orchestration (6) 100 active agents + 43 skills + agent-router |
-| **🚀 どう使う** | `bash install.sh /path/to/project` → `.claude/harness-config.yml` 編集 → Claude Code 起動 → `/init-tasks` → `/mode loop` → `/new-draft` → `/new-task` → 自律実装 |
+| **🚀 どう使う** | `bash install.sh /path/to/project` → `bash .claude/scripts/hc-config.sh` で設定 → Claude Code 起動 → `/init-tasks` → `/mode loop` → `/new-draft` → `/new-task` → 自律実装 (詳細フロー: [§3.9.2](#392-インストール--設定--利用の全体フロー)) |
 
 ---
 
@@ -278,6 +278,8 @@ flowchart LR
 
 ### 3.9 設定 (`.claude/harness-config.yml`)
 
+全挙動は `.claude/harness-config.yml` の集中設定で制御する。主要 key:
+
 ```yaml
 # 保護パス (メインからの直接 Edit/Write を block)
 protected_paths: [src, tests, scripts]
@@ -299,11 +301,103 @@ confidence_state_dir: .claude/.confidence-gate-state
 # Context budget
 context_budget_threshold: 0.66
 
+# 機能 on/off (feature toggle、各 hook を group 単位で集中制御)
+feature_loop_mode_enforcement_enabled: true   # loop-auto-progress / mode-enforce / loop-confirmation-detector
+feature_task_rule_guard_enabled: true         # task-rule-guard / list-md-plan-first-reminder
+feature_byproduct_discharge_enabled: true     # next-actions-surface / byproduct-discharge-guard
+feature_why_x5_enforcement_enabled: true      # why-x5-violation-detect / why-x5-reminder
+feature_notify_enabled: true                  # stop / notify (macOS 通知音)
+
+# reviewer 制御 (W1-W4 + Task 最終 3 Step のレビュー反復)
+review_min_count_test: 5         # テスト設計レビュー reviewer 数下限
+review_max_count_test: 10        # 同上限 (cost 制御)
+review_iteration_max: 5          # レビュー反復上限 (採用 6 条 4)
+
 # 観測
 homunculus_root: ~/.claude/homunculus
 ```
 
-env 上書き例: `HC_PROTECTED_PATHS="src tests"` / `HC_TASK_DIR=tasks` 等で project 別調整可。詳細は [`docs/PORTABILITY.md`](docs/PORTABILITY.md)。
+#### 3.9.1 設定編集ツール `hc-config.sh` (推奨)
+
+yml を直接 `$EDITOR` で編集すると **型ミス / 構文崩れでハーネス全体が動作不能**になるリスクがある。`hc-config.sh` は型 validation + atomic write + 自動 backup 付きで安全に編集する CLI / 対話ツール。
+
+**実行コマンド**:
+
+```bash
+# 対話 menu (引数なしで起動、推奨)
+bash .claude/scripts/hc-config.sh
+
+# 使い方表示
+bash .claude/scripts/hc-config.sh --help
+```
+
+**CLI args (script 自動化 / 単発編集用)**:
+
+| コマンド | 動作 |
+|---|---|
+| `--list` | 全 key 一覧 (key / current / default / type の 4 列) |
+| `--get <key>` | 値取得 (env override > yml > default の 3 段解決) |
+| `--set <key>=<value>` | 値設定 + 型 validation + `.bak.<ts>` backup + atomic write |
+| `--feature <name>=<true\|false>` | feature toggle 専用 shorthand (`feature_<name>_enabled` の alias) |
+| `--reset <key>` | default 値に戻す |
+| `--reset-all` | 全 key を default に戻す |
+| `--diff` | 現在値と default の差分一覧 |
+| `--validate` | 全 key の型 validation のみ実行 (yml 編集なし) |
+| `--config <path>` | 編集対象 yml を override (任意 yml file 指定 / staging 確認用) |
+| `--help` | 使い方表示 |
+
+**対話 menu (引数なし起動)**: ①全 key 一覧 ②key 選択 → 値編集 ③feature toggle 一括 on/off ④reviewer 設定 quick edit ⑤終了。`q` / `0` / `Ctrl-D` でいつでも終了。
+
+**使用例**:
+
+```bash
+# 現在値を確認
+bash .claude/scripts/hc-config.sh --get review_iteration_max     # → 5
+
+# Loop モード強制 hook 群を一括 OFF (試験的 / regression debug 時)
+bash .claude/scripts/hc-config.sh --feature loop_mode_enforcement=false
+
+# reviewer 反復上限を 3 に変更 (cost 制御、atomic backup 付き)
+bash .claude/scripts/hc-config.sh --set review_iteration_max=3
+
+# 通知音を OFF (静音セッション)
+bash .claude/scripts/hc-config.sh --feature notify=false
+
+# 全設定を default に戻す
+bash .claude/scripts/hc-config.sh --reset-all
+```
+
+**安全機構**: 各編集前に `harness-config.yml.bak.<timestamp>.<pid>` を自動作成 (最新 10 件保持、`HC_BAK_RETENTION_COUNT` で変更可)。`.tmp` に書込 → yaml 構文検証 → `mv` で atomic 上書き。検証 FAIL なら旧 yml を維持して rollback。
+
+> env 上書き例: `HC_PROTECTED_PATHS="src tests"` / `HC_TASK_DIR=tasks` / `HC_REVIEW_ITERATION_MAX=3` 等で yml を触らず一時調整も可 (優先順: env > yml > default)。詳細は [`docs/PORTABILITY.md`](docs/PORTABILITY.md) / [`docs/SELF_IMPROVEMENT.md`](docs/SELF_IMPROVEMENT.md) §「hc-config.sh による yml 編集」。
+
+### 3.9.2 インストール → 設定 → 利用の全体フロー
+
+```mermaid
+flowchart TD
+    I1["bash install.sh /path/to/project<br/>(ハーネス本体を配置)"] --> I2["cd /path/to/project"]
+    I2 --> C1["bash .claude/scripts/hc-config.sh<br/>(対話 menu で設定確認 / 調整)"]
+    C1 --> C2["$EDITOR .claude/bash-whitelist.txt<br/>(使う CLI を追記: pnpm/poetry/cargo...)"]
+    C2 --> C3["mv CLAUDE.md.template CLAUDE.md<br/>+ &lt;...&gt; placeholders 記入"]
+    C3 --> C4["git init<br/>(observe.sh の project hash 検出)"]
+    C4 --> U1["Claude Code session 起動"]
+    U1 --> U2["/init-tasks (タスク台帳初期化)"]
+    U2 --> U3["/mode loop (自律進行モード)"]
+    U3 --> U4["/new-draft → 承認 → /new-task<br/>→ /start-task → 自律実装"]
+```
+
+| 段階 | コマンド | 目的 |
+|---|---|---|
+| **① インストール** | `bash install.sh /path/to/project` | `.claude/` 一式 + CLAUDE.md.template 配置 (冪等、既存は `.bak` 退避) |
+| **② 設定** | `bash .claude/scripts/hc-config.sh` | feature toggle / reviewer 制御 / 保護パス等を安全に確認・調整 |
+| | `$EDITOR .claude/bash-whitelist.txt` | project で使う CLI prefix を追記 |
+| | `mv CLAUDE.md.template CLAUDE.md` + 編集 | project 固有情報 (Tech Stack / Commands 等) を記入 |
+| | `git init` | observe.sh の project hash 検出を有効化 |
+| **③ 利用** | Claude Code 起動 → `/init-tasks` → `/mode loop` | session 開始 + タスク台帳初期化 + 自律進行モード |
+| | `/new-draft <slug>` → 承認 → `/new-task <id> <slug>` | 設計→承認→タスク化の 3 step (設計なき着手を hook が block) |
+| | `/start-task <id>` → subagent 委譲 → `/finish-task <id>` | 着手 → 実装 (並列 subagent) → 完了クローズ |
+
+> ②③ の途中で feature toggle を切り替えたくなったら、いつでも `bash .claude/scripts/hc-config.sh --feature <name>=false` で安全に変更できる (atomic backup 付き、ハーネス再起動不要)。
 
 ### 3.10 動作確認
 
