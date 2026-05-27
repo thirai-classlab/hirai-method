@@ -167,6 +167,18 @@ _case_1() (
     missing=$((missing + 1))
   fi
 
+  # pr MED-02: task-48 の新 --list format (説明列 header + category 区切り行) に感応させる。
+  #   既存の key keyword grep は format 進化 (列追加 / category グルーピング) を検出できないため、
+  #   「説明」header と `=== <category> (N keys) ===` 区切り行の存在を明示 assert する。
+  if ! printf '%s' "$output" | grep -q '説明'; then
+    printf 'Case 1: --list missing 説明 column header (task-48 format)\n' >&2
+    missing=$((missing + 1))
+  fi
+  if ! printf '%s' "$output" | grep -qE '^=== .* \([0-9]+ keys\) ===$'; then
+    printf 'Case 1: --list missing category separator row (=== <cat> (N keys) ===)\n' >&2
+    missing=$((missing + 1))
+  fi
+
   [ $missing -eq 0 ]
 )
 
@@ -991,8 +1003,8 @@ _case_19f() (
 
 printf '\n=== hc-config-script-smoke (iter 5: 21 cases, Case 19 a/b/c/d/e/f) ===\n\n'
 
-if _case_1 2>/dev/null; then _record PASS 1 "--list で全 key 一覧表示 (34+ key 確認)"
-else                         _record FAIL 1 "--list で全 key 一覧表示 (34+ key 確認)"
+if _case_1 2>/dev/null; then _record PASS 1 "--list で全 key 一覧表示 (34+ key + 説明 header + category 区切り行、task-48 format)"
+else                         _record FAIL 1 "--list で全 key 一覧表示 (34+ key + 説明 header + category 区切り行、task-48 format)"
 fi
 
 if _case_2 2>/dev/null; then _record PASS 2 "--get で値取得 (default + env override)"

@@ -1,6 +1,6 @@
 # Task #24: taskManageSystem Recovery — draft-flow-guard 同期 / PROJECT_ROOT 解決 / 二重 .claude 境界
 
-> Status: **🔄 進行中 (~85%)** (W1+W2+W3+W4+W6 完了、W5 cross-repo user manual 残 + taskManageSystem 側 harness-config.yml 設定 user manual 残)
+> Status: **✅ 完了** (2026-05-27、W1-W6 全完了。W5 cross-repo は task-42 で agent 着手可能化、taskManageSystem local commit `ad4b99d` 実行 [push は user 承認待ち])
 > 起案: 2026-05-23
 > 関連: #12 (dual-mode-portability、subdir 配置という第三 mode を追加)
 > 設計起源: [taskmanagesystem-recovery.md](../draft/taskmanagesystem-recovery.md)
@@ -26,11 +26,18 @@
 
 > **cross-repo 注意**: 上記 cross-repo blocker は task-31 で規範化済 (commit `f90d194`)。Claude Code sandbox + `delegation-guard.sh` 二重制約で agent 経路完全 denied、`bash install.sh --update <target>` は **user manual (terminal) 実行のみ可能** (subagent foreground / background / `isolation: "worktree"` いずれも回避不可)。詳細は `.claude/rules/development-process.md` §「cross-repo write 例外」参照。
 
-### 残作業
+### W5 完遂 (2026-05-27、subagent ae3e1c707ed155c63 confidence 0.9、cross-repo agent 着手)
 
-- W5: taskManageSystem 内 root tasks.md を `docs/archive/tasks-root-2026-05-23.md` に move + README 案内 (cross-repo user manual)
-- taskManageSystem 側 `harness-config.yml` に `docs_approved_dir` 設定 (cross-repo user manual)
-- 上記 cross-repo 作業 2 件完了で task-24 → ✅ 化
+cross-repo 制約は task-42 (2026-05-26) で superseded (agent 直接 write 実証済) のため、W5 を user manual ではなく **agent cross-repo 自律実行**:
+- **tasks.md archive 移動**: `taskManageSystem/tasks.md` → `taskManageSystem/docs/archive/tasks-root-2026-05-23.md` (git mv 100% rename、履歴保持、14158 bytes)
+- **docs_approved_dir 設定**: `.claude/harness-config.yml` に `docs_approved_dir: "design"` (yml contract が「`docs/` 配下 dir セグメント、slash なし」のため `"docs/design"` ではなく `"design"`。`docs/design/foo.md` が approved_dir 経由で PASS する正しい値)
+- **README 案内**: `docs/README.md` Archive section に「root tasks.md は docs/archive/ に移動、現行 task 管理は docs/tasks/list.md」を追記
+- **local commit**: taskManageSystem (git root `/Users/t.hirai/タスクマネジメント`、branch `fix/critical-gaps`) で `ad4b99d`。**push は user 承認待ち** (modes.md 遵守事項 8 第三者リポ)
+- **smoke**: `draft-flow-guard-approved-dir-smoke.sh` 7/7 PASS (Case 2 `docs/design/foo.md` PASS + Case 3 `docs/foo.md` BLOCK regression 含む)
+
+### user follow-up (push)
+
+- taskManageSystem の local commit `ad4b99d` を user が push (別 repo push は自律禁止)
 
 ## 背景・目的
 
@@ -93,9 +100,9 @@
 
 ## 完了条件
 
-- [ ] taskManageSystem に draft-flow-guard.sh 配備 + smoke pass
-- [ ] PROJECT_ROOT が `taskManageSystem` に解決される
-- [ ] `docs/design/foo.md` への新規 Write が approved_dir 経由で通過
-- [ ] COEXISTENCE.md で parent-child 役割明文化
-- [ ] tasks.md archive 移動 + README 案内
-- [ ] next-actions に汎用化案 B entry あり
+- [x] taskManageSystem に draft-flow-guard.sh 配備 + smoke pass (W1、smoke 7/7 PASS で W5 再確認)
+- [x] PROJECT_ROOT が `taskManageSystem` に解決される (W2 `.envrc` + HC_PROJECT_ROOT)
+- [x] `docs/design/foo.md` への新規 Write が approved_dir 経由で通過 (W3 実装 + W5 で `docs_approved_dir: "design"` 設定、live guard PASS 確認)
+- [x] COEXISTENCE.md で parent-child 役割明文化 (W4)
+- [x] tasks.md archive 移動 + README 案内 (W5、commit `ad4b99d`)
+- [x] next-actions に汎用化案 B entry あり (W6)

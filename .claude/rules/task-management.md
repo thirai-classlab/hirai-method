@@ -60,8 +60,16 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
      - **yml 値による制御 (task-44/45/46)**: reviewer 動的選定の下限 / 上限 / 反復は `harness-config.yml` の `review_min_count_test` (default 5) / `review_max_count_test` (default 10) / `review_iteration_max` (default 5) で集中制御 (`HC_REVIEW_*` env で override 可、`bash .claude/scripts/hc-config.sh --set review_min_count_test=3` で安全に変更可、atomic backup + type validation)。詳細は `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」参照。
    - **テスト合格 Step**:
      - レビューで合意したテスト設計に従いテスト実行
-     - UI 含む Task → **E2E 必須** (Playwright / 同等)
+     - UI (browser/web) 含む Task → **E2E 必須** (Playwright / 同等) **かつ ビジュアル検証必須** (下記)
      - UI 変更なし Task → unit / integration test PASS で OK
+     - **ビジュアル検証 (browser/web UI、E2E とは別レイヤ、2026-05-27 採用、draft `ui-visual-verification-mandate.md`)**:
+       - `agent-browser` skill (vercel/agent browser) で実際にブラウザ描画 → screenshot 取得 → 目視確認
+       - 主要 breakpoint (320/768/1024/1440 等) / 主要状態 (hover/focus/active/error 等) / 両 theme (あれば) を撮影
+       - レイアウト / 配色 / タイポグラフィ / 余白 / レスポンシブ が設計意図通りか確認 (可能なら before/after 比較)
+       - E2E (機能フロー動作) とは別の品質軸。**両方 PASS で初めて UI Task 完了**、E2E のみ / 型チェックのみでは完了宣言しない
+       - トリガーは §「UI 変更検出基準」を流用 (拡張子/path)。skip は同 §の skip format に準拠
+       - **terminal TUI は対象外** (CLI TUI は TTY 必須の手動操作確認が別途)
+       - 非対話 / CI 環境は Playwright screenshot で代替可。honor-system (機械強制 hook なし)
    - **リファクタリング Step**:
      - 持続可能性 / 汎用性 / 非冗長化 の 3 観点 (`/module-review` 同期)
      - 不要なら `skip: <reason>` 明示記録 (例: `skip: 単純な文字列追加で refactor 余地なし`)
@@ -184,7 +192,7 @@ reviewer 確認推奨 (`/module-review` or `/system-review` 時に skip 妥当�
 
 ### 機械強制 hook 案 (future work)
 
-本規範採用フェーズでは規範のみ (honor system)。効果観察後に別 task で `task-rule-guard.sh` 拡張により Task 内容を parse → UI 判定 → E2E Step 存在検証を機械強制化する案を検討する (起案は `docs/draft/` 経由で別 task として起こす)。
+本規範採用フェーズでは規範のみ (honor system)。効果観察後に別 task で `task-rule-guard.sh` 拡張により Task 内容を parse → UI 判定 → E2E + ビジュアル検証 (採用 6 条 4、2026-05-27 採用) Step 存在検証を機械強制化する案を検討する (起案は `docs/draft/` 経由で別 task として起こす)。
 
 ## 設計→承認→タスク追加フロー（必須）
 
