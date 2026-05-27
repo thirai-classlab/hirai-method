@@ -331,6 +331,79 @@ bash .claude/scripts/hc-config.sh
 bash .claude/scripts/hc-config.sh --help
 ```
 
+**`bash .claude/scripts/hc-config.sh` (引数なし = 対話 menu) の出力**:
+
+```text
+=== hc-config interactive menu ===
+
+  1) 全 key 一覧表示
+  2) key 選択して編集
+  3) feature toggle 一括 on/off
+  4) reviewer 設定 quick edit (review_*)
+  5) 終了
+
+choice [1-5/q]:
+```
+
+`1`-`5` で各操作、`q` / `0` / `Ctrl-D` で終了 (`bye.` を出力して exit)。
+
+**`bash .claude/scripts/hc-config.sh --help` の出力**:
+
+```text
+hc-config — harness-config.yml interactive editor
+
+USAGE:
+  hc-config.sh                          引数なし: 対話 menu 起動
+  hc-config.sh --list                   全 key 一覧表示
+  hc-config.sh --get <key>              key の現在値取得 (env override 優先)
+  hc-config.sh --set <key>=<value>      値設定 (型 validation + backup + atomic)
+  hc-config.sh --feature <name>=<bool>  feature toggle 短縮 (feature_<name>_enabled の alias)
+  hc-config.sh --reset <key>            key を default 値に戻す
+  hc-config.sh --reset-all              全 key を default に戻す
+  hc-config.sh --diff                   現在値と default の差分一覧
+  hc-config.sh --validate               全 key の型 validation のみ実行
+  hc-config.sh --config <path>          編集対象 yml path を override (test isolation 用)
+  hc-config.sh --help                   本 help 表示
+
+EXAMPLES:
+  hc-config.sh --get feature_loop_mode_enforcement_enabled
+  hc-config.sh --set review_iteration_max=3
+  hc-config.sh --feature draft_flow_guard=false
+  hc-config.sh --reset review_iteration_max
+
+DESIGN:
+  - atomic 操作: .bak.<ts>.<pid> backup + .tmp.<pid> write + python yaml validate (stdin) + mv
+  - 値型 validation: bool / int / float / array / string / path (改行/制御文字/yaml syntax confusion を reject)
+  - 環境変数 HC_<KEY> で yml 値を override 可能 (config-loader.sh 経由)
+  - .bak retention: 最新 N=10 件保持 (HC_BAK_RETENTION_COUNT で override)
+  - --config path は REPO_ROOT / /tmp/ 配下のみ (HC_ALLOW_EXTERNAL_CONFIG=1 で bypass)
+
+REFERENCE:
+  - smoke test:  .claude/tests/hc-config-script-smoke.sh
+  - config-loader: .claude/hooks/lib/config-loader.sh
+  - 設計 draft:  docs/draft/config-yml-phase3-hc-config-script.md
+```
+
+**`bash .claude/scripts/hc-config.sh --list` の出力** (全 ~74 key、KEY / CURRENT / DEFAULT / TYPE の 4 列、抜粋):
+
+```text
+KEY                                                CURRENT                        DEFAULT                        TYPE
+----------------------------------------------------------------------------------------------------------------------------------
+protected_paths                                    [src, tests, scripts]          src,tests,scripts              array
+protected_paths_code                               [.claude/hooks, .claude/skil…                                 array
+code_file_extensions                               [sh, py, mjs, ts, js, tsx, j…                                 array
+task_dir                                           docs/tasks                     docs/tasks                     path
+draft_dir                                          docs/draft                     docs/draft                     path
+bash_whitelist_path                                .claude/bash-whitelist.txt     .claude/bash-whitelist.txt     path
+confidence_threshold                               0.6                            0.6                            float
+confidence_required                                true                           true                           bool
+improvement_proposal_lookback_days                 7                              7                              int
+notify_sound                                       /System/Library/Sounds/Hero.…  /System/Library/Sounds/Hero.…  path
+...   (以下 feature_*_enabled / review_*_* 等を含む全 ~74 key)
+```
+
+> 長い array / path 値は端末幅で右端が truncate 表示される (値自体は完全保持)。`--get <key>` で個別 key の完全値を確認できる。
+
 **CLI args (script 自動化 / 単発編集用)**:
 
 | コマンド | 動作 |
