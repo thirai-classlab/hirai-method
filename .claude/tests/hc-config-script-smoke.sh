@@ -331,6 +331,24 @@ _case_7() (
   # stdin に "q" (または "5" = 終了選択) を渡して menu を即終了させる
   # hc-config.sh の対話 menu では "q" または選択肢の最後 (例: "5") が終了
   # 複数の終了候補を試して、いずれかで exit 0 なら PASS
+  #
+  # `timeout` が PATH に無い環境 (macOS default) のため、bash 関数で fallback を提供。
+  # 5 秒経過で SIGKILL する簡易実装。stdin EOF 後すぐに exit するため、
+  # 通常は timeout する前に正常終了する。
+  if ! command -v timeout >/dev/null 2>&1; then
+    timeout() {
+      local sec="$1"; shift
+      "$@" &
+      local pid=$!
+      ( sleep "$sec" 2>/dev/null; kill -9 $pid 2>/dev/null ) &
+      local guard_pid=$!
+      wait $pid 2>/dev/null
+      local ec=$?
+      kill -9 $guard_pid 2>/dev/null || true
+      return $ec
+    }
+  fi
+
   local exit_code=1
 
   # 試行 1: "q" で終了
