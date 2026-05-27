@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #46: config-yml Phase 3 (対話的 config-editor hc-config.sh + 規範文書更新)
 
-> Status: **🔄 進行中**
+> Status: **✅ 完了** (2026-05-27、Step 1-6 全 ✅、iter cycle 5 回、CRIT+HIGH=0 達成 + 残 MED 11 件 Step 6 absorb 済、smoke 21/21 PASS + regression 0)
 > 起案: 2026-05-27
 > 関連: task-44 (Phase 1), task-45 (Phase 2), entry #52 (引継ぎ 5 件のうち 3 件統合)
 > 設計起源: [config-yml-phase3-hc-config-script.md](../draft/config-yml-phase3-hc-config-script.md)
@@ -199,8 +199,18 @@ security-reviewer 追加理由: hc-config.sh の atomic write + `.bak` file 残�
 | 日付 | 状態 | 備考 |
 |---|---|---|
 | 2026-05-27 | 起案 | draft `config-yml-phase3-hc-config-script.md` (approved_at: 2026-05-27) |
-| 2026-05-27 | 承認 | user 承認、list.md row 46 📝 → 🔄 |
+| 2026-05-27 | 承認 | user 承認 (PR #19 merge 後 task-46 着手指示)、list.md row 46 📝 → 🔄 |
 | 2026-05-27 | 着手 | branch `feat/config-yml-phase3-hc-config-script` |
+| 2026-05-27 | Step 1 完了 | commit `95d7fe4` (RED smoke 7/7 FAIL) |
+| 2026-05-27 | Step 2 完了 | commit `d6cb269` (GREEN impl hc-config.sh 706 LOC、smoke 7/7 PASS) |
+| 2026-05-27 | Step 3 完了 | commit `c580bd4` (規範文書 5 file + 6 hook 冒頭 + draft §3.1.1 toggle mapping) |
+| 2026-05-27 | iter 2 fix | commit `d0fd5d8` (CRIT 2 + HIGH 7 + MED 8、smoke 7→15/15 PASS) |
+| 2026-05-27 | iter 3 fix | commit `ed2d673` (CRIT 1 + HIGH 4、smoke 15→19/19 PASS) |
+| 2026-05-27 | iter 4 fix | commit `1bc6cc0` (HIGH 3 単一根原因、bypass round-trip 整合性) |
+| 2026-05-27 | iter 5 fix (最終) | commit `652f538` (CRIT 1 + HIGH 2 data corruption 3 surface 解消、smoke 19→21/21 PASS) |
+| 2026-05-27 | Step 5 完了 | smoke 34/34 task-46 由来 PASS + 既存 37 smoke regression 0 (pre-existing FAIL 8 件 task-39 緩和起因で scope 外) |
+| 2026-05-27 | Step 6 完了 | commit `66f162a` (refactor 42 関数 ≤ 48 LOC、3 観点 PASS、subagent refactoring-specialist confidence 0.96) |
+| 2026-05-27 | 完了 | Step 1-6 全 ✅、累計 8 commits、smoke 21/21 + regression 0、iter cycle 5 回完遂、entry #52 引継ぎ 3 件 closure |
 
 ## 派生 task / 次アクション候補
 
