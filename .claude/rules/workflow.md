@@ -131,41 +131,41 @@ state JSON 本体 (`<slug>.json`) は `.claude/.workflow-state/.gitignore` で�
 
 honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリにも記録すること (env 系統だけだと持続的なトレースができない)。
 
-## draft-flow-guard.sh による規範変更強制 (task-40 拡張、2026-05-26)
+## draft-flow-guard.sh による docs/ 直下 block (task-40 拡張は 2026-05-28 緩和で撤廃)
 
-`.claude/hooks/draft-flow-guard.sh` は **PreToolUse(Edit/Write)** で `docs/` 直下の新規設計文書 Write を BLOCK する既存挙動に加え、task-40 拡張で **規範文書の draft 経由必須化** も強制する。
+`.claude/hooks/draft-flow-guard.sh` は **PreToolUse(Edit/Write)** で `docs/` 直下の新規設計文書 Write を BLOCK する。
 
-### 監視対象 path (task-40 で 3 path 追加)
+> **2026-05-28 緩和 (task-40 拡張の撤廃)**: 旧 task-40 拡張 (2026-05-26) は `.claude/rules/*.md` / `.claude/commands/*.md` / `.claude/templates/docs/**/*.md` への **新規 Write** も draft 承認 (`approved_at` / `retroactive`) 不在で BLOCK していた。user 指示「既存 rules file の Edit は PASS (新規 Write のみ BLOCK) → 書き込みも許容してください」により、これらの規範文書 path は **新規 Write / 既存 Edit とも PASS** に緩和。本 hook はもはや `.claude/rules/` / `.claude/commands/` / `.claude/templates/docs/` を一切監視しない。frontmatter parser (`extract_frontmatter_value` / `verify_draft_status`) + 新 path pattern 判定 + retroactive 厳格化ロジックは hook から削除済。
 
-| # | path pattern | 既存 / 新規 | 動作 |
-|---|---|---|---|
-| 1 | `<root>/docs/<basename>.md` (深さ 1) | 既存 | 対応 `docs/draft/<basename>.md` 不在で **BLOCK** |
-| 2 | `<root>/.claude/rules/<basename>.md` (深さ 1) | **task-40 新規** | 対応 draft で `approved_at:` 非空 or `retroactive: true` 必要 |
-| 3 | `<root>/.claude/commands/<basename>.md` (深さ 1) | **task-40 新規** | 同上 |
-| 4 | `<root>/.claude/templates/docs/**/<basename>.md` (深さ 2 以上) | **task-40 新規 (iter2 縮小)** | 同上 |
+### 監視対象 path (2026-05-28 緩和後)
 
-### 規範変更時の hook 役割 (新 1 行)
+| # | path pattern | 動作 |
+|---|---|---|
+| 1 | `<root>/docs/<basename>.md` (深さ 1) | 対応 `docs/draft/<basename>.md` 不在で **BLOCK** (元機能、不変) |
+| — | `<root>/.claude/rules/<basename>.md` 等 (旧 task-40 新規) | **監視対象外 (緩和で撤廃)** — 新規 Write / Edit とも PASS |
+
+### 規範変更時の hook 役割 (2026-05-28 緩和後)
 
 | シナリオ | 動作 |
 |---|---|
-| `.claude/rules/<basename>.md` / `.claude/commands/<basename>.md` / `.claude/templates/docs/**/<basename>.md` の Write、対応 draft `docs/draft/<basename>.md` で `approved_at:` 空 or 不在 | **BLOCK** — 「先に `/new-draft <slug>` で規範変更設計を起こせ」と提示 (task-40 拡張、bypass: `ECC_RULE_CHANGE_GUARD_OFF=1` / `HC_RULE_CHANGE_GUARD_ENABLED=false`) |
-| 既存 file の Edit | **PASS** — 新規 Write のみ block 対象 (`if [ -f "$file_path" ]; then exit 0; fi` L196) |
+| `.claude/rules/<basename>.md` / `.claude/commands/<basename>.md` / `.claude/templates/docs/**/<basename>.md` の **新規 Write / 既存 Edit** | **PASS (Edit 同様、2026-05-28 user 指示で緩和)** — 旧 task-40 拡張 (draft 承認不在で BLOCK) を撤廃 |
+| `docs/` 直下の既存 file の Edit | **PASS** — 新規 Write のみ block 対象 (`if [ -f "$file_path" ]; then exit 0; fi`) |
+| `docs/` 直下への新規設計文書 Write、対応 draft 不在 | **BLOCK** — 「先に `/new-draft <slug>` で設計を起こせ」(元機能、不変) |
 
-### bypass 経路 (task-40 新規含む)
+### bypass 経路 (docs/ block のみ対象、緩和後)
 
 | 方法 | 系統 | スコープ | 痕跡 |
 |---|---|---|---|
-| `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` | env 系統 (両 path カバー) | 1 セッション | `.claude/.workflow-state/bypass.log` に append |
-| `ECC_RULE_CHANGE_GUARD_OFF=1` | env 系統 (task-40 新 path のみ) | 1 セッション | 同上 |
-| `HC_RULE_CHANGE_GUARD_ENABLED=false` | config 系統 (task-40 default `true`) | 1 セッション | 同上 |
+| `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` | env 系統 (docs/ block を skip) | 1 セッション | `.claude/.workflow-state/bypass.log` に append |
 | `HC_DOCS_APPROVED_DIR=<dir>[,<dir>...]` | config 系統 (`docs/<dir>/` 配下を承認済扱い) | 1 セッション | (記録なし、config レベル) |
+| `ECC_RULE_CHANGE_GUARD_OFF=1` / `HC_RULE_CHANGE_GUARD_ENABLED=false` | (旧 task-40 用、緩和で **dead path**) | — | hook は参照しない (後方互換で set しても無害な no-op) |
 
 honor system: bypass の根拠は `docs/tasks/<task-N>.md` の該当 entry に記録すること。
 
 ### 起源
 
-- 2026-05-26 task-40、本 session で規範変更時の draft skip 違反が発生 → retroactive リカバリ後に hook 拡張で再発防止
-- 設計起源: `docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md` (frontmatter `retroactive: true`)
+- 2026-05-26 task-40 で `.claude/rules/*.md` 等の規範文書も draft 経由必須化 (機械強制 BLOCK)、設計起源: `docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md`
+- 2026-05-28 緩和: user 直接指示「既存 rules file の Edit は PASS (新規 Write のみ BLOCK) → 書き込みも許容してください」で task-40 拡張部分 (規範文書 path の新規 Write block) を撤廃。docs/ 直下 block + 既存 Edit PASS は完全維持
 - 関連: [`task-management.md`](./task-management.md) §「設計→承認→タスク追加フロー」/ [`modes.md`](./modes.md) 遵守事項 2 例外条項「規範変更」
 
 ## リファクタリング強制 (W3)
