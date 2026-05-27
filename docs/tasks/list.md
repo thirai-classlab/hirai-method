@@ -132,8 +132,8 @@
 |    | ✅ | Step 5 | (テスト合格) 全 smoke 統合実行 — 本 task 由来 34/34 PASS + 既存 37 smoke regression 0 (pre-existing FAIL 8 件 task-39 緩和起因 scope 外) | | |
 |    | ✅ | Step 6 | (リファクタリング) commit `66f162a` 42 関数全 ≤ 48 LOC + 3 観点 PASS (持続可能性 / 汎用性 / 非冗長化、refactoring-specialist confidence 0.96) | | |
 | 48 | 🔄 | **Task: hc-config.sh 矢印キー TUI 化 + key metadata (説明 + 変更効果) 表示** | hc-config.sh の UX 改善のため、番号選択 menu を矢印キー TUI (↑↓ + Enter + effect panel) に拡張し、73 key 全てに「説明 + 変更効果」metadata を定義して対話時 + --list 両方に表示する。完成すれば user が実 terminal で各 key の意味と変更影響を視認しながら gcloud/gh CLI 風に設定編集でき、非 TTY 環境では現行番号選択に自動 fallback する。 | task-46 | [task-48-hc-config-interactive-tui.md](task-48-hc-config-interactive-tui.md) ← draft: [`docs/draft/hc-config-interactive-tui.md`](../draft/hc-config-interactive-tui.md) |
-|    | 🔲 | Step 1 | smoke `hc-config-tui-smoke.sh` 新設 (7 cases、TDD RED commit) | | |
-|    | 🔲 | Step 2 | `lib/hc-config-metadata.sh` 新設 (73 key description + effect、inline comment 抽出 + hardcode) | | |
+|    | ✅ | Step 1 | smoke `hc-config-tui-smoke.sh` 新設 (7 cases、TDD RED commit `0fa7e47`、7/7 FAIL) | | |
+|    | 🔄 | Step 2 | `lib/hc-config-metadata.sh` 新設 (73 key description + effect、inline comment 抽出 + hardcode) | | |
 |    | 🔲 | Step 3 | `hc-config.sh` 拡張 (矢印キー TUI + TTY fallback + --list 説明列、subagent staging) | | |
 |    | 🔲 | Step 4 | (テスト設計レビュー) 6 reviewer (tdd-guide / test-automator / qa-expert / code-reviewer + ui-designer + pr-test-analyzer) | | |
 |    | 🔲 | Step 5 | (テスト合格) 全 smoke 統合 + 既存 regression 0 + 手動 TUI 検証 | | |
