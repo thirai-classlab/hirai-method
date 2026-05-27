@@ -28,6 +28,12 @@
 # 設計起源:
 #   docs/draft/system-reminder-attention-fix.md §2 W0.1
 #   docs/tasks/task-21-system-reminder-attention-fix.md W0.1
+#
+# 共有 feature toggle group:
+#   - グループ制御 toggle: `feature_loop_mode_enforcement_enabled` (default: true)
+#   - OFF にすると本 hook を含む同 group の全 hook が no-op
+#   - 編集: `bash .claude/scripts/hc-config.sh --feature loop_mode_enforcement=false`
+#   - 同 group の他 hook: loop-confirmation-detector.sh, mode-enforce.sh
 
 set -u
 

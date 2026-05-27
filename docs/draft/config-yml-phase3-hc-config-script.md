@@ -38,6 +38,48 @@ master draft §2 「D ハイブリッド」採用。本 task は Phase 3 単独�
   - `--feature <name>=<true|false>` / `--reset <key>` / `--reset-all`
   - `--diff` / `--validate` / `--help`
 
+### 3.1.1 5 共有 feature toggle と制御 hook の mapping
+
+起源: task-45 reviewer iter 1 MEDIUM finding (5 共有 toggle mapping draft 不在、entry #52 (2))。`hc-config.sh --feature <name>=<value>` の対象となる **5 共有 feature toggle** が hook 群とどう紐付くかを設計文書として明文化する。task-44 で 23 件全 feature toggle を `harness-config.yml` 定義済 (line 318-339)、task-45 Phase 2 で各 hook 冒頭に `is_feature_enabled` 配線完了済。
+
+#### mapping table
+
+| toggle name | default | yml line | 制御対象 hook | 制御 logic |
+|---|---|---|---|---|
+| `loop_mode_enforcement` | true | 318 | `loop-confirmation-detector.sh` (Stop) / `loop-auto-progress-reminder.sh` (UserPromptSubmit) / `mode-enforce.sh` (UserPromptSubmit) | Loop モード稼働中の自律進行強制 + 確認質問抑制 + 待ち中独立作業義務 reminder を **group 単位で OFF** 可。静かな調査セッション等で Loop 規律を一時的に外す用途 |
+| `task_rule_guard` | true | 320 | `task-rule-guard.sh` (PreToolUse Edit/Write) / `list-md-plan-first-reminder.sh` (SessionStart) | タスク管理規範強制 (draft 不在で task 新規作成 BLOCK + 同 ID 重複 BLOCK) + batch planning plan-first reminder を **group 単位で OFF** 可。hot fix で list.md を bypass したい場合の用途 |
+| `byproduct_discharge` | true | 328 | `byproduct-discharge-guard.sh` (Stop) / `next-actions-surface.sh` (SessionStart) | 副産物 registry surface (毎セッション開始時 stderr 提示) + Stop hook BLOCK (🔴 未処理 entry 残存で session 終了 block) を **group 単位で OFF** 可。次 session で対応予定の 🔴 entry を一時的に通過させる用途 |
+| `notify` | true | 336 | `stop.sh` (Stop、afplay 通知音 + osascript notification) / `notify.sh` (Notification、macOS 通知バナー) | macOS 通知音 + 通知バナー (Stop / Notification hook の両 trigger 経路) を **group 単位で OFF** 可。静音セッション (会議中 / 夜間作業) の用途 |
+| `why_x5_enforcement` | true | 329 | `why-x5-reminder.sh` (UserPromptSubmit) / `why-x5-violation-detect.sh` (PostToolUse) | Why × 5 出力規範の毎 turn reminder 注入 + 違反検出 PostToolUse 注入を **group 単位で OFF** 可。雑談セッション / 短い確認応答のみの session で 1 行 format 義務を外す用途 (`why-x5-output.md` §「一時無効化」と整合) |
+
+#### 制御 logic 統一仕様
+
+各 toggle は `feature_<name>_enabled` (default `true`) として `harness-config.yml` line 318-339 に定義済 (task-44 Phase 1)。各 hook 冒頭で `is_feature_enabled <name>` (`config-loader.sh` L498-525 共通関数) が `true` を返さない場合に **no-op で exit 0** する (task-45 Phase 2 で 27 件 hook 配線済)。本 Phase 3 で新設する `hc-config.sh --feature <name>=<value>` は yml の該当 key を atomic + backup 付きで書き換えるため、安全に on/off 切替可能。
+
+#### 5 共有 toggle の存在意義 (group 単位制御)
+
+23 件全 toggle のうち上記 5 件のみを「共有 toggle」と位置付ける理由は **2 件以上の hook を group として制御するため**:
+
+- 同一 group 内 hook を **個別 enable/disable** すると hook 間の不整合が起きやすい (例: Loop モードで auto-progress reminder のみ ON + confirmation-detector OFF → 確認質問が漏れて自律進行のみ強制される片肺状態、規範意図と乖離)
+- group 単位の集約 toggle で「**機能群として ON/OFF**」する設計により、規範意図 (Loop 規律 / タスク管理規範 / 副産物管理 / 通知 / Why × 5 出力) を整合的に on/off 可能
+- 残り 18 件 toggle は単一 hook 制御 (`task_rule_guard` 以外の hook 群)、本 mapping table の対象外 (個別制御で十分)
+
+#### `hc-config.sh --feature` での操作例
+
+```bash
+# Loop 規律を group 単位で OFF (3 hook 同時無効化)
+bash .claude/scripts/hc-config.sh --feature loop_mode_enforcement=false
+
+# 通知音 + バナーを group 単位で OFF (2 hook 同時無効化、静音セッション)
+bash .claude/scripts/hc-config.sh --feature notify=false
+
+# Why × 5 出力規範を group 単位で OFF (2 hook 同時無効化、雑談セッション)
+bash .claude/scripts/hc-config.sh --feature why_x5_enforcement=false
+
+# 全 group を default (true) へ復元
+bash .claude/scripts/hc-config.sh --reset-all
+```
+
 ### 3.2 値型 validation (master §3.3.2)
 
 - **bool**: `true|false` (大小無視)

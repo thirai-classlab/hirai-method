@@ -21,6 +21,12 @@
 # 重要制約:
 #   - set -e 禁止 (mode-loader.sh の CB-verify 教訓 - 5846925)
 #   - source 系は set -uo pipefail のみ
+#
+# 共有 feature toggle group:
+#   - グループ制御 toggle: `feature_byproduct_discharge_enabled` (default: true)
+#   - OFF にすると本 hook を含む同 group の全 hook が no-op
+#   - 編集: `bash .claude/scripts/hc-config.sh --feature byproduct_discharge=false`
+#   - 同 group の他 hook: byproduct-discharge-guard.sh
 
 set -uo pipefail   # set -e は使わない (mode-loader.sh 教訓)
 

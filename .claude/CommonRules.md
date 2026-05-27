@@ -94,6 +94,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 - **保護パス / 配置 / 拡張子は `harness-config.yml` で集中管理**: `protected_paths` / `protected_paths_code` / `task_dir` / `draft_dir` / `bash_whitelist_path` / `code_file_extensions` 等を hook に直接ハードコードしない (`.claude/hooks/lib/config-loader.sh` 経由で `HC_*` env として export)
 - **hook の fail policy 統一**: 全 hook は `set -uo pipefail` (errexit 外し) を default、`set -euo pipefail` は subshell 関数化 (`do_work() ( set -euo pipefail; ... )`) でのみ使用。caller の shell flags への leak と SIGPIPE → exit 141 サイレント死を防ぐ (CLAUDE.md Critical Lessons HIGH)
 - **規範違反は機械強制 hook で防止**: 「ルールに書いて守らせる」ではなく「hook で BLOCK して守らせる」を default。違反検出 → next-actions entry → draft 起こし → 機械強制 hook 実装の閉ループ (task-21 / task-26 が典型例)
+- **機能 on/off は yml feature toggle で集中管理**: hook / command の機能群は `harness-config.yml` の **feature toggle** (`feature_<name>_enabled: true|false`) で集中制御する。各 hook 冒頭で `is_feature_enabled <name>` check を入れて false なら即 no-op で抜ける paired 実装を default 規範とする。新 hook / command 追加時は (1) yml に 1 key 追加 (`feature_xxx_enabled: true` + comment で対象 hook 名明示) (2) hook 冒頭で feature check (3) env 上書きは `HC_FEATURE_XXX_ENABLED` で可能、の 3 点 set を必須とする。これにより「特定機能を試験的に OFF」「regression debug 中の局所無効化」「project 単位の feature 取捨選択」が hook source を触らずに完結する。`hc-config.sh --feature <name>=false` で安全に切替可能 (atomic backup + type validation + 復元は `--reset feature_<name>_enabled`)。詳細: `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」
 
 ## Critical Operational Lessons（`<重要操作>`前に必読）
 

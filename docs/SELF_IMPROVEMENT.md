@@ -236,3 +236,68 @@ python3 .claude/skills/continuous-learning-v2/instinct-cli.py observe-analyze
 | `improvement_proposal_dedup_hours` | `24` | 同提案 ID の再表示禁止期間 |
 
 env override 形式: `HC_IMPROVEMENT_PROPOSAL_ENABLED` 等。
+
+---
+
+## hc-config.sh による yml 編集 (task-46 Phase 3)
+
+`harness-config.yml` の全 key を **対話 menu / CLI 引数** で安全に編集する script。user は yml を直接編集せず、本 script 経由で feature toggle / reviewer 制御 / hook 設定を変更する。atomic backup (`.bak.<timestamp>` 自動作成) + type validation (bool / int / float / array / string / path) + python yaml validate で **誤値の流入を構造的に防止** する。
+
+### CLI args (10 種)
+
+| 引数 | 用途 |
+|---|---|
+| `--list` | 全 key 一覧表示 (key / current / default / type の 4 列 table) |
+| `--get <key>` | key の現在値取得 (env override 優先、`HC_<KEY>` set 中ならそれを優先表示) |
+| `--set <key>=<value>` | 値設定 (型 validation + `.bak.<ts>` backup + atomic write、yaml validate fail なら rollback) |
+| `--feature <name>=<true\|false>` | feature toggle 短縮 (`feature_<name>_enabled` の alias、CommonRules.md §Design Constraints の paired 規範対応) |
+| `--reset <key>` | 当該 key を default 値に戻す (`harness-config.yml` 内 comment の default 値解析、backup 自動) |
+| `--reset-all` | 全 key を default に戻す (each-key backup → 全 key reset、key 数分の `.bak.<ts>` 生成) |
+| `--diff` | 現在値と default の差分一覧 (どの key を user が変更したか追跡) |
+| `--validate` | 全 key の型 validation のみ実行 (値変更なし、CI / pre-commit hook 想定) |
+| `--config <path>` | 編集対象 yml path を override (test isolation 用、smoke test 必須引数) |
+| `--help` | usage 表示 |
+
+### 対話 menu (引数なし起動)
+
+```bash
+bash .claude/scripts/hc-config.sh
+```
+
+stdin から 1〜5 の番号 or `q` / `0` で番号付き menu (list / get / set / feature toggle / reset / quit) を select。誤入力 retry 可。
+
+### 安全性 (atomic backup)
+
+`--set` / `--reset` / `--reset-all` / `--feature` 操作時:
+
+1. `harness-config.yml.bak.<unix_timestamp>` を作成 (rollback 用 audit trail)
+2. `.tmp.<pid>` に新値書き込み (race-condition 防止)
+3. python `yaml.safe_load` で構造 validation (parse fail なら abort + tmp 削除)
+4. `mv .tmp.<pid> harness-config.yml` (atomic rename)
+
+backup は `_prune_old_backups` で自動削除 (最新 N=10 件保持、`HC_BAK_RETENTION_COUNT` で変更可能)。
+
+### 使用例
+
+```bash
+# feature toggle を off
+bash .claude/scripts/hc-config.sh --feature draft_flow_guard=false
+
+# reviewer 反復上限を 3 に変更
+bash .claude/scripts/hc-config.sh --set review_iteration_max=3
+
+# 現在値を env override 優先で取得
+bash .claude/scripts/hc-config.sh --get feature_loop_mode_enforcement_enabled
+
+# 全 key default 復元
+bash .claude/scripts/hc-config.sh --reset-all
+
+# 変更箇所一覧
+bash .claude/scripts/hc-config.sh --diff
+```
+
+### 起源
+
+- 設計起源: `docs/draft/config-yml-phase3-hc-config-script.md`
+- 実装: `.claude/scripts/hc-config.sh` (task-46 Step 2)
+- smoke: `.claude/tests/hc-config-script-smoke.sh` (7 cases、Step 1 RED → Step 2 GREEN)

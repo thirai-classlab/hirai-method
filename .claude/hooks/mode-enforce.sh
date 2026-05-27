@@ -5,6 +5,12 @@
 #       <system-reminder> として注入する。Normal モードでは no-op。
 #
 # 失敗時の挙動: exit 0 のみ。失敗してもユーザターンをブロックしない。
+#
+# 共有 feature toggle group:
+#   - グループ制御 toggle: `feature_loop_mode_enforcement_enabled` (default: true)
+#   - OFF にすると本 hook を含む同 group の全 hook が no-op
+#   - 編集: `bash .claude/scripts/hc-config.sh --feature loop_mode_enforcement=false`
+#   - 同 group の他 hook: loop-confirmation-detector.sh, loop-auto-progress-reminder.sh
 
 set -uo pipefail  # task-22 W1: errexit 外し SIGPIPE 141 サイレント死を防止 (CLAUDE.md Critical Lessons HIGH)
 
