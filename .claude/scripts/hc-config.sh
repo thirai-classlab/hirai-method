@@ -113,6 +113,34 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DEFAULT_CONFIG="${REPO_ROOT}/.claude/harness-config.yml"
 
+# task-48 Step 3: key metadata lib を source (description / effect / category)。
+# 不在環境でも fallback で動くよう存在確認後に source、引き helper も guard する。
+HC_METADATA_LIB="${SCRIPT_DIR}/lib/hc-config-metadata.sh"
+if [ -f "$HC_METADATA_LIB" ]; then
+  # shellcheck disable=SC1090
+  source "$HC_METADATA_LIB"
+fi
+
+# metadata 引き helper (lib 不在でも壊れないよう command -v guard)
+# $1: key → description (不在なら空)
+_meta_desc() {
+  if command -v hc_metadata_description >/dev/null 2>&1; then
+    hc_metadata_description "$1" 2>/dev/null || true
+  fi
+}
+# $1: key → effect (不在なら空)
+_meta_effect() {
+  if command -v hc_metadata_effect >/dev/null 2>&1; then
+    hc_metadata_effect "$1" 2>/dev/null || true
+  fi
+}
+# $1: key → category (不在なら空)
+_meta_category() {
+  if command -v hc_metadata_category >/dev/null 2>&1; then
+    hc_metadata_category "$1" 2>/dev/null || true
+  fi
+}
+
 # --config <path> 引数で test isolation 対応 (smoke Case 3-6)
 CONFIG_PATH=""
 
@@ -716,25 +744,94 @@ _validate_config_path() {
 
 # === コマンド実装 ===
 
-# --list: 全 key 一覧表示 (key | current | default | type)
+# --list: 全 key 一覧表示
+#
+# task-48 Step 3: key metadata (説明 / 変更効果) を列に追加 + category 別グルーピング。
+#   default      : KEY / CURRENT / TYPE / 説明 (DEFAULT 列を説明に置換)
+#   --show-default: KEY / CURRENT / DEFAULT / TYPE / 説明 (DEFAULT 列復活)
+#   --verbose    : KEY / CURRENT / DEFAULT / TYPE / 説明 / 変更効果 (6 列)
+#
+# 引数: $1 に "verbose" / "show-default" を渡すと該当 mode。空なら default mode。
 cmd_list() {
-  printf '%-50s %-30s %-30s %-10s\n' "KEY" "CURRENT" "DEFAULT" "TYPE"
+  local mode="${1:-}"
+  local show_default=0 show_effect=0
+  case "$mode" in
+    verbose)      show_default=1; show_effect=1 ;;
+    show-default) show_default=1 ;;
+  esac
+
+  # header
+  if [ "$show_effect" -eq 1 ]; then
+    printf '%-48s %-18s %-18s %-7s %-44s %s\n' "KEY" "CURRENT" "DEFAULT" "TYPE" "説明" "変更効果"
+  elif [ "$show_default" -eq 1 ]; then
+    printf '%-48s %-22s %-22s %-7s %s\n' "KEY" "CURRENT" "DEFAULT" "TYPE" "説明"
+  else
+    printf '%-48s %-26s %-7s %s\n' "KEY" "CURRENT" "TYPE" "説明"
+  fi
   printf '%s\n' "$(printf '%.0s-' {1..130})"
+
   local keys
   keys=$(_yml_list_keys "$CONFIG_PATH")
-  local key cur def type raw
+
+  # category 別にグルーピングして出力 (metadata 不在時は単一グループ扱い)
+  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  local printed_any=0
+  local cat
+  for cat in $categories; do
+    local cat_keys=""
+    local key
+    while IFS= read -r key; do
+      [ -z "$key" ] && continue
+      if [ "$(_meta_category "$key")" = "$cat" ]; then
+        cat_keys="${cat_keys}${key}"$'\n'
+      fi
+    done <<< "$keys"
+    [ -z "$cat_keys" ] && continue
+    local cat_count
+    cat_count=$(printf '%s' "$cat_keys" | grep -c '.')
+    printf '\n=== %s (%s keys) ===\n' "$cat" "$cat_count"
+    printf '%s' "$cat_keys" | _cmd_list_rows "$show_default" "$show_effect"
+    printed_any=1
+  done
+
+  # metadata 不在 / 未分類 key があれば従来通り全 key を 1 グループで出力
+  if [ "$printed_any" -eq 0 ]; then
+    printf '%s\n' "$keys" | _cmd_list_rows "$show_default" "$show_effect"
+  fi
+}
+
+# cmd_list の行出力 helper (stdin に key 改行区切り)
+# $1: show_default (0/1), $2: show_effect (0/1)
+_cmd_list_rows() {
+  local show_default="$1"
+  local show_effect="$2"
+  local key cur def type raw desc effect
   while IFS= read -r key; do
     [ -z "$key" ] && continue
     raw=$(_yml_get_raw "$CONFIG_PATH" "$key" || printf '')
     cur=$(_get_current "$key")
-    def=$(_get_default "$key" 2>/dev/null || printf '')
     type=$(_infer_type "$key" "$raw")
-    # 出力長制限 (display のみ、改行含む配列値を1行にする)
-    local cur_disp def_disp
-    cur_disp=$(printf '%s' "$cur" | tr '\n' ',' | sed 's/,$//' | cut -c1-28)
-    def_disp=$(printf '%s' "$def" | tr '\n' ',' | sed 's/,$//' | cut -c1-28)
-    printf '%-50s %-30s %-30s %-10s\n' "$key" "$cur_disp" "$def_disp" "$type"
-  done <<< "$keys"
+    desc=$(_meta_desc "$key")
+    local cur_disp
+    cur_disp=$(printf '%s' "$cur" | tr '\n' ',' | sed 's/,$//' | cut -c1-24)
+    if [ "$show_effect" -eq 1 ]; then
+      def=$(_get_default "$key" 2>/dev/null || printf '')
+      effect=$(_meta_effect "$key")
+      local def_disp
+      def_disp=$(printf '%s' "$def" | tr '\n' ',' | sed 's/,$//' | cut -c1-16)
+      printf '%-48s %-18s %-18s %-7s %-44s %s\n' \
+        "$key" "$cur_disp" "$def_disp" "$type" "$(printf '%s' "$desc" | cut -c1-42)" "$effect"
+    elif [ "$show_default" -eq 1 ]; then
+      def=$(_get_default "$key" 2>/dev/null || printf '')
+      local def_disp
+      def_disp=$(printf '%s' "$def" | tr '\n' ',' | sed 's/,$//' | cut -c1-20)
+      printf '%-48s %-22s %-22s %-7s %s\n' \
+        "$key" "$cur_disp" "$def_disp" "$type" "$desc"
+    else
+      printf '%-48s %-26s %-7s %s\n' \
+        "$key" "$cur_disp" "$type" "$desc"
+    fi
+  done
 }
 
 # --get <key>: 値取得 (HIGH H-02 test-auto fix: defaults fallback 実装)
@@ -892,8 +989,10 @@ cmd_help() {
 hc-config — harness-config.yml interactive editor
 
 USAGE:
-  hc-config.sh                          引数なし: 対話 menu 起動
-  hc-config.sh --list                   全 key 一覧表示
+  hc-config.sh                          引数なし: 対話 menu 起動 (TTY=矢印キー TUI / 非TTY=番号選択)
+  hc-config.sh --list                   全 key 一覧表示 (KEY/CURRENT/TYPE/説明、category 別)
+  hc-config.sh --list --verbose         全 key 一覧 + DEFAULT + 変更効果 (6 列)
+  hc-config.sh --list --show-default     全 key 一覧 + DEFAULT 列
   hc-config.sh --get <key>              key の現在値取得 (env override 優先)
   hc-config.sh --set <key>=<value>      値設定 (型 validation + backup + atomic)
   hc-config.sh --feature <name>=<bool>  feature toggle 短縮 (feature_<name>_enabled の alias)
@@ -986,8 +1085,12 @@ _menu_opt_reviewer() {
   fi
 }
 
-# === 対話 menu ===
-cmd_interactive() {
+# === 対話 menu (番号選択、TTY fallback path) ===
+#
+# task-48 Step 3: 従来の番号選択 menu を _cmd_interactive_numeric に抽出。
+#   非 TTY (Claude Code session / pipe / CI) では raw terminal が効かないため本 path に降格、
+#   HC_HC_CONFIG_FORCE_NUMERIC=1 で TTY でも強制番号選択。
+_cmd_interactive_numeric() {
   while true; do
     cat <<'EOF'
 
@@ -1030,6 +1133,148 @@ EOF
   done
 }
 
+# === 矢印キー TUI (task-48 Step 3、TTY 必須) ===
+#
+# category 一覧 → key 一覧 (選択行を `>` + reverse video ハイライト) → 下部に effect panel。
+# ESC [A/[B/[C/[D を decode、Enter で決定、q で quit。
+# bash 3.2 互換: declare -g / ${var^^} を避け case / tr で代替。
+#
+# 注意: 本 path は TTY 環境でのみ呼ばれる (cmd_interactive の dispatch 参照)。
+#       自動 smoke は非 TTY pipe で番号選択に降格するため TUI 描画は手動検証 (Step 5)。
+
+# ANSI escape sequence 定義
+_TUI_RESET=$'\033[0m'
+_TUI_REVERSE=$'\033[7m'
+_TUI_DIM=$'\033[2m'
+_TUI_BOLD=$'\033[1m'
+_TUI_CLEAR=$'\033[2J\033[H'
+
+# 1 文字キー入力を読み取り、矢印キーは UP/DOWN/RIGHT/LEFT に正規化して stdout 出力
+# Enter → ENTER、q → QUIT、それ以外は raw 文字。
+_tui_read_key() {
+  local key rest
+  IFS= read -rsn1 key 2>/dev/null || { printf 'QUIT'; return 0; }
+  case "$key" in
+    $'\x1b')
+      # ESC sequence: 続く 2 文字を読む ([A 等)。timeout で単独 ESC も拾う。
+      IFS= read -rsn2 -t 0.01 rest 2>/dev/null || rest=""
+      case "$rest" in
+        '[A') printf 'UP' ;;
+        '[B') printf 'DOWN' ;;
+        '[C') printf 'RIGHT' ;;
+        '[D') printf 'LEFT' ;;
+        *)    printf 'QUIT' ;;
+      esac
+      ;;
+    ''|$'\n'|$'\r') printf 'ENTER' ;;
+    q|Q)            printf 'QUIT' ;;
+    *)              printf '%s' "$key" ;;
+  esac
+}
+
+# key 一覧の選択画面 + effect panel を描画
+# $1: 全 key 改行区切り (1 行 1 key), $2: 選択 index (0-based)
+_tui_render() {
+  local all_keys="$1"
+  local sel="$2"
+  printf '%s' "$_TUI_CLEAR"
+  printf '%s=== hc-config TUI ===%s  (↑/↓ 選択, Enter 決定, q 終了)\n\n' "$_TUI_BOLD" "$_TUI_RESET"
+
+  local idx=0 key
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    if [ "$idx" -eq "$sel" ]; then
+      printf '%s> %-46s%s\n' "$_TUI_REVERSE" "$key" "$_TUI_RESET"
+    else
+      printf '  %-46s\n' "$key"
+    fi
+    idx=$((idx + 1))
+  done <<< "$all_keys"
+
+  # 選択中 key の effect panel
+  local cur_key
+  cur_key=$(printf '%s' "$all_keys" | sed -n "$((sel + 1))p")
+  if [ -n "$cur_key" ]; then
+    local cur type raw desc effect def
+    raw=$(_yml_get_raw "$CONFIG_PATH" "$cur_key" || printf '')
+    cur=$(_get_current "$cur_key")
+    def=$(_get_default "$cur_key" 2>/dev/null || printf '')
+    type=$(_infer_type "$cur_key" "$raw")
+    desc=$(_meta_desc "$cur_key")
+    effect=$(_meta_effect "$cur_key")
+    printf '\n%s---------------------------------------------------------------%s\n' "$_TUI_DIM" "$_TUI_RESET"
+    printf '%skey%s     : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$cur_key"
+    printf '%s説明%s    : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$desc"
+    printf '%s型%s      : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$type"
+    printf '%s現在値%s  : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$cur" | tr '\n' ',')"
+    printf '%sdefault%s : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$def" | tr '\n' ',')"
+    printf '%s変更効果%s: %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$effect"
+  fi
+}
+
+# TUI 本体: 選択 → effect 確認 → 新値入力 → 確認 → cmd_set
+_cmd_interactive_tui() {
+  local all_keys
+  all_keys=$(_yml_list_keys "$CONFIG_PATH")
+  local total
+  total=$(printf '%s' "$all_keys" | grep -c '.')
+  if [ "$total" -eq 0 ]; then
+    _err "no keys found in ${CONFIG_PATH}"
+    return 1
+  fi
+
+  local sel=0
+  while true; do
+    _tui_render "$all_keys" "$sel"
+    local k
+    k=$(_tui_read_key)
+    case "$k" in
+      UP)    [ "$sel" -gt 0 ] && sel=$((sel - 1)) ;;
+      DOWN)  [ "$sel" -lt "$((total - 1))" ] && sel=$((sel + 1)) ;;
+      QUIT)  printf '%s\n' "$_TUI_RESET"; _out "bye."; return 0 ;;
+      ENTER|RIGHT)
+        local cur_key
+        cur_key=$(printf '%s' "$all_keys" | sed -n "$((sel + 1))p")
+        [ -z "$cur_key" ] && continue
+        # raw terminal 解除して新値入力
+        printf '%s\n\n新値を入力 (空で skip): ' "$_TUI_RESET"
+        local newval
+        IFS= read -r newval || newval=""
+        if [ -n "$newval" ]; then
+          local effect
+          effect=$(_meta_effect "$cur_key")
+          printf '変更後の効果: %s\n続行? [y/N]: ' "$effect"
+          local confirm
+          IFS= read -r confirm || confirm=""
+          case "$confirm" in
+            y|Y|yes|YES)
+              cmd_set "${cur_key}=${newval}" && _out "更新しました: ${cur_key}=${newval}"
+              ;;
+            *)
+              _out "skip しました"
+              ;;
+          esac
+          printf '(Enter で menu に戻る) '
+          IFS= read -r _ || true
+        fi
+        ;;
+      *) : ;;  # その他キーは無視
+    esac
+  done
+}
+
+# === 対話 menu dispatcher (TTY check + fallback) ===
+#
+# task-48 Step 3: TTY なら矢印キー TUI、非 TTY (pipe / CI) or HC_HC_CONFIG_FORCE_NUMERIC=1 なら
+#   番号選択 menu に降格。
+cmd_interactive() {
+  if [ -t 0 ] && [ -t 1 ] && [ "${HC_HC_CONFIG_FORCE_NUMERIC:-}" != "1" ]; then
+    _cmd_interactive_tui
+  else
+    _cmd_interactive_numeric
+  fi
+}
+
 # === arg parser ===
 
 # cmd に引数 $2 が必要かチェック。不在なら error + return 1
@@ -1050,7 +1295,14 @@ _main_dispatch() {
   local cmd="${1:-}"
   local arg="${2:-}"
   case "$cmd" in
-    --list)      cmd_list ;;
+    --list)
+      # --list [--verbose|--show-default] (task-48 Step 3)
+      case "$arg" in
+        --verbose|-v)     cmd_list "verbose" ;;
+        --show-default)   cmd_list "show-default" ;;
+        ""|*)             cmd_list "" ;;
+      esac
+      ;;
     --get)       _main_require_arg "$cmd" "$arg" && cmd_get "$arg" ;;
     --set)       _main_require_arg "$cmd" "$arg" && cmd_set "$arg" ;;
     --feature)   _main_require_arg "$cmd" "$arg" && cmd_feature "$arg" ;;
