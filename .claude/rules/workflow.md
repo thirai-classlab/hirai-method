@@ -196,6 +196,8 @@ MEDIUM / LOW のみが残存する場合は user 承認のうえ `skip_log` に�
 
 review prompt 規約 (behavior-preserving 必須 / public API・DB schema 変更禁止 / 全 finding に修正コード提案 / 末尾 `confidence: 0.X`) の詳細は [`module-review.md`](../commands/module-review.md) Phase 3 を参照。
 
+**yml 値による制御**: `/module-review` は `review_required_module` (default true) / `review_min_count_module` (default 2) / `review_max_count_module` (default 5) で、`/system-review` は `review_required_system` / `review_min_count_system` (default 2) / `review_max_count_system` (default 5) で並列度を集中制御。`review_iteration_max` (default 5) は全レビューで共通の反復上限。`hc-config.sh --feature review_required_module=false` で局所無効化可。
+
 ## テスト設計の MECE 強制 (W1)
 
 `/test-design <slug>` は承認済設計 draft (`docs/draft/<slug>.md`) を読み、`.claude/templates/docs/draft/_TEST_DESIGN_TEMPLATE.md` から **MECE 20 カテゴリ** のテストカタログを `docs/draft/<slug>.test-design.md` に生成する。
@@ -219,6 +221,8 @@ W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK され�
 
 並列起動される agent: `tdd-guide` / `test-automator` / `qa-expert` (`reviewer_registry_test` カテゴリ)。3 agent 中 2 以上が採用推奨ならデフォルト ☑、2 以上が不採用なら ☒、意見割れなら ☐ + コメント「user 判断要」。
 
+**yml 値による制御**: 並列起動数 / 反復は `harness-config.yml` の `review_required_test` / `review_min_count_test` (default 5、採用 6 条 4 起源) / `review_max_count_test` (default 10) / `review_iteration_max` (default 5) で集中制御 (`HC_REVIEW_*` env で override 可、`hc-config.sh --set review_min_count_test=3` で安全に変更可)。
+
 ## 設計レビューの fan-out (W2)
 
 `/design-review <slug>` は `harness-config.yml` の `reviewer_registry_design` + `reviewer_registry_security` カテゴリに登録された agent を **並列起動** (`run_in_background: true` 必須) し、各 findings を `docs/draft/<slug>-review.md` に集約する。
@@ -233,6 +237,8 @@ W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK され�
 | `reviewer_registry_impl` | code-reviewer / refactoring-specialist / 言語別 reviewer 群 | 実装レビュー (W3 `/module-review` `/system-review`) |
 
 env 上書き例: `export HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer'` (改行区切り) で 2 件に絞り cost 制御可能。
+
+**並列数 / 反復制御の yml key**: registry と独立して `review_required_design` (default true) / `review_min_count_design` (default 3) / `review_max_count_design` (default 7) / `review_iteration_max` (default 5、§「収束条件」table の「反復上限」と同期) で制御。`hc-config.sh --get review_min_count_design` で現在値確認、`--set` で変更 (atomic backup)。
 
 ### stack heuristic 絞り込み
 

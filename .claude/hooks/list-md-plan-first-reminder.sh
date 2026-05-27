@@ -42,6 +42,12 @@
 #   - task #33 (list-md-plan-first-normative) 採用 6 条 supersede による分割で task #35 へ
 #   - 設計起源: docs/draft/list-md-plan-first-normative.md §3 P3
 #   - 規範:     .claude/rules/task-management.md §plan-first 経路 B
+#
+# 共有 feature toggle group:
+#   - グループ制御 toggle: `feature_task_rule_guard_enabled` (default: true)
+#   - OFF にすると本 hook を含む同 group の全 hook が no-op
+#   - 編集: `bash .claude/scripts/hc-config.sh --feature task_rule_guard=false`
+#   - 同 group の他 hook: task-rule-guard.sh
 #   - Step 5 refactor: harness-optimizer M-1 finding (YAML→hook 受渡し欠如) を解消
 #     context-budget.sh L59-62 パターンを踏襲し、config-loader.sh source で
 #     harness-config.yml の list_plan_first_reminder_enabled: false が hook に届くようにする。

@@ -57,6 +57,7 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
      - 各 reviewer の修正提案を集約 → テスト設計に反映 → 再度 5+ reviewer 並列起動
      - **収束条件**: 全 reviewer が approve / no objection (修正提案 0 件)
      - **反復上限**: 5 回 (超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1` セッション全体)
+     - **yml 値による制御 (task-44/45/46)**: reviewer 動的選定の下限 / 上限 / 反復は `harness-config.yml` の `review_min_count_test` (default 5) / `review_max_count_test` (default 10) / `review_iteration_max` (default 5) で集中制御 (`HC_REVIEW_*` env で override 可、`bash .claude/scripts/hc-config.sh --set review_min_count_test=3` で安全に変更可、atomic backup + type validation)。詳細は `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」参照。
    - **テスト合格 Step**:
      - レビューで合意したテスト設計に従いテスト実行
      - UI 含む Task → **E2E 必須** (Playwright / 同等)

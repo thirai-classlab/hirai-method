@@ -120,6 +120,19 @@ paths:
 **Hook バイパスは禁止:**
 - `CLAUDE_HARNESS_ROLE=` のような inline 環境変数による Hook バイパスは `delegation-guard.sh` が検出してブロック
 
+**Reviewer 制御は `harness-config.yml` 集中管理 (task-44/45/46 系):**
+
+設計レビュー / テスト設計レビュー / module-review / system-review 等の **reviewer 5+ 動的選定 / 並列起動数 / 反復上限 / 必須要否** は `.claude/harness-config.yml` の以下 key で集中制御される。hook / command 側にハードコードしない (`HC_REVIEW_*` env で override 可能):
+
+| key | 用途 |
+|---|---|
+| `review_required_design` / `_test` / `_module` / `_system` / `_security` | 各レビュー要否 (false で no-op skip) |
+| `review_min_count_design` / `_test` / `_module` / `_system` / `_security` | 並列起動 reviewer 数下限 (採用 6 条 4 で `review_min_count_test=5` が default) |
+| `review_max_count_design` / `_test` / `_module` / `_system` | 並列起動上限 (cost 制御) |
+| `review_iteration_max` | 反復上限 (default 5、採用 6 条 4 の「5 回上限」起源) |
+
+取得例: `bash .claude/scripts/hc-config.sh --get review_iteration_max` (env override 優先で現在値表示)。値変更は `bash .claude/scripts/hc-config.sh --set review_iteration_max=3` (atomic backup + type validation)。詳細は [`workflow.md`](./workflow.md) §「設計レビューの fan-out」+ [`task-management.md`](./task-management.md) §「タスク構造規範」採用 6 条 4 + `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」を参照。
+
 ## サブエージェント委譲の必須要件（背景起動 + 順序整合性）
 
 メインエージェントは Agent tool 起動時、以下 3 点を必須とする。

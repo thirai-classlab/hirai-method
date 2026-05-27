@@ -3,6 +3,12 @@
 #
 # Config keys consumed (.claude/harness-config.yml):
 #   stop_sound                 # afplay 対象 (macOS のみ。非 macOS / 不在ファイルなら静音)
+#
+# 共有 feature toggle group:
+#   - グループ制御 toggle: `feature_notify_enabled` (default: true)
+#   - OFF にすると本 hook を含む同 group の全 hook が no-op
+#   - 編集: `bash .claude/scripts/hc-config.sh --feature notify=false`
+#   - 同 group の他 hook: notify.sh
 set -uo pipefail
 
 # config 読み込み (HC_STOP_SOUND)
