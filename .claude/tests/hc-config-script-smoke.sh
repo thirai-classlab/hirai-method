@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# .claude/tests/hc-config-script-smoke.sh — task-46 Step 1 → iter 2
+# .claude/tests/hc-config-script-smoke.sh — task-46 Step 1 → iter 2 → iter 3
 #
 # 目的:
-#   .claude/scripts/hc-config.sh の動作を 13+ ケースで検証する (iter 2 拡張)。
+#   .claude/scripts/hc-config.sh の動作を 19 ケースで検証する (iter 3 拡張)。
 #
 #   Original (RED → GREEN):
 #   - Case 1: --list で全 key 一覧表示 (34+ key 確認)
@@ -14,7 +14,8 @@
 #   - Case 7: 対話 menu (stdin redirect 経由)
 #
 #   iter 2 新規 (CRIT F-02 + HIGH 多数 + MED):
-#   - Case 8: 真の rollback (path key に yaml syntax invalid 値 → _atomic_write reject)
+#   - Case 8: _validate_string_sanity による pre-write reject (yml unchanged)
+#             ※ iter 3 訂正: 真の yaml.safe_load reject path は Case 16 で testable
 #   - Case 9: --feature <name>=<bool>
 #   - Case 10: --validate
 #   - Case 11: --diff
@@ -22,6 +23,20 @@
 #   - Case 13: path traversal --config /etc/passwd → reject
 #   - Case 14: env override 優先順位 (env > yml > defaults)
 #   - Case 15: awk -v escape corruption 修正検証 (`foo\bar` をそのまま保持)
+#
+#   iter 3 新規 (CRIT R-01 + HIGH 4 + MED M-NEW-01 closure):
+#   - Case 16: _atomic_write rollback (mid-value colon / 不完全 bracket)
+#              CRIT R-01 (tdd-guide) + HIGH (中間コロン) coverage、
+#              PyYAML 利用可能環境では yaml.safe_load reject、不在環境では
+#              fallback structural check reject の両方を validate。
+#   - Case 17: HC_BAK_RETENTION_COUNT validation (0 / 非数値 → default 10 fallback)
+#              MED M-NEW-01 (code-rev) + L-03 (security) coverage。
+#   - Case 18: UTF-8 multibyte path 受理 (`task_dir=docs/タスク/foo`)
+#              HIGH (code-rev UTF-8 false-reject) coverage、
+#              旧 `tr -d '\11\40-\176'` が \x80-\xFF を reject していた regression 防止。
+#   - Case 19: mid-value `#` silent data loss 防止 (`docs_approved_dir=foo#bar` → reject)
+#              HIGH (pr-test mid-value # silent data loss) coverage、
+#              HC_ALLOW_HASH_IN_VALUE=1 で URL fragment 等 bypass 可。
 #
 # 設計:
 #   - subshell 関数 ( set -uo pipefail; ... ) で各 case を隔離
@@ -87,6 +102,8 @@ _md5_of() {
 }
 
 # timeout fallback (MED M-03 fix: process group kill)
+# iter 3 fix (test-auto M-NEW-01): `kill -- -$guard_pid` は冗長 (`kill -9 $guard_pid` で十分)、
+# pgid kill は本 use-case では不要なため削除して shellcheck noise を減らす。
 if ! command -v timeout >/dev/null 2>&1; then
   timeout() {
     local sec="$1"; shift
@@ -96,9 +113,7 @@ if ! command -v timeout >/dev/null 2>&1; then
     local guard_pid=$!
     wait $pid 2>/dev/null
     local ec=$?
-    # process group kill で orphan 回避 (best-effort)
     kill -9 $guard_pid 2>/dev/null || true
-    kill -- -$guard_pid 2>/dev/null || true
     return $ec
   }
 fi
@@ -351,10 +366,14 @@ _case_7() (
 )
 
 # ============================================================
-# Case 8 (iter 2 新規 CRIT F-02): 真の rollback path
-# path/string 型 key (task_dir) に yaml syntax invalid な値を渡し、
-# _validate_string_sanity または _atomic_write の yaml.safe_load reject で
-# yml が unchanged であることを確認
+# Case 8 (iter 2 新規 CRIT F-02、iter 3 訂正):
+#   _validate_string_sanity による pre-write reject path (`: <text>` / `# comment` を
+#   sanity check で先に reject)。
+#
+#   iter 3 訂正 (R-02 tdd-guide finding):
+#     旧コメント「yaml.safe_load reject」は誤り。本 case の値は _validate_string_sanity
+#     を通過せず _atomic_write には到達しない。真の _atomic_write rollback path
+#     (mid-value colon / 不完全 bracket) は Case 16 で別途 testable。
 # ============================================================
 _case_8() (
   set -uo pipefail
@@ -618,10 +637,212 @@ _case_15() (
 )
 
 # ============================================================
+# Case 16 (iter 3 新規 CRIT R-01 + HIGH 中間コロン):
+#   _atomic_write rollback path (yaml.safe_load reject + fallback structural check)
+#
+#   _validate_string_sanity は通過するが _atomic_write の yaml validation で
+#   reject される値 (mid-value colon / 不完全 [ / 不完全 {) を渡し、
+#   yml が unchanged で残ることを確認。PyYAML 利用可能環境では yaml.safe_load reject、
+#   不在環境では fallback structural pattern reject の両方が動作対象。
+#
+#   注意: _validate_string_sanity が `: <text>` を先に reject するため、
+#         mid-value colon は値の途中 (`foo: bar`) として渡す必要がある。
+#         また bracket / brace は `[` / `{` 単独 (= sanity pass) として渡す。
+# ============================================================
+_case_16() (
+  set -uo pipefail
+  _red_guard "16" || return 1
+
+  local tmp_yml="${TMP_DIR}/test-harness-config-case16.yml"
+  cp "${HC_CONFIG_YML}" "${tmp_yml}"
+
+  local original_checksum
+  original_checksum="$(_md5_of "${tmp_yml}")"
+
+  # 16a: mid-value colon (path 型 key、空白 + 値 の中間に colon)
+  #      task_dir=foo: bar → yaml では `task_dir: foo: bar` (flow scalar 構造破壊兆候)
+  #      _validate_string_sanity は `:` 行頭のみ reject、mid-value は通過
+  bash "${HC_CONFIG_SCRIPT}" --set 'task_dir=foo: bar' \
+    --config "${tmp_yml}" 2>/dev/null
+  local cs1
+  cs1="$(_md5_of "${tmp_yml}")"
+  if [ "$original_checksum" != "$cs1" ]; then
+    printf 'Case 16a: yml modified after mid-value colon (rollback failed)\n' >&2
+    return 1
+  fi
+
+  # 16b: 不完全 array bracket (`[unclosed` には行末 `]` がない)
+  bash "${HC_CONFIG_SCRIPT}" --set 'task_dir=[unclosed' \
+    --config "${tmp_yml}" 2>/dev/null
+  local cs2
+  cs2="$(_md5_of "${tmp_yml}")"
+  if [ "$original_checksum" != "$cs2" ]; then
+    printf 'Case 16b: yml modified after unclosed bracket (rollback failed)\n' >&2
+    return 1
+  fi
+
+  # 16c: 不完全 object brace
+  bash "${HC_CONFIG_SCRIPT}" --set 'task_dir={unclosed' \
+    --config "${tmp_yml}" 2>/dev/null
+  local cs3
+  cs3="$(_md5_of "${tmp_yml}")"
+  if [ "$original_checksum" != "$cs3" ]; then
+    printf 'Case 16c: yml modified after unclosed brace (rollback failed)\n' >&2
+    return 1
+  fi
+
+  # 16d: yml が yaml としてまだ parse 可能であること (PyYAML 利用可能環境のみ)
+  local py_check
+  py_check=""
+  for py in python3.13 python3.12 python3.11 python3; do
+    if command -v "$py" >/dev/null 2>&1 && "$py" -c "import yaml" 2>/dev/null; then
+      py_check="$py"; break
+    fi
+  done
+  if [ -n "$py_check" ]; then
+    if ! "$py_check" -c "import yaml, sys; yaml.safe_load(sys.stdin.read())" < "${tmp_yml}" 2>/dev/null; then
+      printf 'Case 16d: yml is no longer yaml-parseable after rejection attempts\n' >&2
+      return 1
+    fi
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case 17 (iter 3 新規 MED M-NEW-01 + L-03):
+#   HC_BAK_RETENTION_COUNT validation (0 / 非数値 → default 10 fallback)
+#
+#   不正値 (0 / 負値 / 非数値) では全 backup 削除 (rollback 不能) を起こさず、
+#   default 10 に fallback して --set が成功 + backup 残存することを確認。
+# ============================================================
+_case_17() (
+  set -uo pipefail
+  _red_guard "17" || return 1
+
+  # 17a: HC_BAK_RETENTION_COUNT=0 → default 10 fallback
+  local tmp_yml="${TMP_DIR}/test-harness-config-case17a.yml"
+  cp "${HC_CONFIG_YML}" "${tmp_yml}"
+  HC_BAK_RETENTION_COUNT=0 bash "${HC_CONFIG_SCRIPT}" --set review_iteration_max=3 \
+    --config "${tmp_yml}" 2>/dev/null
+  local exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    printf 'Case 17a: HC_BAK_RETENTION_COUNT=0 should fallback, exit code %d\n' "$exit_code" >&2
+    return 1
+  fi
+  local bak_count_a
+  bak_count_a="$(ls "${TMP_DIR}"/test-harness-config-case17a.yml.bak.* 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$bak_count_a" -lt 1 ]; then
+    printf 'Case 17a: backup deleted by HC_BAK_RETENTION_COUNT=0 (rollback unrecoverable)\n' >&2
+    return 1
+  fi
+
+  # 17b: HC_BAK_RETENTION_COUNT=abc → default 10 fallback
+  local tmp_yml_b="${TMP_DIR}/test-harness-config-case17b.yml"
+  cp "${HC_CONFIG_YML}" "${tmp_yml_b}"
+  HC_BAK_RETENTION_COUNT=abc bash "${HC_CONFIG_SCRIPT}" --set review_iteration_max=4 \
+    --config "${tmp_yml_b}" 2>/dev/null
+  exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    printf 'Case 17b: HC_BAK_RETENTION_COUNT=abc should fallback, exit code %d\n' "$exit_code" >&2
+    return 1
+  fi
+  local bak_count_b
+  bak_count_b="$(ls "${TMP_DIR}"/test-harness-config-case17b.yml.bak.* 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$bak_count_b" -lt 1 ]; then
+    printf 'Case 17b: backup deleted by HC_BAK_RETENTION_COUNT=abc (rollback unrecoverable)\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case 18 (iter 3 新規 HIGH code-rev UTF-8 false-reject):
+#   UTF-8 multibyte path 受理 (`task_dir=docs/タスク/foo`)
+#
+#   旧 logic は `tr -d '\11\40-\176'` で \x80-\xFF (UTF-8 multibyte) を制御文字扱いで
+#   reject していた。bash pattern match で C0/DEL のみ pinpoint reject に修正後、
+#   日本語 path が通ること、かつ yml への書き込みも成功することを確認。
+# ============================================================
+_case_18() (
+  set -uo pipefail
+  _red_guard "18" || return 1
+
+  local tmp_yml="${TMP_DIR}/test-harness-config-case18.yml"
+  cp "${HC_CONFIG_YML}" "${tmp_yml}"
+
+  # 日本語 path を --set
+  bash "${HC_CONFIG_SCRIPT}" --set 'task_dir=docs/タスク/foo' \
+    --config "${tmp_yml}" 2>/dev/null
+  local exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    printf 'Case 18: --set with UTF-8 multibyte path returned exit code %d\n' "$exit_code" >&2
+    return 1
+  fi
+
+  # yml 中の値が保持されているか
+  local stored
+  stored=$(grep '^task_dir:' "${tmp_yml}" | head -1)
+  if ! printf '%s' "$stored" | grep -qF 'docs/タスク/foo'; then
+    printf 'Case 18: UTF-8 path not preserved in yml: %s\n' "$stored" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case 19 (iter 3 新規 HIGH pr-test mid-value # silent data loss):
+#   mid-value `#` reject + HC_ALLOW_HASH_IN_VALUE=1 bypass
+#
+#   `_yml_get_raw` の `${val%%#*}` が mid-value `#` を yml inline comment と誤認し
+#   read-back 時 truncation → silent data loss。書き込み時点で reject されることと、
+#   HC_ALLOW_HASH_IN_VALUE=1 で正規ユースケース (URL fragment 等) を許可できることを確認。
+# ============================================================
+_case_19() (
+  set -uo pipefail
+  _red_guard "19" || return 1
+
+  local tmp_yml="${TMP_DIR}/test-harness-config-case19.yml"
+  cp "${HC_CONFIG_YML}" "${tmp_yml}"
+
+  local original_checksum
+  original_checksum="$(_md5_of "${tmp_yml}")"
+
+  # 19a: mid-value `#` (HC_ALLOW_HASH_IN_VALUE unset) → reject (default)
+  unset HC_ALLOW_HASH_IN_VALUE
+  if bash "${HC_CONFIG_SCRIPT}" --set 'docs_approved_dir=foo#bar' \
+    --config "${tmp_yml}" 2>/dev/null; then
+    printf 'Case 19a: mid-value # was accepted (silent data loss risk)\n' >&2
+    return 1
+  fi
+  local after_checksum
+  after_checksum="$(_md5_of "${tmp_yml}")"
+  if [ "$original_checksum" != "$after_checksum" ]; then
+    printf 'Case 19a: yml modified after mid-value # (write-prevention failed)\n' >&2
+    return 1
+  fi
+
+  # 19b: HC_ALLOW_HASH_IN_VALUE=1 で bypass 可能
+  HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --set 'docs_approved_dir=foo#bar' \
+    --config "${tmp_yml}" 2>/dev/null
+  local exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    printf 'Case 19b: HC_ALLOW_HASH_IN_VALUE=1 should bypass, exit code %d\n' "$exit_code" >&2
+    return 1
+  fi
+  # 注: 書き込みは成功するが、_yml_get_raw の `${val%%#*}` truncation は本 fix 範囲外で残る。
+  # 本 case は「明示 bypass 時にのみ書き込めること」までを担保。
+
+  return 0
+)
+
+# ============================================================
 # テスト実行
 # ============================================================
 
-printf '\n=== hc-config-script-smoke (iter 2: 15 cases) ===\n\n'
+printf '\n=== hc-config-script-smoke (iter 3: 19 cases) ===\n\n'
 
 if _case_1 2>/dev/null; then _record PASS 1 "--list で全 key 一覧表示 (34+ key 確認)"
 else                         _record FAIL 1 "--list で全 key 一覧表示 (34+ key 確認)"
@@ -681,6 +902,22 @@ fi
 
 if _case_15 2>/dev/null; then _record PASS 15 "awk -v escape corruption 修正 (foo\\\\bar 保持)"
 else                          _record FAIL 15 "awk -v escape corruption 修正 (foo\\\\bar 保持)"
+fi
+
+if _case_16 2>/dev/null; then _record PASS 16 "_atomic_write rollback (mid-value colon / 不完全 bracket / 不完全 brace)"
+else                          _record FAIL 16 "_atomic_write rollback (mid-value colon / 不完全 bracket / 不完全 brace)"
+fi
+
+if _case_17 2>/dev/null; then _record PASS 17 "HC_BAK_RETENTION_COUNT validation (0 / abc → default 10 fallback)"
+else                          _record FAIL 17 "HC_BAK_RETENTION_COUNT validation (0 / abc → default 10 fallback)"
+fi
+
+if _case_18 2>/dev/null; then _record PASS 18 "UTF-8 multibyte path 受理 (task_dir=docs/タスク/foo)"
+else                          _record FAIL 18 "UTF-8 multibyte path 受理 (task_dir=docs/タスク/foo)"
+fi
+
+if _case_19 2>/dev/null; then _record PASS 19 "mid-value # silent data loss 防止 + HC_ALLOW_HASH_IN_VALUE bypass"
+else                          _record FAIL 19 "mid-value # silent data loss 防止 + HC_ALLOW_HASH_IN_VALUE bypass"
 fi
 
 # ============================================================

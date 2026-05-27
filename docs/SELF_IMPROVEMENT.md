@@ -275,7 +275,7 @@ stdin から 1〜5 の番号 or `q` / `0` で番号付き menu (list / get / set
 3. python `yaml.safe_load` で構造 validation (parse fail なら abort + tmp 削除)
 4. `mv .tmp.<pid> harness-config.yml` (atomic rename)
 
-backup 削除は user 手動 (古い `.bak.*` を `find .claude/ -name "harness-config.yml.bak.*" -mtime +30 -delete` で運用)。
+backup は `_prune_old_backups` で自動削除 (最新 N=10 件保持、`HC_BAK_RETENTION_COUNT` で変更可能)。
 
 ### 使用例
 

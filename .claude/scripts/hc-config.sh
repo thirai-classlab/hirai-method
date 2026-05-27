@@ -26,7 +26,7 @@
 #   - 値内コメント許容 (parse 時に strip)
 #   - tilde 展開 (~/foo) は config-loader.sh の HC_<NAME> env で運用、yml 値は raw 保持
 #
-# iter 2 fixes (本 commit):
+# iter 2 fixes:
 #   CRIT F-01: yaml.safe_load を stdin 経由 (path quoting 同時解決)
 #   CRIT F-02: Case 8 で真の rollback path 検証 (smoke 側)
 #   HIGH H-01 test-auto: backup を ts+pid suffix で衝突回避
@@ -43,9 +43,25 @@
 #   MED M-03 code-rev: _make_backup cp 失敗を伝播
 #   MED M-05 code-rev: review_iteration_max int range check (1..10)
 #
+# iter 3 fixes (本 commit):
+#   CRIT R-01 (tdd-guide): _atomic_write の python3 detection を多版本 loop 化
+#     macOS Homebrew で `python3 -c "import yaml"` が subprocess で exit 1 になり
+#     yaml.safe_load path 到達不能 → fallback 強化と共に
+#     python3.13 → 3.12 → 3.11 → python3 の順で PyYAML 利用可能 version を探索。
+#   HIGH (test-automator 中間コロン): fallback で
+#     mid-value colon / 不完全 [bracket / 不完全 {brace を reject。
+#   HIGH (code-rev UTF-8 false-reject): `tr -d '\11\40-\176'` を廃止し
+#     bash pattern match で C0 / DEL のみ reject (UTF-8 multibyte 受理)。
+#   HIGH (pr-test mid-value # silent data loss): _yml_get_raw の `${val%%#*}` で
+#     mid-value `#` が read-back 時 truncation。書込み時点で reject + HC_ALLOW_HASH_IN_VALUE
+#     bypass。
+#   MED M-NEW-01 (code-rev) + L-03 (security): HC_BAK_RETENTION_COUNT validation
+#     (0 / 負値 / 非数値 で全 backup 削除 = rollback 不能を回避、default 10 に fallback)。
+#
 # 起源:
-#   task-46 Step 2 (TDD GREEN)、設計 draft: docs/draft/config-yml-phase3-hc-config-script.md
-#   smoke: .claude/tests/hc-config-script-smoke.sh (13+ cases iter 2)
+#   task-46 Step 2 (TDD GREEN) → iter 2 fix → iter 3 fix
+#   設計 draft: docs/draft/config-yml-phase3-hc-config-script.md
+#   smoke: .claude/tests/hc-config-script-smoke.sh (15+ cases iter 2、19 cases iter 3)
 
 set -uo pipefail
 
@@ -58,7 +74,15 @@ DEFAULT_CONFIG="${REPO_ROOT}/.claude/harness-config.yml"
 CONFIG_PATH=""
 
 # .bak retention (最新 N 件保持、それより古い bak は自動削除)
+# iter 3 MED M-NEW-01 (code-rev) + L-03 (security):
+#   HC_BAK_RETENTION_COUNT=0 / 負値 / 非数値 で全 backup 削除 (rollback 不能) を防止。
+#   positive int (>= 1) のみ受理、それ以外は default 10 に fallback + stderr warn。
 BAK_RETENTION_COUNT="${HC_BAK_RETENTION_COUNT:-10}"
+if ! [[ "$BAK_RETENTION_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+  printf 'hc-config: invalid HC_BAK_RETENTION_COUNT: %q (must be positive int >= 1), using default 10\n' \
+    "$BAK_RETENTION_COUNT" >&2
+  BAK_RETENTION_COUNT=10
+fi
 
 # === ユーティリティ ===
 
@@ -83,8 +107,17 @@ _validate_key_format() {
   return 0
 }
 
-# string / path 値の minimal sanity check (HIGH H-02 code-rev)
-# 改行 / NUL / 行頭 # / yaml-confusing leading `:` を reject
+# string / path 値の minimal sanity check (HIGH H-02 code-rev + iter 3 fixes)
+# 改行 / NUL / 制御文字 / 行頭 # / 行頭 : / mid-value # を reject、UTF-8 multibyte は受理
+#
+# iter 3 fixes:
+#   HIGH (code-rev UTF-8 false-reject):
+#     旧 `tr -d '\11\40-\176'` は \x80-\xFF (UTF-8 multibyte) を制御文字扱いで reject、
+#     日本語 path 等で false positive。bash pattern match で C0/DEL のみ pinpoint reject。
+#   HIGH (pr-test mid-value # silent data loss):
+#     `_yml_get_raw` の `val="${val%%#*}"` が mid-value `#` を inline comment と
+#     誤認 → read-back で truncation。書込み時点で mid-value `#` を reject。
+#     URL fragment 等の正規ユースケース向けに HC_ALLOW_HASH_IN_VALUE=1 bypass。
 _validate_string_sanity() {
   local key="$1"
   local val="$2"
@@ -95,11 +128,22 @@ _validate_string_sanity() {
       return 1
       ;;
   esac
-  # NUL / 制御文字 (TAB は許容、それ以外の 0x00-0x1f を reject)
-  if LC_ALL=C printf '%s' "$val" | tr -d '\11\40-\176' | LC_ALL=C grep -q .; then
-    _err "invalid value for ${key}: contains control characters"
-    return 1
-  fi
+  # C0 制御文字 / DEL を reject (TAB \x09 / LF / CR は前段で別途処理済、NUL は bash 文字列に
+  # そもそも含まれない (string-terminator) ので pattern 不要)
+  # iter 3 HIGH (code-rev UTF-8 false-reject) fix:
+  #   bash pattern match で C0 (\x01-\x08, \x0b-\x1f) + DEL (\x7f) のみ reject、
+  #   \x80-\xFF (UTF-8 multibyte) は touch しない。
+  # 注意: bash で `$'\x00'` は empty string になり `*$'\x00'*` = `**` で全 match 誤爆するため、
+  #       NUL pattern は意図的に除外 (どのみち bash variable に NUL は格納不可)。
+  case "$val" in
+    *$'\x01'*|*$'\x02'*|*$'\x03'*|*$'\x04'*|*$'\x05'*|*$'\x06'*|*$'\x07'*|*$'\x08'* \
+    |*$'\x0b'*|*$'\x0c'*|*$'\x0e'*|*$'\x0f'*|*$'\x10'*|*$'\x11'*|*$'\x12'*|*$'\x13'* \
+    |*$'\x14'*|*$'\x15'*|*$'\x16'*|*$'\x17'*|*$'\x18'*|*$'\x19'*|*$'\x1a'*|*$'\x1b'* \
+    |*$'\x1c'*|*$'\x1d'*|*$'\x1e'*|*$'\x1f'*|*$'\x7f'*)
+      _err "invalid value for ${key}: contains control characters"
+      return 1
+      ;;
+  esac
   # 行頭 # (yaml comment と混同) — 値全体が # から始まる場合のみ reject
   case "$val" in
     \#*)
@@ -114,6 +158,20 @@ _validate_string_sanity() {
       return 1
       ;;
   esac
+  # iter 3 HIGH (pr-test mid-value # silent data loss) fix:
+  #   mid-value `#` (例: "foo#bar" / "foo #bar") は _yml_get_raw の
+  #   `val="${val%%#*}"` で read-back 時に truncation → silent data loss。
+  #   書き込み時点で reject。URL #fragment 等の正規 use case 向けに
+  #   HC_ALLOW_HASH_IN_VALUE=1 で bypass 可。
+  if [ "${HC_ALLOW_HASH_IN_VALUE:-0}" != "1" ]; then
+    case "$val" in
+      *\#*)
+        _err "invalid value for ${key}: contains '#' (yaml inline comment confusion, would be silently truncated on read-back)"
+        _err "  use HC_ALLOW_HASH_IN_VALUE=1 to bypass (URL fragment etc.)"
+        return 1
+        ;;
+    esac
+  fi
   return 0
 }
 
@@ -310,9 +368,23 @@ _make_backup() {
   printf '%s' "$bak"
 }
 
-# atomic yml 上書き (CRIT F-01 fix: yaml.safe_load stdin 経由 + path quoting 解消)
+# atomic yml 上書き
 # $1: yml path
 # $2: new content
+#
+# iter 2 fix: CRIT F-01 = yaml.safe_load を stdin 経由 (path quoting + alias 不在 python 対応)
+#
+# iter 3 fixes:
+#   CRIT R-01 (tdd-guide): python3 detection を多版本 loop 化
+#     macOS Homebrew では `python3` (interactive alias 経由 3.13) と
+#     bash subprocess の `python3` (/opt/homebrew/bin/python3、3.13.4 だが PyYAML 不在) が
+#     乖離 → `python3 -c "import yaml"` が exit 1 で yaml.safe_load path に到達せず
+#     fallback の弱い check のみで yml corruption (中間コロン / 不完全 bracket) を素通し。
+#     python3.13 → python3.12 → python3.11 → python3 の順で
+#     `import yaml` 成功する最初の version を採用。
+#   HIGH (test-automator 中間コロン): fallback 強化
+#     `key: foo: bar` (中間コロン) / `key: [unclosed` (不完全 bracket) /
+#     `key: {unclosed` (不完全 brace) を structural pattern で reject。
 _atomic_write() {
   local yml="$1"
   local new_content="$2"
@@ -320,19 +392,30 @@ _atomic_write() {
 
   printf '%s' "$new_content" > "$tmp"
 
-  # python3 + PyYAML で yaml syntax 検証 (両方不在なら fallback で簡易 check)
-  if command -v python3 >/dev/null 2>&1 \
-    && python3 -c "import yaml" >/dev/null 2>&1; then
+  # iter 3 CRIT R-01 fix: 複数 python3 version を試行、PyYAML 利用可能な最初の version を採用
+  local py_with_yaml=""
+  local py
+  for py in python3.13 python3.12 python3.11 python3; do
+    if command -v "$py" >/dev/null 2>&1 \
+      && "$py" -c "import yaml" >/dev/null 2>&1; then
+      py_with_yaml="$py"
+      break
+    fi
+  done
+
+  if [ -n "$py_with_yaml" ]; then
     # CRIT F-01 fix: stdin 経由で path quoting 不要、alias 不在 python でも安全
-    if ! python3 -c "import yaml, sys; yaml.safe_load(sys.stdin.read())" < "$tmp" 2>/dev/null; then
+    if ! "$py_with_yaml" -c "import yaml, sys; yaml.safe_load(sys.stdin.read())" < "$tmp" 2>/dev/null; then
       _err "yaml syntax invalid after edit, rolling back"
       rm -f "$tmp"
       return 1
     fi
   else
-    # Fallback: 軽量 yaml syntax check
+    # Fallback: 軽量 yaml syntax check (PyYAML 不在環境用、iter 3 で structural pattern 強化)
     #   1. top-level key 数が原 yml と乖離してないか (旧 logic 維持)
     #   2. ファイル中に行頭 `:` (key 名不在の値行) や `: : ` (key value confusion) が無いか
+    #   3. iter 3: 中間コロン (mid-value `: <text>`) → yml 構造破壊兆候
+    #   4. iter 3: 不完全 [ ... ] / { ... } bracket (同一行内で閉じない)
     local orig_count new_count
     orig_count=$(grep -cE "^[a-z_][a-zA-Z0-9_]*:" "$yml" 2>/dev/null || printf '0')
     new_count=$(grep -cE "^[a-z_][a-zA-Z0-9_]*:" "$tmp" 2>/dev/null || printf '0')
@@ -344,6 +427,27 @@ _atomic_write() {
     # 行頭 `:` のみで始まる行 (= 値が ': xxx' で yml が壊れている兆候) を reject
     if grep -qE "^[a-z_][a-zA-Z0-9_]*: : " "$tmp" 2>/dev/null; then
       _err "yaml structure check: detected ': :' pattern (corrupted value), rolling back"
+      rm -f "$tmp"
+      return 1
+    fi
+    # iter 3 HIGH (test-automator 中間コロン) fix: mid-value `: <text>` を reject
+    # 例: `task_dir: foo: bar` (foo: bar は flow scalar として yml 構造破壊兆候)
+    # 注: array `[a, b]` / 行末コメント ` # ...` / quoted `"foo: bar"` は除外
+    #     簡易判定: `^key: <val>: <val>$` のような mid-value colon-space を reject
+    if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]+[^"'"'"'#[{[:space:]][^"'"'"'#]*:[[:space:]]' "$tmp" 2>/dev/null; then
+      _err "yaml structure check: mid-value colon detected (structural corruption), rolling back"
+      rm -f "$tmp"
+      return 1
+    fi
+    # iter 3 HIGH (test-automator 不完全 bracket) fix: `key: [...` 行末で `]` 不在 → reject
+    if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]*\[[^]]*$' "$tmp" 2>/dev/null; then
+      _err "yaml structure check: unclosed array bracket detected, rolling back"
+      rm -f "$tmp"
+      return 1
+    fi
+    # iter 3 HIGH (test-automator 不完全 brace) fix: `key: {...` 行末で `}` 不在 → reject
+    if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]*\{[^}]*$' "$tmp" 2>/dev/null; then
+      _err "yaml structure check: unclosed object brace detected, rolling back"
       rm -f "$tmp"
       return 1
     fi
