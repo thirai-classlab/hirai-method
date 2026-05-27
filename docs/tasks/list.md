@@ -138,6 +138,8 @@
 |    | ✅ | Step 4 | (テスト設計レビュー) 6 reviewer iter1→iter3 収束 (iter1 CRIT3/HIGH13 → iter2 CRIT2 [code-reviewer 発見] → iter3 全 approve CRIT+HIGH+MED=0、median 0.93) | | |
 |    | ✅ | Step 5 | (テスト合格) 全 harness smoke 統合実行 regression 0 (task-48 14/14 + script 21/21 bash3.2 含む、pre-existing FAIL 8 は task-39 緩和起因 scope外)、手動 TUI 検証は user 依頼 | | |
 |    | ✅ | Step 6 | (リファクタリング) TUI 描画 4 関数を 8 helper 抽出で全関数 ≤45 LOC (commit `3e04b26`)、3 観点 (持続可能性 改善 / 汎用性・非冗長化 skip)、perf MED defer (entry #55)、behavior-preserving 14/14+21/21、closure + PR | | |
+| 49 | ✅ | **Task: UI 実装後のビジュアル検証必須化** | UI 実装で E2E PASS でも見た目崩れを捕捉できない品質 gap を埋めるため、採用 6 条 4「テスト合格 Step」に browser/web UI のビジュアル検証 (agent-browser + screenshot、E2E と別レイヤ) を必須化する。完成すれば AI が UI Task 完了前に必ず見た目を視覚確認し、E2E のみ / 型チェックのみでの完了宣言を防げるようになる。**完遂** (2026-05-27、honor-system doc 追記、user 承認済 draft、採用 6 条 5 小タスク) | — | [task-49-ui-visual-verification-mandate.md](task-49-ui-visual-verification-mandate.md) ← draft: [`docs/draft/ui-visual-verification-mandate.md`](../draft/ui-visual-verification-mandate.md) |
+|    | ✅ | Step 1 | 採用 6 条 4「テスト合格 Step」にビジュアル検証必須化追記 (agent-browser + screenshot + breakpoint/状態/theme + E2E 別レイヤ + terminal TUI 除外 + honor-system) + §UI 変更検出基準 future hook 案の整合更新 | | |
 
 <!--
 記入ルール:
