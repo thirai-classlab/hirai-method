@@ -1,9 +1,21 @@
 # Task #23: recall_poc Recovery — git init / CLAUDE.md 改訂 / draft フロー復旧 / list.md 初期化
 
-> Status: **draft (要承認)** | **🔲 未着手**
+> Status: **✅ 完了** (2026-05-27、W1-W5 全完了)
 > 起案: 2026-05-23
-> 関連: #21 (CLAUDE.md template 改訂と同根)
+> 関連: #21 (CLAUDE.md template 改訂と同根。**依存は task-21 W2.5 [template 改訂、完了済 `a9902c8`] に限定で実質解消**。task-21 残 W3 [42 sessions eval] は本 task と無関係)
 > 設計起源: [recall-poc-recovery.md](../draft/recall-poc-recovery.md)
+
+## 完了サマリ (2026-05-27)
+
+- **W1** git init `875d2ea` (recall_poc 独立 project hash)
+- **W2** CLAUDE.md Autonomous Progression 同期 (recall_poc/CLAUDE.md 再生成、task-21 W2.5 template 改訂と共通)
+- **W3** 遡及 draft 12 件に approved frontmatter 追記
+- **W4** recall_poc/docs/tasks/list.md 初期化 + 設計分解 — **recall_poc 側で 2026-05-26 完了済 (26 task / 180 Step、W4 想定 5-10 を大幅超過、self-progress で task-5 実装中)**。subagent afdbbd9cec515a37a が no-op 判断 (既存上書きは破壊的、confidence 0.88)
+- **W5** `recall_poc/.claude/tests/recall-poc-recovery-smoke.sh` 新設 (cross-repo agent 着手 [task-42 superseded]、subagent a4f95e5457cf85356 confidence 0.97): 5/5 PASS (project_id 独立 / draft-flow-guard BLOCK+PASS / list.md 26 task)、recall_poc local commit `cfe879a` (push は user follow-up)
+
+## user follow-up
+
+- recall_poc local commit `cfe879a` (W5 smoke) の push (別 repo push 自律禁止)
 
 ## 背景・目的
 
@@ -57,8 +69,8 @@
 
 ## 完了条件
 
-- [ ] recall_poc が独立 project hash で observation 記録される
-- [ ] recall_poc/CLAUDE.md が draft フロー強制版に更新
-- [ ] docs/draft/0[1-3]_*.md に承認 frontmatter あり
-- [ ] docs/tasks/list.md に実装 task 行が 5+ 件
-- [ ] draft-flow-guard.sh が recall_poc で誤検知なく動作
+- [x] recall_poc が独立 project hash で observation 記録される (W1 git init `875d2ea`、smoke Case 1 で git root 独立確認)
+- [x] recall_poc/CLAUDE.md が draft フロー強制版に更新 (W2)
+- [x] docs/draft/0[1-3]_*.md に承認 frontmatter あり (W3、12 draft 確認)
+- [x] docs/tasks/list.md に実装 task 行が 5+ 件 (W4、26 task / 180 Step、smoke Case 3 で確認)
+- [x] draft-flow-guard.sh が recall_poc で誤検知なく動作 (W5 smoke Case 2a/b/c で BLOCK+PASS 確認)
