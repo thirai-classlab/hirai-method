@@ -131,13 +131,13 @@
 |    | ✅ | Step 4 | (テスト設計レビュー) iter 1-4 review 5+ reviewer 並列 (tdd-guide / test-automator / qa-expert / code-reviewer + security-reviewer + harness-optimizer / pr-test-analyzer)、iter 5 fix で CRIT+HIGH=0 達成 | | |
 |    | ✅ | Step 5 | (テスト合格) 全 smoke 統合実行 — 本 task 由来 34/34 PASS + 既存 37 smoke regression 0 (pre-existing FAIL 8 件 task-39 緩和起因 scope 外) | | |
 |    | ✅ | Step 6 | (リファクタリング) commit `66f162a` 42 関数全 ≤ 48 LOC + 3 観点 PASS (持続可能性 / 汎用性 / 非冗長化、refactoring-specialist confidence 0.96) | | |
-| 48 | 🔄 | **Task: hc-config.sh 矢印キー TUI 化 + key metadata (説明 + 変更効果) 表示** | hc-config.sh の UX 改善のため、番号選択 menu を矢印キー TUI (↑↓ + Enter + effect panel) に拡張し、73 key 全てに「説明 + 変更効果」metadata を定義して対話時 + --list 両方に表示する。完成すれば user が実 terminal で各 key の意味と変更影響を視認しながら gcloud/gh CLI 風に設定編集でき、非 TTY 環境では現行番号選択に自動 fallback する。 | task-46 | [task-48-hc-config-interactive-tui.md](task-48-hc-config-interactive-tui.md) ← draft: [`docs/draft/hc-config-interactive-tui.md`](../draft/hc-config-interactive-tui.md) |
+| 48 | ✅ | **Task: hc-config.sh 矢印キー TUI 化 + key metadata (説明 + 変更効果) 表示** | hc-config.sh の UX 改善のため、番号選択 menu を矢印キー TUI (↑↓ + Enter + effect panel) に拡張し、74 key 全てに「説明 + 変更効果」metadata を定義して対話時 + --list 両方に表示する。完成すれば user が実 terminal で各 key の意味と変更影響を視認しながら gcloud/gh CLI 風に設定編集でき、非 TTY 環境では現行番号選択に自動 fallback する。**完遂** (2026-05-27、8 commits `a353b2e`..`3e04b26`、reviewer iter1→iter3 収束 [iter1 CRIT3/HIGH13 → iter2 CRIT2 code-reviewer 発見 → iter3 全 6 approve CRIT+HIGH+MED=0]、TUI smoke 14/14 + script 21/21 bash3.2、全 harness smoke regression 0、全関数 ≤45 LOC)。**user follow-up**: 手動 TUI 検証 (実 terminal で ↑↓) + 4 リポ install 反映 | task-46 | [task-48-hc-config-interactive-tui.md](task-48-hc-config-interactive-tui.md) ← draft: [`docs/draft/hc-config-interactive-tui.md`](../draft/hc-config-interactive-tui.md) |
 |    | ✅ | Step 1 | smoke `hc-config-tui-smoke.sh` 新設 (7 cases、TDD RED commit `0fa7e47`、7/7 FAIL) | | |
 |    | ✅ | Step 2 | `lib/hc-config-metadata.sh` 新設 (74 key description + effect、commit `4c15bfb`、Case 1/2/7 GREEN) | | |
 |    | ✅ | Step 3 | `hc-config.sh` 拡張 (矢印キー TUI + TTY fallback + --list 説明列、TUI smoke 7/7 + 既存 21/21 regression 0) | | |
 |    | ✅ | Step 4 | (テスト設計レビュー) 6 reviewer iter1→iter3 収束 (iter1 CRIT3/HIGH13 → iter2 CRIT2 [code-reviewer 発見] → iter3 全 approve CRIT+HIGH+MED=0、median 0.93) | | |
 |    | ✅ | Step 5 | (テスト合格) 全 harness smoke 統合実行 regression 0 (task-48 14/14 + script 21/21 bash3.2 含む、pre-existing FAIL 8 は task-39 緩和起因 scope外)、手動 TUI 検証は user 依頼 | | |
-|    | 🔄 | Step 6 | (リファクタリング) TUI 描画関数分割 + 3 観点判定、closure + PR | | |
+|    | ✅ | Step 6 | (リファクタリング) TUI 描画 4 関数を 8 helper 抽出で全関数 ≤45 LOC (commit `3e04b26`)、3 観点 (持続可能性 改善 / 汎用性・非冗長化 skip)、perf MED defer (entry #55)、behavior-preserving 14/14+21/21、closure + PR | | |
 
 <!--
 記入ルール:
