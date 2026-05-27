@@ -136,8 +136,8 @@
 |    | ✅ | Step 2 | `lib/hc-config-metadata.sh` 新設 (74 key description + effect、commit `4c15bfb`、Case 1/2/7 GREEN) | | |
 |    | ✅ | Step 3 | `hc-config.sh` 拡張 (矢印キー TUI + TTY fallback + --list 説明列、TUI smoke 7/7 + 既存 21/21 regression 0) | | |
 |    | ✅ | Step 4 | (テスト設計レビュー) 6 reviewer iter1→iter3 収束 (iter1 CRIT3/HIGH13 → iter2 CRIT2 [code-reviewer 発見] → iter3 全 approve CRIT+HIGH+MED=0、median 0.93) | | |
-|    | 🔄 | Step 5 | (テスト合格) 全 smoke 統合 + 既存 regression 0 + 手動 TUI 検証 | | |
-|    | 🔲 | Step 6 | (リファクタリング) TUI 描画関数分割 + 3 観点判定、closure + PR | | |
+|    | ✅ | Step 5 | (テスト合格) 全 harness smoke 統合実行 regression 0 (task-48 14/14 + script 21/21 bash3.2 含む、pre-existing FAIL 8 は task-39 緩和起因 scope外)、手動 TUI 検証は user 依頼 | | |
+|    | 🔄 | Step 6 | (リファクタリング) TUI 描画関数分割 + 3 観点判定、closure + PR | | |
 
 <!--
 記入ルール:
