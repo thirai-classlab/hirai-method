@@ -877,10 +877,119 @@ _case_19() (
 )
 
 # ============================================================
+# Case 19e (iter 5 新規 CRIT C-01 closure):
+#   再書込 round-trip — quoted literal を再 --set すると awk comment-preservation 干渉で
+#   corrupt する旧 bug の repro + fix verification。
+#   流れ:
+#     1. --set 'docs_approved_dir=foo#bar' (bypass) → yml `"foo#bar"` 保存
+#     2. --set 'docs_approved_dir=baz#qux' (bypass) → yml `"baz#qux"` 保存
+#        (旧 bug: `"baz#qux"  #bar"` corrupt 状態)
+#     3. --get docs_approved_dir (bypass) → `baz#qux` 返却
+# ============================================================
+_case_19e() (
+  set -uo pipefail
+  _red_guard "19e" || return 1
+
+  local tmp_yml="${TMP_DIR}/test-harness-config-case19e.yml"
+  cp "${HC_CONFIG_YML}" "${tmp_yml}"
+
+  # Step 1: 初回 set `foo#bar`
+  HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --set 'docs_approved_dir=foo#bar' \
+    --config "${tmp_yml}" 2>/dev/null
+  if [ $? -ne 0 ]; then
+    printf 'Case 19e step 1: initial --set failed\n' >&2
+    return 1
+  fi
+
+  # Step 2: 再 set `baz#qux` (CRIT C-01 真の repro 行)
+  HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --set 'docs_approved_dir=baz#qux' \
+    --config "${tmp_yml}" 2>/dev/null
+  if [ $? -ne 0 ]; then
+    printf 'Case 19e step 2: re-set failed\n' >&2
+    return 1
+  fi
+
+  # Step 3: yml file 内で `docs_approved_dir: "baz#qux"` (CORRUPT-FREE) であること
+  local actual_line
+  actual_line="$(grep -E '^docs_approved_dir:' "${tmp_yml}" || printf '(line not found)')"
+  if [ "$actual_line" != 'docs_approved_dir: "baz#qux"' ]; then
+    printf 'Case 19e: yml line corrupt after re-set\n' >&2
+    printf '  expected: docs_approved_dir: "baz#qux"\n' >&2
+    printf '  actual:   %s\n' "$actual_line" >&2
+    return 1
+  fi
+
+  # Step 4: --get round-trip 確認
+  local readback
+  readback="$(HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --get docs_approved_dir \
+    --config "${tmp_yml}" 2>/dev/null)"
+  if [ "$readback" != "baz#qux" ]; then
+    printf 'Case 19e: round-trip failed: expected "baz#qux", got "%s"\n' "$readback" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case 19f (iter 5 新規 HIGH H-01 + H-02 closure):
+#   backslash round-trip + non-bypass read — 2 corruption surface の同時検証。
+#   流れ:
+#     1. --set 'docs_approved_dir=a\b#c' (bypass) → yml `"a\\b#c"` 保存
+#     2. --get docs_approved_dir (bypass) → `a\b#c` 返却 (NOT `a\\b#c` literal 二重 backslash)
+#        ← HIGH H-01 (`\\` unescape 欠落) 解消 verification
+#     3. --get docs_approved_dir (bypass env unset) → `a\b#c` 返却 (NOT `"a\\b` partial)
+#        ← HIGH H-02 (read 時 env asymmetry) 解消 verification
+# ============================================================
+_case_19f() (
+  set -uo pipefail
+  _red_guard "19f" || return 1
+
+  local tmp_yml="${TMP_DIR}/test-harness-config-case19f.yml"
+  cp "${HC_CONFIG_YML}" "${tmp_yml}"
+
+  # Step 1: set `a\b#c` (bypass)
+  HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --set 'docs_approved_dir=a\b#c' \
+    --config "${tmp_yml}" 2>/dev/null
+  if [ $? -ne 0 ]; then
+    printf 'Case 19f step 1: --set failed\n' >&2
+    return 1
+  fi
+
+  # Step 2: yml file 内で `docs_approved_dir: "a\\b#c"` 形式で保存 (write 側 `\` → `\\` escape)
+  if ! grep -qE '^docs_approved_dir: "a\\\\b#c"$' "${tmp_yml}"; then
+    printf 'Case 19f step 2: yml line not in expected escaped form\n' >&2
+    printf '  expected: docs_approved_dir: "a\\\\b#c"\n' >&2
+    printf '  actual:   %s\n' "$(grep -E '^docs_approved_dir:' "${tmp_yml}" || printf '(line not found)')" >&2
+    return 1
+  fi
+
+  # Step 3: bypass read → `a\b#c` (HIGH H-01 unescape 検証)
+  local readback_bypass
+  readback_bypass="$(HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --get docs_approved_dir \
+    --config "${tmp_yml}" 2>/dev/null)"
+  if [ "$readback_bypass" != 'a\b#c' ]; then
+    printf 'Case 19f step 3 (HIGH H-01): bypass read failed: expected "a\\b#c", got "%s"\n' "$readback_bypass" >&2
+    return 1
+  fi
+
+  # Step 4: non-bypass read → `a\b#c` (HIGH H-02 env asymmetry 解消検証)
+  local readback_nonbypass
+  readback_nonbypass="$(unset HC_ALLOW_HASH_IN_VALUE; bash "${HC_CONFIG_SCRIPT}" --get docs_approved_dir \
+    --config "${tmp_yml}" 2>/dev/null)"
+  if [ "$readback_nonbypass" != 'a\b#c' ]; then
+    printf 'Case 19f step 4 (HIGH H-02): non-bypass read failed: expected "a\\b#c", got "%s"\n' "$readback_nonbypass" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # テスト実行
 # ============================================================
 
-printf '\n=== hc-config-script-smoke (iter 4: 19 cases, Case 19 expanded to a/b/c/d) ===\n\n'
+printf '\n=== hc-config-script-smoke (iter 5: 21 cases, Case 19 a/b/c/d/e/f) ===\n\n'
 
 if _case_1 2>/dev/null; then _record PASS 1 "--list で全 key 一覧表示 (34+ key 確認)"
 else                         _record FAIL 1 "--list で全 key 一覧表示 (34+ key 確認)"
@@ -956,6 +1065,14 @@ fi
 
 if _case_19 2>/dev/null; then _record PASS 19 "mid-value # reject + bypass round-trip 整合性 (a/b/c/d)"
 else                          _record FAIL 19 "mid-value # reject + bypass round-trip 整合性 (a/b/c/d)"
+fi
+
+if _case_19e 2>/dev/null; then _record PASS "19e" "iter 5 CRIT C-01: 再書込 round-trip (awk comment-preservation 干渉解消)"
+else                          _record FAIL "19e" "iter 5 CRIT C-01: 再書込 round-trip (awk comment-preservation 干渉解消)"
+fi
+
+if _case_19f 2>/dev/null; then _record PASS "19f" "iter 5 HIGH H-01+H-02: backslash unescape + non-bypass read"
+else                          _record FAIL "19f" "iter 5 HIGH H-01+H-02: backslash unescape + non-bypass read"
 fi
 
 # ============================================================

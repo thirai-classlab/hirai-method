@@ -71,10 +71,29 @@
 #     3. bypass 時 stderr に notice を 1 行出力 (operator visibility 確保)。
 #   smoke Case 19b 更新 + Case 19c (round-trip 検証) + Case 19d (yml file format 検証) 追加。
 #
+# iter 5 fixes (code-reviewer iter 4 検出 CRIT 1 + HIGH 2 closure、データ corruption 3 surface 解消):
+#   CRIT C-01 (再書込時 awk comment-preservation 干渉):
+#     `_yml_set` の awk dispatch で matched-line も `match($0, /#.*$/)` で comment 抽出 + 新値後置
+#     する構造のため、quoted literal (`docs_approved_dir: "foo#bar"`) を再 `--set baz#qux` すると
+#     `#bar"` を comment 誤検知 → 新値に `  #bar"` 再付加 → `docs_approved_dir: "baz#qux"  #bar"`
+#     corrupt 状態。matched-line では comment preservation を skip し新値で完全置換する。
+#   HIGH H-01 (`\\` unescape 欠落):
+#     `_yml_set` で `\` → `\\` escape するが、`_yml_get_raw` の unescape は `\"` → `"` のみ。
+#     bypass で `a\b#c` set → yml に `"a\\b#c"` → read で `a\\b#c` 返却 (literal 二重 backslash)。
+#     `\\` → `\` unescape を `\"` → `"` unescape より先に実施 (順序: 先に `\\`、後に `\"`)。
+#   HIGH H-02 (read 時 env asymmetry):
+#     `_yml_get_raw` の quote 解除条件が `HC_ALLOW_HASH_IN_VALUE=1 ∧ val が "..." 形式` の両 AND
+#     条件のため、yml に `"foo#bar"` 保存後 bypass env 外して `--get` すると quote 解除 path に
+#     入らず `val="${val%%#*}"` で `"foo` 返却 (broken partial)。`--list` / `--diff` / `--validate` 等
+#     が corrupt 値を表示。read 側の quote 解除条件から `HC_ALLOW_HASH_IN_VALUE=1` を削除し、
+#     前後 `"..."` 形式検出だけで quote 解除 + comment-strip-skip を発動。bypass env は write 側のみ
+#     (mid-`#` reject の bypass 用途) で gate する非対称設計に変更。
+#   smoke Case 19e (再書込 round-trip) + Case 19f (backslash round-trip + non-bypass read) 追加。
+#
 # 起源:
-#   task-46 Step 2 (TDD GREEN) → iter 2 fix → iter 3 fix → iter 4 fix
+#   task-46 Step 2 (TDD GREEN) → iter 2 fix → iter 3 fix → iter 4 fix → iter 5 fix
 #   設計 draft: docs/draft/config-yml-phase3-hc-config-script.md
-#   smoke: .claude/tests/hc-config-script-smoke.sh (15+ cases iter 2、19 cases iter 3、20 cases iter 4)
+#   smoke: .claude/tests/hc-config-script-smoke.sh (21 cases iter 5)
 
 set -uo pipefail
 
@@ -215,17 +234,23 @@ _yml_get_raw() {
   val="${val#"${val%%[![:space:]]*}"}"
   val="${val%"${val##*[![:space:]]}"}"
 
-  # iter 4 fix: HC_ALLOW_HASH_IN_VALUE=1 + double-quoted literal なら
-  # 行末 comment strip を skip し、quote 解除 + unescape のみ実施
+  # iter 5 fix (HIGH H-01 + H-02 closure):
+  #   - HIGH H-02 解消: quote 解除条件から HC_ALLOW_HASH_IN_VALUE=1 を削除し、
+  #     前後 `"..."` 形式検出だけで quote 解除 + comment-strip-skip を発動。
+  #     これにより yml に保存された double-quoted literal は bypass env の有無に関係なく
+  #     一貫して同じ value を返却 (env asymmetry 解消)。bypass env は write 側のみで gate。
+  #   - HIGH H-01 解消: `\\` → `\` unescape を `\"` → `"` unescape より先に実施。
+  #     順序を逆にすると `\\"` 文字列が `\"` (\\ → \ → \") → `"` (\" → ") と二段解釈されて
+  #     誤展開するため、先に `\\` を 1 段消化してから `\"` を処理する。
   # (round-trip 整合性: `_yml_set` が `"foo#bar"` で書き込んだ値を `foo#bar` で復元)
-  if [ "${HC_ALLOW_HASH_IN_VALUE:-0}" = "1" ] \
-    && [ "${#val}" -ge 2 ] \
+  if [ "${#val}" -ge 2 ] \
     && [ "${val:0:1}" = '"' ] \
     && [ "${val: -1}" = '"' ]; then
     # leading/trailing double-quote を 1 文字ずつ除去
     val="${val#\"}"
     val="${val%\"}"
-    # `\"` → `"` unescape (yml double-quoted scalar の最小 spec)
+    # unescape 順序: `\\` → `\` を先 (二段解釈防止)、`\"` → `"` を後
+    val="${val//\\\\/\\}"
     val="${val//\\\"/\"}"
     printf '%s' "$val"
     return 0
@@ -548,6 +573,13 @@ _yml_set() {
   # 行頭コメント以外で `^key:` 行を新値で置換 (1 行のみ)
   # HIGH H-01 code-rev fix: awk -v は backslash sequence (\n / \t / \\) を解釈するため
   # ENVIRON 経由で渡す。POSIX awk / mawk / gawk 全対応。
+  # iter 5 fix (CRIT C-01 closure): matched-line では comment preservation を skip し
+  # 新値で完全置換する。理由: 旧 logic は `match($0, /#.*$/)` で行末 comment 抽出 + 新値後置
+  # する構造のため、quoted literal (`docs_approved_dir: "foo#bar"`) を再 `--set baz#qux` すると
+  # `#bar"` を comment 誤検知 → 新値に `  #bar"` 再付加 → corrupt 状態。
+  # 新値側 (write_val) は呼び出し元で必要な quote / escape を含む完成 yml scalar 形式なので、
+  # 元行の comment 抽出は不要 (operator が yml に直接書いた行末 comment は再書込時に
+  # 失われる点は trade-off として許容、これまでも quoted line では同様の挙動)。
   content=$(KEY="$key" VAL="$write_val" awk '
     BEGIN {
       k = ENVIRON["KEY"]
@@ -556,12 +588,8 @@ _yml_set() {
     }
     {
       if (!replaced && index($0, k ":") == 1) {
-        # コメント保持: 元行に # コメントがあれば末尾に保持
-        comment = ""
-        if (match($0, /#.*$/)) {
-          comment = "  " substr($0, RSTART)
-        }
-        printf "%s: %s%s\n", k, v, comment
+        # iter 5 CRIT C-01: matched-line は新値で完全置換 (元行の comment 保持 skip)
+        printf "%s: %s\n", k, v
         replaced = 1
       } else {
         print $0
