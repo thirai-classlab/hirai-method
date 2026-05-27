@@ -196,7 +196,7 @@ MEDIUM / LOW のみが残存する場合は user 承認のうえ `skip_log` に�
 
 review prompt 規約 (behavior-preserving 必須 / public API・DB schema 変更禁止 / 全 finding に修正コード提案 / 末尾 `confidence: 0.X`) の詳細は [`module-review.md`](../commands/module-review.md) Phase 3 を参照。
 
-**yml 値による制御**: `/module-review` は `review_required_module` (default true) / `review_min_count_module` (default 2) / `review_max_count_module` (default 5) で、`/system-review` は `review_required_system` / `review_min_count_system` (default 2) / `review_max_count_system` (default 5) で並列度を集中制御。`review_iteration_max` (default 5) は全レビューで共通の反復上限。`hc-config.sh --feature review_required_module=false` で局所無効化可。
+**yml 値による制御**: `/module-review` は `review_required_module` (default true) / `review_min_count_module` (default 2) / `review_max_count_module` (default 5) で、`/system-review` は `review_required_system` / `review_min_count_system` (default 2) / `review_max_count_system` (default 5) で並列度を集中制御。`review_iteration_max` (default 5) は全レビューで共通の反復上限。`hc-config.sh --set review_required_module=false` で局所無効化可。
 
 ## テスト設計の MECE 強制 (W1)
 

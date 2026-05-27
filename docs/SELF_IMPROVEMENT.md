@@ -252,7 +252,7 @@ env override 形式: `HC_IMPROVEMENT_PROPOSAL_ENABLED` 等。
 | `--set <key>=<value>` | 値設定 (型 validation + `.bak.<ts>` backup + atomic write、yaml validate fail なら rollback) |
 | `--feature <name>=<true\|false>` | feature toggle 短縮 (`feature_<name>_enabled` の alias、CommonRules.md §Design Constraints の paired 規範対応) |
 | `--reset <key>` | 当該 key を default 値に戻す (`harness-config.yml` 内 comment の default 値解析、backup 自動) |
-| `--reset-all` | 全 key を default に戻す (single backup → 全 key reset → yaml validate) |
+| `--reset-all` | 全 key を default に戻す (each-key backup → 全 key reset、key 数分の `.bak.<ts>` 生成) |
 | `--diff` | 現在値と default の差分一覧 (どの key を user が変更したか追跡) |
 | `--validate` | 全 key の型 validation のみ実行 (値変更なし、CI / pre-commit hook 想定) |
 | `--config <path>` | 編集対象 yml path を override (test isolation 用、smoke test 必須引数) |
