@@ -103,11 +103,11 @@ feature_notify_enabled	feature_toggle	notify + stop (sound)	false にすると n
 feature_check_md_mermaid_enabled	feature_toggle	check-md-mermaid	false にすると check-md-mermaid を OFF にし md 内 mermaid 構文検証が止まる
 feature_failure_loop_detect_enabled	feature_toggle	failure-loop-detect	false にすると failure-loop-detect を OFF にし同一エラー連続失敗の検出が止まる
 review_required_design	reviewer_control	false なら /design-review が no-op skip	false にすると design-review が no-op skip され設計レビュー fan-out が省かれる
-review_min_count_design	reviewer_control	default 3、reviewer_registry_design 件数下限	増やすと design-review で起動する reviewer 下限が上がる。減らすと下限が下がる
-review_max_count_design	reviewer_control	default registry 全件、上限指定	減らすと design-review で起動する reviewer 上限が下がる。増やすと上限が上がる
+review_min_count_design	reviewer_control	design-review fan-out で並列起動する reviewer の最小数 (default 3、reviewer_registry_design 件数下限)	増やすと設計レビューの網羅性が上がるが並列 subagent 消費が増える。減らすとレビューが手薄になり見逃しリスクが上がる
+review_max_count_design	reviewer_control	design-review fan-out で並列起動する reviewer の最大数 (default は registry 全件)	減らすと並列 subagent 消費を抑えられるが設計レビューの網羅性が下がる。増やすと網羅性が上がるが消費が増える
 review_required_test	reviewer_control	false なら採用 6 条 4 テスト設計レビュー step skip 可	false にするとテスト設計レビュー step を skip 可能にする。true だと採用 6 条 4 で必須化される
-review_min_count_test	reviewer_control	default 5 (採用 6 条 4 で 5+ 動的選定)	増やすとテスト設計レビューの reviewer 下限が上がる。減らすと下限が下がる
-review_max_count_test	reviewer_control	default registry 全件、上限指定	減らすとテスト設計レビューの reviewer 上限が下がる。増やすと上限が上がる
+review_min_count_test	reviewer_control	テスト設計レビュー fan-out で並列起動する reviewer の最小数 (default 5、採用 6 条 4 の 5+ 動的選定下限)	増やすとテスト設計レビューの網羅性が上がるが並列 subagent 消費が増える。減らすとレビューが手薄になる
+review_max_count_test	reviewer_control	テスト設計レビュー fan-out で並列起動する reviewer の最大数 (default は registry 全件)	減らすと並列 subagent 消費を抑えられるがテスト設計レビューの網羅性が下がる。増やすと網羅性が上がるが消費が増える
 review_required_module	reviewer_control	false なら /module-review skip 可	false にすると module-review を skip 可能にする。true だと必須化される
 review_min_count_module	reviewer_control	default 2 (code-reviewer + refactoring-specialist)	増やすと module-review の reviewer 下限が上がる。減らすと下限が下がる
 review_max_count_module	reviewer_control	default registry 全件、上限指定	減らすと module-review の reviewer 上限が下がる。増やすと上限が上がる
@@ -116,7 +116,7 @@ review_min_count_system	reviewer_control	default 2 (architect-reviewer + refacto
 review_max_count_system	reviewer_control	default registry 全件、上限指定	減らすと system-review の reviewer 上限が下がる。増やすと上限が上がる
 review_required_security	reviewer_control	default false (security 影響 task のみ)	true にすると security レビューを必須化する。false だと security 影響 task のみで起動される
 review_min_count_security	reviewer_control	default 1 (security-reviewer)	増やすと security レビューの reviewer 下限が上がる。減らすと下限が下がる
-review_iteration_max	reviewer_control	default 5 (採用 6 条 4 で 5 回上限のレビュー反復)	増やすとレビュー反復の上限回数が増える。減らすと反復上限が減り早期に user escalation する
+review_iteration_max	reviewer_control	レビュー → 修正 → 再レビューを繰り返す反復の上限回数 (default 5、採用 6 条 4 の収束上限)	増やすと収束まで粘れるが時間とコストが増える。減らすと早期に user escalation し反復が浅くなる
 METADATA_EOF
 }
 

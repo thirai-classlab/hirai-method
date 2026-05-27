@@ -99,7 +99,10 @@ _get_all_config_keys() {
 # 末尾の `main "$@"` 呼び出しのみ除去して source する (関数定義はそのまま、副作用なし)。
 _make_sourceable_hcconfig() {
   local out="$1"
-  grep -v '^main "\$@"$' "${HC_CONFIG_SCRIPT}" > "$out"
+  # ta 注記: 末尾の `main "$@"` 呼び出し行のみ除去して source 可能にする (関数定義は温存)。
+  #   grep pattern を空白許容 (`^[[:space:]]*main[[:space:]]+"\$@"[[:space:]]*$`) にして、
+  #   将来 hc-config.sh の末尾呼び出しがインデント / 末尾空白付きになっても確実に除去する。
+  grep -vE '^[[:space:]]*main[[:space:]]+"\$@"[[:space:]]*$' "${HC_CONFIG_SCRIPT}" > "$out"
 }
 
 # ============================================================
@@ -369,6 +372,9 @@ _case_7() (
 
   # inline comment を持つ代表 key (yml の `key: val  # comment` から comment を抽出)。
   # comment 主要語 (最初の token) が metadata description に含まれることを確認 (drift 検出)。
+  # ta 注記: check_keys は harness-config.yml で `# comment` を持つ key である前提。
+  #   comment を持たない key を入れると comment 抽出が空になり「test key invalid」で FAIL する
+  #   (本 case の主旨は drift 検出であり、comment 不在 key の検証ではないため意図的に除外)。
   local check_keys="review_iteration_max feature_loop_mode_enforcement_enabled feature_draft_flow_guard_enabled"
   local mismatch=0
   local key
@@ -451,8 +457,18 @@ _case_9() (
   before="$(cat "$test_yml")"
 
   # option 2 (key 編集) → key 名 → 新値を空入力 (skip = rollback 相当) → 5 (終了)
+  # qa MED-3: numeric menu の異常終了を `|| true` で握り潰さず exit code を確認する。
+  #   numeric menu は `5` で正常終了 (exit 0) するため、非 0 は menu 自体の故障を示す。
+  #   (TUI [y/N]=N rollback は pty 必須で Phase2 defer。本 case は numeric menu の
+  #    「空入力 skip で書込みが起きない」rollback 相当の振る舞いを検証する)
+  local menu_ec
   printf '2\nreview_iteration_max\n\n5\n' \
-    | timeout 5 bash "${HC_CONFIG_SCRIPT}" --config "$test_yml" >/dev/null 2>&1 || true
+    | timeout 5 bash "${HC_CONFIG_SCRIPT}" --config "$test_yml" >/dev/null 2>&1
+  menu_ec=$?
+  if [ "$menu_ec" -ne 0 ]; then
+    printf 'Case 9: numeric menu exited non-zero (%d) — menu malfunction, not a clean skip\n' "$menu_ec" >&2
+    return 1
+  fi
 
   local after
   after="$(cat "$test_yml")"
@@ -511,6 +527,42 @@ _case_11() (
   local src="${TMP_DIR}/hc-config-src.sh"
   _make_sourceable_hcconfig "$src"
 
+  # CONFIG_PATH 設定が必要な理由: _tui_render は内部で _get_current → _get_default を呼び、
+  #   さらに effect panel で _yml_get_raw "$CONFIG_PATH" を参照する。未設定だと unbound で死ぬ。
+  # metadata を先 source する理由: _tui_order_keys_by_category / _tui_render が _meta_category /
+  #   _meta_effect を呼ぶため、hc-config.sh より先に lib/hc-config-metadata.sh を source して
+  #   hc_metadata_* 関数を可視化しておく必要がある (順序逆だと category 解決が全て空になる)。
+
+  # iter2 CRIT C-iter2-1 regression ガード (stdout 純度):
+  #   _tui_order_keys_by_category の戻りが正確に 74 行 (= yml key 数) かつ
+  #   `^[a-z_]+=` ゴミ行 0 を assert。bash 3.2 local+cmdsubst 漏洩で `kc=...` 等が
+  #   混入すると total が膨らむ (例: ゴミ 73 行混入で total=147)。
+  local order_out yml_key_count order_total order_garbage
+  yml_key_count=$(_get_all_config_keys | grep -c .)
+  order_out="$(
+    # shellcheck disable=SC1090
+    source "${HC_CONFIG_METADATA_LIB}"
+    # shellcheck disable=SC1090
+    source "$src"
+    CONFIG_PATH="${HC_CONFIG_YML}"
+    local keys
+    keys=$(_yml_list_keys "$CONFIG_PATH")
+    _tui_order_keys_by_category "$keys"
+  )" || true
+  order_total=$(printf '%s\n' "$order_out" | grep -c .)
+  order_garbage=$(printf '%s\n' "$order_out" | grep -cE '^[a-z_]+=' || true)
+  if [ "$order_total" -ne "$yml_key_count" ]; then
+    printf 'Case 11: _tui_order_keys_by_category total=%d != yml key count=%d (stdout leak?)\n' \
+      "$order_total" "$yml_key_count" >&2
+    return 1
+  fi
+  if [ "$order_garbage" -ne 0 ]; then
+    printf 'Case 11: _tui_order_keys_by_category emitted %d garbage assignment lines (^[a-z_]+=)\n' \
+      "$order_garbage" >&2
+    printf '%s\n' "$order_out" | grep -E '^[a-z_]+=' | head -5 >&2
+    return 1
+  fi
+
   # 別 bash で source して _tui_render を呼ぶ
   local rendered
   rendered="$(
@@ -528,6 +580,15 @@ _case_11() (
   # ANSI escape を strip して検査
   local clean
   clean="$(printf '%s' "$rendered" | sed -E "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g")"
+
+  # iter2 CRIT C-iter2-2 regression ガード (stdout 純度):
+  #   _tui_render の clean 出力に `kc=` / `cat_count=` のゴミ代入行が混入しない (negative assert)。
+  #   bash 3.2 local+cmdsubst 漏洩で端末描画にゴミ行が混入すると TUI レイアウトが崩壊する。
+  if printf '%s\n' "$clean" | grep -qE '^(kc|cat_count)='; then
+    printf 'Case 11: _tui_render emitted garbage assignment lines (kc=/cat_count=) in output\n' >&2
+    printf '%s\n' "$clean" | grep -E '^(kc|cat_count)=' | head -5 >&2
+    return 1
+  fi
 
   # sel=0 の先頭 key が `> ` 付きで出る
   if ! printf '%s' "$clean" | grep -qE '^> [a-z_]'; then
@@ -630,7 +691,11 @@ _case_14() (
 
   local esc_yml="${TMP_DIR}/ansi.yml"
   cp "${HC_CONFIG_YML}" "$esc_yml"
-  # ESC を含む値を notify_sound に追記 (double-quote 形式)
+  # qa MED-4: notify_sound は yml に既存のため、append すると重複 key で invalid yaml になり
+  #   PyYAML validate が常に reject して本 case の主旨 (ANSI 値の --list が exit 0) を検証できない。
+  #   既存 notify_sound 行を事前削除してから ANSI 値付きで append し直す (重複回避)。
+  # ESC を含む値を notify_sound に設定 (double-quote 形式)
+  sed -i.bak '/^notify_sound:/d' "$esc_yml" && rm -f "${esc_yml}.bak"
   printf '\nnotify_sound: "%sred%s"\n' "$(printf '\033')[31m" "$(printf '\033')[0m" >> "$esc_yml"
 
   local ec
@@ -681,16 +746,16 @@ if _case_8 2>/dev/null; then _record PASS 8 "空 yml の --list が exit 0 (H8)"
 else                         _record FAIL 8 "空 yml の --list が exit 0 (H8)"
 fi
 
-if _case_9 2>/dev/null; then _record PASS 9 "番号 menu skip で yml 無変化 (rollback 検証、H7)"
-else                         _record FAIL 9 "番号 menu skip で yml 無変化 (rollback 検証、H7)"
+if _case_9 2>/dev/null; then _record PASS 9 "番号 menu 空入力で yml 無変化 + menu exit 0 (skip 検証、H7 + qa MED-3)"
+else                         _record FAIL 9 "番号 menu 空入力で yml 無変化 + menu exit 0 (skip 検証、H7 + qa MED-3)"
 fi
 
 if _case_10 2>/dev/null; then _record PASS 10 "番号 menu 編集 path で新値が persist (H11 代替)"
 else                          _record FAIL 10 "番号 menu 編集 path で新値が persist (H11 代替)"
 fi
 
-if _case_11 2>/dev/null; then _record PASS 11 "TUI render seam — 選択行/区切り行/effect panel 出力 (H11)"
-else                          _record FAIL 11 "TUI render seam — 選択行/区切り行/effect panel 出力 (H11)"
+if _case_11 2>/dev/null; then _record PASS 11 "TUI render seam — 選択行/区切り行/effect panel + stdout 純度 (order total==74/ゴミ0, render kc=/cat_count= 0) (H11 + iter2 CRIT)"
+else                          _record FAIL 11 "TUI render seam — 選択行/区切り行/effect panel + stdout 純度 (order total==74/ゴミ0, render kc=/cat_count= 0) (H11 + iter2 CRIT)"
 fi
 
 if _case_12 2>/dev/null; then _record PASS 12 "--show-default で DEFAULT 列 + --verbose --show-default 無害 (MED)"

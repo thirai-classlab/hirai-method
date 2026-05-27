@@ -761,25 +761,31 @@ cmd_list() {
   esac
 
   # header
+  # ui-designer M3: default mode は説明列を cut で truncate して行幅暴走を抑える
+  #   (最長 key=42 文字のため KEY 列 44、説明列を 30 文字に丸めて狭端末でも読める程度に)。
+  #   --verbose / --show-default は情報密度優先で広端末向けと割り切る (header に注記)。
   if [ "$show_effect" -eq 1 ]; then
     printf '%-48s %-18s %-18s %-7s %-44s %s\n' "KEY" "CURRENT" "DEFAULT" "TYPE" "説明" "変更効果"
+    printf '%s\n' "(--verbose は広端末向け: 全 6 列を truncate して表示。狭端末では --list 単体を推奨)"
   elif [ "$show_default" -eq 1 ]; then
     printf '%-48s %-22s %-22s %-7s %s\n' "KEY" "CURRENT" "DEFAULT" "TYPE" "説明"
+    printf '%s\n' "(--show-default は広端末向け: DEFAULT 列を追加。狭端末では --list 単体を推奨)"
   else
-    printf '%-48s %-26s %-7s %s\n' "KEY" "CURRENT" "TYPE" "説明"
+    printf '%-44s %-22s %-7s %s\n' "KEY" "CURRENT" "TYPE" "説明"
   fi
-  printf '%s\n' "$(printf '%.0s-' {1..130})"
+  printf '%s\n' "$(printf '%.0s-' {1..106})"
 
   local keys
   keys=$(_yml_list_keys "$CONFIG_PATH")
 
   # category 別にグルーピングして出力 (metadata 不在時は単一グループ扱い)
+  # iter2 CRIT 同種 leak 予防: for/while 本体内の `local cat_keys` / `local key` / `local cat_count`
+  #   宣言を関数頭に集約し、ループ内は素の代入にして bash 3.2 cmdsubst stdout 漏洩を構造的に防ぐ。
   local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
   local printed_any=0
-  local cat
+  local cat cat_keys key cat_count
   for cat in $categories; do
-    local cat_keys=""
-    local key
+    cat_keys=""
     while IFS= read -r key; do
       [ -z "$key" ] && continue
       if [ "$(_meta_category "$key")" = "$cat" ]; then
@@ -787,7 +793,6 @@ cmd_list() {
       fi
     done <<< "$keys"
     [ -z "$cat_keys" ] && continue
-    local cat_count
     cat_count=$(printf '%s' "$cat_keys" | grep -c '.')
     printf '\n=== %s (%s keys) ===\n' "$cat" "$cat_count"
     printf '%s' "$cat_keys" | _cmd_list_rows "$show_default" "$show_effect"
@@ -805,31 +810,32 @@ cmd_list() {
 _cmd_list_rows() {
   local show_default="$1"
   local show_effect="$2"
-  local key cur def type raw desc effect
+  # iter2 CRIT 同種 leak 予防: while 本体内の `local cur_disp` / `local def_disp` 宣言を
+  #   関数頭に集約し、ループ内は素の代入にして bash 3.2 cmdsubst stdout 漏洩を構造的に防ぐ。
+  local key cur def type raw desc effect cur_disp def_disp
   while IFS= read -r key; do
     [ -z "$key" ] && continue
     raw=$(_yml_get_raw "$CONFIG_PATH" "$key" || printf '')
     cur=$(_get_current "$key")
     type=$(_infer_type "$key" "$raw")
     desc=$(_meta_desc "$key")
-    local cur_disp
     cur_disp=$(printf '%s' "$cur" | tr '\n' ',' | sed 's/,$//' | cut -c1-24)
     if [ "$show_effect" -eq 1 ]; then
       def=$(_get_default "$key" 2>/dev/null || printf '')
       effect=$(_meta_effect "$key")
-      local def_disp
       def_disp=$(printf '%s' "$def" | tr '\n' ',' | sed 's/,$//' | cut -c1-16)
       printf '%-48s %-18s %-18s %-7s %-44s %s\n' \
         "$key" "$cur_disp" "$def_disp" "$type" "$(printf '%s' "$desc" | cut -c1-42)" "$effect"
     elif [ "$show_default" -eq 1 ]; then
       def=$(_get_default "$key" 2>/dev/null || printf '')
-      local def_disp
       def_disp=$(printf '%s' "$def" | tr '\n' ',' | sed 's/,$//' | cut -c1-20)
       printf '%-48s %-22s %-22s %-7s %s\n' \
         "$key" "$cur_disp" "$def_disp" "$type" "$desc"
     else
-      printf '%-48s %-26s %-7s %s\n' \
-        "$key" "$cur_disp" "$type" "$desc"
+      # ui-designer M3: default mode は KEY 44 + CURRENT 22 + TYPE 7 + 説明 (30 文字 truncate) に丸めて
+      #   行幅暴走を抑える (説明全文は --verbose / --show-default で確認)。
+      printf '%-44s %-22s %-7s %s\n' \
+        "$key" "$(printf '%s' "$cur_disp" | cut -c1-20)" "$type" "$(printf '%s' "$desc" | cut -c1-30)"
     fi
   done
 }
@@ -913,7 +919,8 @@ cmd_reset() {
   if ! _validate_key_format "$key"; then
     return 1
   fi
-  local def
+  # iter2 CRIT 同種 leak 予防: case 内 `local items` を関数頭に集約。
+  local def items
   def=$(_get_default "$key")
   if [ -z "$def" ]; then
     _err "no default value found for ${key}"
@@ -922,7 +929,6 @@ cmd_reset() {
   # array 値は yml inline 形式に再構成 (改行 → カンマ区切り [a, b, c])
   case "$def" in
     *$'\n'*)
-      local items
       items=$(printf '%s' "$def" | tr '\n' ',' | sed 's/,$//')
       def="[${items}]"
       ;;
@@ -947,13 +953,13 @@ cmd_diff() {
   printf '%s\n' "$(printf '%.0s-' {1..120})"
   local keys
   keys=$(_yml_list_keys "$CONFIG_PATH")
-  local key cur def
+  # iter2 CRIT 同種 leak 予防: while 本体内 `local cur_disp def_disp` を関数頭に集約。
+  local key cur def cur_disp def_disp
   while IFS= read -r key; do
     [ -z "$key" ] && continue
     cur=$(_get_current "$key")
     def=$(_get_default "$key" 2>/dev/null || printf '')
     if [ "$cur" != "$def" ]; then
-      local cur_disp def_disp
       cur_disp=$(printf '%s' "$cur" | tr '\n' ',' | cut -c1-28)
       def_disp=$(printf '%s' "$def" | tr '\n' ',' | cut -c1-28)
       printf '%-50s %-30s %-30s\n' "$key" "$cur_disp" "$def_disp"
@@ -1197,6 +1203,11 @@ _tui_order_keys_by_category() {
   local all_keys="$1"
   local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
   local ordered="" key cat seen_cat=0
+  # iter2 CRIT C-iter2-1 fix (bash 3.2 local+command-substitution leak 予防):
+  #   while ループ本体内で `local kc` (代入なし宣言) → 直後に `kc=$(_meta_category)` する構造は
+  #   特定の bash 3.2 ビルドで command-substitution 出力が関数 stdout に漏洩する。
+  #   `local kc` をループ外 (関数頭) で 1 回だけ宣言し、ループ内は素の代入にして漏洩を構造的に防ぐ。
+  local kc
   # category 順に key を集める
   for cat in $categories; do
     while IFS= read -r key; do
@@ -1210,7 +1221,6 @@ _tui_order_keys_by_category() {
   # 未分類 key (metadata 不在 / category 空) を末尾に追加
   while IFS= read -r key; do
     [ -z "$key" ] && continue
-    local kc
     kc=$(_meta_category "$key")
     case "$kc" in
       保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control) ;;
@@ -1235,7 +1245,11 @@ _tui_render() {
   printf '%s=== hc-config TUI ===%s  (↑/↓ 選択, Enter 決定, q 終了)\n\n' "$_TUI_BOLD" "$_TUI_RESET"
 
   # category ごとの key 数を事前集計 (区切り行の "(N keys)" 用)
-  local idx=0 key prev_cat="" cur_cat
+  # iter2 CRIT C-iter2-2 fix (bash 3.2 local+command-substitution leak 予防):
+  #   while/pipe-subshell 本体内の `local cat_count` / `local kc` 宣言 → 直後 cmdsubst が
+  #   特定の bash 3.2 ビルドで stdout 漏洩 (端末描画にゴミ行混入) する。`cat_count` `kc` を
+  #   関数頭で 1 回だけ宣言し、ループ/subshell 内は素の代入にして漏洩を構造的に防ぐ。
+  local idx=0 key prev_cat="" cur_cat cat_count kc
   # 各 category の件数を求めるため、まず category→count を作る (出現順)
   while IFS= read -r key; do
     [ -z "$key" ] && continue
@@ -1243,10 +1257,9 @@ _tui_render() {
     [ -z "$cur_cat" ] && cur_cat="(未分類)"
     if [ "$cur_cat" != "$prev_cat" ]; then
       # category 境界: 区切り行を挿入 (dim 表示、選択対象外)
-      local cat_count
       cat_count=$(printf '%s\n' "$all_keys" | while IFS= read -r k; do
         [ -z "$k" ] && continue
-        local kc; kc=$(_meta_category "$k"); [ -z "$kc" ] && kc="(未分類)"
+        kc=$(_meta_category "$k"); [ -z "$kc" ] && kc="(未分類)"
         [ "$kc" = "$cur_cat" ] && printf 'x\n'
       done | grep -c .)
       printf '%s=== %s (%s keys) ===%s\n' "$_TUI_DIM" "$cur_cat" "$cat_count" "$_TUI_RESET"
@@ -1306,6 +1319,10 @@ _cmd_interactive_tui() {
   fi
 
   # C1: raw mode 設定 + trap 復元 (異常終了でも端末を壊さない)
+  # qa/tdd 注記: Ctrl-C (INT) / SIGTERM (TERM) / 正常 EXIT 時の stty 復元 + 表示属性 reset を
+  #   trap で保証する。この trap 経路 (中途中断時に端末が canonical/echo に戻ること) の自動検証は
+  #   実 TTY + pty simulate が必須なため Phase2 defer (非 TTY pipe では stty -g が空文字を返し
+  #   raw mode 自体 no-op になるため smoke では再現不能)。手動検証は Step 5 で実施。
   local _stty_saved
   _stty_saved=$(stty -g 2>/dev/null) || _stty_saved=""
   # shellcheck disable=SC2064

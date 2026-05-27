@@ -160,7 +160,15 @@ fi
 | iter | reviewer | CRITICAL | HIGH | MEDIUM | LOW | 状態 |
 |---|---|---|---|---|---|---|
 | iter1 | tdd-guide / test-automator / qa-expert / code-reviewer + ui-designer (TUI UX) + pr-test-analyzer (全 6、median confidence 0.87) | 3 | 13 | 10 | 8 | 修正中 → iter2 |
-| iter2 (予定) | 同 6 reviewer | TBD | TBD | TBD | TBD | 修正反映後 re-review |
+| iter2 | 同 6 reviewer (median confidence 0.82-0.93) | 2 | 0 | ~6 | 多数 | 修正中 → iter3 |
+| iter3 (予定) | 同 6 reviewer | TBD | TBD | TBD | TBD | 修正反映後 re-review |
+
+### iter2 結果
+
+- **iter1 CRIT3 + HIGH13 は全 reviewer で全解消確認** (stty raw mode / Case6 env / required_env CSV tab 化 / category グルーピング / effect 再掲 / 非 TTY 案内 等)
+- **新規 CRITICAL 2 (code-reviewer が bash 3.2 実機 repro で発見)**: iter2 修正で混入した `local`+command-substitution 漏洩バグ。`_tui_order_keys_by_category` (ループ内 `local kc; kc=$(...)` が cmdsubst 出力を関数 stdout に漏洩 → 戻り 147 行中 73 行ゴミ) + `_tui_render` (同種で `cat_count=`/`kc=` 22 行が端末描画混入) → **TUI が macOS bash 3.2 で起動直後機能不全**。smoke 14/14 は seam の存在確認のみで stdout purity 未検証のため見逃し。他 5 reviewer (approve or smoke MED のみ) が見落とした致命 bug を code-reviewer の深い repro が発見 (memory `feedback_code_reviewer_deep_test_advantage` 実証)
+- **新規 MED ~6 (全て smoke 品質 / コメント / description、production core 外)**: Case 9 `|| true` 偽 PASS + test 名乖離 / Case 14 重複 key append で invalid yaml / script-smoke Case 1 が新 --list format 非感応 / Case 11・7 コメント不足 / Ctrl-C 復元 Phase2 defer 明記 / --list 80桁はみ出し / reviewer_control description 情報密度
+- iter3 で CRITICAL 2 (local 宣言ループ外移動) + smoke purity 回帰ガード + MED 群を修正
 
 ### iter1 CRITICAL 3 件 (必須修正)
 
