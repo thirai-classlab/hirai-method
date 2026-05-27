@@ -90,8 +90,19 @@
 #     (mid-`#` reject の bypass 用途) で gate する非対称設計に変更。
 #   smoke Case 19e (再書込 round-trip) + Case 19f (backslash round-trip + non-bypass read) 追加。
 #
+# Step 6 refactoring (task-46 Step 6): 全関数 < 50 LOC に分割
+#   対象 6 関数を helper 分割:
+#   - _validate_string_sanity: _validate_str_newline_ctrl + _validate_str_leading_chars
+#     + _validate_str_mid_hash に 3 分割
+#   - _validate_value: _validate_bool + _validate_int + _validate_float に 3 分割
+#   - _atomic_write: _atomic_find_python_yaml + _atomic_yaml_validate_fallback に 2 分割
+#   - _yml_set: _yml_set_escape_value に 1 helper 抽出
+#   - cmd_interactive: _menu_opt_edit_key + _menu_opt_feature + _menu_opt_reviewer に 3 分割
+#   - main: _main_require_arg + _main_dispatch に 2 helper 抽出、inline config parse
+#
 # 起源:
 #   task-46 Step 2 (TDD GREEN) → iter 2 fix → iter 3 fix → iter 4 fix → iter 5 fix
+#   → Step 6 refactoring (behavior-preserving function split)
 #   設計 draft: docs/draft/config-yml-phase3-hc-config-script.md
 #   smoke: .claude/tests/hc-config-script-smoke.sh (21 cases iter 5)
 
@@ -139,18 +150,11 @@ _validate_key_format() {
   return 0
 }
 
-# string / path 値の minimal sanity check (HIGH H-02 code-rev + iter 3 fixes)
-# 改行 / NUL / 制御文字 / 行頭 # / 行頭 : / mid-value # を reject、UTF-8 multibyte は受理
-#
-# iter 3 fixes:
-#   HIGH (code-rev UTF-8 false-reject):
-#     旧 `tr -d '\11\40-\176'` は \x80-\xFF (UTF-8 multibyte) を制御文字扱いで reject、
-#     日本語 path 等で false positive。bash pattern match で C0/DEL のみ pinpoint reject。
-#   HIGH (pr-test mid-value # silent data loss):
-#     `_yml_get_raw` の `val="${val%%#*}"` が mid-value `#` を inline comment と
-#     誤認 → read-back で truncation。書込み時点で mid-value `#` を reject。
-#     URL fragment 等の正規ユースケース向けに HC_ALLOW_HASH_IN_VALUE=1 bypass。
-_validate_string_sanity() {
+# 改行 / NUL / C0 制御文字 / DEL を reject (string sanity helper 1/3)
+# iter 3 HIGH (code-rev UTF-8 false-reject) fix:
+#   bash pattern match で C0 (\x01-\x08, \x0b-\x1f) + DEL (\x7f) のみ reject、
+#   \x80-\xFF (UTF-8 multibyte) は touch しない。
+_validate_str_newline_ctrl() {
   local key="$1"
   local val="$2"
   # 改行 (LF / CR) → yml 構造破壊
@@ -160,11 +164,7 @@ _validate_string_sanity() {
       return 1
       ;;
   esac
-  # C0 制御文字 / DEL を reject (TAB \x09 / LF / CR は前段で別途処理済、NUL は bash 文字列に
-  # そもそも含まれない (string-terminator) ので pattern 不要)
-  # iter 3 HIGH (code-rev UTF-8 false-reject) fix:
-  #   bash pattern match で C0 (\x01-\x08, \x0b-\x1f) + DEL (\x7f) のみ reject、
-  #   \x80-\xFF (UTF-8 multibyte) は touch しない。
+  # C0 制御文字 / DEL を reject
   # 注意: bash で `$'\x00'` は empty string になり `*$'\x00'*` = `**` で全 match 誤爆するため、
   #       NUL pattern は意図的に除外 (どのみち bash variable に NUL は格納不可)。
   case "$val" in
@@ -176,6 +176,13 @@ _validate_string_sanity() {
       return 1
       ;;
   esac
+  return 0
+}
+
+# 行頭 # / 行頭 : を reject (string sanity helper 2/3)
+_validate_str_leading_chars() {
+  local key="$1"
+  local val="$2"
   # 行頭 # (yaml comment と混同) — 値全体が # から始まる場合のみ reject
   case "$val" in
     \#*)
@@ -190,11 +197,16 @@ _validate_string_sanity() {
       return 1
       ;;
   esac
-  # iter 3 HIGH (pr-test mid-value # silent data loss) fix:
-  #   mid-value `#` (例: "foo#bar" / "foo #bar") は _yml_get_raw の
-  #   `val="${val%%#*}"` で read-back 時に truncation → silent data loss。
-  #   書き込み時点で reject。URL #fragment 等の正規 use case 向けに
-  #   HC_ALLOW_HASH_IN_VALUE=1 で bypass 可。
+  return 0
+}
+
+# mid-value # を reject (string sanity helper 3/3)
+# iter 3 HIGH (pr-test mid-value # silent data loss) fix:
+#   mid-value `#` は _yml_get_raw の `val="${val%%#*}"` で read-back 時に truncation。
+#   URL #fragment 等の正規ユースケース向けに HC_ALLOW_HASH_IN_VALUE=1 bypass。
+_validate_str_mid_hash() {
+  local key="$1"
+  local val="$2"
   if [ "${HC_ALLOW_HASH_IN_VALUE:-0}" != "1" ]; then
     case "$val" in
       *\#*)
@@ -204,6 +216,17 @@ _validate_string_sanity() {
         ;;
     esac
   fi
+  return 0
+}
+
+# string / path 値の minimal sanity check (HIGH H-02 code-rev + iter 3 fixes)
+# 改行 / NUL / 制御文字 / 行頭 # / 行頭 : / mid-value # を reject、UTF-8 multibyte は受理
+_validate_string_sanity() {
+  local key="$1"
+  local val="$2"
+  _validate_str_newline_ctrl "$key" "$val" || return 1
+  _validate_str_leading_chars "$key" "$val" || return 1
+  _validate_str_mid_hash "$key" "$val" || return 1
   return 0
 }
 
@@ -237,11 +260,7 @@ _yml_get_raw() {
   # iter 5 fix (HIGH H-01 + H-02 closure):
   #   - HIGH H-02 解消: quote 解除条件から HC_ALLOW_HASH_IN_VALUE=1 を削除し、
   #     前後 `"..."` 形式検出だけで quote 解除 + comment-strip-skip を発動。
-  #     これにより yml に保存された double-quoted literal は bypass env の有無に関係なく
-  #     一貫して同じ value を返却 (env asymmetry 解消)。bypass env は write 側のみで gate。
   #   - HIGH H-01 解消: `\\` → `\` unescape を `\"` → `"` unescape より先に実施。
-  #     順序を逆にすると `\\"` 文字列が `\"` (\\ → \ → \") → `"` (\" → ") と二段解釈されて
-  #     誤展開するため、先に `\\` を 1 段消化してから `\"` を処理する。
   # (round-trip 整合性: `_yml_set` が `"foo#bar"` で書き込んだ値を `foo#bar` で復元)
   if [ "${#val}" -ge 2 ] \
     && [ "${val:0:1}" = '"' ] \
@@ -315,6 +334,63 @@ _infer_type() {
   printf 'string'
 }
 
+# bool 型 validation (_validate_value helper 1/3)
+_validate_bool() {
+  local key="$1"
+  local val="$2"
+  case "$val" in
+    true|True|TRUE|false|False|FALSE) return 0 ;;
+    *)
+      _err "invalid value for ${key} (expected: bool, got: '${val}')"
+      return 1
+      ;;
+  esac
+}
+
+# int 型 validation (_validate_value helper 2/3)
+_validate_int() {
+  local key="$1"
+  local val="$2"
+  if [[ "$val" =~ ^[0-9]+$ ]]; then
+    # review_iteration_max は 1..10 の range
+    case "$key" in
+      review_iteration_max)
+        if [ "$val" -lt 1 ] || [ "$val" -gt 10 ]; then
+          _err "invalid value for ${key} (expected: int 1-10, got: '${val}')"
+          return 1
+        fi
+        ;;
+    esac
+    return 0
+  fi
+  _err "invalid value for ${key} (expected: int, got: '${val}')"
+  return 1
+}
+
+# float 型 validation (_validate_value helper 3/3)
+_validate_float() {
+  local key="$1"
+  local val="$2"
+  if [[ "$val" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    # confidence_threshold / context_budget_threshold は 0.0-1.0
+    case "$key" in
+      confidence_threshold|context_budget_threshold|*_ratio)
+        if awk -v v="$val" 'BEGIN { if (v < 0.0 || v > 1.0) exit 1; exit 0 }'; then
+          return 0
+        else
+          _err "invalid value for ${key} (expected: float 0.0-1.0, got: '${val}')"
+          return 1
+        fi
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+  fi
+  _err "invalid value for ${key} (expected: float, got: '${val}')"
+  return 1
+}
+
 # 値型 validation
 # $1: key, $2: type, $3: value
 # 戻り: 0 = valid / 1 = invalid (stderr に error)
@@ -324,50 +400,13 @@ _validate_value() {
   local val="$3"
   case "$type" in
     bool)
-      case "$val" in
-        true|True|TRUE|false|False|FALSE) return 0 ;;
-        *)
-          _err "invalid value for ${key} (expected: bool, got: '${val}')"
-          return 1
-          ;;
-      esac
+      _validate_bool "$key" "$val"
       ;;
     int)
-      if [[ "$val" =~ ^[0-9]+$ ]]; then
-        # review_iteration_max は 1..10 の range
-        case "$key" in
-          review_iteration_max)
-            if [ "$val" -lt 1 ] || [ "$val" -gt 10 ]; then
-              _err "invalid value for ${key} (expected: int 1-10, got: '${val}')"
-              return 1
-            fi
-            ;;
-        esac
-        return 0
-      fi
-      _err "invalid value for ${key} (expected: int, got: '${val}')"
-      return 1
+      _validate_int "$key" "$val"
       ;;
     float)
-      if [[ "$val" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        # confidence_threshold / context_budget_threshold は 0.0-1.0
-        case "$key" in
-          confidence_threshold|context_budget_threshold|*_ratio)
-            # awk で範囲チェック
-            if awk -v v="$val" 'BEGIN { if (v < 0.0 || v > 1.0) exit 1; exit 0 }'; then
-              return 0
-            else
-              _err "invalid value for ${key} (expected: float 0.0-1.0, got: '${val}')"
-              return 1
-            fi
-            ;;
-          *)
-            return 0
-            ;;
-        esac
-      fi
-      _err "invalid value for ${key} (expected: float, got: '${val}')"
-      return 1
+      _validate_float "$key" "$val"
       ;;
     array)
       # [a, b, c] 形式のみ受け入れ
@@ -436,6 +475,58 @@ _make_backup() {
   printf '%s' "$bak"
 }
 
+# PyYAML 利用可能な python3 実行可能ファイルを検出して stdout に出力
+# 見つからない場合は空文字 + return 1
+# _atomic_write helper 1/2
+_atomic_find_python_yaml() {
+  local py
+  for py in python3.13 python3.12 python3.11 python3; do
+    if command -v "$py" >/dev/null 2>&1 \
+      && "$py" -c "import yaml" >/dev/null 2>&1; then
+      printf '%s' "$py"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# PyYAML 不在環境向け軽量 yaml 構造チェック (fallback)
+# $1: orig yml path, $2: tmp yml path
+# 戻り: 0 = OK / 1 = 構造異常 (tmp を呼び出し元で rm すること)
+# _atomic_write helper 2/2
+_atomic_yaml_validate_fallback() {
+  local yml="$1"
+  local tmp="$2"
+  local orig_count new_count
+  orig_count=$(grep -cE "^[a-z_][a-zA-Z0-9_]*:" "$yml" 2>/dev/null || printf '0')
+  new_count=$(grep -cE "^[a-z_][a-zA-Z0-9_]*:" "$tmp" 2>/dev/null || printf '0')
+  if [ "$new_count" -lt "$orig_count" ]; then
+    _err "yaml structure check: key count decreased (${orig_count} → ${new_count}), rolling back"
+    return 1
+  fi
+  # 行頭 `:` のみで始まる行 (= 値が ': xxx' で yml が壊れている兆候) を reject
+  if grep -qE "^[a-z_][a-zA-Z0-9_]*: : " "$tmp" 2>/dev/null; then
+    _err "yaml structure check: detected ': :' pattern (corrupted value), rolling back"
+    return 1
+  fi
+  # iter 3 HIGH: mid-value `: <text>` を reject
+  if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]+[^"'"'"'#[{[:space:]][^"'"'"'#]*:[[:space:]]' "$tmp" 2>/dev/null; then
+    _err "yaml structure check: mid-value colon detected (structural corruption), rolling back"
+    return 1
+  fi
+  # iter 3 HIGH: unclosed array bracket → reject
+  if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]*\[[^]]*$' "$tmp" 2>/dev/null; then
+    _err "yaml structure check: unclosed array bracket detected, rolling back"
+    return 1
+  fi
+  # iter 3 HIGH: unclosed object brace → reject
+  if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]*\{[^}]*$' "$tmp" 2>/dev/null; then
+    _err "yaml structure check: unclosed object brace detected, rolling back"
+    return 1
+  fi
+  return 0
+}
+
 # atomic yml 上書き
 # $1: yml path
 # $2: new content
@@ -444,15 +535,7 @@ _make_backup() {
 #
 # iter 3 fixes:
 #   CRIT R-01 (tdd-guide): python3 detection を多版本 loop 化
-#     macOS Homebrew では `python3` (interactive alias 経由 3.13) と
-#     bash subprocess の `python3` (/opt/homebrew/bin/python3、3.13.4 だが PyYAML 不在) が
-#     乖離 → `python3 -c "import yaml"` が exit 1 で yaml.safe_load path に到達せず
-#     fallback の弱い check のみで yml corruption (中間コロン / 不完全 bracket) を素通し。
-#     python3.13 → python3.12 → python3.11 → python3 の順で
-#     `import yaml` 成功する最初の version を採用。
 #   HIGH (test-automator 中間コロン): fallback 強化
-#     `key: foo: bar` (中間コロン) / `key: [unclosed` (不完全 bracket) /
-#     `key: {unclosed` (不完全 brace) を structural pattern で reject。
 _atomic_write() {
   local yml="$1"
   local new_content="$2"
@@ -460,18 +543,8 @@ _atomic_write() {
 
   printf '%s' "$new_content" > "$tmp"
 
-  # iter 3 CRIT R-01 fix: 複数 python3 version を試行、PyYAML 利用可能な最初の version を採用
-  local py_with_yaml=""
-  local py
-  for py in python3.13 python3.12 python3.11 python3; do
-    if command -v "$py" >/dev/null 2>&1 \
-      && "$py" -c "import yaml" >/dev/null 2>&1; then
-      py_with_yaml="$py"
-      break
-    fi
-  done
-
-  if [ -n "$py_with_yaml" ]; then
+  local py_with_yaml
+  if py_with_yaml=$(_atomic_find_python_yaml); then
     # CRIT F-01 fix: stdin 経由で path quoting 不要、alias 不在 python でも安全
     if ! "$py_with_yaml" -c "import yaml, sys; yaml.safe_load(sys.stdin.read())" < "$tmp" 2>/dev/null; then
       _err "yaml syntax invalid after edit, rolling back"
@@ -479,43 +552,8 @@ _atomic_write() {
       return 1
     fi
   else
-    # Fallback: 軽量 yaml syntax check (PyYAML 不在環境用、iter 3 で structural pattern 強化)
-    #   1. top-level key 数が原 yml と乖離してないか (旧 logic 維持)
-    #   2. ファイル中に行頭 `:` (key 名不在の値行) や `: : ` (key value confusion) が無いか
-    #   3. iter 3: 中間コロン (mid-value `: <text>`) → yml 構造破壊兆候
-    #   4. iter 3: 不完全 [ ... ] / { ... } bracket (同一行内で閉じない)
-    local orig_count new_count
-    orig_count=$(grep -cE "^[a-z_][a-zA-Z0-9_]*:" "$yml" 2>/dev/null || printf '0')
-    new_count=$(grep -cE "^[a-z_][a-zA-Z0-9_]*:" "$tmp" 2>/dev/null || printf '0')
-    if [ "$new_count" -lt "$orig_count" ]; then
-      _err "yaml structure check: key count decreased (${orig_count} → ${new_count}), rolling back"
-      rm -f "$tmp"
-      return 1
-    fi
-    # 行頭 `:` のみで始まる行 (= 値が ': xxx' で yml が壊れている兆候) を reject
-    if grep -qE "^[a-z_][a-zA-Z0-9_]*: : " "$tmp" 2>/dev/null; then
-      _err "yaml structure check: detected ': :' pattern (corrupted value), rolling back"
-      rm -f "$tmp"
-      return 1
-    fi
-    # iter 3 HIGH (test-automator 中間コロン) fix: mid-value `: <text>` を reject
-    # 例: `task_dir: foo: bar` (foo: bar は flow scalar として yml 構造破壊兆候)
-    # 注: array `[a, b]` / 行末コメント ` # ...` / quoted `"foo: bar"` は除外
-    #     簡易判定: `^key: <val>: <val>$` のような mid-value colon-space を reject
-    if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]+[^"'"'"'#[{[:space:]][^"'"'"'#]*:[[:space:]]' "$tmp" 2>/dev/null; then
-      _err "yaml structure check: mid-value colon detected (structural corruption), rolling back"
-      rm -f "$tmp"
-      return 1
-    fi
-    # iter 3 HIGH (test-automator 不完全 bracket) fix: `key: [...` 行末で `]` 不在 → reject
-    if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]*\[[^]]*$' "$tmp" 2>/dev/null; then
-      _err "yaml structure check: unclosed array bracket detected, rolling back"
-      rm -f "$tmp"
-      return 1
-    fi
-    # iter 3 HIGH (test-automator 不完全 brace) fix: `key: {...` 行末で `}` 不在 → reject
-    if grep -qE '^[a-z_][a-zA-Z0-9_]*:[[:space:]]*\{[^}]*$' "$tmp" 2>/dev/null; then
-      _err "yaml structure check: unclosed object brace detected, rolling back"
+    # Fallback: 軽量 yaml syntax check (PyYAML 不在環境用)
+    if ! _atomic_yaml_validate_fallback "$yml" "$tmp"; then
       rm -f "$tmp"
       return 1
     fi
@@ -525,19 +563,39 @@ _atomic_write() {
   return 0
 }
 
+# HC_ALLOW_HASH_IN_VALUE=1 + value に `#` 含む場合の double-quote escape
+# $1: new_val (raw)
+# stdout: yml 書き込み用 write_val (escaped 済)
+# 副作用: bypass 時 stderr に notice 出力
+# _yml_set helper
+_yml_set_escape_value() {
+  local new_val="$1"
+  if [ "${HC_ALLOW_HASH_IN_VALUE:-0}" = "1" ]; then
+    case "$new_val" in
+      *\#*)
+        # 内部 `"` は `\"` に escape、内部 `\` も `\\` に escape して二重 escape 衝突を回避
+        local escaped="${new_val//\\/\\\\}"
+        escaped="${escaped//\"/\\\"}"
+        printf '%s' "\"${escaped}\""
+        _err "note: HC_ALLOW_HASH_IN_VALUE=1 で # 含む値を yml に double-quote 保存します (round-trip 整合性確保のため)"
+        return 0
+        ;;
+    esac
+  fi
+  printf '%s' "$new_val"
+  return 0
+}
+
 # yml の特定 key を新値で書き換える
 # $1: yml path
 # $2: key
 # $3: new value (raw、yml 構文として valid な形)
 # 戻り: 0 = success / 1 = key 不在 or atomic fail
 #
-# iter 4 fix (HIGH 3 件単一根原因 closure、HC_ALLOW_HASH_IN_VALUE=1 round-trip 整合性):
-#   bypass 時 (HC_ALLOW_HASH_IN_VALUE=1) かつ value に `#` を含む場合、
-#   yml に double-quote 形式 (`key: "foo#bar"`) で保存する。これにより:
-#     - YAML parser は double-quoted string として literal 解釈 (`#` を comment 誤認しない)
-#     - `_yml_get_raw` 側で同 bypass + 前後 `"` 検出時に literal 解釈 + unescape する
-#   通常 value (`#` 不在 or bypass 不在) は従来通り quote なしで書き込む。
-#   stderr に notice を 1 行出力する (operator visibility 確保)。
+# iter 4 fix (HC_ALLOW_HASH_IN_VALUE=1 round-trip 整合性):
+#   bypass 時 + value に `#` を含む場合は _yml_set_escape_value で double-quote escape して保存。
+# iter 5 fix (CRIT C-01 closure):
+#   matched-line では comment preservation を skip し新値で完全置換する。
 _yml_set() {
   local yml="$1"
   local key="$2"
@@ -553,33 +611,12 @@ _yml_set() {
     return 1
   fi
 
-  # iter 4: HC_ALLOW_HASH_IN_VALUE=1 + value に `#` 含む場合は double-quote escape して保存
-  # round-trip 整合性のため `_yml_get_raw` 側で同 bypass + quoted literal 検出時に
-  # quote 解除 + unescape する設計。
-  local write_val="$new_val"
-  if [ "${HC_ALLOW_HASH_IN_VALUE:-0}" = "1" ]; then
-    case "$new_val" in
-      *\#*)
-        # 内部 `"` は `\"` に escape (yml double-quoted scalar の最小 spec)
-        # 内部 `\` も `\\` に escape して二重 escape 衝突を回避
-        local escaped="${new_val//\\/\\\\}"
-        escaped="${escaped//\"/\\\"}"
-        write_val="\"${escaped}\""
-        _err "note: HC_ALLOW_HASH_IN_VALUE=1 で # 含む値を yml に double-quote 保存します (round-trip 整合性確保のため)"
-        ;;
-    esac
-  fi
+  local write_val
+  write_val=$(_yml_set_escape_value "$new_val")
 
   # 行頭コメント以外で `^key:` 行を新値で置換 (1 行のみ)
-  # HIGH H-01 code-rev fix: awk -v は backslash sequence (\n / \t / \\) を解釈するため
-  # ENVIRON 経由で渡す。POSIX awk / mawk / gawk 全対応。
-  # iter 5 fix (CRIT C-01 closure): matched-line では comment preservation を skip し
-  # 新値で完全置換する。理由: 旧 logic は `match($0, /#.*$/)` で行末 comment 抽出 + 新値後置
-  # する構造のため、quoted literal (`docs_approved_dir: "foo#bar"`) を再 `--set baz#qux` すると
-  # `#bar"` を comment 誤検知 → 新値に `  #bar"` 再付加 → corrupt 状態。
-  # 新値側 (write_val) は呼び出し元で必要な quote / escape を含む完成 yml scalar 形式なので、
-  # 元行の comment 抽出は不要 (operator が yml に直接書いた行末 comment は再書込時に
-  # 失われる点は trade-off として許容、これまでも quoted line では同様の挙動)。
+  # HIGH H-01 code-rev fix: awk -v は backslash sequence を解釈するため ENVIRON 経由で渡す。
+  # iter 5 fix (CRIT C-01): matched-line は新値で完全置換 (元行の comment 保持 skip)。
   content=$(KEY="$key" VAL="$write_val" awk '
     BEGIN {
       k = ENVIRON["KEY"]
@@ -588,7 +625,6 @@ _yml_set() {
     }
     {
       if (!replaced && index($0, k ":") == 1) {
-        # iter 5 CRIT C-01: matched-line は新値で完全置換 (元行の comment 保持 skip)
         printf "%s: %s\n", k, v
         replaced = 1
       } else {
@@ -888,6 +924,68 @@ REFERENCE:
 EOF
 }
 
+# === 対話 menu helpers ===
+
+# option 2: key 選択して編集 (cmd_interactive helper 1/3)
+_menu_opt_edit_key() {
+  printf 'key name: '
+  local k
+  IFS= read -r k || return 0
+  if [ -n "$k" ]; then
+    printf 'current: '
+    cmd_get "$k" 2>/dev/null || true
+    printf 'new value (empty to skip): '
+    local v
+    IFS= read -r v || return 0
+    if [ -n "$v" ]; then
+      cmd_set "${k}=${v}"
+    fi
+  fi
+}
+
+# option 3: feature toggle 一括 on/off (cmd_interactive helper 2/3)
+_menu_opt_feature() {
+  printf 'feature name (without "feature_" prefix and "_enabled" suffix): '
+  local fn
+  IFS= read -r fn || return 0
+  if [ -n "$fn" ]; then
+    printf 'enable? [true/false]: '
+    local fv
+    IFS= read -r fv || return 0
+    if [ -n "$fv" ]; then
+      cmd_feature "${fn}=${fv}"
+    fi
+  fi
+}
+
+# option 4: reviewer 設定 quick edit (cmd_interactive helper 3/3)
+_menu_opt_reviewer() {
+  local keys
+  keys=$(_yml_list_keys "$CONFIG_PATH" | grep '^review_' || true)
+  if [ -z "$keys" ]; then
+    _out "no review_* keys found"
+    return 0
+  fi
+  local k
+  while IFS= read -r k; do
+    [ -z "$k" ] && continue
+    local cur
+    cur=$(_get_current "$k")
+    printf '%-40s = %s\n' "$k" "$cur"
+  done <<< "$keys"
+  printf '\nkey to edit (empty to skip): '
+  local edk
+  IFS= read -r edk || return 0
+  if [ -n "$edk" ]; then
+    printf 'new value: '
+    local edv
+    IFS= read -r edv || return 0
+    if [ -n "$edv" ]; then
+      cmd_set "${edk}=${edv}"
+    fi
+  fi
+}
+
 # === 対話 menu ===
 cmd_interactive() {
   while true; do
@@ -905,7 +1003,6 @@ EOF
     printf 'choice [1-5/q]: '
     local choice
     if ! IFS= read -r choice; then
-      # stdin EOF (e.g. pipe closed)
       printf '\nbye.\n'
       return 0
     fi
@@ -914,59 +1011,13 @@ EOF
         cmd_list
         ;;
       2)
-        printf 'key name: '
-        local k
-        IFS= read -r k || return 0
-        if [ -n "$k" ]; then
-          printf 'current: '
-          cmd_get "$k" 2>/dev/null || true
-          printf 'new value (empty to skip): '
-          local v
-          IFS= read -r v || return 0
-          if [ -n "$v" ]; then
-            cmd_set "${k}=${v}"
-          fi
-        fi
+        _menu_opt_edit_key
         ;;
       3)
-        printf 'feature name (without "feature_" prefix and "_enabled" suffix): '
-        local fn
-        IFS= read -r fn || return 0
-        if [ -n "$fn" ]; then
-          printf 'enable? [true/false]: '
-          local fv
-          IFS= read -r fv || return 0
-          if [ -n "$fv" ]; then
-            cmd_feature "${fn}=${fv}"
-          fi
-        fi
+        _menu_opt_feature
         ;;
       4)
-        # reviewer 設定 quick edit: review_* keys を一覧表示
-        local keys
-        keys=$(_yml_list_keys "$CONFIG_PATH" | grep '^review_' || true)
-        if [ -z "$keys" ]; then
-          _out "no review_* keys found"
-        else
-          local k
-          while IFS= read -r k; do
-            [ -z "$k" ] && continue
-            local cur
-            cur=$(_get_current "$k")
-            printf '%-40s = %s\n' "$k" "$cur"
-          done <<< "$keys"
-          printf '\nkey to edit (empty to skip): '
-          local edk
-          IFS= read -r edk || return 0
-          if [ -n "$edk" ]; then
-            printf 'new value: '
-            local edv
-            IFS= read -r edv || return 0
-            if [ -n "$edv" ]; then
-              cmd_set "${edk}=${edv}"
-            fi
-          fi
-        fi
+        _menu_opt_reviewer
         ;;
       5|q|Q|0|quit|exit)
         _out "bye. (smoke test: bash .claude/tests/hc-config-script-smoke.sh)"
@@ -981,8 +1032,44 @@ EOF
 
 # === arg parser ===
 
+# cmd に引数 $2 が必要かチェック。不在なら error + return 1
+# $1: cmd (例: --get), $2: 引数値 (省略可)
+_main_require_arg() {
+  local cmd="$1"
+  local arg="${2:-}"
+  if [ -z "$arg" ]; then
+    _err "${cmd} requires an argument"
+    return 1
+  fi
+  return 0
+}
+
+# CLI args dispatch
+# $@: --config 除外済み引数
+_main_dispatch() {
+  local cmd="${1:-}"
+  local arg="${2:-}"
+  case "$cmd" in
+    --list)      cmd_list ;;
+    --get)       _main_require_arg "$cmd" "$arg" && cmd_get "$arg" ;;
+    --set)       _main_require_arg "$cmd" "$arg" && cmd_set "$arg" ;;
+    --feature)   _main_require_arg "$cmd" "$arg" && cmd_feature "$arg" ;;
+    --reset)     _main_require_arg "$cmd" "$arg" && cmd_reset "$arg" ;;
+    --reset-all) cmd_reset_all ;;
+    --diff)      cmd_diff ;;
+    --validate)  cmd_validate ;;
+    --help|-h)   cmd_help ;;
+    *)
+      _err "unknown command: ${cmd}"
+      _err "run 'hc-config.sh --help' for usage"
+      return 1
+      ;;
+  esac
+}
+
 main() {
   # --config <path> を最初に処理 (他 cmd の前提)
+  # インラインループで CONFIG_PATH を設定 (subshell 回避)
   local args=("$@")
   local new_args=()
   local i=0
@@ -1001,6 +1088,7 @@ main() {
     esac
     i=$((i + 1))
   done
+
   # default config path
   if [ -z "$CONFIG_PATH" ]; then
     CONFIG_PATH="$DEFAULT_CONFIG"
@@ -1009,69 +1097,16 @@ main() {
     _err "config not found: ${CONFIG_PATH}"
     return 1
   fi
-  # path traversal guard (HIGH F-04)
   if ! _validate_config_path "$CONFIG_PATH"; then
     return 1
   fi
 
-  # 引数なし → 対話 menu
   if [ "${#new_args[@]}" -eq 0 ]; then
     cmd_interactive
     return $?
   fi
 
-  # CLI args dispatch
-  local cmd="${new_args[0]}"
-  case "$cmd" in
-    --list)
-      cmd_list
-      ;;
-    --get)
-      if [ "${#new_args[@]}" -lt 2 ]; then
-        _err "--get requires <key>"
-        return 1
-      fi
-      cmd_get "${new_args[1]}"
-      ;;
-    --set)
-      if [ "${#new_args[@]}" -lt 2 ]; then
-        _err "--set requires <key>=<value>"
-        return 1
-      fi
-      cmd_set "${new_args[1]}"
-      ;;
-    --feature)
-      if [ "${#new_args[@]}" -lt 2 ]; then
-        _err "--feature requires <name>=<true|false>"
-        return 1
-      fi
-      cmd_feature "${new_args[1]}"
-      ;;
-    --reset)
-      if [ "${#new_args[@]}" -lt 2 ]; then
-        _err "--reset requires <key>"
-        return 1
-      fi
-      cmd_reset "${new_args[1]}"
-      ;;
-    --reset-all)
-      cmd_reset_all
-      ;;
-    --diff)
-      cmd_diff
-      ;;
-    --validate)
-      cmd_validate
-      ;;
-    --help|-h)
-      cmd_help
-      ;;
-    *)
-      _err "unknown command: ${cmd}"
-      _err "run 'hc-config.sh --help' for usage"
-      return 1
-      ;;
-  esac
+  _main_dispatch "${new_args[@]}"
 }
 
 main "$@"
