@@ -8,45 +8,17 @@
 #   を妨げない)。task-rule-guard.sh の鏡像版で、対象 path が docs/ 直下に
 #   限定される。
 #
-#   task-40 拡張 (2026-05-26):
-#     .claude/rules/*.md / .claude/commands/*.md / .claude/templates/docs/**/*.md
-#     への新規 Write も block 対象に追加。対応 draft が存在し
-#     frontmatter (HTML comment 内) で `approved_at:` が非空 (or
-#     `retroactive: true`) なら pass。
-#
-#   task-40 Step 7 iter2 (2026-05-26) — HIGH 4 件 fix:
-#     HIGH-A: bypass.log 記録追加 (audit trail)
-#     HIGH-C: retroactive case の悪用検知 (bypass.log 記録 + JSON additionalContext で注意喚起)
-#     HIGH-D: file_path canonical 化 (../ / symlink 経由 BLOCK 回避を防止)
-#     HIGH-G: .claude/templates/** → .claude/templates/docs/** に縮小 (top-level 直下は対象外)
-#
-#   task-40 Step 7 iter3 (2026-05-26) — HIGH 4 + MEDIUM 2 + LOW 1 fix:
-#     HIGH-2 (TA-H1 + SEC-H2 + LOW-1 内包):
-#       canonicalize_path に realpath -m 2nd choice + python3/realpath 両不在時の
-#       fail-open warn 化 + 呼び出し後の改行 reject (injection 疑い、NUL は bash 文字列で truncate される)。
-#     HIGH-3 (SEC-H1):
-#       retroactive=true 単独通過を悪用防止のため、approved_by 副次条件で厳格化。
-#       approved_by が空なら blocked-retroactive-no-approved-by として block。
-#     HIGH-5 (ARCH-H1):
-#       L236-242 の dead code (noop ブロック + 5 行コメント) を削除、1 行コメントに圧縮。
-#     MEDIUM-6 (SEC-MA):
-#       ECC_RULE_CHANGE_GUARD_OFF / HC_RULE_CHANGE_GUARD_ENABLED=false の log を
-#       path 評価前に集中、遅延 log block を廃止 (ECC_DRAFT_FLOW_GUARD_OVERRIDE と
-#       timing 整合化)。
-#     MEDIUM-8 (ARCH-M2):
-#       retroactive warn の stderr + JSON additionalContext 2 経路を _retro_msg
-#       単一変数で DRY 化。
-#
-#   task-40 Step 7 iter4 (2026-05-26) — security MEDIUM 2 件 fix:
-#     MEDIUM-NEW-1 (SEC-iter4):
-#       extract_frontmatter_value に leading whitespace trim を追加。
-#       approved_by / approved_at / retroactive の whitespace-only 値による
-#       retroactive bypass を構造的に防止 (SEC-H1 完全性向上)。
-#     MEDIUM-NEW-2 (SEC-iter4):
-#       awk frontmatter parser の `-->` 終端を行頭アンカー (`^-->`) に限定 +
-#       `next` でフラグ切替行を skip。本文中の `foo --> bar` でコメントブロック
-#       誤閉鎖を防ぐ + malformed frontmatter で本文中の偽 key 行が誤マッチ
-#       する逆向き risk も解消。
+#   task-40 拡張 (2026-05-26) — 2026-05-28 user 指示で緩和 (撤廃):
+#     旧 task-40 拡張は .claude/rules/*.md / .claude/commands/*.md /
+#     .claude/templates/docs/**/*.md への **新規 Write** も block 対象とし、
+#     対応 draft で approved_at 非空 (or retroactive: true) を要求していた。
+#     2026-05-28 user 指示「既存 rules file の Edit は PASS (新規 Write のみ
+#     BLOCK) → 書き込みも許容してください」により、これらの規範文書 path は
+#     **新規 Write / 既存 Edit とも PASS** に緩和。本 hook はもはや
+#     .claude/rules/ / .claude/commands/ / .claude/templates/docs/ を一切
+#     監視しない (docs/ 直下の新規設計文書 block 機能のみ維持)。
+#     関連 bypass env (ECC_RULE_CHANGE_GUARD_OFF / HC_RULE_CHANGE_GUARD_ENABLED)
+#     は dead path となるが、後方互換のため残置 (set しても無害な no-op)。
 #
 # 設計起源:
 #   - docs/draft/system-reminder-attention-fix.md Wave 2.3 (2026-05-23)
@@ -60,22 +32,19 @@
 # 監視対象:
 #   - tool: Edit / Write
 #   - path1: <root>/docs/<basename>.md (深さ 1 のみ、既存挙動)
-#   - path2 (task-40): <root>/.claude/rules/<basename>.md (深さ 1)
-#   - path3 (task-40): <root>/.claude/commands/<basename>.md (深さ 1)
-#   - path4 (task-40, iter2 縮小): <root>/.claude/templates/docs/**/<basename>.md
-#                                    (深さ 2 以上、top-level 直下は対象外)
 #   - 除外: <root>/docs/draft/** / <root>/docs/tasks/** / 深さ 2 以上
 #   - 除外: 既存 file の Edit (新規 Write のみ)
 #   - 除外 (task-24 W3): HC_DOCS_APPROVED_DIR 配下 (CSV 複数値対応)
 #                        e.g. HC_DOCS_APPROVED_DIR=design で
 #                             docs/design/foo.md は深さ 2 のみ PASS
+#   - 監視対象外 (2026-05-28 緩和): .claude/rules/ / .claude/commands/ /
+#                        .claude/templates/docs/ は新規 Write / Edit とも PASS
+#                        (旧 task-40 拡張を撤廃)
 #
 # bypass:
 #   - 対応する <root>/docs/draft/<basename>.md を先に作る (推奨)
 #   - HC_DOCS_APPROVED_DIR=<dir>[,<dir>...] を harness-config / env で設定
-#   - 環境変数 ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 (一時、両 path カバー)
-#   - 環境変数 ECC_RULE_CHANGE_GUARD_OFF=1 (task-40 新 path のみ skip)
-#   - HC_RULE_CHANGE_GUARD_ENABLED=false (task-40 config レベル、default true)
+#   - 環境変数 ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 (一時、docs/ block を skip)
 #   - harness-config.yml の draft_flow_guard_whitelist に basename 追加
 #
 # 失敗時:
@@ -210,252 +179,22 @@ task_dir="${HC_TASK_DIR:-docs/tasks}"
 draft_dir="${HC_DRAFT_DIR:-docs/draft}"
 whitelist_raw="${HC_DRAFT_FLOW_GUARD_WHITELIST:-}"
 approved_dir_raw="${HC_DOCS_APPROVED_DIR:-}"
-rule_change_guard_enabled="${HC_RULE_CHANGE_GUARD_ENABLED:-true}"
 
 docs_root="$root/docs"
 
 # ----------------------------------------------------------------------
-# MEDIUM-6 (iter3): ECC_RULE_CHANGE_GUARD_OFF / HC_RULE_CHANGE_GUARD_ENABLED
-# の log を path_match 評価前に集中 (ECC_DRAFT_FLOW_GUARD_OVERRIDE と timing 整合化)。
-# 元々 new path (.claude/rules/, .claude/commands/, .claude/templates/docs/) 配下なのに
-# env で skip された場合のみ記録。
+# task-40 拡張は 2026-05-28 user 指示で撤廃 (緩和)。
+# .claude/rules/ / .claude/commands/ / .claude/templates/docs/ への
+# 新規 Write / 既存 Edit はいずれも block しない (本 hook では一切監視しない)。
+# 旧 frontmatter parser (extract_frontmatter_value / verify_draft_status) +
+# 新 path pattern 判定 + retroactive 厳格化ロジックは併せて削除した。
+# bypass env (ECC_RULE_CHANGE_GUARD_OFF / HC_RULE_CHANGE_GUARD_ENABLED) は
+# 後方互換のため caller が set しても無害な no-op として残置 (本 hook は参照しない)。
+# 以降は docs/ 直下の新規設計文書 block 機能 (task-40 以前の元機能) のみ。
 # ----------------------------------------------------------------------
-_is_new_path_for_log=0
-case "$file_path" in
-  "$root/.claude/rules/"*|"$root/.claude/commands/"*|"$root/.claude/templates/docs/"*)
-    _is_new_path_for_log=1
-    ;;
-esac
-if [ "$_is_new_path_for_log" = "1" ]; then
-  if [ "${ECC_RULE_CHANGE_GUARD_OFF:-0}" = "1" ]; then
-    if declare -f log_bypass >/dev/null 2>&1; then
-      log_bypass "draft-flow-guard" "ECC_RULE_CHANGE_GUARD_OFF" "${ECC_BYPASS_REASON:-(not provided)} file=${file_path}"
-    fi
-  elif [ "$rule_change_guard_enabled" = "false" ]; then
-    if declare -f log_bypass >/dev/null 2>&1; then
-      log_bypass "draft-flow-guard" "HC_RULE_CHANGE_GUARD_ENABLED" "${ECC_BYPASS_REASON:-(config off)} file=${file_path}"
-    fi
-  fi
-fi
 
 # ----------------------------------------------------------------------
-# frontmatter parser: HTML comment 内の `key: value` を抽出 (jq 不要)
-# 引数 1: draft_path
-# 引数 2: key (e.g. approved_at / retroactive)
-# stdout: value (trim 済、不在は空文字)
-#
-# iter4 MEDIUM-NEW-1 + MEDIUM-NEW-2 fix:
-#   - awk `-->` 終端を行頭アンカー `^-->` に限定 + `next` でフラグ切替行 skip
-#     (本文中の `foo --> bar` でコメントブロック誤閉鎖を防ぐ)
-#   - sed pipeline に leading whitespace trim 追加
-#     (approved_by 等の whitespace-only 値による retroactive bypass を防ぐ)
-# ----------------------------------------------------------------------
-extract_frontmatter_value() {
-  local _draft_path="$1"
-  local _key="$2"
-  [ -f "$_draft_path" ] || { printf ''; return 0; }
-  # <!-- ... --> ブロック内の最初の `<key>:` 行を抽出
-  # awk で ^<!-- → ^--> 範囲を抽出 (行頭アンカー限定) + grep で key 行 + sed で value 取得 + leading/trailing trim
-  awk '/^<!--/{flag=1; next} /^-->/{flag=0; next} flag' "$_draft_path" 2>/dev/null \
-    | grep -E "^[[:space:]]*${_key}:" \
-    | head -1 \
-    | sed -E "s/^[[:space:]]*${_key}:[[:space:]]*//" \
-    | sed -E 's/^[[:space:]]+//' \
-    | sed -E 's/[[:space:]]+$//'
-}
-
-# ----------------------------------------------------------------------
-# draft 検証:
-#   - approved_at 非空                                  → "approved"
-#   - retroactive: true ∧ approved_by 非空              → "retroactive"
-#   - retroactive: true ∧ approved_by 空 (HIGH-3 iter3) → "blocked-retroactive-no-approved-by"
-#   - それ以外 (draft 不在 / approved_at 空)            → "blocked"
-# 引数 1: slug (basename without .md)
-# stdout: status
-# ----------------------------------------------------------------------
-verify_draft_status() {
-  local _slug="$1"
-  local _draft_path="$root/$draft_dir/${_slug}.md"
-  if [ ! -f "$_draft_path" ]; then
-    printf 'blocked'
-    return 0
-  fi
-  local _retroactive
-  _retroactive=$(extract_frontmatter_value "$_draft_path" "retroactive")
-  if [ "$_retroactive" = "true" ]; then
-    # HIGH-3 (iter3): retroactive=true は approved_by 副次条件で厳格化。
-    # 任意 draft で `retroactive: true` だけ書く悪用を防ぐ。
-    # iter4 MEDIUM-NEW-1: extract_frontmatter_value の leading trim 強化により
-    # whitespace-only 値も空判定される (`-n` で長さ 0 として扱われる)。
-    local _approved_by
-    _approved_by=$(extract_frontmatter_value "$_draft_path" "approved_by")
-    if [ -n "$_approved_by" ]; then
-      printf 'retroactive'
-      return 0
-    fi
-    printf 'blocked-retroactive-no-approved-by'
-    return 0
-  fi
-  local _approved_at
-  _approved_at=$(extract_frontmatter_value "$_draft_path" "approved_at")
-  if [ -n "$_approved_at" ]; then
-    printf 'approved'
-    return 0
-  fi
-  printf 'blocked'
-}
-
-# ----------------------------------------------------------------------
-# task-40 新 path pattern 判定 (.claude/rules / .claude/commands / .claude/templates/docs)
-# HIGH-G: .claude/templates/** → .claude/templates/docs/** に縮小
-# ----------------------------------------------------------------------
-rule_change_path_match=0
-rule_change_category=""
-
-if [ "$rule_change_guard_enabled" != "false" ] && [ "${ECC_RULE_CHANGE_GUARD_OFF:-0}" != "1" ]; then
-  case "$file_path" in
-    "$root/.claude/rules/"*)
-      # 深さ 1 のみ (.claude/rules/<basename>.md)
-      _sub="${file_path#$root/.claude/rules/}"
-      case "$_sub" in
-        */*) ;;  # 深さ 2 以上は対象外
-        *.md|*.mdx)
-          rule_change_path_match=1
-          rule_change_category="rules"
-          ;;
-      esac
-      ;;
-    "$root/.claude/commands/"*)
-      # 深さ 1 のみ (.claude/commands/<basename>.md)
-      _sub="${file_path#$root/.claude/commands/}"
-      case "$_sub" in
-        */*) ;;  # 深さ 2 以上は対象外
-        *.md|*.mdx)
-          rule_change_path_match=1
-          rule_change_category="commands"
-          ;;
-      esac
-      ;;
-    "$root/.claude/templates/docs/"*)
-      # HIGH-G: 再帰だが templates/docs/ 配下に限定
-      # (.claude/templates/foo.md のような top-level 直下は対象外)
-      _sub="${file_path#$root/.claude/templates/docs/}"
-      case "$_sub" in
-        *.md|*.mdx)
-          rule_change_path_match=1
-          rule_change_category="templates"
-          ;;
-      esac
-      ;;
-  esac
-fi
-
-# HIGH-5 (iter3): rule_change_guard 対応 path への新規 Write 判定
-# (env bypass の log は MEDIUM-6 で path 評価前に集中処理済)
-if [ "$rule_change_path_match" = "1" ]; then
-  # 既存 file の Edit は無条件通過 (新規 Write のみ block 対象)
-  if [ -f "$file_path" ]; then
-    exit 0
-  fi
-
-  basename_md=$(basename "$file_path")
-  slug="${basename_md%.md}"
-  slug="${slug%.mdx}"
-
-  status=$(verify_draft_status "$slug")
-  draft_path="$root/$draft_dir/${slug}.md"
-
-  case "$status" in
-    approved)
-      exit 0
-      ;;
-    retroactive)
-      # HIGH-C: retroactive case の悪用検知
-      # - bypass.log に記録 (audit trail で誤用追跡)
-      # - stderr warn + JSON additionalContext で main agent に強制注意喚起
-      # MEDIUM-8 (iter3): stderr + JSON 2 経路を _retro_msg 単一変数で DRY 化
-      if declare -f log_bypass >/dev/null 2>&1; then
-        log_bypass "draft-flow-guard" "retroactive-pass" "category=${rule_change_category} file=${file_path} draft=${draft_path}"
-      fi
-      _retro_msg="[draft-flow-guard] retroactive=true 経由で通過 (category: ${rule_change_category})
-
-  対象 file : ${file_path}
-  対応 draft: ${draft_path}
-
-retroactive は **緊急 retroactive リカバリ専用** です。誤用検知のため bypass.log に記録済。
-次回以降は通常フローを遵守してください:
-  1. /new-draft <slug>            # 先に設計を起こす
-  2. user 承認 (approved_at 非空)
-  3. /new-task <id> <slug>        # task 化してから着手
-
-設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)"
-      # stderr (interactive 用)
-      printf '%s\n' "$_retro_msg" >&2
-      # JSON additionalContext (main agent 用)
-      jq -n --arg r "$_retro_msg" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$r}}'
-      exit 0
-      ;;
-    blocked-retroactive-no-approved-by)
-      # HIGH-3 (iter3): retroactive: true だけで approved_by 不在の draft は不正
-      cat <<EOF >&2
-[draft-flow-guard] BLOCK: retroactive draft に approved_by が必須
-
-  対象 file : $file_path (category: $rule_change_category)
-  対応 draft: $draft_path
-  状態      : frontmatter retroactive: true は記載されているが approved_by が空
-
-retroactive リカバリは緊急用途であり、誰が承認したかの監査痕跡が必要です。
-draft frontmatter に approved_by: <承認者名 or 役割> を追記してください。
-
-例:
-  <!--
-  approved_by: takuma hirai
-  retroactive: true
-  -->
-
-または通常フロー (推奨):
-  1. /new-draft $slug            # 先に設計を起こす
-  2. user 承認 (approved_at 非空)
-  3. /new-task <id> $slug        # task 化してから着手
-
-bypass (一時、緊急時のみ):
-  - ECC_RULE_CHANGE_GUARD_OFF=1 環境変数をセット (新 path のみ skip)
-  - ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 環境変数をセット (両 path 全 skip)
-  - HC_RULE_CHANGE_GUARD_ENABLED=false (config レベル、default true)
-
-設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40 Step 7 iter3 HIGH-3)
-EOF
-      exit 2
-      ;;
-    blocked)
-      cat <<EOF >&2
-[draft-flow-guard] BLOCK: $rule_change_category 直下への新規規範文書 Write を検出
-
-  対象 file : $file_path
-  対応 draft: $draft_path (不在 or approved_at 空)
-
-「設計→承認→タスク追加」フロー (task-management.md) を尊重してください:
-
-  1. /new-draft $slug            # docs/draft/${slug}.md を起こす
-  2. user 承認を受ける (frontmatter に approved_at: YYYY-MM-DD 記入)
-  3. /new-task <id> $slug        # docs/tasks/ に反映 + 承認版を配置
-
-bypass (一時、緊急時のみ):
-  - 先に touch $draft_path してから frontmatter approved_at を埋める
-  - or 既存規範違反のリカバリなら frontmatter retroactive: true + approved_by を立てる
-  - or ECC_RULE_CHANGE_GUARD_OFF=1 環境変数をセット (新 path のみ skip)
-  - or ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 環境変数をセット (両 path 全 skip)
-  - or HC_RULE_CHANGE_GUARD_ENABLED=false (config レベル、default true)
-
-設計起源: docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)
-EOF
-      exit 2
-      ;;
-  esac
-fi
-
-# ----------------------------------------------------------------------
-# 既存 docs/ 直下判定 (回帰維持)
+# docs/ 直下判定 (元機能、task-40 以前から不変)
 # ----------------------------------------------------------------------
 
 # file_path が docs/ 配下か

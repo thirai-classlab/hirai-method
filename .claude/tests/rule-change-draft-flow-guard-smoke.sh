@@ -1,35 +1,36 @@
 #!/usr/bin/env bash
-# rule-change-draft-flow-guard-smoke.sh — task-40 Step 7 iter3 smoke
+# rule-change-draft-flow-guard-smoke.sh — task-40 拡張の緩和 (2026-05-28) smoke
 #
 # 設計起源:
-#   docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40)
-#   Step 4 で拡張した draft-flow-guard.sh の新 path pattern + frontmatter parse +
-#   bypass env + 既存 docs/ 直下 BLOCK 回帰の検証。
-#   Step 7 iter2 (HIGH-EFI + MEDIUM 1-4, 10) で 6 case → 12 case へ拡張。
-#   Step 7 iter3 (HIGH-4 + MEDIUM 1-5,7 + LOW 1-2) で 12 case → 14 case へ拡張。
+#   docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md (task-40、2026-05-26)
+#   2026-05-28 user 指示「既存 rules file の Edit は PASS (新規 Write のみ
+#   BLOCK) → 書き込みも許容してください」で task-40 拡張部分を撤廃。
+#
+# 緩和内容:
+#   旧 task-40 拡張は .claude/rules/*.md / .claude/commands/*.md /
+#   .claude/templates/docs/**/*.md への新規 Write を draft 承認 (approved_at /
+#   retroactive) 不在で BLOCK していた。本緩和で **これらは新規 Write / 既存
+#   Edit とも PASS** になる (本 hook は一切監視しない)。
+#   docs/ 直下の新規設計文書 BLOCK + 既存 Edit PASS は **完全維持** (回帰)。
 #
 # 対象 hook:
-#   .claude/hooks/draft-flow-guard.sh (PreToolUse Edit/Write、task-40 拡張版)
+#   .claude/hooks/draft-flow-guard.sh (PreToolUse Edit/Write)
 #
-# 検証範囲 (14 ケース):
-#   Case 1:  .claude/rules/foo.md 新規 Write + 対応 draft 不在 → BLOCK (exit 2) + stderr "BLOCK"
+# 検証範囲 (13 active + 1 skip):
+#   Case 1:  .claude/rules/foo.md 新規 Write + 対応 draft 不在 → PASS (緩和、旧 BLOCK)
 #   Case 2:  .claude/rules/foo.md 新規 Write + 対応 draft あり (approved_at 非空) → PASS
-#   Case 3:  .claude/rules/foo.md 新規 Write + 対応 draft あり (approved_at key 不在) → BLOCK + stderr "BLOCK"
-#            ※ key 不在 (draft 存在のみ) の境界値。Case 10 (空白のみ) / Case 11 (key only 値なし) と
-#               合わせて 3 境界値を網羅:
-#               Case 3 = approved_at key 不在 / Case 10 = 空白のみ / Case 11 = key only
-#   Case 4:  .claude/templates/docs/tasks/foo.md 新規 Write + retroactive: true + approved_by 非空
-#            → PASS + warn (stderr 'retroactive') + bypass.log 記録 + JSON stdout valid
-#   Case 5:  .claude/rules/foo.md 新規 Write + ECC_RULE_CHANGE_GUARD_OFF=1 → PASS + bypass.log (strict)
-#   Case 6:  docs/new-feature.md 新規 Write + 対応 draft 不在 → BLOCK (既存挙動回帰)
-#   Case 7:  .claude/commands/foo.md 新規 Write + 対応 draft 不在 → BLOCK (exit 2) + stderr "BLOCK" (HIGH-E)
-#   Case 8:  既存 .claude/rules/<existing>.md Edit (tool_name=Edit) → PASS (HIGH-F)
-#   Case 9:  ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 で .claude/rules/foo.md Write → PASS + bypass.log (strict, HIGH-I)
-#   Case 10: approved_at: (空白のみ) draft → BLOCK (MEDIUM-1a)
-#   Case 11: approved_at: (key only、値なし) draft → BLOCK (MEDIUM-1b)
-#   Case 12: .claude/rules/sub/foo.md (深さ 2、out of scope) Write → PASS (MEDIUM-10)
-#   Case 13: HC_RULE_CHANGE_GUARD_ENABLED=false で .claude/rules/foo.md Write → PASS + bypass.log (MEDIUM-4)
-#   Case 14: YAML frontmatter approved_at: 2026-05-26 → PASS [SKIP: Future work, YAML 未対応]
+#   Case 3:  .claude/rules/foo.md 新規 Write + 対応 draft あり (approved_at key 不在) → PASS (緩和、旧 BLOCK)
+#   Case 4:  .claude/templates/docs/tasks/foo.md 新規 Write + retroactive draft → PASS (緩和、旧 PASS+warn)
+#   Case 5:  .claude/rules/foo.md + ECC_RULE_CHANGE_GUARD_OFF=1 → PASS (env は dead path、緩和後も PASS)
+#   Case 6:  docs/new-feature.md 新規 Write + 対応 draft 不在 → BLOCK (docs/ block 維持、回帰)
+#   Case 7:  .claude/commands/foo.md 新規 Write + 対応 draft 不在 → PASS (緩和、旧 BLOCK)
+#   Case 8:  既存 .claude/rules/<existing>.md Edit → PASS (緩和前後とも PASS)
+#   Case 9:  ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 で .claude/rules/foo.md Write → PASS + bypass.log (override は hook 冒頭で維持)
+#   Case 10: approved_at: (空白のみ) draft で .claude/rules/foo.md → PASS (緩和、旧 BLOCK)
+#   Case 11: approved_at: (key only) draft で .claude/rules/foo.md → PASS (緩和、旧 BLOCK)
+#   Case 12: .claude/rules/sub/foo.md (深さ 2) Write → PASS (緩和前後とも PASS)
+#   Case 13: HC_RULE_CHANGE_GUARD_ENABLED=false で .claude/rules/foo.md Write → PASS (config は dead path、緩和後も PASS)
+#   Case 14: docs/draft/ + docs/tasks/ 配下 → PASS [SKIP: 既存 draft-flow-guard-smoke.sh で網羅]
 #
 # 重要制約:
 #   - file-top の set -uo pipefail (errexit 外し、feedback_set_e_in_sourced_libs)
@@ -41,7 +42,7 @@
 #   bash .claude/tests/rule-change-draft-flow-guard-smoke.sh
 #
 # 終了コード:
-#   0 = 全 PASS (WARN あり含む) / 1 = 1 件以上 FAIL
+#   0 = 全 PASS / 1 = 1 件以上 FAIL
 
 set -uo pipefail
 
@@ -68,14 +69,11 @@ mkdir -p "$TMP_ROOT/.git" \
          "$TMP_ROOT/.claude/rules/sub" \
          "$TMP_ROOT/.claude/.workflow-state"
 
-# MEDIUM-4: trap で tmp_root cleanup (中断時もリーク防止)
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 PASS=0
 FAIL=0
-WARN=0
 FAILED_CASES=()
-WARNED_CASES=()
 
 # hook input JSON (PreToolUse Edit/Write)
 hook_input() {
@@ -91,7 +89,6 @@ print(json.dumps({
 }
 
 # hook を tmp project root cwd で実行
-# CLAUDE_PROJECT_DIR を TMP_ROOT に設定してから hook 起動 (bypass.log 先を統一)
 run_hook() {
   local tool="$1"
   local fp="$2"
@@ -107,11 +104,6 @@ run_hook() {
 }
 
 # helper: draft を frontmatter 付きで作成
-# 引数:
-#   $1 = path
-#   $2 = approved_at (値; 空文字なら key 自体を出力しない)
-#   $3 = retroactive (省略可; "true" or "")
-#   $4 = approved_by (省略可; iter3 HIGH-3 dependency)
 write_draft() {
   local _path="$1"
   local _approved_at="$2"
@@ -129,7 +121,6 @@ write_draft() {
   } > "$_path"
 }
 
-# helper: approved_at key のみ (値なし) の draft を作成
 write_draft_key_only() {
   local path="$1"
   {
@@ -141,7 +132,6 @@ write_draft_key_only() {
   } > "$path"
 }
 
-# helper: approved_at に空白のみの draft を作成
 write_draft_spaces_only() {
   local path="$1"
   {
@@ -153,24 +143,35 @@ write_draft_spaces_only() {
   } > "$path"
 }
 
-# === Case 1: .claude/rules/foo.md 新規 Write + 対応 draft 不在 → BLOCK + stderr "BLOCK" ===
-case1_rules_no_draft_block() {
-  local label="Case 1: .claude/rules/case1.md w/o draft → BLOCK (exit 2) + stderr BLOCK"
+# 汎用 PASS 期待 assertion (rc=0)
+assert_pass() {
+  local label="$1"; local rc="$2"
+  if [ "$rc" -eq 0 ]; then
+    PASS=$((PASS + 1)); printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1)); FAILED_CASES+=("$label (rc=$rc expected 0)")
+    printf "  FAIL: %s (rc=%d expected 0)\n" "$label" "$rc"
+  fi
+}
+
+# 汎用 BLOCK 期待 assertion (rc=2)
+assert_block() {
+  local label="$1"; local rc="$2"
+  if [ "$rc" -eq 2 ]; then
+    PASS=$((PASS + 1)); printf "  PASS: %s\n" "$label"
+  else
+    FAIL=$((FAIL + 1)); FAILED_CASES+=("$label (rc=$rc expected 2)")
+    printf "  FAIL: %s (rc=%d expected 2)\n" "$label" "$rc"
+  fi
+}
+
+# === Case 1 (緩和): .claude/rules/foo.md 新規 Write + 対応 draft 不在 → PASS ===
+case1_rules_no_draft_pass() {
+  local label="Case 1 (緩和): .claude/rules/case1.md w/o draft → PASS (旧 BLOCK)"
   local fp="${TMP_ROOT}/.claude/rules/case1.md"
   local rc=0
-  local stderr_out
-  # MEDIUM-2: stderr に "BLOCK" が含まれることを assertion
-  stderr_out=$(run_hook Write "$fp" 2>&1 >/dev/null) || rc=$?
-
-  if [ "$rc" -eq 2 ] && printf '%s' "$stderr_out" | grep -q "BLOCK"; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc, stderr_has_BLOCK=$(printf '%s' "$stderr_out" | grep -c "BLOCK" 2>/dev/null || echo 0))")
-    printf "  FAIL: %s (rc=%d expected 2, stderr_has_BLOCK=%s)\n" "$label" "$rc" \
-      "$(printf '%s' "$stderr_out" | grep -c "BLOCK" 2>/dev/null || echo 0)"
-  fi
+  run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
+  assert_pass "$label" "$rc"
 }
 
 # === Case 2: .claude/rules/foo.md + draft (approved_at 非空) → PASS ===
@@ -180,310 +181,153 @@ case2_rules_approved_pass() {
   write_draft "${TMP_ROOT}/docs/draft/case2.md" "2026-05-26"
   local rc=0
   run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
-
-  if [ "$rc" -eq 0 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc)")
-    printf "  FAIL: %s (rc=%d expected 0)\n" "$label" "$rc"
-  fi
+  assert_pass "$label" "$rc"
 }
 
-# === Case 3: .claude/rules/foo.md + draft (approved_at key 不在) → BLOCK + stderr "BLOCK" ===
-# 仕様 (MEDIUM-A 案 b): draft は存在するが frontmatter に approved_at key 自体が不在。
-# write_draft に "" を渡すと [ -n "$approved_at" ] が false で key 自体が生成されない。
-# これは意図通りの境界値 = "draft 存在 + approved_at key 不在"。
-# 3 境界値全網羅:
-#   Case 3  = approved_at key 不在 (本 Case) ← draft 存在するが approved_at key 自体なし
-#   Case 10 = approved_at: <空白のみ> (key あり・値が空白) ← Case 3/11 との 3 段階境界値
-#   Case 11 = approved_at: (key only・値なし改行直後) ← key のみで値が皆無
-case3_rules_unapproved_block() {
-  local label="Case 3: .claude/rules/case3.md w/ draft (approved_at key absent) → BLOCK (exit 2) + stderr BLOCK"
+# === Case 3 (緩和): .claude/rules/foo.md + draft (approved_at key 不在) → PASS ===
+case3_rules_unapproved_pass() {
+  local label="Case 3 (緩和): .claude/rules/case3.md w/ draft (approved_at key absent) → PASS (旧 BLOCK)"
   local fp="${TMP_ROOT}/.claude/rules/case3.md"
-  # draft 存在するが approved_at key 自体が frontmatter に不在 (write_draft に "" 渡しで key skip)
   write_draft "${TMP_ROOT}/docs/draft/case3.md" "" ""
   local rc=0
-  local stderr_out
-  # MEDIUM-2: stderr に "BLOCK" が含まれることを assertion
-  stderr_out=$(run_hook Write "$fp" 2>&1 >/dev/null) || rc=$?
-
-  if [ "$rc" -eq 2 ] && printf '%s' "$stderr_out" | grep -q "BLOCK"; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc, stderr_has_BLOCK=$(printf '%s' "$stderr_out" | grep -c "BLOCK" 2>/dev/null || echo 0))")
-    printf "  FAIL: %s (rc=%d expected 2, stderr_has_BLOCK=%s)\n" "$label" "$rc" \
-      "$(printf '%s' "$stderr_out" | grep -c "BLOCK" 2>/dev/null || echo 0)"
-  fi
+  run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
+  assert_pass "$label" "$rc"
 }
 
-# === Case 4: .claude/templates/docs/tasks/foo.md + retroactive: true + approved_by 非空 → PASS + warn + bypass.log + JSON valid ===
-# HIGH-4: bypass.log 記録 assertion 追加
-# MEDIUM-2 (TDD-M2 + QA-L1): JSON additionalContext 検証 を HIGH-4 に統合
-# retroactive=true かつ approved_by 非空 (HIGH-3 副次条件) を write_draft に渡す
-case4_templates_retroactive_pass_warn() {
-  local label="Case 4: templates/docs retroactive draft → PASS + warn + bypass.log"
+# === Case 4 (緩和): templates/docs retroactive draft → PASS (warn なし) ===
+case4_templates_retroactive_pass() {
+  local label="Case 4 (緩和): templates/docs retroactive draft → PASS (旧 PASS+warn、現 plain PASS)"
   local fp="${TMP_ROOT}/.claude/templates/docs/tasks/case4.md"
-  local draft="${TMP_ROOT}/docs/draft/case4.md"
-  # retroactive=true + approved_by="Hirai" (HIGH-3 副次条件)
-  write_draft "$draft" "" "true" "Hirai"
-  local bypass_log="${TMP_ROOT}/.claude/.workflow-state/bypass.log"
-  rm -f "$bypass_log"
-  local stderr_out stdout_out rc=0
-  stdout_out=$(run_hook Write "$fp" 2>/tmp/case4_stderr) || rc=$?
-  stderr_out=$(cat /tmp/case4_stderr 2>/dev/null || true)
-  rm -f /tmp/case4_stderr
-
-  local bypass_logged=0
-  if [ -f "$bypass_log" ] && grep -q "retroactive-pass" "$bypass_log" 2>/dev/null; then
-    bypass_logged=1
-  fi
-
-  # JSON stdout validity 検証 (hookSpecificOutput.additionalContext 等の existence は best-effort)
-  local json_valid=0
-  if printf '%s' "$stdout_out" | jq . >/dev/null 2>&1; then
-    json_valid=1
-  fi
-
-  if [ "$rc" -eq 0 ] && printf '%s' "$stderr_out" | grep -q "retroactive" && [ "$bypass_logged" -eq 1 ] && [ "$json_valid" -eq 1 ]; then
-    PASS=$((PASS + 1)); printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc stderr_retro=$(printf '%s' "$stderr_out" | grep -c retroactive) bypass=$bypass_logged json=$json_valid)")
-    printf "  FAIL: %s (rc=%d expected 0, stderr_retro=%s, bypass=%d, json=%d)\n" \
-      "$label" "$rc" \
-      "$(printf '%s' "$stderr_out" | grep -c retroactive)" \
-      "$bypass_logged" "$json_valid"
-  fi
+  write_draft "${TMP_ROOT}/docs/draft/case4.md" "" "true" "Hirai"
+  local rc=0
+  run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
+  assert_pass "$label" "$rc"
 }
 
-# === Case 5: .claude/rules/foo.md + ECC_RULE_CHANGE_GUARD_OFF=1 → PASS + bypass.log (strict) ===
-# MEDIUM-3 (TDD-M3 + QA-M1): bypass.log assertion を Case 9 と対称に strict 化
-case5_bypass_env_pass() {
-  local label="Case 5: ECC_RULE_CHANGE_GUARD_OFF=1 on BLOCK case → PASS + bypass.log (strict)"
+# === Case 5 (緩和): ECC_RULE_CHANGE_GUARD_OFF=1 → PASS (env は dead path だが結果 PASS) ===
+case5_rule_guard_off_pass() {
+  local label="Case 5 (緩和): ECC_RULE_CHANGE_GUARD_OFF=1 on rules → PASS (env dead path)"
   local fp="${TMP_ROOT}/.claude/rules/case5.md"
-  local bypass_log="${TMP_ROOT}/.claude/.workflow-state/bypass.log"
-  rm -f "$bypass_log"
   local rc=0
   run_hook Write "$fp" ECC_RULE_CHANGE_GUARD_OFF=1 >/dev/null 2>&1 || rc=$?
-
-  local bypass_logged=0
-  if [ -f "$bypass_log" ] && grep -q "ECC_RULE_CHANGE_GUARD_OFF" "$bypass_log" 2>/dev/null; then
-    bypass_logged=1
-  fi
-
-  if [ "$rc" -eq 0 ] && [ "$bypass_logged" -eq 1 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc bypass=$bypass_logged)")
-    printf "  FAIL: %s (rc=%d expected 0, bypass=%d)\n" "$label" "$rc" "$bypass_logged"
-  fi
+  assert_pass "$label" "$rc"
 }
 
-# === Case 6: docs/new-feature.md 新規 Write + draft 不在 → BLOCK (回帰検証) ===
+# === Case 6: docs/new-feature.md 新規 Write + draft 不在 → BLOCK (docs/ block 維持、回帰) ===
 case6_docs_root_block_regression() {
-  local label="Case 6: docs/case6.md w/o draft → BLOCK (regression check)"
+  local label="Case 6 (回帰): docs/case6.md w/o draft → BLOCK (docs/ block 維持)"
   local fp="${TMP_ROOT}/docs/case6.md"
   local rc=0
   run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
-
-  if [ "$rc" -eq 2 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc)")
-    printf "  FAIL: %s (rc=%d expected 2)\n" "$label" "$rc"
-  fi
+  assert_block "$label" "$rc"
 }
 
-# === Case 7 (HIGH-E): .claude/commands/foo.md 新規 Write + draft 不在 → BLOCK + stderr "BLOCK" ===
-# MEDIUM-5 (TA-M2): rc=2 のみでなく stderr 'BLOCK' も Case 1/3 と対称に検証
-case7_commands_no_draft_block() {
-  local label="Case 7 (HIGH-E): .claude/commands/case7.md w/o draft → BLOCK (exit 2) + stderr BLOCK"
+# === Case 7 (緩和): .claude/commands/foo.md 新規 Write + draft 不在 → PASS ===
+case7_commands_no_draft_pass() {
+  local label="Case 7 (緩和): .claude/commands/case7.md w/o draft → PASS (旧 BLOCK)"
   local fp="${TMP_ROOT}/.claude/commands/case7.md"
   local rc=0
-  local stderr_out
-  stderr_out=$(run_hook Write "$fp" 2>&1 >/dev/null) || rc=$?
-
-  if [ "$rc" -eq 2 ] && printf '%s' "$stderr_out" | grep -q "BLOCK"; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc, stderr_has_BLOCK=$(printf '%s' "$stderr_out" | grep -c "BLOCK" 2>/dev/null || echo 0))")
-    printf "  FAIL: %s (rc=%d expected 2, stderr_has_BLOCK=%s)\n" "$label" "$rc" \
-      "$(printf '%s' "$stderr_out" | grep -c "BLOCK" 2>/dev/null || echo 0)"
-  fi
+  run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
+  assert_pass "$label" "$rc"
 }
 
-# === Case 8 (HIGH-F): 既存 .claude/rules/<existing>.md Edit → PASS ===
-# 設計仕様: 新規 Write のみ BLOCK、既存 file の Edit は無条件 PASS
+# === Case 8: 既存 .claude/rules/<existing>.md Edit → PASS (緩和前後とも) ===
 case8_existing_rules_edit_pass() {
-  local label="Case 8 (HIGH-F): existing .claude/rules/existing.md Edit → PASS (edit pass-through)"
+  local label="Case 8: existing .claude/rules/existing.md Edit → PASS (edit pass-through)"
   local fp="${TMP_ROOT}/.claude/rules/existing.md"
-  # 既存 file として touch で作成 (file が存在する状態を作る)
   touch "$fp"
   local rc=0
   run_hook Edit "$fp" >/dev/null 2>&1 || rc=$?
-
-  if [ "$rc" -eq 0 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc)")
-    printf "  FAIL: %s (rc=%d expected 0)\n" "$label" "$rc"
-  fi
+  assert_pass "$label" "$rc"
 }
 
-# === Case 9 (HIGH-I): ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 + .claude/rules/foo.md Write → PASS + bypass.log (strict) ===
-# MEDIUM-1 (TDD-M1 + SEC-MC): best-effort 容認を撤廃して strict 検証に格上げ
-# bypass-logger.sh が CLAUDE_PROJECT_DIR=$TMP_ROOT 環境で機能する前提で strict PASS/FAIL のみ
+# === Case 9: ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 + .claude/rules/foo.md Write → PASS + bypass.log ===
+# override は hook 冒頭 (docs/ block 含む全 path) で維持されるため bypass.log 記録も継続。
 case9_override_env_pass_and_bypass_log() {
-  local label="Case 9 (HIGH-I): ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 → PASS + bypass.log (strict)"
+  local label="Case 9: ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 → PASS + bypass.log (override 維持)"
   local fp="${TMP_ROOT}/.claude/rules/case9.md"
   local bypass_log="${TMP_ROOT}/.claude/.workflow-state/bypass.log"
-  # bypass.log を初期化
   rm -f "$bypass_log"
   local rc=0
   run_hook Write "$fp" ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 >/dev/null 2>&1 || rc=$?
 
-  # bypass.log に記録されているか確認
   local bypass_logged=0
   if [ -f "$bypass_log" ] && grep -q "ECC_DRAFT_FLOW_GUARD_OVERRIDE" "$bypass_log" 2>/dev/null; then
     bypass_logged=1
   fi
 
   if [ "$rc" -eq 0 ] && [ "$bypass_logged" -eq 1 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
+    PASS=$((PASS + 1)); printf "  PASS: %s\n" "$label"
   else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc, bypass_logged=$bypass_logged)")
+    FAIL=$((FAIL + 1)); FAILED_CASES+=("$label (rc=$rc, bypass_logged=$bypass_logged)")
     printf "  FAIL: %s (rc=%d expected 0, bypass=%d)\n" "$label" "$rc" "$bypass_logged"
   fi
 }
 
-# === Case 10 (MEDIUM-1a): approved_at: (空白のみ) draft → BLOCK ===
-case10_approved_at_spaces_only_block() {
-  local label="Case 10 (MEDIUM-1a): approved_at with spaces only → BLOCK (exit 2)"
+# === Case 10 (緩和): approved_at: (空白のみ) draft で rules → PASS ===
+case10_approved_at_spaces_only_pass() {
+  local label="Case 10 (緩和): approved_at spaces-only draft + rules → PASS (旧 BLOCK)"
   local fp="${TMP_ROOT}/.claude/rules/case10.md"
   write_draft_spaces_only "${TMP_ROOT}/docs/draft/case10.md"
   local rc=0
   run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
-
-  if [ "$rc" -eq 2 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc)")
-    printf "  FAIL: %s (rc=%d expected 2)\n" "$label" "$rc"
-  fi
+  assert_pass "$label" "$rc"
 }
 
-# === Case 11 (MEDIUM-1b): approved_at: (key only、値なし改行直後) draft → BLOCK ===
-case11_approved_at_key_only_block() {
-  local label="Case 11 (MEDIUM-1b): approved_at key only (no value) → BLOCK (exit 2)"
+# === Case 11 (緩和): approved_at: (key only) draft で rules → PASS ===
+case11_approved_at_key_only_pass() {
+  local label="Case 11 (緩和): approved_at key-only draft + rules → PASS (旧 BLOCK)"
   local fp="${TMP_ROOT}/.claude/rules/case11.md"
   write_draft_key_only "${TMP_ROOT}/docs/draft/case11.md"
   local rc=0
   run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
-
-  if [ "$rc" -eq 2 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc)")
-    printf "  FAIL: %s (rc=%d expected 2)\n" "$label" "$rc"
-  fi
+  assert_pass "$label" "$rc"
 }
 
-# === Case 12 (MEDIUM-10): .claude/rules/sub/foo.md (深さ 2、out of scope) Write → PASS ===
-# 設計仕様: .claude/rules/ 直下 (深さ 1) のみ BLOCK 対象、深さ 2 以上は out of scope
+# === Case 12: .claude/rules/sub/foo.md (深さ 2) Write → PASS (緩和前後とも) ===
 case12_rules_subdirectory_depth2_pass() {
-  local label="Case 12 (MEDIUM-10): .claude/rules/sub/case12.md (depth 2) Write → PASS (out of scope)"
+  local label="Case 12: .claude/rules/sub/case12.md (depth 2) Write → PASS"
   local fp="${TMP_ROOT}/.claude/rules/sub/case12.md"
   local rc=0
   run_hook Write "$fp" >/dev/null 2>&1 || rc=$?
-
-  if [ "$rc" -eq 0 ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (rc=$rc)")
-    printf "  FAIL: %s (rc=%d expected 0)\n" "$label" "$rc"
-  fi
+  assert_pass "$label" "$rc"
 }
 
-# === Case 13 (MEDIUM-4, TA-M1 + QA-M2): HC_RULE_CHANGE_GUARD_ENABLED=false → PASS + bypass.log ===
+# === Case 13 (緩和): HC_RULE_CHANGE_GUARD_ENABLED=false → PASS (config dead path だが結果 PASS) ===
 case13_config_guard_disabled_pass() {
-  local label="Case 13: HC_RULE_CHANGE_GUARD_ENABLED=false → PASS (config off) + bypass.log"
+  local label="Case 13 (緩和): HC_RULE_CHANGE_GUARD_ENABLED=false + rules → PASS (config dead path)"
   local fp="${TMP_ROOT}/.claude/rules/case13.md"
-  local bypass_log="${TMP_ROOT}/.claude/.workflow-state/bypass.log"
-  rm -f "$bypass_log"
   local rc=0
   run_hook Write "$fp" HC_RULE_CHANGE_GUARD_ENABLED=false >/dev/null 2>&1 || rc=$?
-
-  local bypass_logged=0
-  if [ -f "$bypass_log" ] && grep -q "HC_RULE_CHANGE_GUARD_ENABLED" "$bypass_log" 2>/dev/null; then
-    bypass_logged=1
-  fi
-
-  if [ "$rc" -eq 0 ] && [ "$bypass_logged" -eq 1 ]; then
-    PASS=$((PASS + 1)); printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1)); FAILED_CASES+=("$label (rc=$rc bypass=$bypass_logged)")
-    printf "  FAIL: %s (rc=%d expected 0, bypass=%d)\n" "$label" "$rc" "$bypass_logged"
-  fi
+  assert_pass "$label" "$rc"
 }
 
-# === Case 14 (MEDIUM-7, SEC-MB): YAML frontmatter approved_at → [SKIP] ===
-# Future work: extract_frontmatter_value の YAML frontmatter (---) 対応が未実装。
-# subagent X が MEDIUM-7 を scope に含めていないため iter3 では PASS/FAIL カウントから除外。
-# NOTE を出力して存在を可視化し、iter4 で YAML 対応完了後に有効化。
-case14_yaml_frontmatter_skip() {
-  local label="Case 14 (MEDIUM-7): YAML frontmatter approved_at → [SKIP: Future work, YAML 未対応]"
+# === Case 14: docs/draft/ + docs/tasks/ 配下は対象外 [SKIP] ===
+case14_draft_tasks_exempt_skip() {
+  local label="Case 14: docs/draft/ + docs/tasks/ 配下 exempt → PASS [SKIP: draft-flow-guard-smoke.sh で網羅]"
   printf "  NOTE: %s\n" "$label"
-  printf "    SKIP reason: extract_frontmatter_value は HTML コメント frontmatter のみ対応。\n"
-  printf "    YAML (---) 対応は iter4 以降で subagent X が extract_frontmatter_value を拡張後に有効化。\n"
-  # PASS/FAIL カウントなし (skip)
 }
 
-printf "===== rule-change-draft-flow-guard-smoke (task-40 Step 7 iter3, 14 cases [13 active + 1 skip]) =====\n\n"
+printf "===== rule-change-draft-flow-guard-smoke (2026-05-28 緩和、13 active + 1 skip) =====\n\n"
 
-case1_rules_no_draft_block
+case1_rules_no_draft_pass
 case2_rules_approved_pass
-case3_rules_unapproved_block
-case4_templates_retroactive_pass_warn
-case5_bypass_env_pass
+case3_rules_unapproved_pass
+case4_templates_retroactive_pass
+case5_rule_guard_off_pass
 case6_docs_root_block_regression
-case7_commands_no_draft_block
+case7_commands_no_draft_pass
 case8_existing_rules_edit_pass
 case9_override_env_pass_and_bypass_log
-case10_approved_at_spaces_only_block
-case11_approved_at_key_only_block
+case10_approved_at_spaces_only_pass
+case11_approved_at_key_only_pass
 case12_rules_subdirectory_depth2_pass
 case13_config_guard_disabled_pass
-case14_yaml_frontmatter_skip
+case14_draft_tasks_exempt_skip
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"
 printf "PASS: %d / %d\n" "$PASS" "$TOTAL"
-if [ "$WARN" -gt 0 ]; then
-  printf "WARN: %d (PASS 扱い、要確認)\n" "$WARN"
-  for w in "${WARNED_CASES[@]}"; do
-    printf "  - %s\n" "$w"
-  done
-fi
 printf "FAIL: %d / %d\n" "$FAIL" "$TOTAL"
 
 if [ "$FAIL" -gt 0 ]; then
@@ -491,17 +335,9 @@ if [ "$FAIL" -gt 0 ]; then
   for c in "${FAILED_CASES[@]}"; do
     printf "  - %s\n" "$c"
   done
-  printf "\nsummary: %d/%d PASS" "$PASS" "$TOTAL"
-  if [ "$WARN" -gt 0 ]; then
-    printf " (%d WARN)" "$WARN"
-  fi
-  printf "\n"
+  printf "\nsummary: %d/%d PASS\n" "$PASS" "$TOTAL"
   exit 1
 fi
 
-printf "\nsummary: %d/%d PASS" "$PASS" "$TOTAL"
-if [ "$WARN" -gt 0 ]; then
-  printf " (%d WARN)" "$WARN"
-fi
-printf "\n"
+printf "\nsummary: %d/%d PASS\n" "$PASS" "$TOTAL"
 exit 0
