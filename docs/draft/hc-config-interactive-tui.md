@@ -161,7 +161,14 @@ fi
 |---|---|---|---|---|---|---|
 | iter1 | tdd-guide / test-automator / qa-expert / code-reviewer + ui-designer (TUI UX) + pr-test-analyzer (全 6、median confidence 0.87) | 3 | 13 | 10 | 8 | 修正中 → iter2 |
 | iter2 | 同 6 reviewer (median confidence 0.82-0.93) | 2 | 0 | ~6 | 多数 | 修正中 → iter3 |
-| iter3 (予定) | 同 6 reviewer | TBD | TBD | TBD | TBD | 修正反映後 re-review |
+| iter3 | 同 6 reviewer (median confidence ~0.93) | 0 | 0 | 0 | 5 | **収束 (全 6 approve)** |
+
+### iter3 結果 (収束)
+
+- **全 6 reviewer approve、CRIT+HIGH+MED=0** (test-automator 0.93 / qa-expert 0.93 / ui-designer 0.91 / pr-test-analyzer 0.93 / tdd-guide 0.94 / code-reviewer 0.95)
+- iter2 の CRIT 2 + MED 群は全解消、新規 CRIT/HIGH/MED なし (残 LOW 5 は cosmetic: truncate 省略記号なし / module-system description 対称性 / perl exec edge / 表示揃い 2 文字 / sed bak cleanup)
+- **code-reviewer の repro 矛盾を決定的に決着**: iter2 で code-reviewer が `total=147`/ゴミ 73 行を主張、iter3 subagent は同環境で再現できず防御修正のみ適用 → iter3 で code-reviewer が **iter2 コード状態 (`git show c0b882c`) を抽出し同一 bash 3.2.57 arm64 で再測定**、iter2=147/ゴミ73・iter3=74/ゴミ0 を確定。**iter2 CRITICAL は実在の bash 3.2 build-specific `local`+cmdsubst split 宣言 leak、防御的修正が真の修正だった**。iter3 subagent は修正済コードを測定していたため再現できなかった
+- **教訓**: reviewer 間で repro 結果が矛盾した場合、commit 状態を bisect (`git show <iter前 hash>` で旧状態抽出 + 同環境再測定) して決着する。code-reviewer の深い repro 優位性 (memory `feedback_code_reviewer_deep_test_advantage`) を再実証
 
 ### iter2 結果
 
