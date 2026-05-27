@@ -23,6 +23,16 @@
 
 set -u
 
+# config 読み込み (HC_* 変数 + is_feature_enabled 関数 export、task-45 Phase 2)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/config-loader.sh
+. "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled check_serena_mcp; then
+  exit 0   # feature OFF で no-op
+fi
+
 # stdin 消費 (SessionStart JSON は使わない)
 cat >/dev/null 2>&1 || true
 
@@ -31,7 +41,6 @@ if [ "${HC_CHECK_SERENA_ENABLED:-true}" = "false" ]; then
   exit 0
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/project-root.sh
 source "$SCRIPT_DIR/lib/project-root.sh"
 PROJECT_ROOT=$(resolve_project_root)

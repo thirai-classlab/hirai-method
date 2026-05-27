@@ -27,6 +27,18 @@ if [ "$MODE" != "loop" ]; then
   exit 0
 fi
 
+# --- config-loader.sh (best-effort、HC_* env 解決 + is_feature_enabled) ---
+# shellcheck source=lib/config-loader.sh
+if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+fi
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled loop_mode_enforcement; then
+  exit 0
+fi
+
 cat <<'EOF'
 <system-reminder>
 **Loop モード稼働中** — このターンも以下を厳守:

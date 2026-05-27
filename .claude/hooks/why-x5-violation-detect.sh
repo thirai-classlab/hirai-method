@@ -30,6 +30,17 @@
 
 set -u
 
+# config 読み込み (HC_* 変数 + is_feature_enabled 関数 export、task-45 Phase 2)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/config-loader.sh
+. "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled why_x5_enforcement; then
+  echo '{}'
+  exit 0   # feature OFF で no-op (PostToolUse hook response 規約: empty JSON)
+fi
+
 # stdin を必ず消費
 input=$(cat 2>/dev/null || true)
 

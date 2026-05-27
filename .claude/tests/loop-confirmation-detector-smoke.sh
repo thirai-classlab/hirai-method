@@ -199,15 +199,19 @@ _run_hook_no_jq() {
   rm -f "$out_file" "$err_file"
 }
 
-# additionalContext が stdout JSON に含まれるか確認
+# Stop hook の warn 注入を検出 (新 schema: top-level decision:"block" + reason)
+# 関数名は legacy のまま (assertion logic のみ新 schema 対応、2026-05-27 hot fix)
+# 旧 schema: hookSpecificOutput.additionalContext (Stop event schema 違反だった)
+# 新 schema: {"decision":"block","reason":"..."} (Stop hook 正式 API)
 _has_additional_context() {
   local out="$1"
   if printf '%s' "$out" | python3 -c '
 import json, sys
 try:
     d = json.loads(sys.stdin.read())
-    val = d.get("hookSpecificOutput", {}).get("additionalContext", "")
-    sys.exit(0 if val else 1)
+    decision = d.get("decision", "")
+    reason = d.get("reason", "")
+    sys.exit(0 if (decision == "block" and reason) else 1)
 except Exception:
     sys.exit(1)
 ' 2>/dev/null; then

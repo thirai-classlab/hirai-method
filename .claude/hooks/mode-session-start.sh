@@ -24,6 +24,18 @@ else
   MODE="normal"
 fi
 
+# --- config-loader.sh (best-effort、HC_* env 解決 + is_feature_enabled) ---
+# shellcheck source=lib/config-loader.sh
+if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+fi
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled mode_session_start; then
+  exit 0
+fi
+
 # --- Session resume prompt (W2 of task #7) ---
 # Serena memory に session/context が存在する場合、user に /resume-state 実行を提案する。
 # Serena は memory key (slash 区切り) を `.serena/memories/<key>.md` に保存する。

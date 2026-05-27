@@ -30,6 +30,19 @@ description: 全モジュール統合後の全体レビュー + リファクタ�
 
 ## 動作
 
+### Phase 0: yml 参照 (task-45 Phase 2、reviewer 制御 yml 経由化)
+
+本 command 開始前に `harness-config.yml` から以下 4 値を参照 (env > yml > default、`config-loader.sh` 仕様):
+
+| 環境変数 | yml key | default | 用途 |
+|---|---|---:|---|
+| `HC_REVIEW_REQUIRED_SYSTEM` | `review_required_system` | `true` | `false` なら本 command を **no-op skip** (理由付きでユーザに報告 + 終了、`/new-feature` Step 11 / `/modify-feature` Step 9 で skip 可) |
+| `HC_REVIEW_MIN_COUNT_SYSTEM` | `review_min_count_system` | `2` | reviewer 最低数 (default 2 = architect-reviewer + refactoring-specialist) |
+| `HC_REVIEW_MAX_COUNT_SYSTEM` | `review_max_count_system` | `5` | reviewer 上限 (`--max-reviewers` 未指定時の default) |
+| `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | findings 修正後の反復ループ上限 |
+
+`HC_REVIEW_REQUIRED_SYSTEM=false` で skip した場合は、bypass.log に記録し、ユーザに「review_required_system=false のため /system-review を skip した、Phase 1 以降を実行しない」と明示。
+
 ### Phase 1: 前提チェック
 
 1. 現タスク slug を解決 (`<slug>` 引数 or `docs/work.md` or branch 名)

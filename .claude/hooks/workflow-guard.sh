@@ -29,6 +29,12 @@ set -uo pipefail  # ⚠️ set -e は使わない (mode-loader.sh の CB-verify 
 # shellcheck source=lib/config-loader.sh
 source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/config-loader.sh"
 
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled workflow_enforcement; then
+  echo '{}'
+  exit 0   # feature OFF で no-op
+fi
+
 # === bypass.log 共通ライブラリ ===
 # shellcheck source=lib/bypass-logger.sh
 source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/bypass-logger.sh"

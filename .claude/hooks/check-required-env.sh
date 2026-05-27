@@ -25,6 +25,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/config-loader.sh
 . "$SCRIPT_DIR/lib/config-loader.sh"
 
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled check_required_env; then
+  exit 0   # feature OFF で no-op
+fi
+
 # stdin を捨てる (SessionStart JSON は使わない)
 cat >/dev/null 2>&1 || true
 

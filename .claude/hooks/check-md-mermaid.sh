@@ -21,6 +21,17 @@
 
 set -u
 
+# config 読み込み (HC_* 変数 + is_feature_enabled 関数 export、task-45 Phase 2)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/config-loader.sh
+. "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled check_md_mermaid; then
+  echo '{}'
+  exit 0   # feature OFF で no-op (PostToolUse hook response 規約: empty JSON)
+fi
+
 input=$(cat)
 
 # task-22 W2: jq 不在環境では fail-open (hook 機能停止して継続)

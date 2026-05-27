@@ -62,6 +62,12 @@ if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
   source "$SCRIPT_DIR/lib/config-loader.sh"
 fi
 
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled autonomous_action_guard; then
+  echo '{}'
+  exit 0   # feature OFF で no-op
+fi
+
 if [ "$is_subagent" = "false" ] && [ -n "${HC_AGENT_MARKER_DIR:-}" ] && [ -d "$HC_AGENT_MARKER_DIR" ]; then
   if ls "$HC_AGENT_MARKER_DIR"/*.lock >/dev/null 2>&1; then
     is_subagent="true"

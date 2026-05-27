@@ -35,6 +35,16 @@
 
 set -u
 
+# config 読み込み (HC_* 変数 + is_feature_enabled 関数 export、task-45 Phase 2)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/config-loader.sh
+. "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled session_help_surface; then
+  exit 0   # feature OFF で no-op
+fi
+
 # stdin 消費 (SessionStart JSON は使わない)
 cat >/dev/null 2>&1 || true
 
@@ -47,7 +57,6 @@ VERBOSE="${HC_SESSION_HELP_VERBOSE:-false}"
 
 # === Wave 1.6: 初回 session のみ表示 (marker check) ===
 # marker file 位置の解決 (env override 可、default は .claude/.session-help-shown)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # project root: CLAUDE_PROJECT_DIR > script の 2 階層上 (.claude/hooks → repo root)
 _project_root="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 MARKER_PATH="${HC_SESSION_HELP_MARKER_PATH:-${_project_root}/.claude/.session-help-shown}"

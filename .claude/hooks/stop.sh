@@ -9,6 +9,11 @@ set -uo pipefail
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
 
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled notify; then
+  exit 0   # feature OFF で no-op
+fi
+
 project=$(basename "$(pwd)")
 afplay "$HC_STOP_SOUND" >/dev/null 2>&1 &
 osascript -e "display notification \"応答が完了しました\" with title \"Claude Code: $project\" subtitle \"確認してください\"" >/dev/null 2>&1

@@ -20,6 +20,13 @@ set -u
 SCRIPT_DIR="$(dirname "$0")"
 # shellcheck source=lib/config-loader.sh
 source "$SCRIPT_DIR/lib/config-loader.sh"
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled confidence_gate; then
+  echo '{}'
+  exit 0   # feature OFF で no-op
+fi
+
 # shellcheck source=lib/confidence-gate/bypass.sh
 source "$SCRIPT_DIR/lib/confidence-gate/bypass.sh"
 # shellcheck source=lib/confidence-gate/extract.sh

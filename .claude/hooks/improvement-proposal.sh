@@ -24,6 +24,12 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/config-loader.sh
 . "$SCRIPT_DIR/lib/config-loader.sh"
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled improvement_proposal; then
+  exit 0   # feature OFF で no-op
+fi
+
 # shellcheck source=lib/improvement-proposal/cache.sh
 . "$SCRIPT_DIR/lib/improvement-proposal/cache.sh"
 

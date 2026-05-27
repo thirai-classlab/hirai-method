@@ -27,6 +27,19 @@ description: 設計 draft からテスト設計を起こし、MECE 20 カテゴ�
 
 ## 動作
 
+### Phase 0: yml 参照 (task-45 Phase 2、reviewer 制御 yml 経由化)
+
+本 command 開始前に `harness-config.yml` から以下 4 値を参照 (env > yml > default、`config-loader.sh` 仕様):
+
+| 環境変数 | yml key | default | 用途 |
+|---|---|---:|---|
+| `HC_REVIEW_REQUIRED_TEST` | `review_required_test` | `true` | `false` なら本 command を **no-op skip** (理由付きでユーザに報告 + 終了、採用 6 条 4「テスト設計レビュー」step skip 可) |
+| `HC_REVIEW_MIN_COUNT_TEST` | `review_min_count_test` | `5` | reviewer 最低数 (採用 6 条 4 で 5+ 動的選定の default) |
+| `HC_REVIEW_MAX_COUNT_TEST` | `review_max_count_test` | `10` | reviewer 上限 |
+| `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | テスト設計レビュー反復上限 (採用 6 条 4 で 5 回上限、超過時 user escalation、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`) |
+
+`HC_REVIEW_REQUIRED_TEST=false` で skip した場合は、bypass.log に記録し、ユーザに「review_required_test=false のため /test-design を skip した、Phase 1 以降を実行しない」と明示。
+
 ### Phase 1: 前提チェック
 
 1. slug を validation regex でチェック (不正なら reject)

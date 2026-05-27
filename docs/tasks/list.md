@@ -110,14 +110,20 @@
 |    | ✅ | Step 3 | (テスト設計レビュー) skip 明示: 規範文書 + spec 改修のみで 5+ reviewer overkill、user 引数承認で代替 | | |
 |    | ✅ | Step 4 | (テスト合格) grep 検証 4 件 PASS + 既存 smoke regression 0 | | |
 |    | ✅ | Step 5 | (リファクタリング) skip 明示: 規範文書 + spec 改修のみで refactor 余地なし | | |
-| 44 | 🔄 | **Task: config-yml Phase 1 (yml schema 拡張 + config-loader.sh)** | feature toggle と reviewer 制御の yml 化基盤を整えるため、`harness-config.yml` に新 36 key 追加し `config-loader.sh` に load logic + `is_feature_enabled` 共通関数を追加する。完成すれば task-45/46 が yml 経由で feature toggle と reviewer 制御を参照できるようになる。 | — | [task-44-config-yml-phase1-schema-loader.md](task-44-config-yml-phase1-schema-loader.md) ← draft: [`docs/draft/config-yml-phase1-schema-loader.md`](../draft/config-yml-phase1-schema-loader.md) |
-|    | 🔲 | Step 1 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 15) | | |
-|    | 🔲 | Step 2 | `config-loader.sh` 拡張 (36 key load + `is_feature_enabled` 関数) | | |
-|    | 🔲 | Step 3 | smoke `config-feature-toggles-smoke.sh` 新設 (6 cases) | | |
-|    | 🔲 | Step 4 | (テスト設計レビュー) reviewer 5+ 並列 iter 1+ | | |
-|    | 🔲 | Step 5 | (テスト合格) 新 smoke + 既存 smoke regression 0 | | |
-|    | 🔲 | Step 6 | (リファクタリング) 3 観点判定 | | |
-| 45 | 📝 | **Task: config-yml Phase 2 (hook feature check + review command yml 参照)** | 機能単位 on/off と reviewer 制御の機械強制のため、21+ 件 hook 冒頭に feature check を追加し、4 件 review command に yml 参照 logic を追加する。完成すれば feature toggle OFF で関連 hook が一括停止し、reviewer 制御 (required / min / max / iteration) が yml 値で動作する。 | task-44 | [task-45-config-yml-phase2-hook-review-command.md](task-45-config-yml-phase2-hook-review-command.md) ← draft: [`docs/draft/config-yml-phase2-hook-review-command.md`](../draft/config-yml-phase2-hook-review-command.md) |
+| 44 | ✅ | **Task: config-yml Phase 1 (yml schema 拡張 + config-loader.sh)** | feature toggle と reviewer 制御の yml 化基盤を整えるため、`harness-config.yml` に新 36 key 追加し `config-loader.sh` に load logic + `is_feature_enabled` 共通関数を追加する。完成すれば task-45/46 が yml 経由で feature toggle と reviewer 制御を参照できるようになる。**完了** (2026-05-27、PR #18 `0daf5ed` MERGED、Step 1-6 全 ✅、closure commit `dfdbfca`、iter 2 reviewer 5/5 approve median 0.94 [tdd 0.95 / qa 0.93 / pr-test 0.96 / harness-opt 0.91 / test-auto 0.96]、smoke 9/9 PASS + 既存 smoke regression 0) | — | [task-44-config-yml-phase1-schema-loader.md](task-44-config-yml-phase1-schema-loader.md) ← draft: [`docs/draft/config-yml-phase1-schema-loader.md`](../draft/config-yml-phase1-schema-loader.md) |
+|    | ✅ | Step 1 | `harness-config.yml` に新 36 key 追加 (feature_* 21 + review_* 15、commit `941f392`) | | |
+|    | ✅ | Step 2 | `config-loader.sh` 拡張 (36 key load + `is_feature_enabled` 関数、commit `941f392`) | | |
+|    | ✅ | Step 3 | smoke `config-feature-toggles-smoke.sh` 新設 (9 cases、commit `941f392` + iter2 `6e79bfc`) | | |
+|    | ✅ | Step 4 | (テスト設計レビュー) iter 1+2、5 reviewer 並列 (tdd-guide / qa-expert / pr-test-analyzer / harness-optimizer / test-automator)、iter 2 で 5/5 approve median 0.94 | | |
+|    | ✅ | Step 5 | (テスト合格) smoke 9/9 PASS (iter 2 hot fix `6e79bfc` で CRITICAL-1 解消) + 既存 smoke regression 0 | | |
+|    | ✅ | Step 6 | (リファクタリング) closure commit `dfdbfca` 3 観点 PASS (persistence / generality / dedup、refactor 余地少で内容軽微) | | |
+| 45 | ✅ | **Task: config-yml Phase 2 (hook feature check + review command yml 参照)** | 機能単位 on/off と reviewer 制御の機械強制のため、21+ 件 hook 冒頭に feature check を追加し、4 件 review command に yml 参照 logic を追加する。完成すれば feature toggle OFF で関連 hook が一括停止し、reviewer 制御 (required / min / max / iteration) が yml 値で動作する。**完了** (2026-05-27、6 commits: f38c6c8 hot fix / 6033eb0 着手準備 / 1521d74 Step 2 / 276f568 Step 1 hook 27 件 / b7c5a8f Step 3 smoke / 6e62b4f iter 2 fix、iter 3 4 reviewer 全員 approve median 0.96 [tdd 0.93 / qa 0.97 / test-auto 0.96 / pr-test 0.95]、smoke 7/7 + 既存 100+ smoke regression 0、task-46 引継ぎ 5 件は entry #52 記録) | task-44 | [task-45-config-yml-phase2-hook-review-command.md](task-45-config-yml-phase2-hook-review-command.md) ← draft: [`docs/draft/config-yml-phase2-hook-review-command.md`](../draft/config-yml-phase2-hook-review-command.md) |
+|    | ✅ | Step 1 | hook 27 件に feature check 追加 (subagent X/Y/Z 並列 3 件、staging 戦略、commit `276f568`) | | |
+|    | ✅ | Step 2 | review command 4 件に Phase 0 yml 参照 logic 追加 (commit `1521d74`、メイン直接 Edit) | | |
+|    | ✅ | Step 3 | smoke `review-required-min-count-smoke.sh` 新設 (4 cases→7 cases、commit `b7c5a8f` + iter 2 `6e62b4f`) | | |
+|    | ✅ | Step 4 | (テスト設計レビュー) iter 1 (6 reviewer median 0.90) HIGH 2+MEDIUM 9 → iter 2 fix → iter 3 (4 reviewer median 0.96) 全員 approve 収束 | | |
+|    | ✅ | Step 5 | (テスト合格) review-required-min-count 7/7 + why-x5 4/4 + 既存 100+ smoke regression 0 (pr-test-analyzer iter 3 実証) | | |
+|    | ✅ | Step 6 | (リファクタリング) skip 明示: `is_feature_enabled` は config-loader.sh で既に共通化済、各 hook 3-7 行 inline は適切な粒度 (YAGNI) | | |
 | 46 | 📝 | **Task: config-yml Phase 3 (対話的 config-editor hc-config.sh + 規範文書更新)** | yml 設定値の編集経路を整備するため、対話 menu + CLI args + 値型 validation + atomic 操作付き `hc-config.sh` を新設し、規範文書 5 file を更新する。完成すれば user が yml 直接編集なしで全 36 key を安全に変更でき、規範側でも yml 参照経路が明文化される。 | task-44, task-45 | [task-46-config-yml-phase3-hc-config-script.md](task-46-config-yml-phase3-hc-config-script.md) ← draft: [`docs/draft/config-yml-phase3-hc-config-script.md`](../draft/config-yml-phase3-hc-config-script.md) |
 
 <!--

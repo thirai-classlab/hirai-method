@@ -31,6 +31,17 @@ source "$SCRIPT_DIR/lib/project-root.sh"
 # 後方互換: CLAUDE_PROJECT_DIR が明示設定されている場合はそれを優先
 _project_dir="${CLAUDE_PROJECT_DIR:-$(resolve_project_root)}"
 
+# config-loader.sh source (is_feature_enabled 関数取得用、task-45 Phase 2)
+if [ -f "${_project_dir}/.claude/hooks/lib/config-loader.sh" ]; then
+  # shellcheck source=lib/config-loader.sh
+  source "${_project_dir}/.claude/hooks/lib/config-loader.sh" 2>/dev/null || true
+fi
+
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled byproduct_discharge; then
+  exit 0   # feature OFF で no-op
+fi
+
 # stdin を消費 (SessionStart hook は使わないが、消費しないと caller 側で残ることがある)
 cat > /dev/null 2>&1 || true
 

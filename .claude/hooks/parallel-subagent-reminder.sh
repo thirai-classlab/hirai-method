@@ -63,6 +63,12 @@ if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
     source "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
 fi
 
+# Feature toggle 参照 (task-45 Phase 2)
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled parallel_subagent_reminder; then
+    echo '{}'
+    exit 0   # feature OFF で no-op
+fi
+
 # --- 早期 bypass (HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false) ---
 # Fix 2 (R2 F-01 + R6 H-2): bypass.log に記録してから exit
 if [ "${HC_PARALLEL_SUBAGENT_REMINDER_ENABLED:-true}" = "false" ]; then
