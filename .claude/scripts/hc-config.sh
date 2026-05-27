@@ -43,7 +43,7 @@
 #   MED M-03 code-rev: _make_backup cp 失敗を伝播
 #   MED M-05 code-rev: review_iteration_max int range check (1..10)
 #
-# iter 3 fixes (本 commit):
+# iter 3 fixes:
 #   CRIT R-01 (tdd-guide): _atomic_write の python3 detection を多版本 loop 化
 #     macOS Homebrew で `python3 -c "import yaml"` が subprocess で exit 1 になり
 #     yaml.safe_load path 到達不能 → fallback 強化と共に
@@ -58,10 +58,23 @@
 #   MED M-NEW-01 (code-rev) + L-03 (security): HC_BAK_RETENTION_COUNT validation
 #     (0 / 負値 / 非数値 で全 backup 削除 = rollback 不能を回避、default 10 に fallback)。
 #
+# iter 4 fixes (本 commit、HIGH 3 件単一根原因 closure):
+#   HIGH H3-01 (test-auto) + H-NEW-01 (pr-test) + H-NEW-01 (tdd-guide) 共通指摘:
+#     iter 3 で HC_ALLOW_HASH_IN_VALUE=1 bypass を導入したが、bypass で書き込み成功した値は
+#     `_yml_get_raw` の `val="${val%%#*}"` で `#` 以降が unconditional truncate されるため
+#     read-back で silent data loss。bypass 使用者の URL fragment / git refspec 用途で破綻。
+#   解法 (採用案: write 時 quote):
+#     1. `_yml_set` で bypass + value に `#` 含む場合、yml に double-quote 形式
+#        (`key: "foo#bar"`) で保存。内部 `"` は `\"` に escape、内部 `\` は `\\` に escape。
+#     2. `_yml_get_raw` で bypass + 前後 `"` 検出時、行末 comment strip を skip し
+#        quote 解除 + `\"` unescape のみ実施。
+#     3. bypass 時 stderr に notice を 1 行出力 (operator visibility 確保)。
+#   smoke Case 19b 更新 + Case 19c (round-trip 検証) + Case 19d (yml file format 検証) 追加。
+#
 # 起源:
-#   task-46 Step 2 (TDD GREEN) → iter 2 fix → iter 3 fix
+#   task-46 Step 2 (TDD GREEN) → iter 2 fix → iter 3 fix → iter 4 fix
 #   設計 draft: docs/draft/config-yml-phase3-hc-config-script.md
-#   smoke: .claude/tests/hc-config-script-smoke.sh (15+ cases iter 2、19 cases iter 3)
+#   smoke: .claude/tests/hc-config-script-smoke.sh (15+ cases iter 2、19 cases iter 3、20 cases iter 4)
 
 set -uo pipefail
 
@@ -179,6 +192,16 @@ _validate_string_sanity() {
 # $1: yml path
 # $2: key
 # 戻り: stdout に値 (key 不在なら空 + return 1)
+#
+# iter 4 fix (HIGH 3 件単一根原因 closure、HC_ALLOW_HASH_IN_VALUE=1 round-trip 整合性):
+#   bypass 時に `_yml_set` が double-quote escape で value を保存するため、
+#   read 側も double-quoted literal を検出して quote 解除 + comment strip skip する。
+#   通常 value (quote なし) は従来通り `${val%%#*}` で行末コメント strip。
+#
+#   検出条件 (両 AND):
+#     1. HC_ALLOW_HASH_IN_VALUE=1
+#     2. 前後 trim 後の val が `"` で始まり `"` で終わる (length >= 2)
+#   → comment strip skip + leading/trailing quote 除去 + `\"` → `"` unescape
 _yml_get_raw() {
   local yml="$1"
   local key="$2"
@@ -188,12 +211,32 @@ _yml_get_raw() {
     return 1
   fi
   val="${line#${key}:}"
-  # 行末コメント (#...) を strip (ただし行頭 # は yml では別行扱いなのでここでは出現しない)
-  val="${val%%#*}"
-  # 前後空白 trim
+  # 前後空白 trim (quote 判定の前に実行、comment strip より前)
   val="${val#"${val%%[![:space:]]*}"}"
   val="${val%"${val##*[![:space:]]}"}"
-  # 外側 quote strip
+
+  # iter 4 fix: HC_ALLOW_HASH_IN_VALUE=1 + double-quoted literal なら
+  # 行末 comment strip を skip し、quote 解除 + unescape のみ実施
+  # (round-trip 整合性: `_yml_set` が `"foo#bar"` で書き込んだ値を `foo#bar` で復元)
+  if [ "${HC_ALLOW_HASH_IN_VALUE:-0}" = "1" ] \
+    && [ "${#val}" -ge 2 ] \
+    && [ "${val:0:1}" = '"' ] \
+    && [ "${val: -1}" = '"' ]; then
+    # leading/trailing double-quote を 1 文字ずつ除去
+    val="${val#\"}"
+    val="${val%\"}"
+    # `\"` → `"` unescape (yml double-quoted scalar の最小 spec)
+    val="${val//\\\"/\"}"
+    printf '%s' "$val"
+    return 0
+  fi
+
+  # 通常 path: 行末コメント (#...) を strip
+  # (HC_ALLOW_HASH_IN_VALUE=1 でも non-quoted な既存 value (mid-`#` なし) は本 path)
+  val="${val%%#*}"
+  # comment strip 後の trailing 空白を再 trim
+  val="${val%"${val##*[![:space:]]}"}"
+  # 外側 quote strip (legacy single-quote 含む)
   if [ "${#val}" -ge 2 ]; then
     case "$val" in
       \"*\") val="${val#\"}"; val="${val%\"}" ;;
@@ -462,6 +505,14 @@ _atomic_write() {
 # $2: key
 # $3: new value (raw、yml 構文として valid な形)
 # 戻り: 0 = success / 1 = key 不在 or atomic fail
+#
+# iter 4 fix (HIGH 3 件単一根原因 closure、HC_ALLOW_HASH_IN_VALUE=1 round-trip 整合性):
+#   bypass 時 (HC_ALLOW_HASH_IN_VALUE=1) かつ value に `#` を含む場合、
+#   yml に double-quote 形式 (`key: "foo#bar"`) で保存する。これにより:
+#     - YAML parser は double-quoted string として literal 解釈 (`#` を comment 誤認しない)
+#     - `_yml_get_raw` 側で同 bypass + 前後 `"` 検出時に literal 解釈 + unescape する
+#   通常 value (`#` 不在 or bypass 不在) は従来通り quote なしで書き込む。
+#   stderr に notice を 1 行出力する (operator visibility 確保)。
 _yml_set() {
   local yml="$1"
   local key="$2"
@@ -477,10 +528,27 @@ _yml_set() {
     return 1
   fi
 
+  # iter 4: HC_ALLOW_HASH_IN_VALUE=1 + value に `#` 含む場合は double-quote escape して保存
+  # round-trip 整合性のため `_yml_get_raw` 側で同 bypass + quoted literal 検出時に
+  # quote 解除 + unescape する設計。
+  local write_val="$new_val"
+  if [ "${HC_ALLOW_HASH_IN_VALUE:-0}" = "1" ]; then
+    case "$new_val" in
+      *\#*)
+        # 内部 `"` は `\"` に escape (yml double-quoted scalar の最小 spec)
+        # 内部 `\` も `\\` に escape して二重 escape 衝突を回避
+        local escaped="${new_val//\\/\\\\}"
+        escaped="${escaped//\"/\\\"}"
+        write_val="\"${escaped}\""
+        _err "note: HC_ALLOW_HASH_IN_VALUE=1 で # 含む値を yml に double-quote 保存します (round-trip 整合性確保のため)"
+        ;;
+    esac
+  fi
+
   # 行頭コメント以外で `^key:` 行を新値で置換 (1 行のみ)
   # HIGH H-01 code-rev fix: awk -v は backslash sequence (\n / \t / \\) を解釈するため
   # ENVIRON 経由で渡す。POSIX awk / mawk / gawk 全対応。
-  content=$(KEY="$key" VAL="$new_val" awk '
+  content=$(KEY="$key" VAL="$write_val" awk '
     BEGIN {
       k = ENVIRON["KEY"]
       v = ENVIRON["VAL"]

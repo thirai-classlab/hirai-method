@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# .claude/tests/hc-config-script-smoke.sh — task-46 Step 1 → iter 2 → iter 3
+# .claude/tests/hc-config-script-smoke.sh — task-46 Step 1 → iter 2 → iter 3 → iter 4
 #
 # 目的:
-#   .claude/scripts/hc-config.sh の動作を 19 ケースで検証する (iter 3 拡張)。
+#   .claude/scripts/hc-config.sh の動作を 19 ケース (iter 4 で Case 19 を a/b/c/d の
+#   4 subcase に拡張) で検証する。
 #
 #   Original (RED → GREEN):
 #   - Case 1: --list で全 key 一覧表示 (34+ key 確認)
@@ -37,6 +38,10 @@
 #   - Case 19: mid-value `#` silent data loss 防止 (`docs_approved_dir=foo#bar` → reject)
 #              HIGH (pr-test mid-value # silent data loss) coverage、
 #              HC_ALLOW_HASH_IN_VALUE=1 で URL fragment 等 bypass 可。
+#              iter 4 拡張: a (reject 維持) / b (bypass round-trip 整合性) /
+#              c (yml file 内 double-quoted 形式) / d (stderr notice 1 行)
+#              の 4 subcase に分割、HIGH 3 件 (test-auto H3-01 / pr-test H-NEW-01 /
+#              tdd-guide H-NEW-01) 単一根原因 closure を担保。
 #
 # 設計:
 #   - subshell 関数 ( set -uo pipefail; ... ) で各 case を隔離
@@ -793,12 +798,19 @@ _case_18() (
 )
 
 # ============================================================
-# Case 19 (iter 3 新規 HIGH pr-test mid-value # silent data loss):
-#   mid-value `#` reject + HC_ALLOW_HASH_IN_VALUE=1 bypass
+# Case 19 (iter 3 新規 → iter 4 で a/b/c/d 4 subcase 拡張):
+#   mid-value `#` reject + HC_ALLOW_HASH_IN_VALUE=1 bypass round-trip 整合性
 #
-#   `_yml_get_raw` の `${val%%#*}` が mid-value `#` を yml inline comment と誤認し
-#   read-back 時 truncation → silent data loss。書き込み時点で reject されることと、
-#   HC_ALLOW_HASH_IN_VALUE=1 で正規ユースケース (URL fragment 等) を許可できることを確認。
+#   iter 3: `_yml_get_raw` の `${val%%#*}` が mid-value `#` を yml inline comment と
+#           誤認し read-back 時 truncation → silent data loss。書き込み時点で reject、
+#           HC_ALLOW_HASH_IN_VALUE=1 で URL fragment 等 bypass 可とする最低限の対処。
+#   iter 4: HIGH 3 件 (test-auto H3-01 / pr-test H-NEW-01 / tdd-guide H-NEW-01) 共通指摘
+#           「bypass で書き込み成功するが read-back で `foo` のみ復元 = silent data loss」
+#           を closure。
+#     a. mid-value `#` reject (HC_ALLOW_HASH_IN_VALUE unset 時) + yml unchanged
+#     b. HC_ALLOW_HASH_IN_VALUE=1 で書き込み + read-back で `foo#bar` round-trip 復元
+#     c. yml file 内に `docs_approved_dir: "foo#bar"` (double-quoted) 形式で保存
+#     d. bypass + write 時に stderr に "HC_ALLOW_HASH_IN_VALUE=1 で..." notice 1 行
 # ============================================================
 _case_19() (
   set -uo pipefail
@@ -824,7 +836,10 @@ _case_19() (
     return 1
   fi
 
-  # 19b: HC_ALLOW_HASH_IN_VALUE=1 で bypass 可能
+  # 19b: HC_ALLOW_HASH_IN_VALUE=1 で bypass 書き込み + iter 4 round-trip 検証
+  # iter 4 fix (HIGH 3 件 closure): write 時 double-quote escape + read 時 quoted literal 解釈で
+  # round-trip 整合性を保証する (旧 iter 3 では bypass で書き込み成功するが
+  # `${val%%#*}` truncation で `foo` のみ復元 = silent data loss)。
   HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --set 'docs_approved_dir=foo#bar' \
     --config "${tmp_yml}" 2>/dev/null
   local exit_code=$?
@@ -832,8 +847,31 @@ _case_19() (
     printf 'Case 19b: HC_ALLOW_HASH_IN_VALUE=1 should bypass, exit code %d\n' "$exit_code" >&2
     return 1
   fi
-  # 注: 書き込みは成功するが、_yml_get_raw の `${val%%#*}` truncation は本 fix 範囲外で残る。
-  # 本 case は「明示 bypass 時にのみ書き込めること」までを担保。
+  local readback
+  readback="$(HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --get docs_approved_dir \
+    --config "${tmp_yml}" 2>/dev/null)"
+  if [ "$readback" != "foo#bar" ]; then
+    printf 'Case 19b: round-trip failed: expected "foo#bar", got "%s" (silent data loss)\n' "$readback" >&2
+    return 1
+  fi
+
+  # 19c: yml file 内に double-quoted 形式 (`docs_approved_dir: "foo#bar"`) で保存されること
+  # (write 時 quote escape の grep 確認、iter 4 fix の物理形式 verification)
+  if ! grep -qE '^docs_approved_dir: "foo#bar"$' "${tmp_yml}"; then
+    printf 'Case 19c: yml file does not contain double-quoted form (expected: docs_approved_dir: "foo#bar")\n' >&2
+    printf '  actual: %s\n' "$(grep -E '^docs_approved_dir:' "${tmp_yml}" || printf '(line not found)')" >&2
+    return 1
+  fi
+
+  # 19d: bypass + write 時 stderr に notice 1 行が出力されること
+  local notice_stderr
+  notice_stderr="$(HC_ALLOW_HASH_IN_VALUE=1 bash "${HC_CONFIG_SCRIPT}" --set 'docs_approved_dir=baz#qux' \
+    --config "${tmp_yml}" 2>&1 >/dev/null)"
+  if ! printf '%s' "$notice_stderr" | grep -q 'HC_ALLOW_HASH_IN_VALUE=1'; then
+    printf 'Case 19d: stderr notice missing (expected "HC_ALLOW_HASH_IN_VALUE=1 で # 含む..." line)\n' >&2
+    printf '  got stderr: %s\n' "$notice_stderr" >&2
+    return 1
+  fi
 
   return 0
 )
@@ -842,7 +880,7 @@ _case_19() (
 # テスト実行
 # ============================================================
 
-printf '\n=== hc-config-script-smoke (iter 3: 19 cases) ===\n\n'
+printf '\n=== hc-config-script-smoke (iter 4: 19 cases, Case 19 expanded to a/b/c/d) ===\n\n'
 
 if _case_1 2>/dev/null; then _record PASS 1 "--list で全 key 一覧表示 (34+ key 確認)"
 else                         _record FAIL 1 "--list で全 key 一覧表示 (34+ key 確認)"
@@ -916,8 +954,8 @@ if _case_18 2>/dev/null; then _record PASS 18 "UTF-8 multibyte path 受理 (task
 else                          _record FAIL 18 "UTF-8 multibyte path 受理 (task_dir=docs/タスク/foo)"
 fi
 
-if _case_19 2>/dev/null; then _record PASS 19 "mid-value # silent data loss 防止 + HC_ALLOW_HASH_IN_VALUE bypass"
-else                          _record FAIL 19 "mid-value # silent data loss 防止 + HC_ALLOW_HASH_IN_VALUE bypass"
+if _case_19 2>/dev/null; then _record PASS 19 "mid-value # reject + bypass round-trip 整合性 (a/b/c/d)"
+else                          _record FAIL 19 "mid-value # reject + bypass round-trip 整合性 (a/b/c/d)"
 fi
 
 # ============================================================
