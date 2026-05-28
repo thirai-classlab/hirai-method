@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #51: Context Bloat Reduction (2 層構造化)
 
-> Status: **🔄 進行中** (Step 1-4 ✅ / Step 5 token 実測で FAIL → A 案 redesign 完了 / Step 5b (Layer B 物理移動) ✅ / Step 6 🔲)
+> Status: **🔄 進行中** (Step 1-4 ✅ / Step 5 token 実測 FAIL → A 案 redesign / Step 5b (Layer B 物理移動) ✅ / Step 6 (back-link verify + install.sh SSoT comment) ✅ / Step 5c (fresh session 再計測 + 残 smoke) 🔲)
 > 起案: 2026-05-28
 > 承認: 2026-05-28 (user)
 > 関連: harness 健全性 9 task umbrella の最終 2 task の 1 つ (task-51 / task-57)
@@ -189,9 +189,9 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 3 | ✅ | (d) project rules **6 file 2 層構造化完了** (git-workflow は退避不要)。**self-improvement** (pilot、~1.3K) / **development-process** (~1.3K) / **task-management** (~4.6K) / **workflow** (~2.1K) / **why-x5-output** (~0.3K) / **modes** (~0.3K) — 6 subagent 並列 + sequential で完遂、累計純削減 ~9.9K tokens、SSoT 劣化なし、Read trigger 4 条件 admonition 全 6 file 配置 | 8-11h | Step 2 |
 | 4 | ✅ | (テスト設計レビュー) 5+ reviewer 動的選定 + Read trigger 4 条件 AI 判断 test scenario 4 件 | 1.5-2h | Step 3 |
 | 5 | ⚠️→5b | (テスト合格) token 実測で DoD 未達判明 (153K vs 目標 80K)、`paths: []` 仕様上無効と確定 → A 案 redesign で Step 5b に分岐 | 1.5h | Step 4 |
-| 5b | ✅ | (A 案 redesign) Layer B 6 file を `.claude/rules-details/` へ git mv + Layer A/B 双方の link 更新 + install.sh / README / INVENTORY / smoke 更新 | 0.5d | Step 5 |
-| 5c | 🔲 | (再計測 + smoke) fresh session 起動時に token 再実測 (after 値) + 既存 smoke regression 0 + 機械強制 hook 各 1 case PASS (smoke は API 週次 limit 後 5/31 以降に subagent 再実行) | 1h | Step 5b |
-| 6 | 🔲 | (リファクタリング) Layer A ↔ Layer B back-link 両方向確認、link reference 規約統一、anchor 整理 | 0.5-1h | Step 5c |
+| 5b | ✅ | (A 案 redesign) Layer B 6 file を `.claude/rules-details/` へ git mv + Layer A/B 双方の link 更新 + install.sh / README / INVENTORY / smoke 更新 (commit `71c85d2` + `de1e851`、smoke 8/8 PASS conf 0.92) | 0.5d | Step 5 |
+| 6 | ✅ | (リファクタリング) Layer A→B forward-link 34 件 + Layer B→A back-link 10 件 grep 確認 ✅、install.sh `.claude/rules-details/` 同期 SSoT comment 追加 ✅、link reference 規約 2 要素 hard match 維持 (Step 5b 内で同時達成) | 0.5h | Step 5b |
+| 5c | 🔲 | (fresh session 再計測 + 残 smoke) 次 session 起動時に token 再実測 (after 値) + 残 6 hook smoke (delegation-guard / autonomous-action-guard / workflow-guard / loop-confirmation-detector / task-rule-guard / draft-flow-guard / context-budget の各 1 case PASS、layer-b-context-isolation は完了済) | 1h | Step 6 |
 
 合計工数: **14-18h (2.0-2.5d)**
 
@@ -392,6 +392,9 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 2026-05-28 | Step 3 development-process.md 完了 | Layer A 17423B + Layer B 17850B、純削減 ~1.3K tokens、subagent adb60e5fa6b97a234 conf 0.85、pilot format 100% 踏襲、SSoT 内容劣化禁止制約で size 目標 ~5K 未達だが SSoT 無損失達成 |
 | 2026-05-28 | Step 3 残 4 file 並列完了 | task-management (abfa1ab710acdbe25 conf 0.95、~4.6K) / workflow (ab7191b08060b054a conf 0.9、~2.1K) / why-x5-output (ab9682463ba3def5e conf 0.95、~0.3K) / modes (ad5a0ef67edd1c087 conf 0.85、~0.3K) を 4 並列 subagent で background 実行、Step 3 累計純削減 ~9.9K tokens、SSoT 劣化なし、format 100% 踏襲、git-workflow.md は ~1K で退避不要として skip |
 | 2026-05-28 | Step 4 完了 | iter 2 reviewer 6 並列 (architect/qa/code-rev/pr-test/harness-opt/test-auto) 全 APPROVE、median conf 0.92、CRITICAL+HIGH=0、M-2 hot fix で MEDIUM=0、M-1 副産物 #58 deferred |
+| 2026-05-28 | Step 5 FAIL → A 案 redesign | token 実測 153,780 tok (target ~80K 未達)、claude-code-guide subagent (conf 0.95) + 公式 doc で `paths: []` 仕様上無効と確定。user 承認「A+Cで」(2026-05-28) で A 案 (Layer B 物理移動 `.claude/rules-details/`) + C 案 (user manual zh.bak/web.bak 移動) に分岐 |
+| 2026-05-28 | Step 5b 完了 | Layer B 6 file を git mv で `.claude/rules-details/` へ移動 + Layer A 34 link + Layer B 10 link 更新 + `.claude/rules-details/README.md` 新設 + install.sh / README / INVENTORY / draft / task-51 / list.md 更新 + smoke 追従 (8/8 PASS conf 0.92) 全完了、commit `71c85d2` + `de1e851` 両 push 済 |
+| 2026-05-28 | Step 6 完了 | Layer A→B forward-link 34 件 + Layer B→A back-link 10 件 grep 確認 ✅、install.sh `.claude/rules-details/` 同期 SSoT comment 追加 ✅ (Step 5b commit 内で同時達成、別途 commit 不要) |
 | YYYY-MM-DD | Step 4 完了 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (次 session) |
 | YYYY-MM-DD | Step 5 完了 | (テスト合格) 起動時 token 実測 + smoke regression 0 + Layer B 非注入 smoke 7+ (次 session) |
 | YYYY-MM-DD | Step 6 完了 | (リファクタリング) Layer A↔B back-link 整合 + install.sh sync path (次 session) |
