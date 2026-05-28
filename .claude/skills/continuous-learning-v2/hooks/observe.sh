@@ -15,6 +15,7 @@
 #   HOMUNCULUS_DIR (default: $HOME/.claude/homunculus)
 #   CLAUDE_PROJECT_DIR (Claude Code が注入する project root)
 #   CLAUDE_OBSERVE_DEBUG=1  → /tmp/claude-observe-debug.log にダンプ
+#   OBSERVE_LOCK_TIMEOUT_MS (default: 2000) → append lock 取得の最大待ち時間 (ms)
 #
 # 拡張履歴:
 #   - 2026-05-23 task-28 W1 (Phase 1): SubagentStop event 配線追加
@@ -30,6 +31,11 @@
 #     - 既存 SubagentStop / PreToolUse / PostToolUse の挙動は完全維持
 #     - 起源: docs/draft/observe-subagent-stop-instrumentation.md §3 W3
 #     - 目的: session lifecycle 全 event 捕捉 + Loop モード規律後追い分析 + 注入数 audit
+#   - 2026-05-28 task-53 (observe-sh-flock): observations.jsonl append の排他化
+#     - 並行 subagent が同時 append しても record interleave (JSON 破損) が起きないよう
+#       flock (利用可能時) / mkdir lock (flock 不在の macOS 等) で append を排他化
+#     - fail-open: lock 取得失敗でも観察を落とさず lock 無し append にフォールバック
+#     - 起源: docs/draft/harness-health-improvements.md §3 task-53 (classlab で 122 件 corruption 実証)
 
 set -u
 
@@ -47,6 +53,87 @@ fi
 if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
+
+# === task-53: append 排他化ヘルパ ===
+#
+# observations.jsonl への並行 append を排他化する。lock 無しの `>>` 並行 append は
+# record interleave で JSON 破損する (大 record は 1 write() に収まらず PIPE_BUF を
+# 超えて split されるため、classlab で 122 件 corruption 実証)。
+#
+# 戦略:
+#   1. flock があれば flock -x で排他 (Linux 等)
+#   2. flock 不在 (macOS 標準) は mkdir atomic lock + retry/timeout で fallback
+#   3. lock 取得失敗 (timeout) でも観察を落とさず lock 無し append にフォールバック (fail-open)
+#
+# fail policy: caller の shell flags へ leak させないため subshell 関数化
+# (`do_xxx() ( set -uo pipefail; ... )`、CLAUDE.md HIGH 教訓 SIGPIPE/leak 回避)。
+#
+# 使い方: append_locked "<line>" "<jsonl_path>"
+
+# flock 経由 append (利用可能時のみ呼ばれる)。subshell 局所化。
+_append_with_flock() (
+  set -uo pipefail
+  local line="$1" target="$2" lockfile="$3" timeout_sec="$4"
+  # fd 9 を lockfile に割り当て、flock -w で timeout 付き排他取得
+  exec 9>"$lockfile" 2>/dev/null || return 1
+  if flock -x -w "$timeout_sec" 9 2>/dev/null; then
+    printf '%s\n' "$line" >> "$target" 2>/dev/null
+    # fd close で lock 自動解放
+    exec 9>&- 2>/dev/null || true
+    return 0
+  fi
+  exec 9>&- 2>/dev/null || true
+  return 1
+)
+
+# mkdir atomic lock 経由 append (flock 不在環境)。subshell 局所化。
+_append_with_mkdir_lock() (
+  set -uo pipefail
+  local line="$1" target="$2" lockdir="$3" timeout_ms="$4"
+  local waited_ms=0
+  local step_ms=20
+  local acquired=0
+  # trap で必ず lockdir 解放 (subshell EXIT 局所、caller へ leak しない)
+  trap 'rmdir "$lockdir" 2>/dev/null || true' EXIT
+  while [ "$waited_ms" -lt "$timeout_ms" ]; do
+    if mkdir "$lockdir" 2>/dev/null; then
+      acquired=1
+      break
+    fi
+    # 20ms sleep (perl/sleep 不要、bash 組込みで近似)
+    sleep 0.02 2>/dev/null || true
+    waited_ms=$((waited_ms + step_ms))
+  done
+  if [ "$acquired" -ne 1 ]; then
+    return 1
+  fi
+  printf '%s\n' "$line" >> "$target" 2>/dev/null
+  return 0
+)
+
+# 排他 append の本体。lock 取得失敗時は lock 無し append にフォールバック (fail-open)。
+append_locked() {
+  local line="$1" target="$2"
+  local timeout_ms="${OBSERVE_LOCK_TIMEOUT_MS:-2000}"
+  local lockfile="$target.lock"
+
+  if command -v flock >/dev/null 2>&1; then
+    # flock は秒単位 (小数許容)。ms → sec へ変換 (整数丸めで下限 1s 確保)
+    local timeout_sec=$((timeout_ms / 1000))
+    [ "$timeout_sec" -lt 1 ] && timeout_sec=1
+    if _append_with_flock "$line" "$target" "$lockfile" "$timeout_sec"; then
+      return 0
+    fi
+  else
+    if _append_with_mkdir_lock "$line" "$target" "$lockfile.d" "$timeout_ms"; then
+      return 0
+    fi
+  fi
+
+  # fail-open: lock 取得に失敗しても観察を落とさない (最悪 lock 無し append)
+  printf '%s\n' "$line" >> "$target" 2>/dev/null
+  return 0
+}
 
 # プロジェクト検出
 project_id=""
@@ -208,7 +295,8 @@ obs=$(jq -nc \
    }' 2>/dev/null) || obs=""
 
 if [ -n "$obs" ]; then
-  printf '%s\n' "$obs" >> "$obs_dir/observations.jsonl" 2>/dev/null
+  # task-53: flock / mkdir lock で排他 append (並行 subagent の record interleave 防止)
+  append_locked "$obs" "$obs_dir/observations.jsonl"
 fi
 
 # project レジストリ更新（global 1ヶ所）
