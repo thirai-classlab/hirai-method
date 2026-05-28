@@ -160,7 +160,7 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 |:---:|:---:|:---|---:|:---|
 | 1 | ✅ | (a/b) global plugin 棚卸し + user-level rule (zh / web) 整理 [user 手動] | 0.5h | — |
 | 2 | ✅ | (c/e) memory SUPERSEDED 5 件削除 (v8 既存削除済の死リンク含 MEMORY.md 6 行整理) + CommonRules 旧 Critical Lessons section 圧縮 [完了 2026-05-28、削減 ~6K tokens] | 1.5h | Step 1 |
-| 3 | 🔄 | (d) project rules 7 file **2 層構造化**。**pilot ✅** (self-improvement.md、~1.3K 削減) / **development-process.md ✅** (Layer A 17.4K + Layer B 17.8K、純削減 ~1.3K、SSoT 内容劣化禁止制約で size 目標未達だが format 100% 踏襲) / **残 4 file**: task-management / workflow / modes / why-x5-output | 8-11h | Step 2 |
+| 3 | ✅ | (d) project rules **6 file 2 層構造化完了** (git-workflow は退避不要)。**self-improvement** (pilot、~1.3K) / **development-process** (~1.3K) / **task-management** (~4.6K) / **workflow** (~2.1K) / **why-x5-output** (~0.3K) / **modes** (~0.3K) — 6 subagent 並列 + sequential で完遂、累計純削減 ~9.9K tokens、SSoT 劣化なし、Read trigger 4 条件 admonition 全 6 file 配置 | 8-11h | Step 2 |
 | 4 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 + Read trigger 4 条件 AI 判断 test scenario 4 件 | 1.5-2h | Step 3 |
 | 5 | 🔲 | (テスト合格) 起動時 token 実測 + 既存 smoke regression 0 + 新規 `layer-b-context-isolation-smoke.sh` 7+ cases PASS | 1.5h | Step 4 |
 | 6 | 🔲 | (リファクタリング) Layer A ↔ Layer B back-link 両方向確認、link reference 規約統一、anchor 整理 | 0.5-1h | Step 5 |
@@ -194,9 +194,31 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 
 **実測削減**: ~6K tokens (Step 2a 1K + Step 2b 5K)
 
-### Step 3: (d) project rules 7 file 2 層構造化
+### Step 3: (d) project rules 7 file 2 層構造化 ✅
 
-**Step status**: 🔲 未着手
+**Step status**: ✅ 完了 (2026-05-28)
+
+**実完了 file**: 6 file (git-workflow.md は ~1K で退避不要として skip)
+
+| file | subagent | Layer A bytes | Layer B bytes | 純削減 tokens | confidence |
+|---|---|---:|---:|---:|:---:|
+| self-improvement.md (pilot) | af4001777fb0a4586 | 4477 | 5367 | ~1.3K | 0.92 |
+| development-process.md | adb60e5fa6b97a234 | 17423 | 17850 | ~1.3K | 0.85 |
+| task-management.md | abfa1ab710acdbe25 | 14388 | 17386 | ~4.6K | 0.95 |
+| workflow.md | ab7191b08060b054a | 22541 | 17479 | ~2.1K | 0.9 |
+| why-x5-output.md | ab9682463ba3def5e | 4020 | 6725 | ~0.3K | 0.95 |
+| modes.md | ad5a0ef67edd1c087 | 13347 | 17107 | ~0.3K | 0.85 |
+| **合計** | — | **76196** | **81914** | **~9.9K** | median 0.91 |
+
+**format 100% 踏襲確認**:
+- Layer A frontmatter 維持 (paths-scoped 維持 / 常時参照は frontmatter なし)
+- Read trigger 4 条件 admonition: 全 6 file 配置済
+- Layer A→B link: 各 file 2 件以上
+- Layer B→A back-link: 各 file 1 件
+- Layer B frontmatter `paths: []`: 全 6 file 確認済
+- link reference 規約 3 形式 (詳細 / 例詳細 / 起源詳細) 使用
+
+**SSoT 劣化なし**: 各 file の条文 / table / 採用 N 条 / 遵守事項 N / 規約 keep。退避は OK/NG 例詳細 / history / 起源 / bypass 詳細 / 関連 artifact 完全 list のみ。
 
 **作業概要**: 7 rule file を Layer A (`<rule>.md` 要約) + Layer B (`<rule>.details.md` 詳細、frontmatter `paths: []`) に分割。各 Layer A 冒頭に Read trigger 4 条件 table 追加、subsection 末尾に Layer B link 追加。
 
@@ -312,7 +334,11 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 2026-05-28 | Step 3 pilot 完了 | self-improvement.md 2 層分割 (Layer A 4477B + Layer B 5367B、純削減 ~1.3K tokens)、subagent af4001777fb0a4586 conf 0.92、format 確立 (Layer A/B 構造 + link reference 規約 3 形式 + Read trigger admonition 配置) |
 | 2026-05-28 | PR #25 merged | `f2becac` で main に統合済 (4 commit: 10b0e33 / 516f2f6 / 311b73c / 83ae19f、user merge 2026-05-28) |
 | 2026-05-28 | Step 3 development-process.md 完了 | Layer A 17423B + Layer B 17850B、純削減 ~1.3K tokens、subagent adb60e5fa6b97a234 conf 0.85、pilot format 100% 踏襲、SSoT 内容劣化禁止制約で size 目標 ~5K 未達だが SSoT 無損失達成 |
-| YYYY-MM-DD | Step 3 完了 | 残 4 file (task-management / workflow / modes / why-x5-output) 並列展開 commit `<sha>` |
+| 2026-05-28 | Step 3 残 4 file 並列完了 | task-management (abfa1ab710acdbe25 conf 0.95、~4.6K) / workflow (ab7191b08060b054a conf 0.9、~2.1K) / why-x5-output (ab9682463ba3def5e conf 0.95、~0.3K) / modes (ad5a0ef67edd1c087 conf 0.85、~0.3K) を 4 並列 subagent で background 実行、Step 3 累計純削減 ~9.9K tokens、SSoT 劣化なし、format 100% 踏襲、git-workflow.md は ~1K で退避不要として skip |
+| YYYY-MM-DD | Step 4 完了 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (次 session) |
+| YYYY-MM-DD | Step 5 完了 | (テスト合格) 起動時 token 実測 + smoke regression 0 + Layer B 非注入 smoke 7+ (次 session) |
+| YYYY-MM-DD | Step 6 完了 | (リファクタリング) Layer A↔B back-link 整合 + install.sh sync path (次 session) |
+| YYYY-MM-DD | 完了 | DoD 全 PASS + 4 リポ user manual install + commit `<sha>` |
 | YYYY-MM-DD | Step 4 完了 | reviewer iter `<N>` 回で収束 |
 | YYYY-MM-DD | Step 5 完了 | 起動時 token before/after 実測値 |
 | YYYY-MM-DD | Step 6 完了 | commit `<sha>` |

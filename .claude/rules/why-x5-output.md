@@ -1,8 +1,20 @@
+<!--
+2026-05-23 v10 確定: 1 行 format「<何のため> のため、<何をやる> を行う」に集約。
+task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
+-->
+
 # 「何のために何をやるのか」1 行出力ルール (v10、2026-05-23)
 
-メインエージェントは、各作業ステップごとに **「何のために何をやるのか」を 1 行** で先出しする。
+メインエージェントは、各作業ステップごとに **「何のために何をやるのか」を 1 行** で先出しする。常時参照 (frontmatter 無し、毎セッション AI が読む)。
 
-> **改訂履歴**: 2026-05-23 v10、user 明示指摘「4 セクション format 不要、何のために何をやるのかを 1 行で毎回出力」を反映。v9 (4 セクション分割: システム意義 / whyN / 現在の作業 / 他選択肢) は冗長で認知負荷が高く廃止。`feedback_why_x5_v10_one_liner.md` (memory) が起源。
+> **Layer B (詳細版) Read trigger** (4 条件):
+> 1. **違反検出時**: hook BLOCK / warn 注入受領 / regex 不一致
+> 2. **規範変更時**: rule 編集 / draft 起案 / 採用 N 条改定
+> 3. **新規事案**: 初遭遇 keyword / 例外パターン疑い
+> 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
+>
+> 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
+> 詳細: [why-x5-output.details.md](./why-x5-output.details.md)
 
 ## format
 
@@ -29,7 +41,7 @@
 
 - すべての作業ターン (雑談・短い確認応答も含む)
 - 連続して同種の操作を行う場合も、ステップ毎に 1 行表示
-- 例外: `feedback_skip_why_x5_for_mode_command.md` 該当 command のみ
+- 例外: `feedback_skip_why_x5_for_mode_command.md` 該当 command (`/mode` 等) のみ
 
 ## 強制機構
 
@@ -52,23 +64,8 @@
 - 「【システムの存在意義】【whyN】【現在行っていること】【他の選択肢を取らない理由】」と 4 セクションで書く (v9 format、廃止)
 - 「何をやる」だけ書いて「何のため」を省略 (例: 「install.sh を smoke test する」 — NG)
 - 1 ステップで 2 行以上書く (例: 改行で目的と作業を分けて書く — NG)
-- 「他の選択肢を取らない理由」を毎回 3 件矢印 format で書く (v9 廃止)
 
-## v1→v10 経緯 (再発防止用の取り違え履歴)
-
-| 版 | 構造 / 並び | 指摘 |
-|---|---|---|
-| v1 | 6 階層固定 | 「固定するな」 |
-| v2 | 3 要件固定 | 「3 要件も固定するな」 |
-| v3 | 全任意化 | 「現在行っていること・他の選択肢は必須」 |
-| v4 | 「○○のために○○を行っている」1 文 | 「ではないです、多階層で」 |
-| v5 | 多階層 + `↑` 記号 + ラベル | 「認知負荷高い」 |
-| v6 | markdown 表 + 視覚記号 | 「【現在行っていること】+【whyN】format で」 |
-| v7 | § 等装飾残存 | 「§は不要です」 |
-| v7-final | 1 セクション混在 (作業 → 中間 → 目的) | 「最終的なシステム目的 → 必要な機能 に繋がっていません」 |
-| v8 | 1 セクション混在 並び逆転 (目的 → 中間 → 作業) | 「一番上をシステム目的、一番下を現在の作業」 |
-| v9 | 4 セクション分割 + 思考ロジック (何 → 選択肢 → 選定) 強制 | 「冗長、不要」 |
-| **v10** | **1 行 format「<何のため> のため、<何をやる> を行う」** | 「何のために何をやるのかを 1 行で毎回出力に変更」 |
+> **例詳細 / 旧 version の format 例**: [why-x5-output.details.md §例詳細](./why-x5-output.details.md#例詳細)
 
 ## 一時無効化
 
@@ -80,13 +77,10 @@ export HC_WHY_X5_DISABLE=1
 
 通常運用では **無効化しない**。
 
-## 関連 feedback memory
+## 関連 feedback memory (代表)
 
-- `feedback_why_x5_v10_one_liner.md` (2026-05-23、本 rule v10 改訂の起源、起こし予定)
-- `feedback_why_x5_v9_four_sections.md` (2026-05-23 v10 で **SUPERSEDED**)
+- `feedback_why_x5_v10_one_liner.md` (2026-05-23、本 rule v10 改訂の起源)
 - `feedback_why_x5_once_per_turn.md` (v10 でも継続有効、ターン冒頭 1 回 / ステップ単位 / 未来時制)
-- `feedback_why_x5_v7_link_to_system_purpose.md` (v10 では「何のため」に統合、SUPERSEDED 相当)
-- `feedback_why_x5_v8_top_purpose_bottom_work.md` (SUPERSEDED)
-- `feedback_why_x5_v7_labeled_sections.md` (SUPERSEDED)
-- `feedback_why_x5_depth_and_requirement_link.md` (SUPERSEDED)
 - `feedback_skip_why_x5_for_mode_command.md` (`/mode` 等 format 省略許可 command 規範、v10 でも有効)
+
+> **v1→v10 経緯 table (full) / SUPERSEDED 履歴 / 起源詳細**: [why-x5-output.details.md §v1-v10-経緯](./why-x5-output.details.md#v1v10-経緯)
