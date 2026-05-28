@@ -19,6 +19,17 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
 > 詳細: [task-management.details.md](./task-management.details.md)
 
+## bypass env naming convention (SSoT)
+
+本 harness の全 bypass env は **2 系統に分離** され、用途・痕跡・スコープが明確に区別される。各規範文書 (`task-management.md` / `workflow.md` / `modes.md` / `development-process.md`) の bypass table はこの規約に従う。
+
+| prefix | 系統 | 用途 | 痕跡 |
+|---|---|---|---|
+| `ECC_*` | env 系統 | 1 セッション限定 bypass、操作の audit trail を `.claude/.workflow-state/bypass.log` に append | bypass.log |
+| `HC_*` | config 系統 | feature toggle / yml override (`harness-config.yml` 経由で永続化される可能性あり) | yml + bypass.log (一部) |
+
+両系統併存は意図的 (env 系統と config 系統から独立に bypass 可能、片方の誤った enabled 状態放置を防ぐ)。
+
 ## メインエージェント専任（必須）
 
 タスク管理はメインエージェントのみが行う。サブエージェントにタスク管理を委譲してはならない。
@@ -54,6 +65,10 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
    - **集約 status**: 全 ✅ → ✅、🔄/🔲 混在 → 🔄、全 🔲 → 🔲、全 📝 → 📝、⏸️ 含む → ⏸️
    - **status 凡例**: 📝 設計未承認 / 🔲 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
    - **概要欄 2 種規約**: Task = 3 要素 (purpose × work × outcome) / Step = 作業概要のみ
+
+> **Step status emoji 凡例 (SSoT)**: 📝 設計未承認 / 🔲 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留 — 本 harness の全 rule / template / list.md / task.md で本 5 種のみ使用。他の emoji (例: 🟢 🟡 🔴 等) は緊急度や別軸用途で混同禁止。
+
+> **3 観点 (リファクタリング、採用 6 条 4)**: 持続可能性 (Sustainability) / 汎用性 (Generality) / 非冗長化 (Deduplication)。詳細 sub-checklist は [`workflow.md`](./workflow.md) §「リファクタリング強制 (W3)」参照。
 
 > **OK/NG 例詳細 (条 2/3/6) / task-29 採用 5 条 supersede 経緯**: [task-management.details.md §採用-6-条-詳細](./task-management.details.md#採用-6-条-詳細)
 
