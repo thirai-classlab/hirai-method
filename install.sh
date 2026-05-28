@@ -105,6 +105,47 @@ echo "[install] target : $TARGET"
 echo "[install] mode   : $MODE  (dry-run=$DRY_RUN, with-mcp=$WITH_MCP, with-docs=$WITH_DOCS)"
 echo ""
 
+# ============================================================
+# dirty-tree safety: --update / --force 前に target の未 commit 変更を warn
+# (task-55: user 無警告で上書き rsync する事故を防ぐ。block ではなく warn のみ)
+# ============================================================
+if [[ "$MODE" == "update" || "$MODE" == "force" ]] && ! $DRY_RUN; then
+  if command -v git >/dev/null 2>&1 && [[ -d "$TARGET/.git" ]]; then
+    DIRTY=$(cd "$TARGET" && git status --short 2>/dev/null | head -20)
+    if [[ -n "$DIRTY" ]]; then
+      echo "[install] WARN: target has uncommitted changes (showing up to 20 lines):"
+      echo "$DIRTY" | sed 's/^/  /'
+      echo "[install] WARN: rsync is about to overwrite .claude/ — review or commit/stash first."
+      echo "[install] WARN: continuing in 3s (Ctrl-C to abort)..."
+      sleep 3 || true
+    fi
+  fi
+fi
+
+# ============================================================
+# migration helper: project 固有 override が SSoT yml に直接書かれている場合の案内
+# (task-55: docs_approved_dir 等が SSoT yml に書かれていると --update で巻き戻る潜在事故。
+#  自動移動はしない、案内のみ。違反が見つかったら user が手で local.yml へ移行する)
+# ============================================================
+if [[ "$MODE" == "update" || "$MODE" == "force" ]] && ! $DRY_RUN; then
+  TARGET_SSOT="$TARGET/.claude/harness-config.yml"
+  SRC_SSOT="$SCRIPT_DIR/.claude/harness-config.yml"
+  if [[ -f "$TARGET_SSOT" && -f "$SRC_SSOT" ]]; then
+    # 比較対象 key (project 固有 override が起こりやすい代表例)
+    for key in docs_approved_dir task_dir draft_dir protected_paths; do
+      tgt_val=$(grep -E "^${key}:" "$TARGET_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//")
+      src_val=$(grep -E "^${key}:" "$SRC_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//")
+      if [[ -n "$tgt_val" && "$tgt_val" != "$src_val" ]]; then
+        echo "[install] MIGRATE: $TARGET_SSOT has project-specific '$key: $tgt_val' (SSoT default: '$src_val')."
+        echo "[install] MIGRATE: --update will overwrite SSoT yml. Move this value to .claude/harness-config.local.yml to preserve it across updates."
+      fi
+    done
+    unset key tgt_val src_val
+  fi
+  unset TARGET_SSOT SRC_SSOT
+fi
+
+
 # helper: run or echo (dry-run aware)
 run() {
   if $DRY_RUN; then
@@ -128,6 +169,7 @@ RSYNC_EXCLUDES=(
   --exclude=.workflow-state/
   --exclude=settings.local.json
   --exclude=settings.local.example.json
+  --exclude=harness-config.local.yml
   --exclude=bash-whitelist-requests/
   --exclude=worktrees/
 )
@@ -315,11 +357,16 @@ Counts at target:
 
 Next steps:
   1. cd $TARGET
-  2. \$EDITOR .claude/harness-config.yml         # protected_paths / task_dir / ... を project に合わせる
-  3. \$EDITOR .claude/bash-whitelist.txt         # 使う CLI (pnpm/poetry/cargo/...) を追記
+  2. project 固有 override (docs_approved_dir / protected_paths 追加分 等) は
+     \$EDITOR .claude/harness-config.local.yml     # ←ココに書く (install.sh --update で温存される)
+     (SSoT .claude/harness-config.yml は触らない — --update で SSoT 値が上書きされる)
+  3. \$EDITOR .claude/bash-whitelist.txt           # 使う CLI (pnpm/poetry/cargo/...) を追記
   4. mv CLAUDE.md.template CLAUDE.md && \$EDITOR CLAUDE.md   # <...> placeholders を埋める
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
   6. Claude Code session 起動 → /init-tasks → /mode loop
+
+Override precedence (高 → 低):
+  env(HC_*) > .claude/harness-config.local.yml > .claude/harness-config.yml (SSoT) > hardcoded default
 
 Documentation:
   - README.md         (採用 5 ステップ)
