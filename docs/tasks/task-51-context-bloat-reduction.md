@@ -253,7 +253,7 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 
 ### Step 4: (テスト設計レビュー)
 
-**Step status**: 🔄 (iter 2 進行中、2026-05-28)
+**Step status**: ✅ (iter 2 収束、2026-05-28、6 reviewer median conf 0.92、CRITICAL+HIGH=0、MEDIUM 2 → M-2 hot fix で 0 / M-1 副産物 #58 deferred)
 
 **作業概要**: 5+ reviewer 動的選定 (常時 base: tdd-guide / test-automator / qa-expert / pr-test-analyzer、domain-specific: harness-optimizer + architect-reviewer + technical-writer)。並列起動 (run_in_background: true)、収束まで反復 (上限 5 回、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`)。
 
@@ -269,7 +269,7 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 
 ### Step 5: (テスト合格)
 
-**Step status**: 🔲
+**Step status**: 🔄 (本 commit で着手準備)
 
 **作業概要**:
 - 起動時 token 実測 (具体的手順: 後述 §「token 計測手順」)
@@ -363,6 +363,7 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 2026-05-28 | PR #25 merged | `f2becac` で main に統合済 (4 commit: 10b0e33 / 516f2f6 / 311b73c / 83ae19f、user merge 2026-05-28) |
 | 2026-05-28 | Step 3 development-process.md 完了 | Layer A 17423B + Layer B 17850B、純削減 ~1.3K tokens、subagent adb60e5fa6b97a234 conf 0.85、pilot format 100% 踏襲、SSoT 内容劣化禁止制約で size 目標 ~5K 未達だが SSoT 無損失達成 |
 | 2026-05-28 | Step 3 残 4 file 並列完了 | task-management (abfa1ab710acdbe25 conf 0.95、~4.6K) / workflow (ab7191b08060b054a conf 0.9、~2.1K) / why-x5-output (ab9682463ba3def5e conf 0.95、~0.3K) / modes (ad5a0ef67edd1c087 conf 0.85、~0.3K) を 4 並列 subagent で background 実行、Step 3 累計純削減 ~9.9K tokens、SSoT 劣化なし、format 100% 踏襲、git-workflow.md は ~1K で退避不要として skip |
+| 2026-05-28 | Step 4 完了 | iter 2 reviewer 6 並列 (architect/qa/code-rev/pr-test/harness-opt/test-auto) 全 APPROVE、median conf 0.92、CRITICAL+HIGH=0、M-2 hot fix で MEDIUM=0、M-1 副産物 #58 deferred |
 | YYYY-MM-DD | Step 4 完了 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (次 session) |
 | YYYY-MM-DD | Step 5 完了 | (テスト合格) 起動時 token 実測 + smoke regression 0 + Layer B 非注入 smoke 7+ (次 session) |
 | YYYY-MM-DD | Step 6 完了 | (リファクタリング) Layer A↔B back-link 整合 + install.sh sync path (次 session) |
