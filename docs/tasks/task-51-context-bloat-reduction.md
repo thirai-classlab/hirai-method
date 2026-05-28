@@ -160,7 +160,7 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 |:---:|:---:|:---|---:|:---|
 | 1 | ✅ | (a/b) global plugin 棚卸し + user-level rule (zh / web) 整理 [user 手動] | 0.5h | — |
 | 2 | ✅ | (c/e) memory SUPERSEDED 5 件削除 (v8 既存削除済の死リンク含 MEMORY.md 6 行整理) + CommonRules 旧 Critical Lessons section 圧縮 [完了 2026-05-28、削減 ~6K tokens] | 1.5h | Step 1 |
-| 3 | 🔲 | (d) project rules 7 file **2 層構造化** (Layer A 要約 + Layer B `.details.md` 退避 + link reference + Read trigger 4 条件) | 8-11h | Step 2 |
+| 3 | 🔄 | (d) project rules 7 file **2 層構造化** (Layer A 要約 + Layer B `.details.md` 退避 + link reference + Read trigger 4 条件) **pilot 完了 (self-improvement.md)、残 5 file (development-process / task-management / workflow / modes / why-x5-output) 並列展開予定** | 8-11h | Step 2 |
 | 4 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 + Read trigger 4 条件 AI 判断 test scenario 4 件 | 1.5-2h | Step 3 |
 | 5 | 🔲 | (テスト合格) 起動時 token 実測 + 既存 smoke regression 0 + 新規 `layer-b-context-isolation-smoke.sh` 7+ cases PASS | 1.5h | Step 4 |
 | 6 | 🔲 | (リファクタリング) Layer A ↔ Layer B back-link 両方向確認、link reference 規約統一、anchor 整理 | 0.5-1h | Step 5 |
@@ -309,7 +309,8 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 2026-05-28 | 承認 | user 承認、本 task ファイル詳細化 + list.md update |
 | 2026-05-28 | Step 1 完了 | (user 手動) global plugin (Vercel/sc/Figma) 除外 + `~/.claude/rules/zh/` `web/` 整理 |
 | 2026-05-28 | Step 2 完了 | Step 2a: CommonRules.md 圧縮 commit `516f2f6` (-1K) + Step 2b: memory 5 件 rm + MEMORY.md index 6 行整理 subagent a106d06ab27d294f7 conf 0.92 (-5K)、累計削減 -6K tokens |
-| YYYY-MM-DD | Step 3 完了 | commit `<sha>` |
+| 2026-05-28 | Step 3 pilot 完了 | self-improvement.md 2 層分割 (Layer A 4477B + Layer B 5367B、純削減 ~1.3K tokens)、subagent af4001777fb0a4586 conf 0.92、format 確立 (Layer A/B 構造 + link reference 規約 3 形式 + Read trigger admonition 配置)、残 5 file (development-process / task-management / workflow / modes / why-x5-output) は次 turn or 次 session で並列展開予定 |
+| YYYY-MM-DD | Step 3 完了 | 残 5 file 並列展開 commit `<sha>` |
 | YYYY-MM-DD | Step 4 完了 | reviewer iter `<N>` 回で収束 |
 | YYYY-MM-DD | Step 5 完了 | 起動時 token before/after 実測値 |
 | YYYY-MM-DD | Step 6 完了 | commit `<sha>` |

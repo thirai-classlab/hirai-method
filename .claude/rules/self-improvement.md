@@ -7,6 +7,15 @@ paths:
 
 このハーネスは ECC（Everything Claude Code）の自己改善アルゴリズム **5 層 + 事実検証 2 層** を完全模倣している。タスク受領時・失敗時・完了時に「どの層を使うか」を意識する。
 
+> **Layer B (詳細版) Read trigger** (4 条件):
+> 1. **違反検出時**: hook BLOCK / warn 注入受領 / regex 不一致
+> 2. **規範変更時**: rule 編集 / draft 起案 / 採用 N 条改定
+> 3. **新規事案**: 初遭遇 keyword / 例外パターン疑い
+> 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
+>
+> 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
+> 詳細: [self-improvement.details.md](./self-improvement.details.md)
+
 ## 層構造
 
 | 層 | 名称 | 改善対象 | 観察粒度 | 永続化先 |
@@ -19,43 +28,19 @@ paths:
 | **F1** | **GateGuard**（事前ゲート） | **Edit/Write/Bash の事実性** | **初回ファイル/コマンド** | `.claude/.gateguard-state/` |
 | **F2** | **Verification Loop**（事後検証） | **PR 直前の品質** | **6 phases** | `/verify` レポート |
 
-## いつどの層を使うか
+## いつどの層を使うか（要約）
 
 ```
-タスク受領
-  → L1 で合否基準を先に書く（/eval define）
-  → L2 でループ実装（Sequential / Continuous PR / GAN）
-  → L1 で合否確認（/eval check）
-
-ファイルを編集/作成しようとした時
-  → F1 GateGuard が初回 BLOCK（事実調査要求）
-  → 要求された 4 事実を提示
-  → 同ファイルへの retry は通過
-
-破壊的 Bash（rm -rf / git reset --hard 等）
-  → F1 GateGuard が初回 BLOCK
-  → rollback 手順 + 影響範囲 + 逐語引用 を提示
-  → retry で通過
-
-PR 作成直前
-  → F2 /verify で 6 phase 検証
-  → READY なら commit/push
-
-タスク失敗（同じ失敗3連 / context 肥大 / drift）
-  → L5 で自己診断（/agent-introspect）
-  → 教訓を L4 へ送る（/learn）
-
-セッション終了
-  → L4 が Hook 経由で自動観察済み
-  → 余裕があれば /instinct-status 確認
-  → /gate-status で何が cleared か確認
-
-複数プロジェクトで同じ patten 反復
-  → L4 で /promote project → global
-
-大規模・並列必要
-  → L3 Ralphinho（外部 plugin・このハーネスでは雛形のみ）
+タスク受領 → L1 で合否基準 → L2 でループ実装 → L1 で合否確認
+Edit/Write 初回 → F1 BLOCK → 4 事実提示 → retry 通過
+破壊的 Bash 初回 → F1 BLOCK → rollback/影響/逐語引用 → retry
+PR 直前 → F2 /verify 6 phase → READY なら commit/push
+失敗 3 連 → L5 /agent-introspect → L4 /learn で教訓化
+セッション終了 → L4 自動観察済 (Hook 経由)
+複数 project 反復 → L4 /promote project → global
 ```
+
+> **判断フロー full / 大規模・並列ケース詳細**: [self-improvement.details.md §いつどの層を使うか-full](./self-improvement.details.md#いつどの層を使うか-full)
 
 ## 事実性レイヤー（F1/F2）の効果
 
@@ -68,28 +53,6 @@ PR 作成直前
 - F1 = "**実行前**に事実を強制"（投機的な Edit を防ぐ）
 - F2 = "**実行後**に網羅検証"（バグの作り込みを止める）
 
-## L4（核心）の動作前提
-
-このハーネスは **すべての tool call を `.claude/skills/continuous-learning-v2/hooks/observe.sh` で観察** する。
-
-- Hook 100% 確実発火
-- 観察先: `~/.claude/homunculus/projects/<hash>/observations.jsonl`
-- 個人データ・コードは送信されない（完全ローカル）
-- `git remote` で project hash 自動検出
-- 検出失敗時は global fallback
-
-## L4 信頼度（confidence）の挙動
-
-| Score | 表示 | 行動 |
-|---|---|---|
-| 0.3 | 提示するが強制せず | suggest |
-| 0.5 | 関連時のみ適用 | apply when relevant |
-| 0.7 | 自動適用承認 | auto-apply |
-| 0.9 | コア行動 | core behavior |
-
-**confidence が上がる**: 同パターン再観察、user 非否定、横断的合意
-**confidence が下がる**: user 修正、長期未観察、矛盾観察
-
 ## メインエージェントへの要請
 
 1. **タスク受領時**: `/eval define` で先に合否基準を書く（できるなら）
@@ -98,45 +61,15 @@ PR 作成直前
 4. **新規スキル提案時**: `/evolve` で既存 instinct クラスタから派生提案
 5. **共通ルール抽出時**: `/promote` で project → global 昇格
 
-## 失敗モード対処
+> **L4 動作前提 / 信頼度挙動 / 失敗モード対処詳細**: [self-improvement.details.md §l4-動作前提](./self-improvement.details.md#l4-動作前提)
 
-| 症状 | 層 | 対処 |
-|---|---|---|
-| ループ churn | L2 | scope 縮小、`/harness-audit`、明示 acceptance |
-| Merge stall | L3 | unit 分割、tier 下げ |
-| 信頼度爆発（矛盾 instinct） | L4 | confidence decay、user 確認、`/instinct-status` |
-| プロジェクト混線 | L4 | v2.1 の project-scoped で隔離（既に有効） |
-| Cost drift | L2/L4 | `--max-cost` / Haiku ルーティング |
-| 失敗ループ | L5 | `/agent-introspect`、教訓を L4 へ |
+## 関連スキル / コマンド (代表)
 
-## 関連スキル
+- L1: `/eval {define|check|report}` ([eval-harness](../skills/eval-harness/SKILL.md))
+- L2: `/gan-design` `/gan-build` ([continuous-agent-loop](../skills/continuous-agent-loop/SKILL.md), [gan-style-harness](../skills/gan-style-harness/SKILL.md))
+- L4: `/instinct-status` `/learn` `/evolve` `/promote` ([continuous-learning-v2](../skills/continuous-learning-v2/SKILL.md) — 核心)
+- L5: `/agent-introspect` ([agent-introspection-debugging](../skills/agent-introspection-debugging/SKILL.md))
+- F1: `/gate-status` `/gate-clear` `/gate-bypass` ([gateguard](../skills/gateguard/SKILL.md))
+- F2: `/verify` ([verification-loop](../skills/verification-loop/SKILL.md))
 
-- `.claude/skills/eval-harness/SKILL.md` (L1)
-- `.claude/skills/continuous-agent-loop/SKILL.md` (L2)
-- `.claude/skills/gan-style-harness/SKILL.md` (L2+)
-- `.claude/skills/continuous-learning-v2/SKILL.md` (L4 — 核心)
-- `.claude/skills/agent-introspection-debugging/SKILL.md` (L5)
-- `.claude/skills/gateguard/SKILL.md` (F1 — 事前ゲート)
-- `.claude/skills/verification-loop/SKILL.md` (F2 — 事後検証)
-
-## 関連コマンド
-
-```
-/eval {define|check|report} <feature>     # L1
-/gan-design <prompt>                       # L2+ Planner
-/gan-build <spec>                          # L2+ Generator/Evaluator loop
-/instinct-status                           # L4 一覧
-/projects                                  # L4 既知プロジェクト
-/learn                                     # L4 ヒューリスティック抽出
-/evolve                                    # L4 クラスタリング
-/promote [id]                              # L4 project → global
-/instinct-export [opts]                    # L4 export
-/instinct-import <file>                    # L4 import
-/agent-introspect                          # L5 自己診断
-
-/gate-status                               # F1 cleared/pending 状態
-/gate-clear [file|all]                     # F1 state リセット
-/gate-bypass <file>                        # F1 pre-clear
-
-/verify                                    # F2 6 phase 事後検証
-```
+> **全 skill / command 完全 list**: [self-improvement.details.md §関連スキル-コマンド-完全](./self-improvement.details.md#関連スキル-コマンド-完全)
