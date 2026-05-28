@@ -9,6 +9,10 @@
 #                CLAUDE.md は CLAUDE.md.template として配置（user が <...> placeholder を埋める）。
 #   --update   : 既存 .claude/ を退避せず rsync で増分上書き。state dir / settings.local.json は保持。
 #                CLAUDE.md / .mcp.json / .gitignore は触らない (既存保護)。
+#                完了時に sync 変更 file 一覧 + 分離 commit 案内を出力 (task-58 G1)。
+#   --commit   : (--update と併用、opt-in) sync 対象 .claude/ path のみ git add + chore(harness): sync で
+#                自動 commit する。project file (root README.md 等) は触らない。git reset 禁止 (HIGH 教訓)。
+#                非 git target なら commit skip + WARN (task-58 G1)。
 #   --force    : 既存 .claude / CLAUDE.md を backup せず上書き。CLAUDE.md は placeholder 入りで上書き。
 #   --dry-run  : 実行内容を表示するのみ (rsync -n + 各 cp / mkdir を echo)。
 #   --no-mcp   : .mcp.json を配置しない (Serena 不要な project)。
@@ -48,11 +52,13 @@ MODE="install"          # install / update / force
 DRY_RUN=false
 WITH_MCP=true
 WITH_DOCS=true
+COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
 
 for arg in "$@"; do
   case "$arg" in
     --update)   MODE="update" ;;
     --force)    MODE="force"  ;;
+    --commit)   COMMIT_AFTER_SYNC=true ;;
     --dry-run)  DRY_RUN=true  ;;
     --no-mcp)   WITH_MCP=false ;;
     --no-docs)  WITH_DOCS=false ;;
@@ -76,7 +82,13 @@ for arg in "$@"; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "usage: ./install.sh <target-project-dir> [--update|--force|--dry-run|--no-mcp|--no-docs]" >&2
+  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--dry-run|--no-mcp|--no-docs]" >&2
+  exit 64
+fi
+
+# --commit は --update mode 専用 (task-58 G1)
+if $COMMIT_AFTER_SYNC && [[ "$MODE" != "update" ]]; then
+  echo "[install] error: --commit requires --update mode" >&2
   exit 64
 fi
 
@@ -363,6 +375,85 @@ if ! $DRY_RUN; then
     unset NEW_STAMP TMP_HC
   fi
   unset TARGET_HC
+fi
+
+# ============================================================
+# 6.7. sync drift 案内 + --commit による分離 commit (task-58 G1)
+# ============================================================
+# install.sh --update が SSoT を同期した直後、target 側 .claude/ 配下の
+# git diff を検出して user に「分離 commit せよ」案内 + 変更 file 一覧を出力。
+# --commit flag 併用時のみ harness-sync 対象 path のみ git add + 単独 commit。
+# project file (root README.md 等) は完全に触らない。git reset 禁止 (HIGH 教訓)。
+# 設計: docs/draft/harness-sync-uncommitted-drift.md (採用案 C ハイブリッド)
+if [[ "$MODE" == "update" ]] && ! $DRY_RUN; then
+  if command -v git >/dev/null 2>&1 && [[ -d "$TARGET/.git" ]]; then
+    # .claude/ 配下の変更 path を git status --porcelain で安全に列挙
+    # (rename 検出は対象外、付属 path のみ抽出)
+    SYNC_CHANGES=$(cd "$TARGET" && git status --porcelain -- .claude/ 2>/dev/null | awk '{
+      # XY status (2 char) + space + path. rename は " -> " で arrow 後ろを採用
+      sub(/^.. /, "")
+      if (match($0, / -> /)) {
+        print substr($0, RSTART + 4)
+      } else {
+        print
+      }
+    }')
+    if [[ -n "$SYNC_CHANGES" ]]; then
+      SYNC_COUNT=$(printf '%s\n' "$SYNC_CHANGES" | wc -l | tr -d ' ')
+      echo ""
+      echo "[install] === harness sync drift detected ==="
+      echo "[install] ${SYNC_COUNT} file(s) under .claude/ changed by this --update:"
+      printf '%s\n' "$SYNC_CHANGES" | sed 's/^/  - /'
+      echo ""
+      if $COMMIT_AFTER_SYNC; then
+        # 安全な git add (specific paths only、CLAUDE.md HIGH 教訓: git reset 禁止)
+        # path に space を含む場合に備えて while-read + git add 個別
+        echo "[install] --commit: staging ${SYNC_COUNT} synced file(s) (project files untouched)"
+        ADDED=0
+        while IFS= read -r p; do
+          [[ -z "$p" ]] && continue
+          if (cd "$TARGET" && git add -- "$p" 2>/dev/null); then
+            ADDED=$((ADDED + 1))
+          else
+            echo "[install] WARN: git add skipped: $p" >&2
+          fi
+        done <<<"$SYNC_CHANGES"
+        if [[ "$ADDED" -gt 0 ]]; then
+          # commit 対象が staging にあるか最終確認 (空 commit 防止)
+          if (cd "$TARGET" && git diff --cached --quiet); then
+            echo "[install] WARN: nothing staged after git add — skip commit" >&2
+          else
+            COMMIT_MSG="chore(harness): sync .claude/ from hirai-method $(date -u +%Y-%m-%d)"
+            if (cd "$TARGET" && git commit -q -m "$COMMIT_MSG"); then
+              COMMIT_SHA=$(cd "$TARGET" && git rev-parse --short HEAD)
+              echo "[install] committed harness sync: ${COMMIT_SHA} (${ADDED} file(s))"
+            else
+              echo "[install] WARN: git commit failed (manual commit needed)" >&2
+            fi
+          fi
+        else
+          echo "[install] WARN: no files staged — skip commit" >&2
+        fi
+        unset ADDED COMMIT_MSG COMMIT_SHA
+      else
+        # default 案内 (honor system、user に分離 commit を促す)
+        echo "[install] HINT: commit these as a SEPARATE commit, e.g.:"
+        echo "  cd $TARGET"
+        echo "  git add .claude/"
+        echo "  git commit -m 'chore(harness): sync .claude/ from hirai-method'"
+        echo "[install] HINT: or rerun with '--commit' to auto-commit harness sync only:"
+        echo "  bash install.sh $TARGET --update --commit"
+        echo "[install] NOTE: keeping harness-sync separate from project work helps revert / blame."
+      fi
+      unset SYNC_COUNT
+    fi
+    unset SYNC_CHANGES
+  else
+    if $COMMIT_AFTER_SYNC; then
+      echo "[install] WARN: --commit requested but target is not a git repo — skip commit"
+      echo "[install] HINT: initialize git first: cd $TARGET && git init"
+    fi
+  fi
 fi
 
 # ============================================================
