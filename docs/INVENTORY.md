@@ -80,6 +80,44 @@
 | `.claude/scripts/harness-audit.py` | ハーネス健全性レポートを実測値で出力（observations.jsonl / GateGuard / TaskGuard / failure-window）。 | New (W2.2) |
 | `.claude/commands/harness-audit.md` | `/harness-audit`: 上記スクリプトを起動して結果を整形。 | New (W2.2) |
 
+## 規範文書の Layer A/B Strategy (2026-05-28、task-51)
+
+`.claude/rules/*.md` (規範文書) は **Layer A (要約、context 自動注入) + Layer B (詳細、明示 Read のみ)** の 2 層構造で運用する。
+
+| Path | 役割 | 物理配置 | context 注入 |
+|---|---|---|---|
+| `.claude/rules/<rule>.md` | **Layer A** — 要約版 (採用 N 条 / 遵守事項 / table / bypass env 1-2 行 / Layer B link / 起源 1 行) | 各 rule 同階層 | claudeMd 経由で注入 (常時 / paths-scoped) |
+| `.claude/rules/<rule>.details.md` | **Layer B** — 詳細版 (OK/NG 例 / history / SUPERSEDED / bypass 詳細 / 起源詳細 / 5 層強制機構詳細 / 関連 artifact 完全 list) | 各 rule 同階層 (`.details.md` suffix) | **frontmatter `paths: []` で非注入** (明示 Read のみ) |
+
+**現状の 2 層分割対象** (task-51 Step 3 完了、6 file):
+
+| Layer A | Layer B | Layer A 抜粋 keyword |
+|---|---|---|
+| `self-improvement.md` | `self-improvement.details.md` | L1-L5 + F1/F2 規約 / 5 + 3 層 |
+| `development-process.md` | `development-process.details.md` | TDD / 委譲ガード 7 必須要件 / staging 戦略 / cross-repo write 例外 / Confidence Gate (F3) |
+| `task-management.md` | `task-management.details.md` | 採用 6 条 / メイン専任 / 開発開始時必読義務 / parking-lot |
+| `workflow.md` | `workflow.details.md` | 14-stage / 10-stage / W1-W4 / 20 MECE / fan-out reviewer-registry |
+| `modes.md` | `modes.details.md` | Normal/Loop / 9 遵守事項 / 自律実行禁止 11 カテゴリ / 5 層強制機構 |
+| `why-x5-output.md` | `why-x5-output.details.md` | v10 1 行 format (`<何のため> のため、<何をやる> を行う`) |
+
+`git-workflow.md` は ~1K で退避不要 (Layer A のみ)。
+
+**Layer B Read trigger 4 条件** (Layer A 冒頭に admonition 配置):
+1. 違反検出時 (hook BLOCK / warn 注入受領 / regex 不一致)
+2. 規範変更時 (rule 編集 / draft 起案 / 採用 N 条改定)
+3. 新規事案 (初遭遇 keyword / 例外パターン疑い)
+4. 学習 / dogfood (task 着手前依存先必読 / harness audit / 副産物整理)
+
+通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
+
+**規約**: Layer A → Layer B link は **2 要素 hard match** (`details.md` 含む markdown link + section anchor) を満たせば spec compliant (task-51 Step H、iter 2 fix、2026-05-28 緩和)。
+
+**機械強制**:
+- `install.sh` rule 同期 path pattern に `*.details.md` を含める (Layer B も配布対象)
+- `.claude/tests/layer-b-context-isolation-smoke.sh` (8 cases) で Layer B 非注入 / link 存在 / install.sh sync pattern 等を検証
+
+**起源**: task-51 (context-bloat-reduction、2026-05-28)、設計 draft `docs/draft/context-bloat-reduction.md` §3 (Q2)。
+
 ## 外部インポート（コミュニティ由来）
 
 ### Agents（[VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents) MIT）
