@@ -93,12 +93,22 @@ description: TDD 完了直後のモジュール単位レビュー + リファク
    - (d) 既存型・既存 schema を流用できる箇所
    - (e) 不要な抽象 (over-engineering) を作っていないか (YAGNI)
 
+4. **プロジェクト整合性 + 他 task 影響確認 (項目 5、`workflow.md` §reviewer prompt 共通規約 準拠、2026-05-28 追加)**:
+   - (a) `docs/tasks/list.md` を Read、本 module 変更が他 task (🔄 進行中 / 🔲 未着手 / 📝 計画中) と重複 / 競合 / 前提崩壊しないか
+   - (b) 本対象の依存先 task.md + draft.md を Read、影響範囲を把握
+   - (c) `docs/tasks/next-actions.md` の未処理 🔴 / 🟡 entry を確認、本 module 変更で解決 / 関連する entry を特定
+   - (d) `.claude/rules/*.md` (Layer A 全 7 file) を Read、本 module 変更が既存規範と矛盾していないか / 規範更新が必要か
+   - (e) `README.md` / `docs/INVENTORY.md` を Read、本 module 変更が project SSoT を破壊していないか
+   - (f) `.claude/hooks/` `.claude/commands/` `.claude/skills/` を Glob/Grep、類似機能が既存なら本変更との関係を findings に明記 (再発明回避)
+
 出力 format:
-- 3 観点ごとに findings (CRITICAL / HIGH / MED / LOW)
+- 4 観点ごとに findings (CRITICAL / HIGH / MED / LOW)
 - 各 finding に「該当ファイル:行 / 問題 / 修正コード提案 (具体 diff)」
+- 項目 4 (プロジェクト整合性) の findings には「他 task #N との重複」「既存 rule §X と矛盾」「副産物 entry #Y を解決可能」「既存 hook/command/skill 再利用可」「SSoT 矛盾」のいずれかを該当時に明示
 - behavior-preserving 原則必須 (public API / DB schema 変更禁止)
 - 全 finding に対応 → modified diff を提示
 - 末尾に `confidence: 0.X` 必須
+- bypass: `HC_REVIEW_PROJECT_CONTEXT_REQUIRED=false` (typo 1 行 / comment-only refactor 等の cost 過大ケースのみ、`.claude/rules/` 編集を含む change では NG)
 ```
 
 ### Phase 4: 集約 + 修正案提示
