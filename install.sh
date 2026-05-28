@@ -145,8 +145,12 @@ if [[ "$MODE" == "update" || "$MODE" == "force" ]] && ! $DRY_RUN; then
   if [[ -f "$TARGET_SSOT" && -f "$SRC_SSOT" ]]; then
     # 比較対象 key (project 固有 override が起こりやすい代表例)
     for key in docs_approved_dir task_dir draft_dir protected_paths; do
-      tgt_val=$(grep -E "^${key}:" "$TARGET_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//")
-      src_val=$(grep -E "^${key}:" "$SRC_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//")
+      # `|| true` で fail-open: target yml に該当 key が不在で grep exit 1 → pipefail
+      # で script abort する事故を防ぐ (task-42 後発見、2026-05-28、classlab-weekly-news
+      # 同期失敗を契機)。key 不在は「project 固有 override なし」を意味するため、空文字で
+      # 続行が正しい挙動 (該当 if 文は -n "$tgt_val" で空時 skip される)。
+      tgt_val=$(grep -E "^${key}:" "$TARGET_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//" || true)
+      src_val=$(grep -E "^${key}:" "$SRC_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//" || true)
       if [[ -n "$tgt_val" && "$tgt_val" != "$src_val" ]]; then
         echo "[install] MIGRATE: $TARGET_SSOT has project-specific '$key: $tgt_val' (SSoT default: '$src_val')."
         echo "[install] MIGRATE: --update will overwrite SSoT yml. Move this value to .claude/harness-config.local.yml to preserve it across updates."
