@@ -71,6 +71,16 @@
 ^cat \.claude/
 ^cat \.gitmessage( |$)
 
+# read-only 検索コマンド (task-50 grep-whitelist-add、2026-05-28)
+# FleetView クライアントは Grep/Glob tool を非提供のため、bash 経由の検索手段を確保する。
+# これらは PATH-RESTRICTED に置く (PATH-AWARE ではない) ため、src/ tests/ scripts/ を
+# 直接 inspect する形 (例: `grep pat src/foo.ts` / `find src/ -name x`) は
+# delegation-guard.sh 末尾の path-leak ガードで block され続ける (委譲原則を維持)。
+# 申請: .claude/bash-whitelist-requests/2026-05-28-grep-find-rg.md
+^grep( |$)
+^find( |$)
+^rg( |$)
+
 # === 自己改善 L4: Continuous Learning v2.1 ===
 # instinct-cli の管理操作（status / projects / evolve / promote / export / import / observe-analyze）
 ^python3 \.claude/skills/continuous-learning-v2/instinct-cli\.py( |$)
