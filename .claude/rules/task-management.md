@@ -1,21 +1,23 @@
 <!--
 task-21 W1.7: paths 条件付き受動 load を廃止し、常時参照 rule に格上げ。
-理由: paths: ["docs/tasks/**", "docs/draft/**"] では当該 path を Read した
-ターンしか context に load されず、設計→承認→タスク追加フローの認識が
-落ちる事案 (recall_poc/docs/01-03 が docs/ 直下に直接 Write された)。
-CLAUDE.md の Rules table で「(常時参照)」として明示し、毎セッション AI が
-本 rule を読む状態にする。
-
-task-26 W4: 設計→承認→タスク追加フロー / メイン専任 / Parking Lot の
-SSoT として確立 (development-process.md / workflow.md から重複を本 file に
-集約)。
-
-task-29 Phase 2+3 (2026-05-23): Phase→Step 2 階層タスク構造規範 +
-既存 task 移行ガイド + UI 変更検出基準を新設。設計起源は
-docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
+task-26 W4: 設計→承認→タスク追加フロー / メイン専任 / Parking Lot の SSoT として確立。
+task-29 Phase 2+3 (2026-05-23): Phase→Step 規範化。
+2026-05-25 採用 6 条 (Task=Phase=N Step) で task-29 採用 5 条を supersede。
+task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 -->
 
 # タスク管理ルール
+
+本 rule は **メイン専任 / 採用 6 条 (Task=Phase=N Step) / 設計→承認→タスク追加フロー / plan-first 行先置き 2 経路 / 開発開始時必読義務 / parking-lot 運用** の SSoT。常時参照 (frontmatter 無し、毎セッション AI が読む)。
+
+> **Layer B (詳細版) Read trigger** (4 条件):
+> 1. **違反検出時**: hook BLOCK / warn 注入受領 / regex 不一致
+> 2. **規範変更時**: rule 編集 / draft 起案 / 採用 N 条改定
+> 3. **新規事案**: 初遭遇 keyword / 例外パターン疑い
+> 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
+>
+> 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
+> 詳細: [task-management.details.md](./task-management.details.md)
 
 ## メインエージェント専任（必須）
 
@@ -26,335 +28,208 @@ docs/draft/phase-step-task-structure.md (user 承認 2026-05-23)。
 - サブエージェント起動前にタスクを「進行中」に更新
 - サブエージェント完了後にタスクを「完了」に更新
 
-## タスク構造規範 (Task=Phase=N Step、Phase 中間階層廃止)
+## タスク構造規範 — 採用 6 条 (Task=Phase=N Step、Phase 中間階層廃止)
 
-**起源**: `docs/draft/task-equals-phase-step-status-list-normative.md` (user 承認 2026-05-25、4 ターン連続承認で本規範化)。task-29 採用 5 条 (`docs/draft/phase-step-task-structure.md`、2026-05-23 採用) を **supersede**。これまでの「task → Phase → Step」3 階層を **「Task = Phase = N Step」2 階層**に圧縮し、Phase 中間階層を廃止する。
+**起源**: 2026-05-25 採用、`docs/draft/task-equals-phase-step-status-list-normative.md`。task-29 採用 5 条を supersede。Phase 中間階層を廃止し「Task = Phase = N Step」の 2 階層に圧縮。
 
-**改定理由 (3 問題、task-33 実例観測)**:
-1. **粒度過剰**: task-33 が 5 Phase × 14 Step で deliverable として scope 過大
-2. **status 不可視**: list.md row が task 単位のみ、Step status が IDE 視点で追跡不可
-3. **概要欄混在**: list.md 概要列が task overview / step description 区別なく記載
+### 採用 6 条 (条文)
 
-### 採用 6 条
+1. **Task = Phase = N Step (2 階層、Phase 廃止)** — 1 task は 1 Goal + N Steps。Phase / Wave / Sub-Phase 等の中間階層は禁止。既存 Wave / Phase 構造は次回着手時に再構造化。
 
-1. **Task = Phase = N Step (2 階層、Phase 廃止)** — 1 task は 1 つの Goal + N Steps から成る。Phase という中間階層は廃止し、**Task と Phase を同義化**。Phase / Step 以外の独自階層 (Wave / Sub-Phase / Stage 等) は禁止。Wave / Phase 階層を使っていた既存 task は次回着手時に新構造へ再構造化する (後述「既存 task 移行ガイド」参照)。
+2. **Task 必須項目 (5 件)**: 「**ゴール** (1 文、観察可能)」+ 「**作業概要** (箇条書き 3-5 件)」+ 「**完了条件** (定量 or 観察可能な事実、DoD)」+ 「**概要欄** (list.md 用、「**何のため × 何をやる × 何ができるようになる**」3 要素必須)」+ 「**依存先タスク** (`task-N1, task-N2` 形式で ID 列挙、依存なしは `—`、空欄禁止 + Task header section に **影響内容 + 依存先 task.md リンク** 記載)」。`/start-task` 直後に依存先 task.md + 関連 draft を **必ず Read** (§「開発開始時の必読義務」)。
 
-2. **Task 必須項目**: 「**ゴール** (1 文、観察可能)」+ 「**作業概要** (箇条書き 3-5 件)」+ 「**完了条件** (定量 or 観察可能な事実、DoD)」+ 「**概要欄** (list.md 用、規約: 「**何のため × 何をやる × 何ができるようになる**」3 要素必須)」+ 「**依存先タスク** (0 以上、複数可、2026-05-26 追加)」 — Task 見出し直下に上記 5 項目を必ず記載。「観察可能」とは PASS/FAIL or 数値 or before/after diff のように第三者が客観確認できる粒度を指す (例: 「全テスト 92/92 PASS」「list.md に新 entry 1 行追加」)。依存先タスクは「**`task-N1, task-N2` 形式で ID 列挙** (依存なしは `—`、空欄禁止) + 各依存先について Task header section に **影響内容 (1-2 文) + 依存先 task.md へのリンク** を記載」。本 task 開発開始時 (`/start-task` 直後) に依存先 task.md + 関連 draft を **必ず Read** すること (詳細は本 .md §「開発開始時の必読義務」参照)。
+3. **Step 必須項目 (4 件)**: 「**作業概要** (1-2 文 actionable)」+ 「**完了条件** (再現可能な検証コマンド)」+ 「**Step status** (📝/🔲/🔄/✅/⏸️)」+ 「**概要欄** (list.md 用、**作業概要のみ**、3 要素不要)」。
 
-3. **Step 必須項目**: 「**作業概要** (1-2 文 actionable description)」+ 「**完了条件** (定量 or 観察可能な事実)」+ 「**Step status** (📝/🔲/🔄/✅/⏸️)」+ 「**概要欄** (list.md 用、規約: **作業概要のみ**、Task のような 3 要素は不要)」 — Step 見出し直下に上記 4 項目を必ず記載。「test PASS」のような曖昧表現ではなく、「`bash .claude/tests/foo-smoke.sh` exit 0」のように再現可能な検証コマンドを書く。
+4. **Task 最終 = テスト設計レビュー → テスト合格 → リファクタリング (3 段必須)**:
+   - **テスト設計レビュー**: メイン agent がテスト設計を分析 → **reviewer 5+ subagent を動的選定** (`tdd-guide` / `test-automator` / `qa-expert` / `pr-test-analyzer` base、UI/DB/API/言語/security で加味) → 並列起動 (`run_in_background: true`) → 修正提案集約 → 再起動。**収束条件**: 全 reviewer approve / no objection。**反復上限**: 5 回 (`ECC_TEST_DESIGN_REVIEW_OFF=1` で bypass)。yml 値: `review_min_count_test` / `review_max_count_test` / `review_iteration_max` (`hc-config.sh` で操作)。
+   - **テスト合格**: UI 含 Task → **E2E 必須 + ビジュアル検証必須** (agent-browser skill で screenshot、主要 breakpoint / 状態 / theme 撮影)。UI なし → unit/integration PASS で OK。terminal TUI 対象外。
+   - **リファクタリング**: 持続可能性 / 汎用性 / 非冗長化 の 3 観点。不要なら `skip: <reason>` 明示記録。
 
-4. **Task 最終 = テスト設計レビュー → テスト合格 → リファクタリング (3 段必須)** — Task 内の最終 3 Steps として配置 (旧 Phase 最終 3 段と同じ):
-   - **テスト設計レビュー Step**:
-     - メインエージェントがテスト設計内容 (TDD 戦略 § + 各 Step 完了条件) を分析し、**適切な reviewer 5+ subagent を動的選定**して並列起動 (run_in_background: true 必須)
-     - **動的選定の判定ヒント** (固定 registry 不採用、case-by-case):
-       - **常時 base 候補**: tdd-guide / test-automator / qa-expert / pr-test-analyzer
-       - **UI 含む** → ui-designer / accessibility-tester / e2e-runner 加味
-       - **DB schema / migration** → database-reviewer / postgres-pro 加味
-       - **API 変更** → api-designer / api-documenter 加味
-       - **言語特定** → 言語別 reviewer (python-reviewer / typescript-reviewer / go-reviewer / rust-reviewer 等) 加味
-       - **security 影響** → security-reviewer / security-auditor 加味
-       - 上記から **5 件以上**を動的選定
-     - 各 reviewer の修正提案を集約 → テスト設計に反映 → 再度 5+ reviewer 並列起動
-     - **収束条件**: 全 reviewer が approve / no objection (修正提案 0 件)
-     - **反復上限**: 5 回 (超過時 user escalation、bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1` セッション全体)
-     - **yml 値による制御 (task-44/45/46)**: reviewer 動的選定の下限 / 上限 / 反復は `harness-config.yml` の `review_min_count_test` (default 5) / `review_max_count_test` (default 10) / `review_iteration_max` (default 5) で集中制御 (`HC_REVIEW_*` env で override 可、`bash .claude/scripts/hc-config.sh --set review_min_count_test=3` で安全に変更可、atomic backup + type validation)。詳細は `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」参照。
-   - **テスト合格 Step**:
-     - レビューで合意したテスト設計に従いテスト実行
-     - UI (browser/web) 含む Task → **E2E 必須** (Playwright / 同等) **かつ ビジュアル検証必須** (下記)
-     - UI 変更なし Task → unit / integration test PASS で OK
-     - **ビジュアル検証 (browser/web UI、E2E とは別レイヤ、2026-05-27 採用、draft `ui-visual-verification-mandate.md`)**:
-       - `agent-browser` skill (vercel/agent browser) で実際にブラウザ描画 → screenshot 取得 → 目視確認
-       - 主要 breakpoint (320/768/1024/1440 等) / 主要状態 (hover/focus/active/error 等) / 両 theme (あれば) を撮影
-       - レイアウト / 配色 / タイポグラフィ / 余白 / レスポンシブ が設計意図通りか確認 (可能なら before/after 比較)
-       - E2E (機能フロー動作) とは別の品質軸。**両方 PASS で初めて UI Task 完了**、E2E のみ / 型チェックのみでは完了宣言しない
-       - トリガーは §「UI 変更検出基準」を流用 (拡張子/path)。skip は同 §の skip format に準拠
-       - **terminal TUI は対象外** (CLI TUI は TTY 必須の手動操作確認が別途)
-       - 非対話 / CI 環境は Playwright screenshot で代替可。honor-system (機械強制 hook なし)
-   - **リファクタリング Step**:
-     - 持続可能性 / 汎用性 / 非冗長化 の 3 観点 (`/module-review` 同期)
-     - 不要なら `skip: <reason>` 明示記録 (例: `skip: 単純な文字列追加で refactor 余地なし`)
+5. **小タスク許容**: hot fix / typo 修正 / config 1 行追加 等は「1 Task + 1 Step」OK。条 4 の最終 3 Step は「1 Step 内に test + refactor 判定を併記」で代替可。
 
-5. **小タスク許容: 1 Task + 1 Step OK** — hot fix / typo 修正 / config 1 行追加 等の小タスクでは「1 Task + 1 Step (作業概要 + 完了条件)」で OK。条 4 の「最終 3 Step」は本ケースでは「1 Step 内に test 検証 + refactor 判定を併記」で代替可。
+6. **list.md 表現規約 (6 列、2026-05-26 依存先列追加)**:
+   - **column**: `# | Step Status | Task / Step | 概要 | 依存先 | 詳細`
+   - **Task header row**: `| <id> | <集約 status> | **Task: <名>** | <Task 概要 3 要素> | <依存先 ID or —> | [task-<id>-<slug>.md] |`
+   - **Step sub-row**: `|    | <Step status> | Step N | <作業概要> | | |` (#列 + 依存先列空)
+   - **集約 status**: 全 ✅ → ✅、🔄/🔲 混在 → 🔄、全 🔲 → 🔲、全 📝 → 📝、⏸️ 含む → ⏸️
+   - **status 凡例**: 📝 設計未承認 / 🔲 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
+   - **概要欄 2 種規約**: Task = 3 要素 (purpose × work × outcome) / Step = 作業概要のみ
 
-6. **list.md 表現規約 (Task header + Step sub-rows、概要欄 2 種規約、依存先列追加 2026-05-26)** — list.md は新 table 構造で表現:
-   - **column** (6 列、2026-05-26 「依存先」列追加): `# | Step Status | Task / Step | 概要 | 依存先 | 詳細`
-   - **Task header row**: `| <id> | <集約 status> | **Task: <タスク名>** | <Task 概要欄: 何のため × 何をやる × 何ができる> | <依存先 ID 列挙 or —> | [task-<id>-<slug>.md] |`
-   - **Step sub-row**: `|    | <Step status> | Step N | <作業概要> | | |` (第 1 列 (#) + 第 5 列 (依存先) は空、Task header の連続として表現)
-   - **依存先列 format** (採用 6 条 2 連動): `task-N1, task-N2, task-N3` (カンマ区切り ID 列挙)、依存なしは `—` (long-dash) で空欄禁止。Task header section に各依存先について **影響内容 + リンク** 記載必須
-   - **集約 status 規則**: 全 Step ✅ なら ✅、Step に 🔄 / 🔲 が混在なら 🔄、全 🔲 なら 🔲、全 📝 なら 📝、⏸️ 含むなら ⏸️
-   - **status 凡例**: 📝 (設計未承認、batch planning 経路 B 中間状態) / 🔲 (未着手) / 🔄 (進行中) / ✅ (完了) / ⏸️ (保留)
-   - **概要欄 2 種規約**:
-     - **Task**: 「**何のため** (purpose / why)」+ 「**何をやる** (work / what)」+ 「**何ができるようになる** (outcome / capability)」の **3 要素**を 1 段落で記述
-     - **Step**: 「**作業概要**」のみ (1-2 文 actionable description)
-     - **OK 例 (Task)**: 「recall_poc plan-first 不在事案の再発防止のため、task-management.md §plan-first を追加し batch planning 時の 📝 行先置きフロー 2 経路分岐を明文化する。完成すれば AI が batch planning 時に list.md plan-first 先置きを規範通り実行できるようになる。」
-     - **OK 例 (Step)**: 「task-management.md §plan-first 新規 subsection 追加 (経路 A/B 分岐 + 凡例 📝 用途明文化)」
-     - **NG 例 (Task)**: 「規範を追加」(目的 / 成果不明) / 「Phase 1 完了、Phase 2 進行中」(Step 状態を概要欄に書かない、それは Step Status 列の責務)
-     - **NG 例 (Step)**: 「task-management.md §plan-first を追加することで AI が規範通り実行できるようになる」(Task 概要欄の規約を Step に流用しない、Step は work only)
+> **OK/NG 例詳細 (条 2/3/6) / task-29 採用 5 条 supersede 経緯**: [task-management.details.md §採用-6-条-詳細](./task-management.details.md#採用-6-条-詳細)
 
 ### bypass
 
 | 経路 | env | スコープ | 痕跡 |
 |---|---|---|---|
-| Task=Phase 構造強制無効化 | `ECC_PHASE_STEP_STRUCTURE_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` に append (hot fix 用、旧 env 名継承) |
-| テスト設計レビュー (採用 6 条 4 第 1 段) 無効化 | `ECC_TEST_DESIGN_REVIEW_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` に append (反復 5 回上限超過時の user escalation 後の継続用、旧採用 5 条 4 と同義) |
+| Task=Phase 構造強制無効化 | `ECC_PHASE_STEP_STRUCTURE_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` |
+| テスト設計レビュー (条 4) 無効化 | `ECC_TEST_DESIGN_REVIEW_OFF=1` | 1 セッション | `.claude/.workflow-state/bypass.log` |
 
-honor system: bypass 時は理由を CLAUDE.md or `docs/tasks/<task-N>.md` の該当 entry に記録すること。機械強制 hook (`task-rule-guard.sh` 拡張で Task 内容解析) は本規範採用フェーズでは未実装、効果観察後に別 task で検討する。
+honor system: bypass 時は理由を CLAUDE.md or `docs/tasks/<task-N>.md` に記録。機械強制 hook は本規範採用フェーズでは未実装。
 
 ## 開発開始時の必読義務 (2026-05-26 採用)
 
-**起源**: user 指示「list.md やタスク詳細へ後続のタスクへどう影響するのかを意識させるために list.md へ依存先タスク (table 列追加)、タスク詳細.md へどのように影響するのかとタスク.md へのリンクを表記すること。開発時はそれとリンク先を必ず読むこと」(2026-05-26)。
-
-採用 6 条 2 で Task 必須項目に追加された **依存先タスク** を実効化するため、Task 開発開始時 (`/start-task <id>` 直後) に以下を **必ず Read** する。
+採用 6 条 2 の **依存先タスク** を実効化するため、Task 開発開始時 (`/start-task <id>` 直後) に以下を **必ず Read**。
 
 ### 必読対象
 
 | 対象 | 読み方 |
 |---|---|
-| **本 task の `docs/tasks/task-<id>-<slug>.md`** | 全文 Read (Task ゴール / 依存先タスク / 作業概要 / DoD / Step 計画 / TDD 戦略 / 影響範囲) |
-| **本 task の `docs/draft/<slug>.md`** (設計起源、存在時) | 全文 Read (真因 / 採用案 / リスク / レビューサイクル / 承認履歴) |
-| **依存先 task の `docs/tasks/task-<N>-<slug>.md` 全件** (`docs/tasks/list.md` の依存先列 + 本 task ファイル §「Task 依存先タスク」table のリンク先) | 各 task の Task ゴール + 完了条件 + 影響範囲 を最低限 Read (依存先が ✅ 完了済なら主に「何が確定したか」、🔄/🔲 進行中なら「現状」と「本 task が前提とする部分」) |
-| **依存先 task の `docs/draft/<dep-slug>.md`** (存在時) | 採用案 + リスク sections を Read (本 task が依存先の設計判断にどう影響を受けるか把握) |
-
-### 違反検出 (当面 honor system、将来機械強制化)
-
-| 段階 | 検出方法 | 動作 |
-|---|---|---|
-| **現状 (2026-05-26〜)** | honor system | main agent が `/start-task` 直後に必読対象を Read する宣言 (Why × 5 で「依存先 task-N1 / N2 の影響を確認するため、それぞれの task.md + draft を Read する」と明示) |
-| **将来 (案、別 task で起票)** | `task-rule-guard.sh` 拡張 | `/start-task <id>` 検出時に対象 task ファイル + 依存先 task ファイルが本 session で Read 済か判定、未 Read なら warn 注入 (block しない、honor system 維持で過剰防止) |
+| **本 task の `docs/tasks/task-<id>-<slug>.md`** | 全文 Read |
+| **本 task の `docs/draft/<slug>.md`** (存在時) | 全文 Read |
+| **依存先 task の `docs/tasks/task-<N>-<slug>.md` 全件** | Task ゴール + 完了条件 + 影響範囲を最低限 Read |
+| **依存先 task の `docs/draft/<dep-slug>.md`** (存在時) | 採用案 + リスク sections を Read |
 
 ### 例外
 
-- **依存先 0 件 (依存なし)**: 本 task の `task-<id>-<slug>.md` + `draft/<slug>.md` のみ Read で OK
-- **小タスク (1 Task + 1 Step、採用 6 条 5)**: typo 修正 / 1 行 fix 等で依存先が「— (依存なし)」の場合は本 task ファイルのみで OK
-- **依存先が parking-lot.md の 🧊 / ❌**: 履歴として Read 推奨 (本 task との関連を理解するため)、ただし完了済 / 不採用情報として参照
+- **依存先 0 件**: 本 task の task.md + draft.md のみで OK
+- **小タスク (1 Task + 1 Step、条 5)**: 本 task ファイルのみで OK
+- **依存先が parking-lot の 🧊 / ❌**: 履歴として Read 推奨
 
-### 効果
+違反検出は当面 honor system (main agent が Why × 5 で必読宣言)、将来 `task-rule-guard.sh` 拡張で warn 注入予定。
 
-- 後続タスクへの影響を **着手前に意識** することで、依存先の設計判断 / 完了状態を踏まえた実装が可能
-- 「依存先 task は完了済と思い込み実装着手 → 実は ⏸️ 保留中で前提崩壊」のような事故を構造的に防止
-- list.md 依存先列で **DAG 視覚化** + task.md 依存先 section で **影響内容明示** + 開始時必読義務で **実 Read 強制** の 3 層で依存関係の暗黙知化を防ぐ
+> **必読義務の起源 (2026-05-26 user 指示) / 効果 3 層 (list.md DAG + task.md 影響内容 + 開始時 Read 強制)**: [task-management.details.md §開発開始時必読-詳細](./task-management.details.md#開発開始時必読-詳細)
 
 ## 既存 task 移行ガイド
 
-**適用範囲**: 本規範採用 (2026-05-25) **以降** に新規作成される task のみ新採用 6 条 (Task=Phase=N Step) を必須とする。それ以前に作成された task は段階的に移行する。
-
-### 既存 task の扱い (2 世代の規範混在に対応)
+**適用範囲**: 2026-05-25 以降の新規 task のみ採用 6 条必須。それ以前は段階移行。
 
 | 世代 | 採用規範 | 既存 task | 扱い |
 |---|---|---|---|
-| **G1 (Wave 構成、〜2026-05-23)** | task-29 以前の自由 Wave 構成 | task-1〜task-20 + 22 / 25 / 26 | 移行不要、Wave 構成のまま履歴として保持 |
-| **G2 (Phase→Step、2026-05-23〜25)** | task-29 採用 5 条 | task-21 / 23 / 24 / 27 / 28 / 29〜32 / **33 (旧 5 Phase 構造)** | 次回着手時に新採用 6 条 (Task=Phase=N Step) へ再構造化を推奨 (強制ではない、honor system)。**task-33 は本規範改定の起源、本 commit で即 restructure (5 task 33/34/35/36/37 に分割)** |
-| **G3 (Task=Phase=N Step、2026-05-25〜)** | 新採用 6 条 | task-34〜 (本 commit 以降の新規 task) | 新構造を必須適用 |
+| **G1 (Wave、〜2026-05-23)** | 自由 Wave 構成 | task-1〜20 + 22/25/26 | 移行不要、履歴保持 |
+| **G2 (Phase→Step、2026-05-23〜25)** | task-29 採用 5 条 | task-21/23/24/27/28/29〜32/33 | 次回着手時に新採用 6 条へ再構造化推奨 (honor system) |
+| **G3 (Task=Phase=N Step、2026-05-25〜)** | 新採用 6 条 | task-34〜 | 必須適用 |
 
-### 移行優先度 (G2 → G3)
-
-| task | 状態 | 優先度 | 備考 |
-|---|---|---|---|
-| **task-33 (list-md-plan-first-normative)** | 5 Phase 構造 (Phase 1 完遂、Phase 2 Step 2.2 まで) | **本 commit で即 restructure** | 本規範改定の起源、Wave C-1 で 5 task (33/34/35/36/37) に分割 |
-| task-21 (system-reminder-attention) | W3 残 | **最優先** | 規範整備系で本規範の起源とも近い、整合性確保 |
-| task-23 (recall-poc-recovery) | W4-W5 残 | 高 | 実装系、Wave 跨ぎの依存が多い |
-| task-24 (taskmanagesystem-recovery) | W5 残 | 高 | 規範整備系、本 rule との整合性確保 |
-| task-27 (observe-jq-parse-fix) | W3 残 | 中 | W3 不要判定検討中、不要なら低優先度に降格可 |
-| task-28 (observe-subagent-stop-instrumentation) | Phase 2 残 | 中 | 既に Phase 命名を採用、Step 粒度のみ要確認 |
-
-移行作業は task 着手前 (`/start-task <id>` 実行前後) の準備として実施。新構造へ書き換えても commit 履歴・既存 Phase / Wave での完了実績は temporal record として残す (削除しない)。
+> **移行優先度 task 個別 table / task-33 即 restructure 経緯**: [task-management.details.md §既存-task-移行-詳細](./task-management.details.md#既存-task-移行-詳細)
 
 ## UI 変更検出基準
 
-**目的**: 採用 6 条の条 4「UI 含 Task は E2E 必須」を発動する判定基準を明文化。本規範採用フェーズでは **手動運用** とし、機械強制 hook は効果観察後に別 task で検討。
+採用 6 条 4 の「UI 含 Task は E2E + ビジュアル検証必須」発動判定。本規範採用フェーズでは **手動運用** (機械強制 hook は future work)。
 
 ### 判定基準 (OR 条件、過検知許容)
 
-以下のいずれかに該当する file が Task 内の変更対象に含まれる場合、その Task は **UI 変更を含む**と判定:
-
 - **拡張子**: `*.tsx` / `*.jsx` / `*.vue` / `*.svelte` / `*.html` / `*.css` / `*.scss` / `*.sass` / `*.less`
-- **path** (lowercase 案): `src/components/**` / `src/pages/**` / `src/app/**` / `apps/**/components/**` / `apps/**/pages/**` / `components/**`
+- **path**: `src/components/**` / `src/pages/**` / `src/app/**` / `apps/**/components/**` / `apps/**/pages/**` / `components/**`
 
-過検知 (誤って UI と判定) は許容、見逃し (UI なのに非 UI 判定) は不可。
-
-### 検出方法 (手動運用)
+### 検出コマンド (手動)
 
 ```bash
 git diff --name-only <base>...HEAD | grep -E '\.(tsx|jsx|vue|svelte|html|css|scss|sass|less)$|^(src|apps/[^/]+)/(components|pages|app)/|^components/'
 ```
 
-の結果が 1 件以上なら UI 変更を含む Task と判定。Task の最終 Step に E2E test 完了条件を必須化する。
-
 ### 手動 skip format
 
-「UI 変更だが view 影響なし」(CSS 内変数 rename のみ / 未参照 component 削除 等) の例外時、Step 完了条件に以下のように明示:
+UI 変更だが view 影響なし時、Step 完了条件に明示:
 
 ```
 完了条件: skip: UI 変更だが view 影響なし (CSS 変数 rename のみ、レンダリング結果同一)
 ```
 
-reviewer 確認推奨 (`/module-review` or `/system-review` 時に skip 妥当性をレビュー)。
-
-### 機械強制 hook 案 (future work)
-
-本規範採用フェーズでは規範のみ (honor system)。効果観察後に別 task で `task-rule-guard.sh` 拡張により Task 内容を parse → UI 判定 → E2E + ビジュアル検証 (採用 6 条 4、2026-05-27 採用) Step 存在検証を機械強制化する案を検討する (起案は `docs/draft/` 経由で別 task として起こす)。
+> **機械強制 hook 案 (future work) 詳細**: [task-management.details.md §ui-検出-詳細](./task-management.details.md#ui-検出-詳細)
 
 ## 設計→承認→タスク追加フロー（必須）
 
-**設計なしのタスク追加は禁止**。下記 4 ステップを厳守:
+**設計なしのタスク追加は禁止**。下記 4 ステップ厳守:
 
-> **Loop モードでも本フローは免除されない** (task-21 W2.2)。`modes.md` 遵守事項 2「中間確認の停止」の禁止対象は **戦術判断のみ** で、設計文書の新規追加 / 仕様変更 / 戦略的判断 は引き続き user 承認必須 (例外条項あり、`modes.md` 遵守事項 2 参照)。Loop モードで「設計→承認」ステップを skip して `docs/` 直下に直接設計書を Write する行為は規範違反、`draft-flow-guard.sh` (commit `6ed9337`) が機械強制で BLOCK する。
+> **Loop モードでも本フローは免除されない** (task-21 W2.2)。`modes.md` 遵守事項 2 例外条項参照。`draft-flow-guard.sh` が機械強制で BLOCK。
 
-1. **テンプレ初期化**（初回のみ・自動）: SessionStart hook で `docs/tasks/list.md` `parking-lot.md` `_TASK_TEMPLATE.md` および `docs/draft/_DRAFT_TEMPLATE.md` がテンプレートから自動生成される。明示実行は `/init-tasks`
-2. **設計起こし**: `/new-draft <slug>` で `docs/draft/<slug>.md` を `_DRAFT_TEMPLATE.md` から生成 → §1〜9 を埋める
-3. **承認依頼**: ユーザーにレビュー・承認を依頼。承認履歴を draft の §8 に記録 (Loop モードでも必須、戦略判断は例外条項対象)
-4. **タスク化**: 承認後に `/new-task <id> <slug>` を実行 — 以下が **同時に** 行われる:
-   - `docs/tasks/task-<id>-<slug>.md` を `_TASK_TEMPLATE.md` から生成
-   - `docs/tasks/list.md` に `🔲 未着手` 行を追加 (📝 行が既存なら 🔲 update、不在なら新規 append。詳細は「plan-first 行先置きフロー (batch planning)」§ 参照)
-   - draft は `docs/draft/<slug>.md` に保存（履歴として残す）
+1. **テンプレ初期化** (SessionStart hook で自動、明示は `/init-tasks`)
+2. **設計起こし**: `/new-draft <slug>` で `docs/draft/<slug>.md` 生成 → §1〜9 を埋める
+3. **承認依頼**: user レビュー・承認、履歴を draft §8 に記録
+4. **タスク化**: `/new-task <id> <slug>` で `task-<id>-<slug>.md` 生成 + list.md 行追加 (📝 既存 → 🔲 update、不在なら append)
 
 ### plan-first 行先置きフロー (batch planning) — 2 経路分岐 (task-33 規範化、2026-05-25)
 
-**設計→承認→タスク追加フロー**は **2 経路** に分岐する。task の発生源 (単発 vs batch planning) で使い分け、batch 計画下での list.md 進捗 visibility を確保する。
-
-#### 経路 A (単発、既存フロー、default)
-
-上記 4 step を順次実行 — 1 task ずつ draft 起案 → user 承認 → `/new-task` で 1 行 append。hot fix / 1 機能 / 副産物 entry 由来など、batch 計画前提のない task に適用。
-
-#### 経路 B (batch planning) — 新規
-
-**master roadmap で N 個の task を計画段階で先に並べる**用途。`/new-task` の sequential 動作が想定外なため、以下 4 step で plan-first を強制する:
-
-1. **master roadmap (or 高 level 計画 doc) で N 個の task を §plan で確定**: `docs/draft/00_master-roadmap.md` 等で計画段階の task list (id / slug / 概要 / 依存) を確定 + user 承認
-2. **main agent が `list.md` に N 行 📝 batch 先置き**: 承認時点で list.md 末尾に N 行を **📝 設計（未承認）** status で append (main 直接 Edit、`task-rule-guard.sh` L116-127 の exempt case 定義で `list.md` は **既存 exempt** として通過、本 § で追加 exempt 実装は不要。本 .md §「Hook による強制」表内 `list.md` 行も参照)。各行は draft link 付き。
-   - **ID 払い出し手順**: list.md 既存最大 ID + 1 から連番で N 件割り当て (`grep -oE 'task-[0-9]+' docs/tasks/list.md | grep -oE '[0-9]+' | sort -n | tail -1` で最大値取得、+1 開始)。**結果が空 (list.md に `task-N` 行が 1 件も無い初期状態) の場合は ID=1 を初期値**とする (例: `next_id=$((${max:-0} + 1))` で max 空時 0 fallback、+1 で 1 開始)
-   - **重複検知**: 同 ID が既存 (📝 / 🔲 / 🔄 / ✅ 問わず) なら BLOCK + user 通知 (誤連番 / 別 task 起案 conflict の可能性)
-   - **目的**: IDE で開いた user が batch 計画全体を即可視
-   - **Loop モード整合**: 本動作は master roadmap §plan で user 承認済の N task を list.md に転記する **事務作業** なので、`modes.md` 遵守事項 2 例外条項「設計文書の新規追加」には該当せず、main 自律実行可。
-3. **個別 draft 起案** (subagent 並列可): 各 task の draft (`docs/draft/<slug>.md`) を起案 → user 承認 → 経路 A step 4 へ
-4. **`/new-task <id> <slug>` で 📝 → 🔲 update**: list.md の **同 ID かつ 同 slug** の既存 📝 行を **🔲 未着手** に status update (新規行 append しない、行重複なし)。`/new-task` 実装は list.md grep で既存 📝 行検出 (**ID + slug の AND 一致** 必須、ID 単独 / slug 単独 grep 禁止) → 不在なら append (経路 A 動作)、既存なら update (経路 B 動作)。
-   - **複数マッチ**: 同 ID + slug で 2 行以上 hit なら BLOCK + user 通知
-   - **status conflict**: 同 ID で status が 📝 以外 (🔲 / 🔄 / ✅) で既存なら BLOCK + 重複 ID 修正案内
-   - **⚠️ Phase 2 依存**: 本動作 (📝 既存行を 🔲 update) は task-33 Phase 2 で `/new-task` 実装更新後に有効化。Phase 1 完了時点 (本 commit) では `/new-task` は同 ID 既存行を BLOCK する (既存仕様、`.claude/commands/new-task.md` Phase 1 step 3)。Phase 1 単体運用時は経路 B step 2 後に main 直接 Edit で 📝 → 🔲 update せよ。
-   <!-- smoke-anchor: new-task-update-or-append -->
-   <!-- Phase 2 smoke `new-task-batch-update-smoke.sh` が「update_or_append_task_row」logic を検証 -->
-
-#### 凡例 📝 の用途明文化
-
-`docs/tasks/list.md` 凡例の `📝 設計（未承認）` は **2 用途** をカバーする:
-
-| 用途 | 状態 | 出典 |
+| 経路 | 用途 | 手順 |
 |---|---|---|
-| **(1) draft 起案中 / user 承認待ち** | 単発 task の draft 起案後、`/new-task` 前の中間状態 (経路 A 中間) | 既存運用 |
-| **(2) batch plan の計画段階先置き** | master roadmap で承認された task 群を list.md に N 行先置き、個別 draft 起案待ち / 承認待ち (経路 B 中間) | task-33 規範化 (2026-05-25) |
+| **A (単発、default)** | hot fix / 1 機能 / 副産物 entry 由来 | 1 task ずつ draft 起案 → 承認 → `/new-task` で 1 行 append |
+| **B (batch planning)** | master roadmap で N 個 task を一括計画 (N ≥ 3) | (1) master roadmap §plan で N task 確定 + 承認 → (2) main が list.md に N 行 📝 先置き → (3) 個別 draft 起案 (subagent 並列可) → (4) `/new-task` で 📝 → 🔲 update |
 
-両用途で `/new-task` 実行時に 🔲 に update される。
+#### 経路 B 適用判定 (3 基準、OR)
 
-#### 経路 B 適用判定
+- master roadmap で **N ≥ 3 個 task 一括計画** (機械検出: SessionStart hook で `draft ≥ 3 ∧ task 行 == 0`)
+- 全 task 完了まで複数セッション跨る見込み (honor system)
+- task 間に強い順序依存 / Phase 区分 (honor system)
 
-**判定タイミング**: user が 3 件以上の task を一括計画する意思を表明した時点で main agent が判定 → user 承認 → step 1 着手。`/new-draft <slug>` 実行直前に判定し直す必要なし。
+#### 凡例 📝 の 2 用途
 
-以下のいずれかなら **経路 B** を選択:
-
-| 判定基準 | hook 検出可能性 |
+| 用途 | 状態 |
 |---|---|
-| master roadmap (or 同等の高 level 計画 doc) で **N ≥ 3 個の task を一括計画** (N の定義: 計画 doc の §plan / §10 等で **ID 列挙された task 数**、draft 起案済か否かは問わない) | (a) Phase 3 SessionStart hook で `draft ≥ 3 ∧ task 行 == 0` を検出 |
-| 全 task の draft 起案 + user 承認 + `/new-task` 完了まで複数セッション跨る見込み (IDE 視点での progress visibility が必要) | (b) honor system (main agent 判断、機械検出不可) |
-| task 間に強い順序依存 / Phase 区分があり、全体像を user が IDE で随時確認したい | (b) honor system (main agent 判断、機械検出不可) |
+| (1) draft 起案中 / user 承認待ち | 単発 task の `/new-task` 前中間状態 (経路 A) |
+| (2) batch plan 計画段階先置き | master roadmap 承認済 N task の list.md 先置き (経路 B) |
 
-それ以外は **経路 A** が default。判定は main agent が user 承認時に確認、迷ったら user に問い合わせ。
+両用途で `/new-task` 実行時に 🔲 に update。
 
-#### 機械検出 (task-33 Phase 3 + 4)
+> **経路 B ID 払い出し / 重複検知 / Loop モード整合 / 機械検出 hook フィルタ順序注意 / 起源 (recall_poc plan-first 不在事案)**: [task-management.details.md §plan-first-詳細](./task-management.details.md#plan-first-詳細)
 
-- **SessionStart hook**: `docs/draft/*.md` ≥ 3 件 ∧ `list.md` task エントリ行 == 0 を検出 → `<system-reminder>` で「経路 B 適用検討」を強制注入。
-  - **task エントリ行 判定基準**: `grep -cE '^\| [0-9]' docs/tasks/list.md` の結果が 0 (行頭 `| <id> |` パターン、📝 / 🔲 / 🔄 / ✅ すべて含む)
-  - **draft カウント基準**: `find docs/draft -name "*.md" -not -name "_*" | wc -l` (アンダースコア prefix の template 除外)
-  - **bypass**: `HC_LIST_PLAN_FIRST_REMINDER_ENABLED=false`
-- **PreToolUse(Write `docs/draft/<slug>.md`)**: 新規 draft Write が発生した時点で、`list.md` に対応 slug の 📝 行が不在なら warn context 注入 (block しない、honor system)。
-  - **検出 path**: `task-rule-guard.sh` の既存 PreToolUse(Edit/Write) hook を拡張、tool_input.file_path が `docs/draft/*.md` pattern に match する場合に slug 抽出 + list.md grep
-  - **⚠️ フィルタ順序注意 (Phase 4 実装者向け)**: 既存 hook は L106-111 で `task_glob="*/${HC_TASK_DIR}/*"` ( = `*/docs/tasks/*`) に match しない path を early `exit 0` する。`docs/draft/*.md` はこのフィルタを通過しないため、新ロジックは **L106 以前** に draft path 判定を挿入する (or 既存フィルタ後の early-exit を draft path の場合 skip する分岐を加える) 必要がある。L111 以降に追記しても到達不能で warn 一切発火しない無音障害になる
-  - **slug マッチ**: 厳密一致 (kebab-case slug)、複数マッチ時は最初の 1 件のみ参照
-  - **理由**: Bash slash command (`/new-draft <slug>`) は task-rule-guard.sh の現アーキ (Edit/Write tool のみ処理) で intercept 不可、Write tool 経由で代替 (R-03 finding 反映)
+### テンプレート
 
-詳細は task-33 Phase 3 / 4 を参照。
-
-#### 起源
-
-- 2026-05-25 recall_poc で plan-first 不在事案発生 (26 task batch plan で list.md 空継続 + user 明示質問でようやく顕在化)
-- user Post-Mortem 報告で真因 4 階層 (1) `/new-task` 1-task-at-a-time gate (2) 規範矛盾 (3) 凡例 📝 用途未明文化 (4) AI 運用判断ミス を特定
-- task-33 で案 C ハイブリッド (P1+P2+P3+P5、工数 2.5) 採用、本セクションは P1 (規範修正) に該当
-
-### テンプレートの場所
-
-- `.claude/templates/docs/tasks/list.md` — タスク台帳ひな型（凡例・依存関係図・更新ルール込み）
-- `.claude/templates/docs/tasks/parking-lot.md` — 保留タスクひな型（必須 7 項目フォーマット込み）
-- `.claude/templates/docs/tasks/_TASK_TEMPLATE.md` — 個別タスクひな型（背景 / 仕様 / 設計 / TDD / Phase→Step / 完了条件 / 影響範囲）
-- `.claude/templates/docs/draft/_DRAFT_TEMPLATE.md` — 設計 draft ひな型（真因 / 案比較 / Phase→Step / リスク / DoD / 承認履歴）
+- `.claude/templates/docs/tasks/list.md` / `parking-lot.md` / `_TASK_TEMPLATE.md`
+- `.claude/templates/docs/draft/_DRAFT_TEMPLATE.md`
 
 ### 自動生成のセーフティ
 
-- **冪等**: 既存ファイルは絶対に上書きしない（`/init-tasks --force` のみ例外）
-- **ID 重複検知**: `/new-task` は同 ID が既に存在する場合中断
-- **設計欠落検知**: `/new-task` は対応 draft が無い場合中断（`--no-draft` で hot fix の例外）
-- **fail-open**: SessionStart hook 失敗時もセッション継続
+- **冪等**: 既存 file は上書きしない (`/init-tasks --force` のみ例外)
+- **ID 重複検知**: `/new-task` は同 ID 既存で中断
+- **設計欠落検知**: `/new-task` は対応 draft 不在で中断 (`--no-draft` で hot fix 例外)
+- **fail-open**: SessionStart hook 失敗もセッション継続
 
-### Hook による強制（コマンド経由でなくても発動）
-
-`.claude/hooks/task-rule-guard.sh` が PreToolUse で以下を **block** で強制する:
+### Hook による強制 (PreToolUse、`task-rule-guard.sh`)
 
 | シナリオ | 動作 |
 |---|---|
-| `docs/tasks/task-<id>-<slug>.md` の Write、対応する `docs/draft/{<slug>.md, task-<slug>.md, <basename>}` が無い | **BLOCK** — 「先に `/new-draft` で設計を起こせ」と提示 |
-| `docs/tasks/task-<id>-*.md` / `phase-<id>-*.md` の Write、同 `<id>` が既に存在 | **BLOCK** — 「別 ID を割り当てるか既存を Edit せよ」と提示 |
-| `docs/tasks/` への命名規約外 Write（`task-` `phase-` で始まらない） | 警告 context 注入（block しない） |
-| `docs/tasks/task-*.md` の **Edit**（既存編集） | 「list.md と同期更新せよ」context 注入 |
-| `docs/tasks/parking-lot.md` の Edit | 必須 7 項目の hint context 注入 |
-| `list.md` `_TASK_TEMPLATE.md` `_DRAFT_TEMPLATE.md` の Edit/Write | exempt（素通り） |
-| サブエージェント実行中 | 全パス通過（多重ゲート防止） |
+| `task-<id>-<slug>.md` Write、対応 draft 不在 | **BLOCK** |
+| `task-<id>-*.md` / `phase-<id>-*.md` Write、同 ID 既存 | **BLOCK** |
+| `docs/tasks/` 命名規約外 Write | 警告 context 注入 |
+| `task-*.md` Edit (既存編集) | 「list.md 同期更新せよ」context 注入 |
+| `parking-lot.md` Edit | 必須 7 項目の hint 注入 |
+| `list.md` / `_*_TEMPLATE.md` Edit/Write | exempt |
+| サブエージェント実行中 | 全パス通過 |
 
 ### Bypass
 
 | 方法 | 用途 |
 |---|---|
-| `ECC_TASKGUARD=off` | セッション全体で OFF |
-| `/task-bypass <slug>` | 1 ファイル分 pre-clear（`.claude/.taskguard-state/<slug>.cleared`） |
+| `ECC_TASKGUARD=off` | セッション全体 OFF |
+| `/task-bypass <slug>` | 1 file 分 pre-clear |
 | `/task-bypass --clear-all` | 全 marker 削除 |
 
-honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリに記録すること。
+> **Hook 検出仕様詳細 / subagent 通過理由 / 違反パターン例**: [task-management.details.md §hook-強制-詳細](./task-management.details.md#hook-強制-詳細)
 
 ## チェックリスト
 
-タスクを追加する際は以下を確認:
+タスク追加時の確認:
 
 - [ ] `docs/draft/` に設計ドキュメントが存在するか
-- [ ] ユーザーの承認を得たか
+- [ ] user 承認を得たか
 - [ ] `docs/tasks/list.md` の一覧テーブルを更新したか
-- [ ] 個別タスクファイル（詳細リンク）を作成したか
+- [ ] 個別タスクファイルを作成したか
 - [ ] 設計ドキュメントへのリンクを含めたか
-- [ ] task ファイルが Phase→Step 構造で記述されているか (採用 5 条準拠)
+- [ ] task ファイルが採用 6 条 (Task=Phase=N Step) に準拠しているか
 
 ## 承認されていない設計
 
-- 未承認の設計は常に `docs/draft/` に置く
-- 承認済みの設計のみ `docs/tasks/` にリンクできる
+未承認設計は `docs/draft/` に置く。承認済のみ `docs/tasks/` にリンク可。
 
 ## Parking Lot（今後検討タスク）
 
-着手不可の保留タスクは [`docs/tasks/parking-lot.md`](../../docs/tasks/parking-lot.md) で管理する。テンプレは `.claude/templates/docs/tasks/parking-lot.md`。
+着手不可保留タスクは [`docs/tasks/parking-lot.md`](../../docs/tasks/parking-lot.md) で管理。
 
-**Parking Lot 運用ルール:**
-
-- **追加条件**: 既存設計書（`docs/` 配下）または `docs/draft/` の承認済み設計へのリンクが必須。設計なし追加は禁止（通常タスクと同じ）
+- **追加条件**: 既存設計書 or `docs/draft/` 承認済設計へのリンク必須 (設計なし追加禁止)
 - **必須項目 7 つ**: 起案日 / 保留日 / 保留理由 / 設計書 / 実装状態 / 再検討トリガー / 代替現状
-- **ステータス**: 🧊 保留 / 🔍 再検討予定 / ❌ 不採用
-- **移行**: 再検討トリガー成立時に `parking-lot.md` から削除し、`list.md` に新規タスクとして追加（通常フロー = `/new-task`）
-- **定期レビュー**: 🔍 エントリは四半期ごとに見直し。保留理由が消えていれば移行、未解消なら更新
-- **不採用**: ❌ エントリは削除せず履歴として残す（過去意思決定のトレーサビリティ）
+- **status**: 🧊 保留 / 🔍 再検討予定 / ❌ 不採用
+- **移行**: 再検討トリガー成立時に `parking-lot.md` から削除 → `list.md` に新規 task 追加 (`/new-task`)
+- **定期レビュー**: 🔍 entry は四半期見直し
+- **不採用**: ❌ entry は削除せず履歴保持
 
-**`list.md` からの参照**: `list.md` 冒頭に parking-lot.md へのリンクを明記し、全タスク台帳として発見可能にする。
+`list.md` 冒頭に parking-lot.md リンクを明記し、全タスク台帳として発見可能にする。
 
 ## タスク管理の関連コマンド
 
 | コマンド | 役割 |
 |---|---|
-| `/init-tasks` | 台帳テンプレ初期化（SessionStart hook で自動実行） |
-| `/new-draft <slug>` | 設計 draft 起こし（`_DRAFT_TEMPLATE.md` から） |
-| `/new-task <id> <slug>` | 設計承認後にタスク化（`_TASK_TEMPLATE.md` から）+ list.md 行追加 |
-| `/start-task <id>` | 着手（branch 切替 + status 同期） |
-| `/finish-task <id>` | 完了（build/test/docs 検証 + done 化 + commit 提案） |
-| `/task-bypass <slug>` | task-rule-guard を 1 ファイル分 bypass（hot fix 用） |
+| `/init-tasks` | 台帳テンプレ初期化 (SessionStart 自動) |
+| `/new-draft <slug>` | 設計 draft 起こし |
+| `/new-task <id> <slug>` | タスク化 + list.md 行追加 |
+| `/start-task <id>` | 着手 (branch 切替 + status 同期) |
+| `/finish-task <id>` | 完了 (検証 + done 化 + commit 提案) |
+| `/task-bypass <slug>` | task-rule-guard 1 file 分 bypass |
