@@ -63,7 +63,7 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
    - **Task header row**: `| <id> | <集約 status> | **Task: <名>** | <Task 概要 3 要素> | <依存先 ID or —> | [task-<id>-<slug>.md] |`
    - **Step sub-row**: `|    | <Step status> | Step N | <作業概要> | | |` (#列 + 依存先列空)
    - **集約 status**: 全 ✅ → ✅、🔄/🔲 混在 → 🔄、全 🔲 → 🔲、全 📝 → 📝、⏸️ 含む → ⏸️
-   - **status 凡例**: 📝 設計未承認 / 🔲 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
+   - **status 凡例**: SSoT は直下の Step status emoji 凡例 mini-table 参照 (5 種限定: 📝🔲🔄✅⏸️)
    - **概要欄 2 種規約**: Task = 3 要素 (purpose × work × outcome) / Step = 作業概要のみ
 
 > **Step status emoji 凡例 (SSoT)**: 📝 設計未承認 / 🔲 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留 — 本 harness の全 rule / template / list.md / task.md で本 5 種のみ使用。他の emoji (例: 🟢 🟡 🔴 等) は緊急度や別軸用途で混同禁止。
