@@ -1,0 +1,158 @@
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-01-environment/719037e7-ch01-hero.png" alt="" width="1536" height="864">
+
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>ターミナル（パソコンに文字で命令を出す画面）が何をする道具か分かる</p>
+</li><li><p>VSCode（コードを書く専用エディタ）を入れて、ターミナルから操作できるようになる</p>
+</li><li><p><code class="rich-inline-code">claude</code> というコマンドが起動できる状態にする</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約30分</strong></p>
+<hr>
+<h2 id="はじめに-環境構築は最大の難関-その後はだいたい天国">はじめに：環境構築は最大の難関、その後はだいたい天国</h2>
+<p>正直に言うと、Claude Code を使い始めるとき、<strong>一番つまずきやすいのが「環境構築」</strong> なんですよ。</p>
+<p>黒い画面が怖い、英語のコマンドが何を意味してるか分からない、ちゃんと入れたはずなのに動かない…ここで「もういいや」となる人、本当に多いです。</p>
+<p><strong>でも安心してください。</strong> ここさえ越えてしまえば、あとはほぼ天国です。なぜかというと、<strong>Claude Code が動き始めた瞬間から、残りのこまかい設定はぜんぶ Claude Code 本人にお願いできるから</strong>。「設定ファイルってどこにあるの？」とか「便利なショートカット教えて」みたいな質問も、起動してさえいれば全部やってくれます。</p>
+<p>つまり、<strong>環境構築は登山で言う「ベースキャンプ到着」</strong>。ここまで来れたら、あとは Claude Code というシェルパ（道案内人）が先導してくれるんです。今日 30 分、頑張りましょう。</p>
+<hr>
+<h2 id="1-ターミナル超入門">1. ターミナル超入門</h2>
+<h3 id="1-1-ターミナルって何">1-1. ターミナルって何？</h3>
+<p>ひとことで言うと、<strong>ターミナルは「パソコンの厨房に直接オーダーを通す窓口」</strong> です。</p>
+<p>普段の操作は「レストランの客席」と一緒で、メニュー（アイコン）を見て、ウェイター（マウス操作の画面）に「これください」と指さしで頼んでますよね。それで全然いいんです。ただ、慣れた料理人なら、厨房に直接「今日のおすすめ全部、塩多めで」と一言で済ませた方が圧倒的に速い。<strong>それがターミナルです。</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-01-environment/84dffd11-ch01-m1.png" alt="" width="1536" height="864">
+
+<p>ちなみに「ターミナル」「シェル」「コマンドライン」「コンソール」「黒い画面」、たぶん一度は耳にしたことあると思いますが、<strong>最初のうちは全部だいたい同じものだと思ってOK</strong> です。厳密には微妙に違うんですが、その違いを気にし始めるのは、もっと先の話。</p>
+<h3 id="1-2-なぜ-claude-code-はターミナルから使うのか">1-2. なぜ Claude Code はターミナルから使うのか</h3>
+<p>「いやでも、画面ぽちぽちで使えた方が楽じゃん？」と思いますよね。わかります。でも、<strong>Claude Code がターミナルから使うのにはちゃんと理由がある</strong> んです。</p>
+<ul><li><p><strong>速い</strong> — マウスでカチカチやるより、文字でバーンと打った方が早い。慣れると本当に倍以上違います</p>
+</li><li><p><strong>記録が残る</strong> — 何をしたかが文字で残るので、明日の自分が「あれ、昨日なに作業したっけ？」とならない</p>
+</li><li><p><strong>再利用しやすい</strong> — 一度打ったコマンドはコピペで何度でも使える。あとで自動化（スクリプト化）もしやすい</p>
+</li><li><p><strong>Claude Code と相性がいい</strong> — Claude Code はファイルを読み書きしたり、いろんな道具を呼んだりするのが本業なので、<strong>最初からその「作業場」にいた方が話が早い</strong> んですよ</p>
+</li></ul>
+<h3 id="1-3-最低限これだけ覚えるコマンド">1-3. 最低限これだけ覚えるコマンド</h3>
+<p>「コマンド」は要するに、<strong>パソコンに文字で出す命令</strong> のことです。最初は <strong>6 個だけ</strong> で十分。料理で言うと「包丁・まな板・フライパン・お湯・塩・コショウ」みたいなもの。これさえあれば、だいたい何とかなります。</p>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>やること</th><th>例</th></tr></thead><tbody><tr><td><code class="rich-inline-code">pwd</code></td><td>「いま自分どこにいる？」を確認（print working directory）</td><td><code class="rich-inline-code">pwd</code> → <code class="rich-inline-code">/Users/yourname/work</code> と表示される</td></tr><tr><td><code class="rich-inline-code">ls</code></td><td>「このフォルダに何が入ってる？」を見る（list）</td><td><code class="rich-inline-code">ls</code></td></tr><tr><td><code class="rich-inline-code">cd</code></td><td>フォルダを移動する（change directory）</td><td><code class="rich-inline-code">cd Documents</code>（中に入る）／ <code class="rich-inline-code">cd ..</code>（一つ上へ戻る）</td></tr><tr><td><code class="rich-inline-code">mkdir</code></td><td>新しいフォルダを作る（make directory）</td><td><code class="rich-inline-code">mkdir my-project</code></td></tr><tr><td><code class="rich-inline-code">cat</code></td><td>このファイルの中身をのぞく</td><td><code class="rich-inline-code">cat README.md</code></td></tr><tr><td><code class="rich-inline-code">clear</code></td><td>画面が散らかったので片付ける</td><td><code class="rich-inline-code">clear</code></td></tr></tbody></table>
+<p>📝 <strong>試してみる</strong>：ターミナルを開いて、<code class="rich-inline-code">pwd</code> → <code class="rich-inline-code">ls</code> → <code class="rich-inline-code">cd Documents</code> → <code class="rich-inline-code">ls</code> → <code class="rich-inline-code">cd ..</code> を順に打ってみてください。<strong>「今どこにいて、何があるか」を確認しながら歩く</strong> イメージです。迷子になりかけたら <code class="rich-inline-code">pwd</code> で現在地を確認。マップ的に使えます。</p>
+<h3 id="1-4-macos-と-windows-での違い">1-4. macOS と Windows での違い</h3>
+<p>ターミナルの開き方は OS（お使いのパソコン）によってちょっと違います。</p>
+<table class="rich-table"><thead><tr><th>OS</th><th>ターミナルの開き方</th></tr></thead><tbody><tr><td><strong>macOS</strong></td><td>Spotlight（画面右上の虫眼鏡、<code class="rich-inline-code">⌘+Space</code>）で「ターミナル」と検索 → Enter</td></tr><tr><td><strong>Windows</strong></td><td>スタートメニューから「PowerShell」または「Windows Terminal」を起動</td></tr><tr><td><strong>Linux</strong></td><td><code class="rich-inline-code">Ctrl+Alt+T</code>（みなさんは詳しいと思うので説明は省きます）</td></tr></tbody></table>
+<p>💡 <strong>おすすめのターミナルアプリ</strong>：標準のものでもいいんですが、<strong>ちょっといいやつに乗り換えると毎日のテンションが上がります</strong>。プロ仕様の包丁を使うようなものです。</p>
+<ul><li><p><strong><a href="https://www.warp.dev/" target="_blank" rel="noopener noreferrer">Warp</a></strong> — 補完が賢く、見た目もきれい。動画でもよく推奨されてます</p>
+</li><li><p><strong><a href="https://iterm2.com/" target="_blank" rel="noopener noreferrer">iTerm2</a></strong> （macOS用） — 定番。タブで複数画面に分けたり、左右に並べたりが得意</p>
+</li><li><p><strong><a href="https://aka.ms/terminal" target="_blank" rel="noopener noreferrer">Windows Terminal</a></strong> — Windows ならまずこれ</p>
+</li></ul>
+<hr>
+<h2 id="2-vscode-visual-studio-code-のインストール">2. VSCode（Visual Studio Code）のインストール</h2>
+<p>VSCode は、Microsoft が無料で配ってる <strong>エディタ（コードを書くためのソフト）</strong> です。例えるなら <strong>「カスタマイズし放題の作業デスク」</strong>。何もない机で作業を始めることもできるんですが、引き出しを増やしたり、ライトを付けたり、付箋を貼ったりして、<strong>自分仕様にどんどん化けさせていける机</strong> だと思ってください。Claude Code とも相性抜群です。</p>
+<blockquote>
+<p>💡 <strong>「メモ帳と何が違うの？」</strong>：VSCode は、メモ帳のすごい版です。文字に色を付けてくれたり、間違いを指摘してくれたり、フォルダごとファイルをまとめて開けたり。<strong>作業効率が体感で 5 倍くらい変わります</strong>。</p>
+</blockquote>
+<h3 id="2-1-インストール手順">2-1. インストール手順</h3>
+<ol><li><p><a href="https://code.visualstudio.com/download" target="_blank" rel="noopener noreferrer">https://code.visualstudio.com/download</a> にアクセス</p>
+</li><li><p>お使いの OS 用のインストーラー（セットアップ用ファイル）をダウンロード</p>
+</li><li><p>ダウンロードしたファイルをダブルクリック → 表示される指示通りに「次へ」を押していけばOK</p>
+</li></ol>
+<p>「次へ」「次へ」「完了」。<strong>ここは10分もかからないはず</strong> です。</p>
+<h3 id="2-2-初回起動時の設定">2-2. 初回起動時の設定</h3>
+<p>📝 <strong>やっておくと幸せな設定</strong>：これやっておかないと、あとで「なんでだー！」ってなりがちです。</p>
+<table class="rich-table"><thead><tr><th>項目</th><th>設定</th></tr></thead><tbody><tr><td>日本語化</td><td>拡張機能（追加機能をインストールできるストア）で「Japanese Language Pack」を検索してインストール</td></tr><tr><td>ターミナル統合</td><td>上部メニュー <code class="rich-inline-code">表示 → ターミナル</code> をクリック（または <code class="rich-inline-code">Ctrl+\`` / </code>Cmd+``）すると、VSCode の中にターミナルが出てくる</td></tr><tr><td>フォルダ単位で開く</td><td>プロジェクトはフォルダごと開く（<code class="rich-inline-code">ファイル → フォルダーを開く...</code>）</td></tr></tbody></table>
+<h3 id="2-3-vscode-と-claude-code-の関係">2-3. VSCode と Claude Code の関係</h3>
+<p>VSCode と Claude Code の関係は、<strong>「作業デスク（VSCode）の上に、賢い助手（Claude Code）を呼んで一緒に作業する」</strong> イメージです。机の上に書類を広げて、横で助手がメモを書いたり、書類を運んできたり、コーヒーを淹れたり（は、しません）。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-01-environment/d27e19a6-ch01-m2.png" alt="" width="1536" height="864">
+
+<p><strong>使い方の典型</strong>：</p>
+<ol><li><p>VSCode で作業したいフォルダを開く</p>
+</li><li><p>内蔵ターミナル（VSCode の中にあるターミナル）で <code class="rich-inline-code">claude</code> と打って起動</p>
+</li><li><p>Claude Code が編集してくれた変更点が、差分表示（変更前と変更後を見比べる画面）として VSCode 上に出る</p>
+</li><li><p>横で別のファイルを開きながら確認できる</p>
+</li></ol>
+<p>エディタとターミナルを行ったり来たりしなくていいので、<strong>慣れるとこれ無しでは生きていけなくなります</strong>。</p>
+<hr>
+<h2 id="3-claude-code-のインストール-ここが本日のラスボス">3. Claude Code のインストール（ここが本日のラスボス）</h2>
+<p>さあ、ここが本日のメインイベント、<strong>ラスボス戦</strong> です。とは言っても、いまの Claude Code はインストーラー（セットアップ用ファイル）一発で入るのでだいぶ楽になりました。1年前はもっと険しかったんですよ…時代の進化に感謝。</p>
+<h3 id="3-1-前提-node-js-を入れておく-おすすめ">3-1. 前提：Node.js を入れておく（おすすめ）</h3>
+<p>Node.js は、<strong>たくさんのアプリの「土台」になっているプログラム実行環境（プログラムを動かすための仕組み）</strong> です。Claude Code 本体には必須ではないんですが、<strong>入れておくとトラブったときの逃げ道が増える</strong> ので、入れておくのを強くおすすめします。<strong>保険みたいなもの</strong> です。</p>
+<ol><li><p><a href="https://nodejs.org/ja/download" target="_blank" rel="noopener noreferrer">https://nodejs.org/ja/download</a> にアクセス</p>
+</li><li><p><strong>LTS 版</strong>（Long Term Support の略。<strong>長く安定して使える、いわゆる「無難な版」</strong>）を選んでダウンロード</p>
+</li><li><p>インストールが終わったら、ターミナルでちゃんと入ったか確認：</p>
+<pre data-lang="bash"><code>node --version</code></pre>
+<p><code class="rich-inline-code">v22.x.x</code> のような数字が表示されたら成功です。</p>
+</li></ol>
+<p><code class="rich-inline-code">command not found</code>（そんなコマンド知らない、という意味のエラー）と言われた場合は、<strong>ターミナルを一度閉じて開き直してから</strong> もう一回試してください。パソコンが「あ、新しい道具が入ったんだ」と気づくのにタイムラグがあるんですよ。</p>
+<h3 id="3-2-claude-code-本体のインストール">3-2. Claude Code 本体のインストール</h3>
+<p>公式が推奨する方法を OS 別に紹介します。<strong>自分の OS のところだけ読めばOK</strong> です。</p>
+<h4 id="macos-linux-wsl">🍎 macOS / 🐧 Linux / WSL</h4>
+<pre data-lang="bash"><code>curl -fsSL https://claude.ai/install.sh | bash</code></pre>
+<blockquote>
+<p>このコマンドは「公式サイトからセットアップ用ファイルをダウンロードして、そのまま実行する」という意味です。1行で済むよう公式が用意してくれた魔法の呪文だと思ってください。</p>
+</blockquote>
+<p>または Homebrew（macOS でアプリをコマンド経由でインストール・管理できるツール）が入っていれば：</p>
+<pre data-lang="bash"><code>brew install --cask claude-code</code></pre>
+<h4 id="windows-powershell">🪟 Windows（PowerShell）</h4>
+<pre data-lang="powershell"><code>irm https://claude.ai/install.ps1 | iex</code></pre>
+<p>または WinGet（Windows 公式のアプリ管理ツール）：</p>
+<pre data-lang="powershell"><code>winget install Anthropic.ClaudeCode</code></pre>
+<h4 id="確認">確認</h4>
+<p>ちゃんと入ったかチェック：</p>
+<pre data-lang="bash"><code>claude --version</code></pre>
+<p>ここでバージョン番号がパッと表示されれば、<strong>もう8割勝ったも同然</strong> です。</p>
+<blockquote>
+<p>⚠️ <strong>注：古い情報に注意</strong>
+ネット検索すると <code class="rich-inline-code">npm install -g @anthropic-ai/claude-code</code> という古い方法が出てくることがありますが、<strong>今はおすすめしません</strong>。Node.js のバージョンに振り回されるトラブルがあるので、上に書いた方法を使ってください。「2024年の情報」とか見たら、ちょっと疑った方がいい世界です（このツール、進化が早すぎるんですよ本当に）。</p>
+</blockquote>
+<h3 id="3-3-vscode-拡張のインストール">3-3. VSCode 拡張のインストール</h3>
+<p>VSCode と Claude Code をもっと連携させたいときの追加機能（拡張機能）です。</p>
+<ol><li><p>VSCode の左サイドバーにある <strong>拡張機能</strong> タブ（ブロック崩しっぽい四角いアイコン）をクリック</p>
+</li><li><p>上の検索欄に <code class="rich-inline-code">Claude Code</code> と入力</p>
+</li><li><p><strong>Anthropic 公式</strong> のものをインストール（似たやつもあるので、必ず公式マークを確認してください）</p>
+</li><li><p>インストールが終わったら、コマンドパレット（VSCode の中の検索メニュー、<code class="rich-inline-code">Ctrl + Shift + P</code> または Mac は <code class="rich-inline-code">Cmd + Shift + P</code> で出る）から「Claude Code: Open in New Tab」を選ぶ</p>
+</li></ol>
+<h3 id="3-4-jetbrains-系ide-intellij-pycharm-webstorm-などの開発ソフト">3-4. JetBrains 系IDE（IntelliJ / PyCharm / WebStorm などの開発ソフト）</h3>
+<p><a href="https://plugins.jetbrains.com/plugin/27310-claude-code-beta-" target="_blank" rel="noopener noreferrer">JetBrains Marketplace</a> からプラグイン（追加機能）をインストール → IDE を再起動。<strong>JetBrains 派の人もちゃんと対応されてます</strong>、ご安心を。</p>
+<hr>
+<h2 id="4-ログインと初回起動">4. ログインと初回起動</h2>
+<h3 id="4-1-アカウント">4-1. アカウント</h3>
+<p>Claude Code は <strong>Anthropic アカウント</strong>（Claude を作っている会社のアカウント）または <strong>Claude.ai 有料プラン</strong>（普段ブラウザで Claude と会話できるサービスの有料版）で使います。</p>
+<table class="rich-table"><thead><tr><th>プラン</th><th>できること</th><th>月額目安</th></tr></thead><tbody><tr><td><strong>Free / Pro ($20)</strong></td><td>軽く試したい人向け</td><td>$0 / $20</td></tr><tr><td><strong>Max ($100)</strong></td><td>個人で日常的にしっかり使いたい人</td><td>$100</td></tr><tr><td><strong>Max 20× ($200)</strong></td><td>一日中ぶん回したいヘビーユーザー</td><td>$200</td></tr><tr><td><strong>API課金</strong></td><td>プログラムから自動で呼び出す用</td><td>使った分だけ</td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>個人で使うときのおすすめ</strong>：まず Pro で試して、本格化したら Max。<strong>「ジムの月会費くらいで、毎日エンジニア一人分が手に入る」</strong> と思えば、人によってはコスパ感がバグります。</p>
+</blockquote>
+<h3 id="4-2-初回起動">4-2. 初回起動</h3>
+<pre data-lang="bash"><code># 練習用フォルダを作って、その中に入る
+mkdir ~/work/cc-test &amp;&amp; cd ~/work/cc-test
+
+# Claude Code を起動
+claude</code></pre>
+<blockquote>
+<p>上のコマンドの <code class="rich-inline-code">&amp;&amp;</code>（前のコマンドが成功したら次もやって）と、<code class="rich-inline-code">~</code>（チルダ。自分のホーム＝ユーザーフォルダを指す記号）はよく出てくるので覚えておくと便利です。</p>
+</blockquote>
+<p>初回はブラウザが勝手に開いて「ログインしてね」と言われます。Anthropic アカウントでログインを完了すると、ターミナルにチャット画面が現れます。<strong>ここまで来たらゴール目前</strong>。</p>
+<h3 id="4-3-動作確認">4-3. 動作確認</h3>
+<p>起動した状態で、まずはお決まりのあいさつから。</p>
+<pre><code>このフォルダは何ですか?</code></pre>
+<pre><code>hello.txt というファイルを作って「Hello, Claude Code!」と書いてください</code></pre>
+<p>ファイルが作成されたら、<strong>おめでとうございます、本日のラスボス撃破です</strong> 🎉。終了は <strong><code class="rich-inline-code">Ctrl + D</code> キー</strong> または <code class="rich-inline-code">/exit</code> と打って Enter。</p>
+<hr>
+<h2 id="5-環境構築チェックリスト">5. 環境構築チェックリスト</h2>
+<p>ここまで来たら、振り返りのチェックリスト。<strong>全部 ☑ になったら、本当の意味で「天国編」スタート</strong> です。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-01-environment/6379b07f-ch01-m3.png" alt="" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th><th>確認方法</th></tr></thead><tbody><tr><td>☐</td><td>ターミナルが開ける</td><td>アプリを開けばOK</td></tr><tr><td>☐</td><td>VSCode が起動する</td><td>アプリを開けばOK</td></tr><tr><td>☐</td><td>Node.js が入っている</td><td>ターミナルで <code class="rich-inline-code">node --version</code></td></tr><tr><td>☐</td><td>Claude Code が入っている</td><td>ターミナルで <code class="rich-inline-code">claude --version</code></td></tr><tr><td>☐</td><td>ログインできた</td><td><code class="rich-inline-code">claude</code> で起動して質問できる</td></tr><tr><td>☐</td><td>ファイル作成テスト OK</td><td>「hello.txtを作って」が成功する</td></tr></tbody></table>
+<hr>
+<h2 id="6-つまずきポイント-あるあるfaq">6. つまずきポイント（あるあるFAQ）</h2>
+<p>ここからは「あ、それ俺もなった」をまとめておきます。<strong>みんなだいたい同じところで詰まる</strong>ので、安心してください。</p>
+<table class="rich-table"><thead><tr><th>症状</th><th>対処</th></tr></thead><tbody><tr><td><code class="rich-inline-code">command not found: claude</code> と出る</td><td>パスが通っていない（パソコンがまだ <code class="rich-inline-code">claude</code> の居場所を覚えてない状態）です。<strong>ターミナルを一度閉じて、新しく開き直す</strong> だけで9割解決します</td></tr><tr><td>日本語が文字化け</td><td>ターミナルの文字コード（文字を表示するときの規格）を <strong>UTF-8</strong>（世界共通の文字の書き方）に。Warp や Windows Terminal は最初から UTF-8 なので OK</td></tr><tr><td>Windows でうまく動かない</td><td>Git for Windows（Git というファイル履歴管理ツールの Windows 版）を入れる（<code class="rich-inline-code">git-scm.com/download/win</code>）。それでもダメなら WSL2（Windows の中で Linux を動かす仕組み）を試す</td></tr><tr><td>起動した瞬間落ちる</td><td>Node.js のバージョンが古すぎる説。<strong>v22 LTS 以上に更新</strong> してください</td></tr><tr><td>ログインで詰まる</td><td>ブラウザのポップアップブロック（小窓を勝手に開かないようにするブラウザの設定）を切る／シークレットウィンドウ（履歴を残さないモード）で再試行</td></tr></tbody></table>
+<p>それでも解決しない場合は <a href="/articles/claude-code-a2-troubleshooting">付録 B. トラブルシューティング</a> に網羅してあります。</p>
+<hr>
+<h2 id="ふりかえり">✅ ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-01-environment/e672122c-ch01-outro.png" alt="" width="1536" height="864">
+
+<p>ここまで本当にお疲れさまでした。<strong>冒頭にも書いた通り、これが一番きつい章です。</strong> ここから先は、Claude Code が起動した状態で進めていきます。「設定ファイルってどこにあるの？」「Git を入れたい」みたいな細かい設定で詰まったら、<strong>もう全部 Claude Code 本人に聞いちゃってください</strong>。インストールが終わった瞬間から、Claude Code 自身があなたのアシスタントになります。<strong>ベースキャンプ到着、おめでとうございます。</strong> 山頂はもうすぐです。</p>
+<h2 id="関連する章">📚 関連する章</h2>
+<ul><li><p>🔗 <strong>エラーが出たら</strong>：<a href="/articles/claude-code-a2-troubleshooting">付録 B. トラブルシューティング</a></p>
+</li><li><p>🔗 <strong>次のステップ</strong>：<a href="/articles/claude-code-02-first-session">第2回 はじめてのセッション</a></p>
+</li><li><p>🔗 <strong>コマンド一覧</strong>：<a href="/articles/claude-code-a1-cheatsheet">付録 A. チートシート</a></p>
+</li></ul>
+<h2 id="次へ">🎬 次へ</h2>
+<p>→ <a href="/articles/claude-code-02-first-session">第2回 はじめてのセッション</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅️ 前へ</td><td><a href="/articles/claude-code-00-introduction">第00回 はじめに</a></td></tr><tr><td>➡️ 次へ</td><td><a href="/articles/claude-code-02-first-session">第2回 はじめてのセッション</a></td></tr><tr><td>🏠 目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ページレイアウト 構成要素</title>
+<link rel="stylesheet" href="sketchnote.css">
+<style>
+  html, body { width: 3072px; height: 1728px; overflow: visible; margin: 0; }
+  body { width: 3072px; height: 1728px; }
+  .canvas { width: 3072px !important; height: 1728px !important; padding: 60px 100px !important; overflow: visible !important; box-sizing: border-box; }
+
+  .head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; gap: 40px; }
+  .title { font-size: 88px; line-height: 1.18; }
+  .subtitle { font-size: 36px; margin-top: 12px; }
+
+  .badge-tilt {
+    background: #ffe89c;
+    border: 4px solid #c89000;
+    border-radius: 32px 38px 30px 36px;
+    padding: 18px 32px;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 32px;
+    color: #8a6a00;
+    box-shadow: 6px 6px 0 #c89000;
+    transform: rotate(-3deg);
+    text-align: center;
+    line-height: 1.25;
+    flex-shrink: 0;
+    margin-top: 22px;
+  }
+
+  /* 画面外枠 — Salesforce 画面イメージ */
+  .screen {
+    border: 8px solid var(--ink);
+    border-radius: 32px;
+    box-shadow: 12px 12px 0 var(--ink);
+    background: #f5f7fb;
+    padding: 26px 36px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    position: relative;
+  }
+  .screen-tab {
+    background: var(--ink);
+    color: white;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 28px;
+    padding: 10px 24px;
+    border-radius: 16px;
+    display: inline-block;
+    margin: 0 0 12px 4px;
+    align-self: flex-start;
+  }
+
+  /* 各ブロック */
+  .block {
+    border: 5px solid var(--ink);
+    border-radius: 22px;
+    padding: 18px 26px;
+    background: white;
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .block .blbl {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 38px; font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .block .blbl .meta {
+    font-family: 'Klee One', sans-serif;
+    font-size: 26px; color: #555;
+    margin-left: 12px; font-weight: 400;
+  }
+
+  /* Highlights パネル(灰) */
+  .b-high { background: #ececec; border-color: #555; box-shadow: 6px 6px 0 #555; padding: 22px 30px; }
+  .b-high .blbl { color: #444; font-size: 42px; }
+
+  /* Path (オレンジ) */
+  .b-path { background: #ffe89c; border-color: #c89000; box-shadow: 6px 6px 0 #c89000; padding: 18px 30px; }
+  .b-path .blbl { color: #8a6a00; font-size: 38px; display: flex; align-items: center; gap: 18px; }
+  .path-progress { display: flex; gap: 8px; margin-top: 6px; }
+  .path-progress .step {
+    flex: 1; padding: 10px 16px;
+    background: white; border: 3px solid #c89000;
+    text-align: center;
+    font-family: 'Klee One', sans-serif;
+    font-size: 24px; font-weight: 600; color: #8a6a00;
+    border-radius: 4px;
+    position: relative;
+  }
+  .path-progress .step.active { background: #c89000; color: white; }
+  .path-progress .step.done { background: #ffd866; }
+
+  /* Detail (青) */
+  .b-detail { background: #e0eef9; border-color: #2670ba; box-shadow: 6px 6px 0 #2670ba; padding: 22px 28px; }
+  .b-detail .blbl { color: #1a4d80; font-size: 42px; }
+  .sections {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px; margin-top: 12px;
+  }
+  .section {
+    background: #ebdcf3;
+    border: 4px solid var(--purple);
+    border-radius: 18px;
+    padding: 18px 22px;
+    box-shadow: 4px 4px 0 var(--purple);
+  }
+  .section .slbl {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 30px; color: #6e3f96; font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .section .field {
+    background: white;
+    border: 2.5px solid var(--purple);
+    border-radius: 12px;
+    padding: 8px 16px;
+    font-family: 'Klee One', sans-serif;
+    font-size: 24px;
+    margin-bottom: 6px;
+    color: #444;
+  }
+  .section .field.lta {
+    background: white; min-height: 86px;
+  }
+
+  /* Related (緑) */
+  .b-related { background: #d8f0e7; border-color: #2d8a72; box-shadow: 6px 6px 0 #2d8a72; padding: 22px 28px; }
+  .b-related .blbl { color: #2d8a72; font-size: 40px; }
+  .related-pills {
+    display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap;
+  }
+  .related-pills .rpill {
+    background: white;
+    border: 3px solid #2d8a72;
+    border-radius: 28px;
+    padding: 10px 24px;
+    font-family: 'Klee One', sans-serif;
+    font-size: 26px;
+    color: #2d8a72;
+    font-weight: 600;
+    box-shadow: 3px 3px 0 #2d8a72;
+  }
+
+  /* Buttons (黒) */
+  .b-actions { background: #fff8d8; border-color: var(--ink); box-shadow: 6px 6px 0 var(--ink); padding: 18px 28px; }
+  .b-actions .blbl { color: var(--ink); font-size: 38px; }
+  .btn-row { display: flex; gap: 18px; margin-top: 8px; flex-wrap: wrap; }
+  .btn {
+    background: white;
+    border: 3px solid var(--ink);
+    border-radius: 16px;
+    padding: 12px 32px;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 28px;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+  .btn.primary { background: #4a90d9; color: white; }
+  .btn.danger { background: #e15c5c; color: white; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="head">
+    <div>
+      <div class="title"><span class="star-mark">✦</span>ページレイアウト — 入力フォームの構成</div>
+      <div class="subtitle">ハイライト / パス / 詳細 / 関連 / アクション の 5 ブロックで構成</div>
+    </div>
+    <div class="badge-tilt">5ブロック<br>で組み立て！</div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-tab">🖥 Salesforce レコード詳細画面</div>
+    <!-- ① ハイライトパネル -->
+    <div class="block b-high">
+      <div class="blbl">① ハイライトパネル <span class="meta">(コンパクトレイアウト)</span></div>
+    </div>
+
+    <!-- ② パス -->
+    <div class="block b-path">
+      <div class="blbl">② パス <span class="meta">— フェーズ進捗 (Lightning)</span></div>
+      <div class="path-progress">
+        <div class="step done">検討</div>
+        <div class="step done">提案</div>
+        <div class="step active">交渉/レビュー</div>
+        <div class="step">受注</div>
+        <div class="step">失注</div>
+      </div>
+    </div>
+
+    <!-- ③ 詳細セクション -->
+    <div class="block b-detail">
+      <div class="blbl">③ 詳細セクション</div>
+      <div class="sections">
+        <div class="section">
+          <div class="slbl">セクション1: 基本情報</div>
+          <div class="field">Name</div>
+          <div class="field">Owner</div>
+          <div class="field">Date</div>
+        </div>
+        <div class="section">
+          <div class="slbl">セクション2: 金額情報</div>
+          <div class="field">Amount</div>
+          <div class="field">Currency</div>
+        </div>
+        <div class="section">
+          <div class="slbl">セクション3: 詳細</div>
+          <div class="field lta">Description<br><span style="color:#888;font-size:20px;">(ロングテキストエリア)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ④ 関連リスト -->
+    <div class="block b-related">
+      <div class="blbl">④ 関連リスト <span class="meta">— 子オブジェクト一覧</span></div>
+      <div class="related-pills">
+        <div class="rpill">Contracts (主従子)</div>
+        <div class="rpill">Tasks</div>
+        <div class="rpill">Files</div>
+        <div class="rpill">Notes</div>
+      </div>
+    </div>
+
+    <!-- ⑤ ボタン/アクション -->
+    <div class="block b-actions">
+      <div class="blbl">⑤ ボタン / アクション</div>
+      <div class="btn-row">
+        <div class="btn primary">新規</div>
+        <div class="btn">編集</div>
+        <div class="btn danger">削除</div>
+        <div class="btn">カスタム</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

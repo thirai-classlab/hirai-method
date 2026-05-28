@@ -33,6 +33,30 @@
 #  5. その他 path 系       → 非標準の .claude/ 配置を使う場合のみ
 #  → 一時的な切替なら yaml を触らず env で済ませる選択肢もある (上記 env override)
 
+# === Harness Version Stamp (task-56 F) ===
+# install.sh --init / --update が `date -u +%Y-%m-%d` を書き込む同期 stamp。
+# stale-harness-detect.sh (SessionStart hook) が読み、consuming repo が
+# `install.sh --update` を取り込まずに旧 harness で稼働継続している事故を WARN する。
+# 形式: "YYYY-MM-DD" (UTC)。
+# 不正値 (regex 不一致) は UNKNOWN 表示 + 注意 WARN、未来日付は別系 WARN。
+# 採用先 project は手動で編集しない (install.sh が更新する)。
+harness_version: "2026-05-28"
+
+# === Stale Harness Detect (task-56 F) ===
+# .claude/hooks/stale-harness-detect.sh (SessionStart hook) が消費。
+# stale_harness_markers: 主要 marker file 一覧 (`.claude/` からの相対 path)。
+#   1 件でも欠落していれば旧 harness 稼働の可能性として WARN 注入。
+#   採用先で「ハーネス更新の取り込み有無」を間接判定するため、新 guard 追加時に
+#   代表的な marker を 5 件程度に保つ (網羅性より代表性を優先)。
+# feature_stale_harness_detect_enabled: 機能 on/off (default true、env override 可)
+#
+# 起源: docs/draft/harness-health-7items-analysis.md §3-F + docs/draft/stale-harness-detection.md
+# WARN 出力時は `bash install.sh --update <repo>` 案内 (cross-repo write 例外 §)。
+# bypass:
+#   export HC_FEATURE_STALE_HARNESS_DETECT_ENABLED=false   # 1 セッション OFF
+stale_harness_markers: [CommonRules.md, scripts/hc-config.sh, hooks/lib/config-loader.sh, hooks/loop-confirmation-detector.sh, hooks/stale-harness-detect.sh]
+feature_stale_harness_detect_enabled: true
+
 # === 委譲ガードの保護パス ===
 # delegation-guard.sh が「メインエージェント直接操作禁止」とみなす path 部分一致リスト。
 # 例: protected_paths に "src" が入っていれば */src/* / */src を block する。

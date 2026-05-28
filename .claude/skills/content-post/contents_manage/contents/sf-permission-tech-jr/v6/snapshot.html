@@ -1,0 +1,308 @@
+<h1 id="salesforce-jr">Salesforce 権限管理入門 — Jr.エンジニア向け</h1>
+<p><strong>対象</strong>: Salesforce に初めて触れる Jr.エンジニア
+<strong>ゴール</strong>: 「ユーザ / ライセンス / プロファイル / 権限セット / 共有設定 / ロール階層」を説明でき、アクセスが決まる順序を追える状態になる</p>
+<hr>
+<h2 id="0-salesforce">0. はじめに — なぜ Salesforce の権限は複雑なのか</h2>
+<p>Salesforce は <strong>「業務システムで、かつ複数部門が同居する」</strong> 前提で作られているため、単純な「Admin / User」の2値では足りません。</p>
+<ul><li><p>営業A は自分の商談しか見たくない</p>
+</li><li><p>営業マネージャは配下の商談を全部見たい</p>
+</li><li><p>経理は全商談の金額だけ見たい（担当者名は隠したい）</p>
+</li><li><p>外部パートナーは自社に関連する一部だけ見られる</p>
+</li></ul>
+<p>これを破綻なく扱うために <strong>権限が「層」になっています</strong>。まずはこの層構造を掴むのが最短の理解ルートです。</p>
+<hr>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/9bad6221-body-overview.png" alt="Two-axis access-control model: function axis (License/Profile/Permission Set) and data axis (OWD/Role/Sharing Rule) crossing at a single user" width="2560" height="1440">
+
+<h2 id="1-2">1. 全体像 — アクセス制御の 2 軸モデル</h2>
+<p>Salesforce の権限は大きく <strong>2軸</strong> で考えます。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/8f9d01f6-01.png" alt="1. 全体像 — アクセス制御の 2 軸モデル (flowchart TB)" width="1588" height="1508">
+
+<table class="rich-table"><thead><tr><th>軸</th><th>質問</th><th>主な設定項目</th></tr></thead><tbody><tr><td>機能アクセス</td><td>「そのユーザは<strong>何ができる</strong>か？」</td><td>ライセンス / プロファイル / 権限セット</td></tr><tr><td>データアクセス</td><td>「そのユーザは<strong>どのレコードを見られる</strong>か？」</td><td>OWD / ロール階層 / 共有ルール</td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>Jr.向けポイント</strong>: 「エラーが出た」「レコードが見えない」時、まずどっちの軸の問題かを切り分ける癖をつけよう。</p>
+</blockquote>
+<hr>
+<h2 id="trailhead-admin-5">📚 Trailhead 学習プラン (Admin試験対策・約5時間)</h2>
+<p>以下6モジュール + 動画シリーズで「<strong>ユーザ / ライセンス / プロファイル / 権限セット / 共有設定 / ロール共有</strong>」を公式コンテンツで網羅。<strong>License → User → Permission Set Group → Data Security → 演習</strong> の順を推奨。</p>
+<table class="rich-table"><thead><tr><th>#</th><th>モジュール (日本語版あり)</th><th>ユニット数</th><th>目安時間</th><th>Trailhead URL</th></tr></thead><tbody><tr><td>1</td><td><strong>Salesforce Licensing: Understanding Features and Access</strong></td><td>3</td><td>20 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/salesforce-licensing" target="_blank" rel="noopener noreferrer">modules/salesforce-licensing</a></td></tr><tr><td>2</td><td><strong>User Management</strong></td><td>2</td><td>45 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/lex_implementation_user_setup_mgmt" target="_blank" rel="noopener noreferrer">modules/lex_implementation_user_setup_mgmt</a></td></tr><tr><td>3</td><td><strong>Permission Set Groups</strong></td><td>3</td><td>40 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/permission-set-groups" target="_blank" rel="noopener noreferrer">modules/permission-set-groups</a></td></tr><tr><td>4</td><td><strong>Data Security</strong></td><td>7</td><td>1 hr 50 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/data_security" target="_blank" rel="noopener noreferrer">modules/data_security</a></td></tr><tr><td>5</td><td><strong>Administrator Certification Prep: Setup and Objects</strong></td><td>3</td><td>15 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/administrator-certification-prep-setup-and-objects" target="_blank" rel="noopener noreferrer">modules/administrator-certification-prep-setup-and-objects</a></td></tr><tr><td>6</td><td><strong>Administrator Certification Prep: Security and Data Management</strong></td><td>2</td><td>30 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/administrator-certification-prep-security-and-data-management" target="_blank" rel="noopener noreferrer">modules/administrator-certification-prep-security-and-data-management</a></td></tr><tr><td>7</td><td>(補助) <strong>Who Sees What 動画シリーズ</strong> — 可視化の全体像を映像で復習</td><td>6</td><td>40 min</td><td><a href="https://admin.salesforce.com/blog/2023/who-sees-what-data-visibility-and-access" target="_blank" rel="noopener noreferrer">admin.salesforce.com: Who Sees What</a></td></tr><tr><td></td><td><strong>合計</strong></td><td><strong>26</strong></td><td><strong>~5 hr</strong></td><td></td></tr></tbody></table>
+<h3 id="heading-1">🔖 各モジュールのユニット内訳 (何が学べるか・日本語解説)</h3>
+<h4 id="1-salesforce-licensing-understanding-features-and-access-20-min">1. Salesforce Licensing: Understanding Features and Access (20 min)</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Understand How Licenses Work</td><td>10 min</td><td><strong>ライセンスの基本概念</strong>: ライセンスとは何か、エディション (Essentials / Professional / Enterprise / Unlimited) の違い、契約単位で何が変わるか。「プロファイルより上位の制約」である理由。</td></tr><tr><td>Give Users the Functionality They Need</td><td>5 min</td><td><strong>ユーザタイプとライセンスの選び方</strong>: Salesforceライセンス / Platformライセンス / Community ライセンスの使い分け、各ライセンスで使える機能の範囲。</td></tr><tr><td>Keep Up with Upgrades and Add-ons</td><td>5 min</td><td><strong>追加ライセンス・アドオン</strong>: Einstein、CPQ、Marketing Cloud等のアドオン、ライセンス残数管理、アップグレード時の考慮点。</td></tr></tbody></table>
+<h4 id="2-user-management-45-min">2. User Management (45 min)</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Add New Users</td><td>20 min</td><td><strong>ユーザ作成の実務</strong>: ユーザレコードの作成手順、必須項目 (ユーザ名/メール/ライセンス/プロファイル/ロール)、パスワード初期化、ユーザの有効化/無効化/凍結 (Freeze) の違い、一括作成 (Data Loader等)。</td></tr><tr><td>Control What Your Users Can Access</td><td>25 min</td><td><strong>アクセス制御の全体像</strong>: プロファイルと権限セットの役割、OWD (組織の共有設定)、ロール階層の基礎、どのレイヤーで何を制御すべきかの判断基準。本資料§2-7の予習に最適。</td></tr></tbody></table>
+<h4 id="3-permission-set-groups-40-min">3. Permission Set Groups (40 min)</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Get Started with Permission Set Groups</td><td>10 min</td><td><strong>なぜ権限セットグループが必要か</strong>: プロファイル爆発問題、権限セットの限界、PSGがもたらす「ロールベース権限管理」の思想。</td></tr><tr><td>Create a Permission Set Group</td><td>15 min</td><td><strong>PSGの作成と割当</strong>: PSGの作成手順、複数の権限セットをまとめる方法、ユーザへの割当、更新時の再計算挙動。</td></tr><tr><td>Mute Permissions in Permission Set Groups</td><td>15 min</td><td><strong>Muting Permission (抑制権限)</strong>: グループ内で特定権限だけを打ち消す方法、「全部入りから例外的に削る」設計パターン、実務での使いどころ (部署限定の機能制限など)。</td></tr></tbody></table>
+<h4 id="4-data-security-110-min">4. Data Security (110 min) ← 試験の主戦場</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Overview of Data Security</td><td>10 min</td><td><strong>セキュリティモデルの全体像</strong>: 組織レベル → オブジェクト → 項目 → レコードの4層モデル、各層で何が決まるか。</td></tr><tr><td>Control Access to the Org</td><td>15 min</td><td><strong>組織レベルのアクセス制御</strong>: ログイン時間/IP制限、パスワードポリシー、セッション設定、信頼済みIPレンジ。ライセンスとプロファイルの関係。</td></tr><tr><td>Control Access to Objects</td><td>25 min</td><td><strong>オブジェクト権限</strong>: プロファイル・権限セットでのCRED (Create/Read/Edit/Delete) + View All / Modify All の違い、タブ表示、アプリケーション割当。<strong>試験頻出</strong>。</td></tr><tr><td>Control Access to Fields</td><td>15 min</td><td><strong>フィールドレベルセキュリティ (FLS)</strong>: 項目単位の参照/編集可否、FLSとページレイアウトの違い、センシティブ項目 (給与、SSN等) の隠し方。</td></tr><tr><td>Control Access to Records</td><td>15 min</td><td><strong>レコードアクセスの基本</strong>: OWD (Private / Public Read Only / Public Read/Write / Controlled by Parent) の意味、所有権 (Owner) の概念、レコード共有が拡張される仕組み。</td></tr><tr><td>Create a Role Hierarchy</td><td>15 min</td><td><strong>ロール階層の構築</strong>: 組織ツリーとしてのロール設計、「ロール階層で付与」オプション、上位ロールへの自動可視化、ロール変更時のデータ再計算。</td></tr><tr><td>Define Sharing Rules</td><td>15 min</td><td><strong>共有ルールの設計</strong>: 所有者基準 (Owner-based) と条件基準 (Criteria-based) の2種、公開グループ (Public Groups) の使い方、バックグラウンド再計算、手動共有との使い分け。</td></tr></tbody></table>
+<h4 id="5-administrator-certification-prep-setup-and-objects-15-min">5. Administrator Certification Prep: Setup and Objects (15 min)</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Get Started with Administrator Certification Prep</td><td>5 min</td><td><strong>試験の概要</strong>: Salesforce Admin試験の出題範囲・配点・合格ライン (65%)、勉強戦略のセオリー。</td></tr><tr><td>Study Up on Configuration and Setup</td><td>5 min</td><td><strong>セットアップ・設定の演習</strong>: 会社情報、ユーザセットアップ、UI設定、セキュリティ設定のフラッシュカード形式での復習。</td></tr><tr><td>Review Object Manager and Lightning App Builder</td><td>5 min</td><td><strong>オブジェクト管理とUI</strong>: Object Manager、ページレイアウト、Lightning App Builderの基本操作。</td></tr></tbody></table>
+<h4 id="6-administrator-certification-prep-security-and-data-management-30-min">6. Administrator Certification Prep: Security and Data Management (~30 min)</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Practice Security Management</td><td>~15 min</td><td><strong>セキュリティ設定のシナリオ演習</strong>: プロファイル/権限セット/OWD/ロール/共有ルールを組み合わせた実務的ケース問題、誤答パターンの分析。</td></tr><tr><td>Practice Data Management</td><td>~15 min</td><td><strong>データ管理の演習</strong>: レコードタイプ、Validation Rule、重複管理、データインポート/エクスポートの出題ポイント。</td></tr></tbody></table>
+<h4 id="7-who-sees-what-40-min">7. Who Sees What 動画シリーズ (40 min・補助教材)</h4>
+<table class="rich-table"><thead><tr><th>動画</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Overview</td><td>5 min</td><td>可視性モデル全体の鳥瞰図。</td></tr><tr><td>Organization-Wide Defaults</td><td>7 min</td><td>OWDの4段階を実画面で視覚的に理解。</td></tr><tr><td>Role Hierarchy</td><td>7 min</td><td>ロール階層がどうレコード可視化を広げるかをアニメーションで説明。</td></tr><tr><td>Record Types</td><td>6 min</td><td>レコードタイプと可視性の関係。</td></tr><tr><td>Teams</td><td>7 min</td><td>Account/Opportunity/Case チームの使い方。</td></tr><tr><td>Sharing Rules</td><td>8 min</td><td>共有ルールの実設定デモ。</td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>動画の強み</strong>: テキストだと追いにくい「可視性の広がり方」が画面遷移で直感的に理解できる。Data Security モジュール学習後の復習に最適。</p>
+</blockquote>
+<h3 id="trailhead">🗺 本資料 → Trailhead のマッピング</h3>
+<table class="rich-table"><thead><tr><th>本資料のセクション</th><th>対応する Trailhead モジュール</th></tr></thead><tbody><tr><td>§2 ユーザ / §3 ライセンス</td><td>User Management (Add New Users) + Salesforce Licensing</td></tr><tr><td>§4 プロファイル / §5 権限セット</td><td>User Management (Control Access) + Permission Set Groups</td></tr><tr><td>§6 共有設定 (OWD)</td><td>Data Security (Overview, Control Access to Records)</td></tr><tr><td>§7 ロール階層</td><td>Data Security (Create a Role Hierarchy)</td></tr><tr><td>§8 アクセス判定フロー</td><td>Data Security 全体 + Who Sees What 動画</td></tr><tr><td>§9 設計パターン</td><td>Cert Prep: Security and Data Management</td></tr></tbody></table>
+<h3 id="5">📅 5日分割スケジュール例</h3>
+<table class="rich-table"><thead><tr><th>Day</th><th>学習内容</th><th>時間</th></tr></thead><tbody><tr><td>Day 1</td><td>① Licensing + ② User Management</td><td>65 min</td></tr><tr><td>Day 2</td><td>③ Permission Set Groups + ④ Data Security 前半 (Unit 1-3)</td><td>90 min</td></tr><tr><td>Day 3</td><td>④ Data Security 後半 (Unit 4-7)</td><td>60 min</td></tr><tr><td>Day 4</td><td>⑤⑥ Cert Prep 演習 + ⑦ Who Sees What 動画</td><td>85 min</td></tr><tr><td>Day 5</td><td>本資料 §10 ハマりどころ + §12 チェックリストで総復習</td><td>30 min</td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>試験対策Tips</strong>: Trailhead の<strong>Hands-on Challenge</strong> は Admin試験のシナリオ問題に近い形式。必ず実Orgで手を動かす。</p>
+</blockquote>
+<hr>
+<h2 id="jr">🎯 各機能の要点早見表 (Jr.エンジニア向け: 機能 / 役割 / 他との違い / ユースケース)</h2>
+<h3 id="a-6-1">A. 6機能を1枚で俯瞰</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>機能 (何をするもの)</th><th>役割 (どの軸)</th><th>他との違い</th><th>代表ユースケース</th></tr></thead><tbody><tr><td><strong>ユーザ (User)</strong></td><td>Salesforceにログインする主体。ライセンス/プロファイル/ロール等を束ねる「箱」</td><td>両軸の起点</td><td>権限そのものは持たず、紐づく要素から流れ込む</td><td>入社時のアカウント作成、退職時の凍結 (※削除しない)</td></tr><tr><td><strong>ライセンス (License)</strong></td><td>契約で「使える機能の上限」を決める</td><td>機能軸 (最上位)</td><td>プロファイル以上の<strong>上位制約</strong>。ライセンスで閉じられた機能はどうやっても使えない</td><td>Platformライセンスで標準CRM機能を閉じる / Partner Community契約</td></tr><tr><td><strong>プロファイル (Profile)</strong></td><td>ユーザに必ず1つ割当てる<strong>最小権限のベースライン</strong></td><td>機能軸</td><td>必須・1ユーザ1つ。役職で変わる「土台」</td><td>「営業」「CS」「経理」等、役職別ベース権限</td></tr><tr><td><strong>権限セット (Permission Set / PSG)</strong></td><td>プロファイルに<strong>追加する</strong>権限。複数付与可</td><td>機能軸</td><td>任意・複数可。プロファイル爆発を防ぐ「+α」</td><td>「+レポート作成権限」「+データエクスポート」</td></tr><tr><td><strong>共有設定 (OWD / 共有ルール)</strong></td><td><strong>レコードの可視性</strong>をデフォルト + 例外で制御</td><td>データ軸 (土台)</td><td>プロファイルとは<strong>軸が違う</strong>。機能OKでもOWDで見えない事あり</td><td>商談をPrivateにして担当外に隠す / 部門横断で経理に共有</td></tr><tr><td><strong>ロールでの共有 (Role Hierarchy)</strong></td><td><strong>上位ロールが下位所有レコードを自動で見る</strong></td><td>データ軸 (自動拡張)</td><td>組織ツリーそのもの。プロファイル・権限セットとは別概念</td><td>マネージャが配下の商談を一覧で確認</td></tr></tbody></table>
+<p><strong>💡 1行サマリ</strong></p>
+<blockquote>
+<p>「<strong>何ができるか</strong>」は <strong>プロファイル + 権限セット (ライセンスの枠内)</strong>
+「<strong>何が見えるか</strong>」は <strong>OWD + ロール階層 + 共有ルール</strong></p>
+</blockquote>
+<hr>
+<h3 id="b-vs-no-1">B. 「プロファイル vs 権限セット」 — 混同しやすいNo.1</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>プロファイル</th><th>権限セット</th></tr></thead><tbody><tr><td>割当数/ユーザ</td><td><strong>必ず1つ</strong></td><td>0〜複数</td></tr><tr><td>性質</td><td>ベースライン (土台)</td><td>追加権限 (+α)</td></tr><tr><td>変更頻度</td><td>低い (役職が変わる時)</td><td>高い (機能追加のたびに)</td></tr><tr><td>管理粒度</td><td>粗 (業務ロール単位)</td><td>細 (機能・画面単位)</td></tr><tr><td>推奨方針</td><td>薄く広く</td><td>細かく追加</td></tr><tr><td>組合せ爆発</td><td>しやすい (NG)</td><td>防げる (OK)</td></tr><tr><td>代表ユースケース</td><td>「営業プロファイル」で共通権限</td><td>「+レポート作成」「+Einstein」</td></tr></tbody></table>
+<p><strong>Jr.の判断基準:</strong> 「役職で変わるもの」はプロファイル、「機能の有無で変わるもの」は権限セット。迷ったら権限セットで作る。</p>
+<hr>
+<h3 id="c-vs-2">C. 「機能アクセス軸 vs データアクセス軸」 — 独立した2つの関門</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>機能軸 (プロファイル/権限セット)</th><th>データ軸 (OWD/ロール/共有ルール)</th></tr></thead><tbody><tr><td>質問</td><td>そのユーザは<strong>何ができる</strong>か</td><td>そのユーザは<strong>どのレコードが見える</strong>か</td></tr><tr><td>例</td><td>「商談の編集ボタンが表示される」</td><td>「その商談レコード自体が一覧に出る」</td></tr><tr><td>失敗例</td><td>プロファイルでRead許可したのに見えない → OWDがPrivateでOwner以外だから</td><td>共有ルールで見えるのに編集できない → プロファイルでEdit権限がないから</td></tr><tr><td>組合せ</td><td><strong>両方OKでないと操作できない</strong> (AND条件)</td><td></td></tr></tbody></table>
+<p><strong>Jr.の切り分け手順:</strong></p>
+<ol><li><p>「ボタンが出ない」「タブが出ない」→ 機能軸 (プロファイル/権限セット/ライセンスを疑う)</p>
+</li><li><p>「レコードが一覧に出ない」「検索に出ない」→ データ軸 (OWD/ロール/共有ルール)</p>
+</li><li><p>「見えるけど編集ボタンがグレーアウト」→ 両方疑う (機能=Edit権限、データ=Public RW/共有レベル)</p>
+</li></ol>
+<hr>
+<h3 id="d-owd-vs-vs">D. 「OWD vs ロール階層 vs 共有ルール」 — データ軸の三層構造</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>OWD (共有設定)</th><th>ロール階層</th><th>共有ルール</th></tr></thead><tbody><tr><td>性質</td><td><strong>デフォルト値</strong> (最狭)</td><td><strong>自動拡張</strong> (上→下)</td><td><strong>条件付き拡張</strong></td></tr><tr><td>単位</td><td>オブジェクト全体</td><td>ユーザ階層</td><td>レコード/ユーザグループ</td></tr><tr><td>設定粒度</td><td>Private / Public RO / Public RW</td><td>組織ツリーの1階層</td><td>所有者基準 or 条件基準</td></tr><tr><td>設計順</td><td><strong>最初に最狭で決める</strong></td><td>次に組織構造に合わせる</td><td>最後に例外ケースで足す</td></tr><tr><td>代表ユースケース</td><td>Opportunity = Private で担当以外に隠す</td><td>マネージャが配下を自動で見る</td><td>「関東営業」の案件を「関西CS」にも共有</td></tr></tbody></table>
+<p><strong>Jr.の鉄則:</strong></p>
+<ul><li><p><strong>OWDは狭く</strong> (Private) スタート → ロール階層で必要最小限広げる → 足りない例外だけ共有ルールで</p>
+</li><li><p><strong>逆順は危険</strong>: 広く開けてから狭めることは原則できない</p>
+</li></ul>
+<hr>
+<h3 id="e-vs">E. 「ライセンス vs プロファイル」 — 上位制約の関係</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>ライセンス</th><th>プロファイル</th></tr></thead><tbody><tr><td>決める時期</td><td><strong>契約時</strong> (会社全体)</td><td>運用中 (Admin)</td></tr><tr><td>変更</td><td>営業経由で契約変更</td><td>Adminがいつでも</td></tr><tr><td>単位</td><td>ユーザ種別</td><td>ユーザ個別の役割</td></tr><tr><td>代表例</td><td>Salesforce / Platform / Community</td><td>営業 / CS / 経理</td></tr><tr><td>関係</td><td>プロファイルの選択肢を<strong>絞る</strong></td><td>ライセンスが許可した中で詳細設定</td></tr></tbody></table>
+<p><strong>Jr.が引っかかる例:</strong></p>
+<ul><li><p>Platformライセンスのユーザに「営業プロファイル」を付けようとしても、<strong>Opportunity等は使えない</strong>。Salesforceライセンスが必要。</p>
+</li><li><p>「ライセンス残数エラー」はAdminでは解決不可。営業/契約マターに上げる。</p>
+</li></ul>
+<hr>
+<h3 id="f-vs">F. 「ロール vs プロファイル」 — 一番混同しやすい用語</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>ロール (Role)</th><th>プロファイル (Profile)</th></tr></thead><tbody><tr><td>軸</td><td>データ軸</td><td>機能軸</td></tr><tr><td>必須</td><td>任意 (なくてもログインはできる)</td><td><strong>必須</strong> (1つ)</td></tr><tr><td>決めるもの</td><td>誰のレコードが見えるか</td><td>何ができるか</td></tr><tr><td>構造</td><td>階層ツリー</td><td>フラット</td></tr><tr><td>日本語の落とし穴</td><td>「役割」ではなく「組織ツリーの位置」</td><td>「役割」そのもの</td></tr></tbody></table>
+<p><strong>Jr.向け覚え方:</strong> <strong>「プロファイル=職種」「ロール=組織図の位置」</strong></p>
+<hr>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/2254eb6f-body-row-col.png" alt="Spreadsheet grid with rows hatched out as ROW filter (OWD/Sharing) and columns hatched out as COLUMN filter (FLS/Profile)" width="2560" height="1440">
+
+<h3 id="g-vs">G. 「列の権限 (プロファイル/権限セット)」 vs 「行の権限 (共有設定/ロール)」 — サンプルレコードで可視化</h3>
+<p>Jr.エンジニアが一番腹落ちしにくいのが <strong>「プロファイルと共有設定はなぜ別々に存在するのか」</strong> です。
+答えは <strong>「削る方向が違う」</strong> から。テーブルで見ると明快になります。</p>
+<h4 id="opportunity">📋 サンプル: Opportunity (商談) テーブル — 生データ</h4>
+<table class="rich-table"><thead><tr><th>商談ID</th><th>商談名</th><th>担当者 (Owner)</th><th>金額</th><th>確度</th><th>契約予定日</th><th>備考</th></tr></thead><tbody><tr><td>OPP-001</td><td>ABC不動産 新築物件</td><td>営業A (関東)</td><td>500万</td><td>80%</td><td>2026-05-01</td><td>重要顧客</td></tr><tr><td>OPP-002</td><td>XYZ管理 更新案件</td><td>営業B (関東)</td><td>300万</td><td>60%</td><td>2026-06-15</td><td>-</td></tr><tr><td>OPP-003</td><td>山田不動産</td><td>営業C (関西)</td><td>800万</td><td>90%</td><td>2026-04-30</td><td>紹介案件</td></tr><tr><td>OPP-004</td><td>田中不動産</td><td>営業D (関西)</td><td>200万</td><td>40%</td><td>2026-07-01</td><td>-</td></tr><tr><td>OPP-005</td><td>鈴木不動産</td><td>営業A (関東)</td><td>150万</td><td>30%</td><td>2026-08-10</td><td>新規</td></tr></tbody></table>
+<p>前提: OWD = <strong>Private</strong>、ロール階層 = <code class="rich-inline-code">関東営業マネージャ → 営業A, 営業B</code> / <code class="rich-inline-code">関西営業マネージャ → 営業C, 営業D</code></p>
+<hr>
+<h4 id="1-a-select-from-opportunity">🟦 パターン1 — 営業A (関東) が SELECT * FROM Opportunity したら</h4>
+<p><strong>効いている制御</strong>:</p>
+<ul><li><p>プロファイル (営業): Opportunityに CRED 全部、全フィールドRead/Edit → <strong>列は全部見える</strong></p>
+</li><li><p>OWD = Private: 自分がOwnerの行しか見えない → <strong>行が絞られる</strong></p>
+</li></ul>
+<table class="rich-table"><thead><tr><th>商談ID</th><th>商談名</th><th>担当者</th><th>金額</th><th>確度</th><th>契約予定日</th><th>備考</th></tr></thead><tbody><tr><td>OPP-001</td><td>ABC不動産 新築物件</td><td>営業A</td><td>500万</td><td>80%</td><td>2026-05-01</td><td>重要顧客</td></tr><tr><td><del>OPP-002</del></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td><del>OPP-003</del></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td><del>OPP-004</del></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>OPP-005</td><td>鈴木不動産</td><td>営業A</td><td>150万</td><td>30%</td><td>2026-08-10</td><td>新規</td></tr></tbody></table>
+<p>→ <strong>2件 × 7列すべて見える</strong>。行が削られた。</p>
+<hr>
+<h4 id="2">🟨 パターン2 — 営業部長(関東) が見たら (ロール階層の効果)</h4>
+<p><strong>効いている制御</strong>:</p>
+<ul><li><p>プロファイル (営業マネージャ): Opportunity全フィールドRead/Edit → <strong>列は全部見える</strong></p>
+</li><li><p>OWD = Private: 本来は自分所有のみだが…</p>
+</li><li><p><strong>ロール階層</strong>: 配下 (営業A, 営業B) の所有レコードも自動可視 → <strong>行が広がる</strong></p>
+</li></ul>
+<table class="rich-table"><thead><tr><th>商談ID</th><th>商談名</th><th>担当者</th><th>金額</th><th>確度</th><th>契約予定日</th><th>備考</th></tr></thead><tbody><tr><td>OPP-001</td><td>ABC不動産 新築物件</td><td>営業A</td><td>500万</td><td>80%</td><td>2026-05-01</td><td>重要顧客</td></tr><tr><td>OPP-002</td><td>XYZ管理 更新案件</td><td>営業B</td><td>300万</td><td>60%</td><td>2026-06-15</td><td>-</td></tr><tr><td><del>OPP-003</del></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td><del>OPP-004</del></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>OPP-005</td><td>鈴木不動産</td><td>営業A</td><td>150万</td><td>30%</td><td>2026-08-10</td><td>新規</td></tr></tbody></table>
+<p>→ <strong>3件見える</strong>。プロファイルは変わらず、ロール階層だけで行の可視性が拡張された。</p>
+<hr>
+<h4 id="3-fls">🟩 パターン3 — 経理 が見たら (プロファイル + FLS の効果)</h4>
+<p><strong>効いている制御</strong>:</p>
+<ul><li><p>プロファイル (経理): Opportunity に <strong>View All (全データの参照)</strong> 付与 → <strong>行は全部見える</strong></p>
+</li><li><p><strong>FLS (項目レベルセキュリティ)</strong>: 「担当者」「備考」を非表示 → <strong>列が削られる</strong></p>
+</li><li><p>編集権限なし (Read Only)</p>
+</li></ul>
+<table class="rich-table"><thead><tr><th>商談ID</th><th>商談名</th><th><del>担当者</del></th><th>金額</th><th>確度</th><th>契約予定日</th><th><del>備考</del></th></tr></thead><tbody><tr><td>OPP-001</td><td>ABC不動産 新築物件</td><td>🚫</td><td>500万</td><td>80%</td><td>2026-05-01</td><td>🚫</td></tr><tr><td>OPP-002</td><td>XYZ管理 更新案件</td><td>🚫</td><td>300万</td><td>60%</td><td>2026-06-15</td><td>🚫</td></tr><tr><td>OPP-003</td><td>山田不動産</td><td>🚫</td><td>800万</td><td>90%</td><td>2026-04-30</td><td>🚫</td></tr><tr><td>OPP-004</td><td>田中不動産</td><td>🚫</td><td>200万</td><td>40%</td><td>2026-07-01</td><td>🚫</td></tr><tr><td>OPP-005</td><td>鈴木不動産</td><td>🚫</td><td>150万</td><td>30%</td><td>2026-08-10</td><td>🚫</td></tr></tbody></table>
+<p>→ <strong>5件すべて見える (=行は全開)</strong>、ただし <strong>2列が消えた (=列が削られた)</strong>。</p>
+<hr>
+<h4 id="4-d">🟪 パターン4 — 営業D (関西) が見たら + 共有ルール適用</h4>
+<p><strong>効いている制御</strong>:</p>
+<ul><li><p>プロファイル (営業): 全列Read/Edit</p>
+</li><li><p>OWD = Private: 自分所有のOPP-004のみ</p>
+</li><li><p><strong>共有ルール</strong>: 「金額500万以上の案件は全営業に参照共有」 → OPP-001, OPP-003が追加で見える</p>
+</li></ul>
+<table class="rich-table"><thead><tr><th>商談ID</th><th>商談名</th><th>担当者</th><th>金額</th><th>確度</th><th>契約予定日</th><th>備考</th><th>アクセス</th></tr></thead><tbody><tr><td>OPP-001</td><td>ABC不動産 新築物件</td><td>営業A</td><td>500万</td><td>80%</td><td>2026-05-01</td><td>重要顧客</td><td>👀 Read (共有ルール)</td></tr><tr><td><del>OPP-002</del></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>❌</td></tr><tr><td>OPP-003</td><td>山田不動産</td><td>営業C</td><td>800万</td><td>90%</td><td>2026-04-30</td><td>紹介案件</td><td>👀 Read (共有ルール)</td></tr><tr><td>OPP-004</td><td>田中不動産</td><td>営業D</td><td>200万</td><td>40%</td><td>2026-07-01</td><td>-</td><td>✏️ Full (Owner)</td></tr><tr><td><del>OPP-005</del></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>❌</td></tr></tbody></table>
+<p>→ 共有ルールで<strong>行が条件付きで拡張</strong>された。列は変化なし。</p>
+<hr>
+<h4 id="heading-2">🎯 まとめ: 制御軸 × 削る方向 の対応表</h4>
+<pre><code>                列 (フィールド方向) ────→
+              ┌─────────────────────────┐
+        行    │                         │
+        (レコ │    データセル            │
+        ード  │                         │
+        方向) │                         │
+          │   └─────────────────────────┘
+          ▼</code></pre>
+<table class="rich-table"><thead><tr><th>制御軸</th><th>削る方向</th><th>効果</th><th>RDBの類推</th></tr></thead><tbody><tr><td><strong>ライセンス</strong></td><td>オブジェクト丸ごと</td><td>テーブル自体が消える</td><td><code class="rich-inline-code">REVOKE USAGE ON SCHEMA</code></td></tr><tr><td><strong>プロファイル/権限セット (オブジェクト権限)</strong></td><td>オブジェクト丸ごと</td><td>テーブル自体が消える</td><td><code class="rich-inline-code">REVOKE SELECT ON TABLE</code></td></tr><tr><td><strong>プロファイル/権限セット (FLS)</strong></td><td><strong>列</strong> ↔️</td><td>列が空白化・非表示</td><td><code class="rich-inline-code">REVOKE SELECT(column) ON TABLE</code></td></tr><tr><td><strong>OWD (共有設定)</strong></td><td><strong>行</strong> ↕️</td><td>行が消える (デフォルト絞込)</td><td><code class="rich-inline-code">CREATE POLICY ... USING (owner = current_user)</code></td></tr><tr><td><strong>ロール階層</strong></td><td><strong>行</strong> ↕️ (拡張)</td><td>上位ロールは行が増える</td><td><code class="rich-inline-code">GRANT</code> via role inheritance</td></tr><tr><td><strong>共有ルール</strong></td><td><strong>行</strong> ↕️ (条件付き拡張)</td><td>条件合致の行だけ追加</td><td><code class="rich-inline-code">CREATE POLICY ... USING (条件)</code></td></tr><tr><td><strong>手動共有 / チーム</strong></td><td><strong>行</strong> ↕️ (個別拡張)</td><td>指定された行だけ追加</td><td>個別 <code class="rich-inline-code">GRANT</code></td></tr></tbody></table>
+<h4 id="jr-1">💡 Jr.が覚えるべき1行メッセージ</h4>
+<blockquote>
+<p><strong>プロファイル/権限セット = 「どの列を見せる・編集させるか」(テーブル構造側の制御)</strong>
+<strong>共有設定/ロール/共有ルール = 「どの行を見せるか」(WHERE句側の制御)</strong></p>
+<p>両方がAND条件で効くから、どちらか1つでも閉じれば見えない。</p>
+</blockquote>
+<hr>
+<h2 id="2-user">2. ユーザ (User)</h2>
+<p>Salesforce にログインする主体。<strong>必ず以下が紐づく</strong>:</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/0f411e54-02.png" alt="2. ユーザ (User) (flowchart LR)" width="874" height="1036">
+
+<table class="rich-table"><thead><tr><th>属性</th><th>必須？</th><th>役割</th></tr></thead><tbody><tr><td>License</td><td>✅ 必須</td><td>使える機能の大枠</td></tr><tr><td>Profile</td><td>✅ 必須 (必ず1つ)</td><td>最小権限セット</td></tr><tr><td>Permission Set</td><td>任意 (複数可)</td><td>追加権限</td></tr><tr><td>Role</td><td>任意 (あれば1つ)</td><td>データ可視範囲の階層</td></tr></tbody></table>
+<blockquote>
+<p>⚠️ <strong>誤解しやすい点</strong>: Role（ロール）は必須ではありません。ロールがないユーザは「ロール階層による可視拡張」を受けません。</p>
+</blockquote>
+<hr>
+<h2 id="3-license">3. ライセンス (License) — 「使える機能の大枠」</h2>
+<p>契約形態。<strong>プロファイルより上位の制約</strong>で、どれだけプロファイルで許可しても、ライセンスが対応していない機能は使えません。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/7f014127-03.png" alt="3. ライセンス (License) — 「使える機能の大枠」 (flowchart TB)" width="2768" height="628">
+
+<p><strong>Jr.向け確認方法:</strong></p>
+<ul><li><p>設定 &gt; 会社の情報 &gt; ユーザライセンス: 契約中の本数と残数が見える</p>
+</li><li><p>ユーザ作成時、ライセンスを選ぶとプロファイルの選択肢が絞られる</p>
+</li></ul>
+<hr>
+<h2 id="4-profile">4. プロファイル (Profile) — 「そのユーザの最小権限」</h2>
+<p><strong>すべてのユーザに1つだけ</strong>割り当てる、権限のベースライン。</p>
+<h3 id="4-1">4.1 プロファイルで制御するもの</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/5378b1f7-04.png" alt="4.1 プロファイルで制御するもの (mindmap)" width="2260" height="872">
+
+<h3 id="4-2">4.2 標準プロファイルとカスタムプロファイル</h3>
+<table class="rich-table"><thead><tr><th>種別</th><th>編集</th><th>用途</th></tr></thead><tbody><tr><td>標準プロファイル (System Administrator 等)</td><td>❌ ほぼ編集不可</td><td>テンプレートとして使用</td></tr><tr><td>カスタムプロファイル</td><td>✅ 自由に編集</td><td><strong>実運用では基本こちら</strong></td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>設計Tips</strong>: 標準プロファイルを<strong>複製</strong>してカスタムプロファイルを作り、そこを編集する。</p>
+</blockquote>
+<h3 id="4-3-vs">4.3 プロファイル vs 権限セット — 役割分担</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/c09904ee-05.png" alt="4.3 プロファイル vs 権限セット — 役割分担 (flowchart LR)" width="788" height="1084">
+
+<p><strong>原則:</strong> 「プロファイルは薄く・広く、権限セットで足す」</p>
+<hr>
+<h2 id="5-permission-set">5. 権限セット (Permission Set) — 「プロファイルに足す追加権限」</h2>
+<h3 id="5-1">5.1 なぜ権限セットが必要か</h3>
+<p>「プロファイルだけ」で運用すると:</p>
+<ul><li><p>「営業 + レポート権限あり」「営業 + レポート権限なし」のように<strong>権限の組合せごとにプロファイルが爆発</strong>する</p>
+</li><li><p>管理不能に</p>
+</li></ul>
+<p>→ <strong>ベースのプロファイル1つ + 必要な権限セットを後付け</strong> で組み合わせ爆発を防ぐ。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/60644b86-06.png" alt="5.1 なぜ権限セットが必要か (flowchart TB)" width="1968" height="1536">
+
+<h3 id="5-2-permission-set-group">5.2 権限セットグループ (Permission Set Group)</h3>
+<p>Spring &#39;20 から登場。<strong>複数の権限セットを束ねて1つのユニットに</strong>できる。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/8797d7a0-07.png" alt="5.2 権限セットグループ (Permission Set Group) (flowchart LR)" width="2146" height="310">
+
+<blockquote>
+<p>💡 <strong>実務Tips</strong>: 役職や業務ロールごとに「パック」を作って付けるのが一般的。Salesforce も権限セットグループ中心の設計を推奨。</p>
+</blockquote>
+<h3 id="5-3-muting-permission-set">5.3 Muting Permission Set (抑制)</h3>
+<p>権限セットグループの中で特定権限を<strong>打ち消す</strong>機能。「基本全部入りのパックだけど、この部署だけ削除だけ無効化」のようなケースで使う。</p>
+<hr>
+<h2 id="6-sharing-settings">6. 共有設定 (Sharing Settings) — 「レコードの土台」</h2>
+<p>ここから <strong>データアクセス（軸2）</strong> の話。最初に決まるのが <strong>組織の共有設定 (OWD: Organization-Wide Defaults)</strong>。</p>
+<h3 id="6-1-owd">6.1 OWD で設定するアクセスレベル</h3>
+<p>各オブジェクトに対して <strong>4段階</strong> から選択:</p>
+<table class="rich-table"><thead><tr><th>OWD</th><th>意味</th></tr></thead><tbody><tr><td><strong>Private</strong> 非公開</td><td>自分が所有 (Owner) するレコードしか見えない</td></tr><tr><td><strong>Public Read Only</strong> 公開/参照のみ</td><td>全員が見られるが、編集はオーナーと上位ロールのみ</td></tr><tr><td><strong>Public Read/Write</strong> 公開/参照・更新可能</td><td>全員が見られて編集もできる</td></tr><tr><td><strong>Controlled by Parent</strong> 親で制御 (詳細/関連オブジェクト用)</td><td>親レコードの共有設定に従う</td></tr></tbody></table>
+<h3 id="6-2-owd">6.2 OWD 設計の原則</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/c1db73c7-08.png" alt="6.2 OWD 設計の原則 (flowchart TD)" width="1558" height="1244">
+
+<p><strong>鉄則: OWD は「一番狭く」設定し、後から広げる</strong></p>
+<p>一度広げると、共有ルールで「狭める」ことはできません。必ず<strong>下から積み上げる</strong>設計に。</p>
+<h3 id="6-3-4">6.3 広げる4つの方法</h3>
+<table class="rich-table"><thead><tr><th>方法</th><th>粒度</th><th>主な用途</th></tr></thead><tbody><tr><td><strong>ロール階層</strong></td><td>自動 (上位→下位は見えない)</td><td>組織ツリーでの可視化</td></tr><tr><td><strong>共有ルール</strong></td><td>条件付き (レコードベース / 所有者ベース)</td><td>部門横断共有</td></tr><tr><td><strong>手動共有</strong></td><td>個別レコード</td><td>例外対応</td></tr><tr><td><strong>チーム</strong> (Account/Opportunity/Case)</td><td>メンバー指定</td><td>案件/顧客/ケースのチーム制</td></tr><tr><td><strong>Apex共有</strong></td><td>プログラム制御</td><td>複雑な業務ロジック</td></tr></tbody></table>
+<hr>
+<h2 id="7-role-hierarchy">7. ロール階層 (Role Hierarchy) — 「上位ロールは下位のデータを見る」</h2>
+<h3 id="7-1">7.1 組織ツリーそのもの</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/c162cb3a-09.png" alt="7.1 組織ツリーそのもの (flowchart TB)" width="1912" height="844">
+
+<h3 id="7-2">7.2 可視性の動き方</h3>
+<ul><li><p>営業A が作成したレコード → 営業部長関東、営業本部長、CEO に自動的に見える</p>
+</li><li><p>営業A には営業B のレコードは<strong>見えない</strong> (兄弟関係)</p>
+</li><li><p>CEO には全員のレコードが見える</p>
+</li></ul>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/f1080372-10.png" alt="7.2 可視性の動き方 (sequenceDiagram)" width="2202" height="934">
+
+<h3 id="7-3">7.3 「ロール階層を使用してアクセス権を付与」チェックボックス</h3>
+<p>カスタムオブジェクトには <strong>「ロール階層を使用してアクセス権を付与」</strong> というオプションがあり、OFF にすると<strong>ロール階層による可視化を止められる</strong>。</p>
+<ul><li><p>給与、評価、個人的な1on1メモ等、上司にも見せたくないデータで使う</p>
+</li></ul>
+<hr>
+<h2 id="8">8. アクセス判定フロー (最重要)</h2>
+<p>ユーザがレコード X にアクセスしようとした時、Salesforce は <strong>7つのチェック</strong> を順に行います。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/0e544b5a-11.png" alt="8. アクセス判定フロー (最重要) (flowchart TD)" width="2460" height="3878">
+
+<p><strong>覚え方:</strong> 「<strong>ライセンス → プロファイル/権限セット → FLS → OWD → ロール → 共有ルール</strong>」の順。</p>
+<hr>
+<h2 id="9-classlab">9. 実務での設計パターン — ClassLab. 風サンプル</h2>
+<p><strong>シナリオ</strong>: ライフライン事業（電気・ガス契約代行）の Salesforce 組織を設計。以下の役職が存在する想定。</p>
+<ul><li><p>コールセンター オペレーター</p>
+</li><li><p>コールセンター スーパーバイザー (SV)</p>
+</li><li><p>営業 (不動産会社担当)</p>
+</li><li><p>営業マネージャ</p>
+</li><li><p>経理（金額のみ見る）</p>
+</li><li><p>パートナー (外部: 不動産会社)</p>
+</li></ul>
+<h3 id="9-1">9.1 全体設計</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-permission-tech-jr/934c064f-12.png" alt="9.1 全体設計 (flowchart TB)" width="2768" height="910">
+
+<h3 id="9-2-owd">9.2 OWD 設計例</h3>
+<table class="rich-table"><thead><tr><th>オブジェクト</th><th>OWD</th><th>理由</th></tr></thead><tbody><tr><td>Account (不動産会社)</td><td>Public Read Only</td><td>営業は全会社情報を参照、編集は担当のみ</td></tr><tr><td>Opportunity (契約案件)</td><td>Private</td><td>担当者以外に見せない</td></tr><tr><td>Case (問合せ)</td><td>Private</td><td>対応中オペレーター以外に見せない</td></tr><tr><td>商品マスタ (カスタム)</td><td>Public Read Only</td><td>全員参照可、管理者のみ編集</td></tr><tr><td>評価シート (カスタム)</td><td>Private + ロール階層OFF</td><td>直属上司と本人しか見せない</td></tr></tbody></table>
+<h3 id="9-3">9.3 経理にだけ金額フィールドを見せる設計</h3>
+<ul><li><p>Opportunity の OWD は Private</p>
+</li><li><p><strong>経理プロファイル</strong> に Opportunity <code class="rich-inline-code">Read</code> (View All) を付与</p>
+</li><li><p><strong>金額以外のフィールドは FLS で非表示</strong>（担当者名、連絡先など）</p>
+</li><li><p>結果: 経理は全商談の<strong>金額サマリだけ</strong>見られる</p>
+</li></ul>
+<hr>
+<h2 id="10-jr">10. よくあるハマりどころ (Jr.向けチートシート)</h2>
+<h3 id="1">❌ ハマり1: 「管理者なのに見えない」</h3>
+<ul><li><p>原因: カスタムオブジェクトで「全データの参照」が権限セットグループの muting permission で打ち消されている</p>
+</li><li><p>対処: プロファイルの <strong>「全データの参照 (View All Data)」</strong> を確認</p>
+</li></ul>
+<h3 id="2-read">❌ ハマり2: 「プロファイルで Read 権限あるのに見えない」</h3>
+<ul><li><p>原因: <strong>OWD が Private でレコードのオーナーじゃない</strong></p>
+</li><li><p>対処: 共有ルール or ロール階層で広げる</p>
+</li></ul>
+<h3 id="3">❌ ハマり3: 「共有ルールを書いたのに更新されない」</h3>
+<ul><li><p>原因: 共有ルールは<strong>バックグラウンドで再計算</strong>される (大きな組織だと数分〜)</p>
+</li><li><p>対処: <code class="rich-inline-code">Setup &gt; Sharing Settings &gt; Recalculate</code> を手動実行</p>
+</li></ul>
+<h3 id="4">❌ ハマり4: 「ロール変更したらデータが消えた」</h3>
+<ul><li><p>原因: ロール変更に伴いアクセス権が再計算され、見えなくなったレコードがある</p>
+</li><li><p>対処: 変更前に影響範囲を確認。共有ルールでカバー</p>
+</li></ul>
+<h3 id="5-community-partner-account">❌ ハマり5: 「Community/Partner ユーザで Account が見えない」</h3>
+<ul><li><p>原因: External Sharing Model (外部共有設定) が別途 Private になっている</p>
+</li><li><p>対処: <code class="rich-inline-code">Setup &gt; Sharing Settings</code> の <strong>External Access</strong> を確認</p>
+</li></ul>
+<hr>
+<h2 id="11">11. 設定の確認場所まとめ</h2>
+<table class="rich-table"><thead><tr><th>設定</th><th>場所</th></tr></thead><tbody><tr><td>ライセンス残数</td><td>設定 &gt; 会社の情報 &gt; ユーザライセンス</td></tr><tr><td>ユーザ一覧</td><td>設定 &gt; ユーザ &gt; ユーザ</td></tr><tr><td>プロファイル</td><td>設定 &gt; ユーザ &gt; プロファイル</td></tr><tr><td>権限セット</td><td>設定 &gt; ユーザ &gt; 権限セット</td></tr><tr><td>権限セットグループ</td><td>設定 &gt; ユーザ &gt; 権限セットグループ</td></tr><tr><td>ロール</td><td>設定 &gt; ユーザ &gt; ロール</td></tr><tr><td>組織の共有設定 (OWD)</td><td>設定 &gt; セキュリティ &gt; 共有設定</td></tr><tr><td>共有ルール</td><td>設定 &gt; セキュリティ &gt; 共有設定 (同画面下部)</td></tr></tbody></table>
+<hr>
+<h2 id="12">12. 学習チェックリスト ✅</h2>
+<p>以下が答えられれば合格ラインです。</p>
+<ul class="rich-checklist"><li><p>ユーザには必ず何と何が紐づく？</p>
+</li><li><p>ライセンスとプロファイルの違いは？</p>
+</li><li><p>プロファイルと権限セットをどう使い分ける？</p>
+</li><li><p>OWD を Private にしたら、そのオブジェクトは誰が見える？</p>
+</li><li><p>ロール階層で上司に見せたくない時どうする？</p>
+</li><li><p>「Owner じゃない Private レコード」を見せる方法を3つ挙げよ</p>
+</li><li><p>権限セットグループと権限セットの関係は？</p>
+</li><li><p>FLS とオブジェクト権限の違いは？</p>
+</li><li><p>アクセス判定の順序を説明できるか？</p>
+</li><li><p>Community ユーザに社内向け OWD はどう影響する？</p>
+</li></ul>
+<hr>
+<h2 id="heading-3">付録: 用語集</h2>
+<table class="rich-table"><thead><tr><th>用語</th><th>意味</th></tr></thead><tbody><tr><td>OWD</td><td>Organization-Wide Defaults。組織の共有設定</td></tr><tr><td>FLS</td><td>Field-Level Security。項目レベルセキュリティ</td></tr><tr><td>PS</td><td>Permission Set。権限セット</td></tr><tr><td>PSG</td><td>Permission Set Group。権限セットグループ</td></tr><tr><td>Role Hierarchy</td><td>ロール階層。組織ツリー</td></tr><tr><td>Sharing Rule</td><td>共有ルール。所有者基準 / 条件基準の2種</td></tr><tr><td>Manual Sharing</td><td>手動共有。個別レコード単位</td></tr><tr><td>Team</td><td>チーム (Account / Opportunity / Case に対応)</td></tr><tr><td>View All / Modify All</td><td>全データの参照/編集。OWDを無視する強権限</td></tr><tr><td>Muting Permission</td><td>権限セットグループ内で特定権限を打ち消す</td></tr></tbody></table>
+<hr>
+<p><strong>参考公式ドキュメント:</strong></p>
+<ul><li><p>Trailhead: <em>Data Security</em> モジュール</p>
+</li><li><p>Help: <em>User Permissions and Access</em></p>
+</li><li><p>Help: <em>Sharing Settings</em></p>
+</li></ul>

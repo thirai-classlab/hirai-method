@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>プロファイル × レコードタイプ × ページレイアウト</title>
+<link rel="stylesheet" href="sketchnote.css">
+<style>
+  body { width: 1536px; height: 1024px; }
+  .canvas { width: 1536px; height: 1024px; padding: 50px 70px; overflow: hidden; }
+
+  .h-title {
+    font-family: 'Yusei Magic', 'Klee One', sans-serif;
+    font-weight: 700;
+    font-size: 48px;
+    color: #2d2a26;
+    margin-bottom: 4px;
+  }
+  .h-title .star-mark { color: #f4c430; margin-right: 8px; font-size: 36px; }
+  .h-sub {
+    font-family: 'Klee One', sans-serif;
+    font-size: 22px;
+    color: #666;
+    margin-bottom: 28px;
+  }
+
+  .pipeline {
+    display: grid;
+    grid-template-columns: 380px 70px 380px 70px 380px;
+    align-items: stretch;
+    justify-items: center;
+    margin: 10px auto 0;
+    width: 1280px;
+  }
+
+  .col {
+    width: 100%;
+    border-radius: 24px 28px 22px 30px;
+    border: 5px solid #2d2a26;
+    background: #ffffff;
+    box-shadow: 6px 6px 0 #2d2a26;
+    padding: 18px 18px 22px;
+    display: flex;
+    flex-direction: column;
+  }
+  .col.c1 { background: #d6e8f7; border-color: #4a90d9; box-shadow: 6px 6px 0 #4a90d9; }
+  .col.c2 { background: #ffe1c4; border-color: #f08e3a; box-shadow: 6px 6px 0 #f08e3a; }
+  .col.c3 { background: #d8f0e7; border-color: #4fb59c; box-shadow: 6px 6px 0 #4fb59c; }
+
+  .col-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .col-icon { font-size: 36px; }
+  .col-title {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .col-title .en {
+    display: block;
+    font-size: 13px;
+    color: #555;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+  .col.c1 .col-title { color: #2670ba; }
+  .col.c2 .col-title { color: #c8651e; }
+  .col.c3 .col-title { color: #2d8a72; }
+
+  .col-desc {
+    font-family: 'Klee One', sans-serif;
+    font-size: 15px;
+    color: #333;
+    line-height: 1.5;
+    margin-bottom: 12px;
+    background: #ffffff;
+    border: 2.5px dashed currentColor;
+    border-radius: 14px;
+    padding: 8px 12px;
+  }
+  .col.c1 .col-desc { color: #2670ba; }
+  .col.c2 .col-desc { color: #c8651e; }
+  .col.c3 .col-desc { color: #2d8a72; }
+  .col-desc b { font-weight: 700; color: #333; }
+
+  .ex-label {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 6px;
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #ffffff;
+    border: 3px solid #2d2a26;
+    border-radius: 14px;
+    padding: 8px 14px;
+    margin-bottom: 8px;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .item .em { font-size: 22px; }
+  .col.c1 .item { border-color: #4a90d9; color: #2670ba; }
+  .col.c2 .item { border-color: #f08e3a; color: #c8651e; }
+  .col.c3 .item { border-color: #4fb59c; color: #2d8a72; }
+
+  .arrow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .arrow-label {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 19px;
+    color: #2d2a26;
+    background: #fff3b0;
+    border: 3px solid #f4c430;
+    border-radius: 14px;
+    padding: 5px 10px;
+    box-shadow: 3px 3px 0 #c89000;
+    transform: rotate(-3deg);
+    text-align: center;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .arrow-icon {
+    font-size: 50px;
+    color: #2d2a26;
+    line-height: 1;
+    font-weight: 700;
+  }
+
+  .summary {
+    margin-top: 28px;
+    text-align: center;
+  }
+  .summary-inner {
+    display: inline-block;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 22px;
+    color: #2d2a26;
+    background: #fffce8;
+    border: 3px dashed #2d2a26;
+    border-radius: 22px;
+    padding: 12px 28px;
+    box-shadow: 4px 4px 0 #2d2a26;
+  }
+  .summary-inner .em-blue   { color: #2670ba; font-weight: 700; }
+  .summary-inner .em-orange { color: #c8651e; font-weight: 700; }
+  .summary-inner .em-mint   { color: #2d8a72; font-weight: 700; }
+
+  .badge {
+    position: absolute;
+    top: 50px; right: 80px;
+    background: #fff3b0;
+    border: 3px solid #f4c430;
+    border-radius: 50%;
+    width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 17px;
+    color: #8a6a00;
+    box-shadow: 4px 4px 0 #c89000;
+    transform: rotate(8deg);
+    text-align: center;
+    line-height: 1.2;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="h-title"><span class="star-mark">✦</span>ページレイアウト × レコードタイプ × プロファイル</div>
+  <div class="h-sub">3層の組み合わせで、ユーザごと・業務ごとに最適な画面を割り当てる</div>
+
+  <div class="badge">3層を<br>組合せ！</div>
+
+  <div class="pipeline">
+    <div class="col c1">
+      <div class="col-head">
+        <div class="col-icon">👤</div>
+        <div class="col-title">プロファイル<span class="en">Profile</span></div>
+      </div>
+      <div class="col-desc"><b>誰が</b>使うか。<br>権限とアクセス可能な<br>レコードタイプを定義</div>
+      <div class="ex-label">例：</div>
+      <div class="item"><span class="em">🛡️</span>System Admin</div>
+      <div class="item"><span class="em">💼</span>Sales User</div>
+    </div>
+
+    <div class="arrow-col">
+      <div class="arrow-label">割当</div>
+      <div class="arrow-icon">→</div>
+    </div>
+
+    <div class="col c2">
+      <div class="col-head">
+        <div class="col-icon">🗂️</div>
+        <div class="col-title">レコードタイプ<span class="en">Record Type</span></div>
+      </div>
+      <div class="col-desc"><b>どの業務シナリオか</b>。<br>選択リスト値や適用する<br>レイアウトを切替える</div>
+      <div class="ex-label">例：</div>
+      <div class="item"><span class="em">🆕</span>新規契約</div>
+      <div class="item"><span class="em">🔄</span>更新契約</div>
+    </div>
+
+    <div class="arrow-col">
+      <div class="arrow-label">適用</div>
+      <div class="arrow-icon">→</div>
+    </div>
+
+    <div class="col c3">
+      <div class="col-head">
+        <div class="col-icon">📄</div>
+        <div class="col-title">ページレイアウト<span class="en">Page Layout</span></div>
+      </div>
+      <div class="col-desc"><b>何を見せるか</b>。<br>項目・関連リスト・<br>ボタン配置を決める</div>
+      <div class="ex-label">例：</div>
+      <div class="item"><span class="em">📋</span>レイアウト-標準</div>
+      <div class="item"><span class="em">🔁</span>レイアウト-更新</div>
+      <div class="item"><span class="em">⚙️</span>レイアウト-管理者</div>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="summary-inner">
+      <span class="em-blue">プロファイル</span> がレコードタイプへのアクセスを制御し、<br>
+      <span class="em-orange">レコードタイプ</span> ごとに <span class="em-mint">ページレイアウト</span> を割り当てる
+    </div>
+  </div>
+</div>
+</body>
+</html>

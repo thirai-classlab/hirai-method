@@ -1,0 +1,479 @@
+<h1 id="salesforce-jr">Salesforce オブジェクト設定入門 — Jr.エンジニア向け</h1>
+<p><strong>対象</strong>: Salesforce のオブジェクト・フィールド設定に初めて触れる Jr.エンジニア
+<strong>ゴール</strong>: 「標準/カスタムオブジェクト / フィールド型 / リレーション / レイアウト / レコードタイプ / 検証ルール / 数式 / 自動化」を説明でき、要件から正しい設定を選べる状態になる</p>
+<hr>
+<h2 id="0-salesforce">0. はじめに — なぜ Salesforce のオブジェクト設定は「層」になっているのか</h2>
+<p>Salesforce のオブジェクト設定は <strong>「データ構造の定義 → 入力UI → 業務ルール → 自動化」の4段</strong> に分かれています。RDB に例えると、フィールド定義が <code class="rich-inline-code">CREATE TABLE</code>、ページレイアウトが入力 Form、検証ルールが <code class="rich-inline-code">CHECK CONSTRAINT</code>、Flow が <code class="rich-inline-code">TRIGGER</code>/<code class="rich-inline-code">STORED PROCEDURE</code> を担当するイメージ。</p>
+<ul><li><p>営業は商談入力時に「顧客」「金額」「ステージ」を必須にしたい</p>
+</li><li><p>経理は契約後にしか出ない項目だけ追加で見たい</p>
+</li><li><p>マネージャは閉じた案件には編集を禁止したい</p>
+</li><li><p>システムは特定条件で自動的にタスクを作成したい</p>
+</li></ul>
+<p>これを破綻なく扱うために <strong>層構造</strong> にしてあり、まずはこの層を掴むのが最短の理解ルートです。</p>
+<hr>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/163f61db-body-layers.png" alt="Four stacked layers from bottom to top: Schema (Object/Field/Rel), UI (Layout/RecType), Rule (Validation/Required), Automation (Flow/Approval)" width="2560" height="1440">
+
+<h2 id="1-4">1. 全体像 — オブジェクト設定の 4 段モデル</h2>
+<p>Salesforce のオブジェクト設定は <strong>4段</strong> で考えます。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/3330f885-01.png" alt="1. 全体像 — オブジェクト設定の 4 段モデル (flowchart TB)" width="1536" height="1024">
+
+<table class="rich-table"><thead><tr><th>層</th><th>質問</th><th>主な設定項目</th></tr></thead><tbody><tr><td>スキーマ層</td><td>「<strong>何を</strong>保存するか」</td><td>Object / Field / Relationship</td></tr><tr><td>UI層</td><td>「<strong>どう入力・表示</strong>するか」</td><td>Page Layout / Compact Layout / Record Type / List View</td></tr><tr><td>ルール層</td><td>「<strong>何を許す/拒む</strong>か」</td><td>Validation Rule / Required / Duplicate Rule</td></tr><tr><td>自動化層</td><td>「<strong>何を自動でやる</strong>か」</td><td>Flow / Approval Process / Apex</td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>Jr.向けポイント</strong>: 「保存できない」「項目が出ない」時は、まずどの層の問題かを切り分ける癖をつける。<strong>スキーマ → レイアウト → ルール → 自動化</strong> の順で疑う。</p>
+</blockquote>
+<hr>
+<h2 id="trailhead-admin-3-5">📚 Trailhead 学習プラン (Admin試験対策・3.5 時間)</h2>
+<h3 id="5">🎯 5 時間の配分根拠</h3>
+<p>Salesforce Certified Administrator 試験の公式出題比率に基づき、本記事と「Salesforce レポート・分析入門」記事で <strong>合計 5 時間</strong> を配分しています。</p>
+<table class="rich-table"><thead><tr><th>ドメイン</th><th>配点</th><th>対応記事</th></tr></thead><tbody><tr><td>Data and Analytics Management</td><td>14%</td><td>レポート・分析</td></tr><tr><td>Object Manager and Lightning App Builder</td><td>20%</td><td>本記事 (オブジェクト設定)</td></tr><tr><td>Workflow / Process Automation</td><td>16%</td><td>本記事 (オブジェクト設定)</td></tr></tbody></table>
+<p>カバレッジ合計 50% を 14:36 = <strong>28% : 72%</strong> で配分:</p>
+<table class="rich-table"><thead><tr><th>記事</th><th>配点</th><th>学習時間</th></tr></thead><tbody><tr><td>レポート・分析</td><td>14%</td><td><strong>1.5 時間 (90 min)</strong></td></tr><tr><td>オブジェクト設定 (本記事)</td><td>36%</td><td><strong>3.5 時間 (210 min)</strong></td></tr></tbody></table>
+<blockquote>
+<p>💡 下記の <strong>必須モジュール</strong> を優先実施し、時間に余裕があれば <strong>追加モジュール</strong> で深掘りしてください。本記事は出題比率 36% を担うため、必須 3 モジュールは確実に押さえること。</p>
+</blockquote>
+<h3 id="210-min">✅ 必須モジュール (210 min)</h3>
+<table class="rich-table"><thead><tr><th>#</th><th>モジュール (日本語版あり)</th><th>ユニット数</th><th>時間</th><th>Trailhead URL</th></tr></thead><tbody><tr><td>1</td><td><strong>Data Modeling</strong></td><td>5</td><td>85 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/data_modeling" target="_blank" rel="noopener noreferrer">modules/data_modeling</a></td></tr><tr><td>2</td><td><strong>Customize the User Interface</strong></td><td>5</td><td>60 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/customize_user_interface" target="_blank" rel="noopener noreferrer">modules/customize_user_interface</a></td></tr><tr><td>3</td><td><strong>Formulas and Validations</strong></td><td>4</td><td>65 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/point_click_business_logic" target="_blank" rel="noopener noreferrer">modules/point_click_business_logic</a></td></tr><tr><td></td><td><strong>小計</strong></td><td><strong>14</strong></td><td><strong>210 min</strong></td><td></td></tr></tbody></table>
+<h3 id="heading-1">➕ 追加モジュール (時間に余裕があれば)</h3>
+<table class="rich-table"><thead><tr><th>#</th><th>モジュール</th><th>時間</th><th>URL</th><th>補足</th></tr></thead><tbody><tr><td>A</td><td><strong>Flow Builder</strong></td><td>90 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/flow_builder" target="_blank" rel="noopener noreferrer">modules/flow_builder</a></td><td>Workflow/Process Automation 16% を本格カバー。本記事 §11 自動化 (Flow 中心) を Trailhead で再確認したい時。</td></tr><tr><td>B</td><td><strong>Administrator Certification Prep: Setup and Objects</strong></td><td>15 min</td><td><a href="https://trailhead.salesforce.com/content/learn/modules/administrator-certification-prep-setup-and-objects" target="_blank" rel="noopener noreferrer">modules/administrator-certification-prep-setup-and-objects</a></td><td>試験直前の総復習に最適。フラッシュカード形式。</td></tr><tr><td>C</td><td><strong>Object Manager 動画シリーズ</strong></td><td>30 min</td><td><a href="https://admin.salesforce.com/blog/object-manager" target="_blank" rel="noopener noreferrer">admin.salesforce.com</a></td><td>フィールド・Layout・Record Type の操作映像で目から学ぶ。</td></tr></tbody></table>
+<h3 id="heading-2">🔖 必須モジュールのユニット内訳</h3>
+<h4 id="1-data-modeling-85-min">1. Data Modeling (85 min) ← 試験の主戦場</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Optimize Customer Data with Standard and Custom Objects</td><td>15 min</td><td><strong>標準/カスタムオブジェクトの違い</strong>: 既存ビジネスプロセスへの当てはめ、いつカスタムを作るか、API Name の命名規則。</td></tr><tr><td>Create Object Relationships</td><td>25 min</td><td><strong>リレーション</strong>: Lookup / Master-Detail / Many-to-Many / Hierarchical / External Lookup の使い分け、削除カスケード、ロールアップサマリーの可否。<strong>試験頻出</strong>。</td></tr><tr><td>Work with Schema Builder</td><td>10 min</td><td><strong>Schema Builder</strong>: ER 図形式でオブジェクト関係を可視化、ドラッグでオブジェクト/フィールド作成。</td></tr><tr><td>Create Custom Fields</td><td>25 min</td><td><strong>フィールド型の選び方</strong>: Text / Number / Picklist / Date / Lookup / Formula / Roll-up Summary の特徴、データ型の変更可否、項目の依存関係 (Field Dependency)。</td></tr><tr><td>Work with Picklists</td><td>10 min</td><td><strong>選択リストの設計</strong>: グローバル選択リスト、レコードタイプごとの値制御、依存選択リスト (Dependent Picklist)。</td></tr></tbody></table>
+<h4 id="2-customize-the-user-interface-60-min">2. Customize the User Interface (60 min)</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Customize the Lightning Experience UI</td><td>10 min</td><td><strong>Lightning UI のカスタマイズ</strong>: アプリ、ホームページ、レコードページの構成。</td></tr><tr><td>Personalize the Layout of Records</td><td>15 min</td><td><strong>Page Layout 編集</strong>: 項目の並び替え、セクション、必須/読取専用、関連リスト、アクション。</td></tr><tr><td>Configure Record Types and Page Layout Assignments</td><td>15 min</td><td><strong>レコードタイプ × ページレイアウト</strong>: プロセス別レイアウト、プロファイル別の割当、Picklist 値制御。</td></tr><tr><td>Build Custom Lightning Pages</td><td>10 min</td><td><strong>Lightning App Builder</strong>: Lightning Record Page / App Page / Home Page、コンポーネント配置。</td></tr><tr><td>Customize the Highlights Panel</td><td>10 min</td><td><strong>Compact Layout (ハイライトパネル)</strong>: モバイルとデスクトップ両方でレコード上部に出る要約項目。</td></tr></tbody></table>
+<h4 id="3-formulas-and-validations-65-min">3. Formulas and Validations (65 min)</h4>
+<table class="rich-table"><thead><tr><th>ユニット</th><th>時間</th><th>学べる内容</th></tr></thead><tbody><tr><td>Use Formula Fields</td><td>20 min</td><td><strong>数式項目</strong>: 構文、戻り値の型、よく使う関数 (<code class="rich-inline-code">IF</code>/<code class="rich-inline-code">CASE</code>/<code class="rich-inline-code">TEXT</code>/<code class="rich-inline-code">ISBLANK</code>)、クロスオブジェクト数式。</td></tr><tr><td>Implement Roll-Up Summary Fields</td><td>15 min</td><td><strong>Roll-up Summary</strong>: Master-Detail 関係でしか作れない、COUNT/SUM/MIN/MAX、フィルタ条件、再計算。</td></tr><tr><td>Create Validation Rules</td><td>20 min</td><td><strong>検証ルール</strong>: 構文、エラーメッセージ表示位置、よくあるパターン (必須化、特定値の禁止)、優先順位。</td></tr><tr><td>Use Workflow and Process Builder</td><td>10 min</td><td><strong>(廃止予定だが試験範囲) Workflow と Process Builder</strong>: いつ Flow に置き換えるべきか。</td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>試験対策Tips</strong>: Admin試験のオブジェクト関連設問は <strong>「Lookup vs Master-Detail の使い分け」「Roll-up Summary が作れる条件」「Validation Rule の構文」「Record-Triggered Flow の起動タイミング」</strong> が頻出。実 Org で必ず手を動かす。</p>
+</blockquote>
+<h3 id="trailhead">🗺 本資料 → Trailhead のマッピング (必須モジュール基準)</h3>
+<table class="rich-table"><thead><tr><th>本資料のセクション</th><th>対応する Trailhead モジュール</th></tr></thead><tbody><tr><td>§2 標準/カスタムオブジェクト</td><td>Data Modeling (Optimize Customer Data)</td></tr><tr><td>§3 フィールド型</td><td>Data Modeling (Create Custom Fields)</td></tr><tr><td>§4 リレーション</td><td>Data Modeling (Create Object Relationships)</td></tr><tr><td>§5 ページレイアウト</td><td>Customize UI (Personalize the Layout)</td></tr><tr><td>§6 レコードタイプ</td><td>Customize UI (Configure Record Types)</td></tr><tr><td>§7 リストビュー</td><td>Customize UI (Lightning Experience UI)</td></tr><tr><td>§8 検証ルール</td><td>Formulas and Validations (Create Validation Rules)</td></tr><tr><td>§9 数式・Roll-up</td><td>Formulas and Validations (Use Formula Fields, Roll-Up Summary)</td></tr><tr><td>§10 重複管理</td><td>Help: Duplicate Management (本記事内で完結)</td></tr><tr><td>§11 自動化 (Flow)</td><td>追加モジュール A: Flow Builder</td></tr><tr><td>§12 データ保存順序</td><td>Help: Triggers and Order of Execution (本記事内で完結)</td></tr></tbody></table>
+<h3 id="3-5">📅 セッション分割例 (3.5 時間)</h3>
+<table class="rich-table"><thead><tr><th>セッション</th><th>内容</th><th>時間</th></tr></thead><tbody><tr><td>Session 1</td><td>Data Modeling (Optimize Customer Data + Create Object Relationships)</td><td>40 min</td></tr><tr><td>Session 2</td><td>Data Modeling 残り (Schema Builder + Custom Fields + Picklists)</td><td>45 min</td></tr><tr><td>Session 3</td><td>Customize the User Interface 全部</td><td>60 min</td></tr><tr><td>Session 4</td><td>Formulas and Validations 全部</td><td>65 min</td></tr><tr><td></td><td><strong>合計</strong></td><td><strong>210 min</strong></td></tr></tbody></table>
+<blockquote>
+<p>💡 <strong>試験対策Tips</strong>: Trailhead の <strong>Hands-on Challenge</strong> は実 Org が必須。<strong>Developer Edition (無料)</strong> で手を動かすのが最速。Flow に踏み込みたい場合は追加モジュール A (90 min) を別日に。</p>
+</blockquote>
+<hr>
+<h2 id="jr">🎯 各機能の要点早見表 (Jr.エンジニア向け: 機能 / 役割 / 他との違い / ユースケース)</h2>
+<h3 id="a-9-1">A. 9機能を1枚で俯瞰</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>機能 (何をするもの)</th><th>役割 (どの層)</th><th>他との違い</th><th>代表ユースケース</th></tr></thead><tbody><tr><td><strong>Object</strong></td><td>データを格納する「テーブル」</td><td>スキーマ層</td><td>標準は既製、カスタムは自由作成</td><td>「契約案件」「物件情報」をカスタムで作成</td></tr><tr><td><strong>Field</strong></td><td>レコードの「列・型」</td><td>スキーマ層</td><td>型ごとに動作・表示が違う、後から型変更は制約あり</td><td>金額 (Currency)、ステータス (Picklist)</td></tr><tr><td><strong>Relationship</strong></td><td>オブジェクト間の参照 (FK)</td><td>スキーマ層</td><td>Lookup vs Master-Detail で削除挙動・共有・Roll-up可否が違う</td><td>商談 → 顧客 (Lookup)、商品明細 → 商談 (M-D)</td></tr><tr><td><strong>Page Layout</strong></td><td>レコード詳細画面の入力フォーム</td><td>UI層</td><td>プロファイル × レコードタイプで切替可</td><td>営業用と経理用でレイアウト分岐</td></tr><tr><td><strong>Record Type</strong></td><td>プロセス別の入力経路</td><td>UI層</td><td>レイアウトと Picklist 値を切替える</td><td>「新規契約」「更新契約」で項目を分岐</td></tr><tr><td><strong>List View</strong></td><td>一覧画面の絞込・並び・列</td><td>UI層</td><td>ユーザ単位の絞込ビュー</td><td>「自分の今月の案件」「未着手のケース」</td></tr><tr><td><strong>Validation Rule</strong></td><td>入力時のチェック</td><td>ルール層</td><td>DB CHECK 制約相当、保存阻止</td><td>「金額&gt;0」「契約日が未来」必須</td></tr><tr><td><strong>Formula Field</strong></td><td>計算結果を表示する読取専用列</td><td>スキーマ層</td><td>保存しない、参照時に計算</td><td>税込金額、契約期間日数</td></tr><tr><td><strong>Roll-up Summary</strong></td><td>子レコードの集計値</td><td>スキーマ層</td><td><strong>Master-Detail 必須</strong>、データとして保存</td><td>商談明細の SUM が商談ヘッダに</td></tr></tbody></table>
+<p><strong>💡 1行サマリ</strong></p>
+<blockquote>
+<p>「<strong>何を保存するか</strong>」は <strong>Object + Field + Relationship</strong>
+「<strong>どう入力・表示するか</strong>」は <strong>Page Layout + Record Type + List View</strong>
+「<strong>何を許すか</strong>」は <strong>Validation Rule + Required + Duplicate Rule</strong>
+「<strong>何を自動でやるか</strong>」は <strong>Flow + Approval + Apex</strong></p>
+</blockquote>
+<hr>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/055a19ec-body-relation.png" alt="Side-by-side comparison: Lookup (parent deleted, child survives, dashed link) vs Master-Detail (parent deleted, child cascade-deleted, nested boxes)" width="2560" height="1440">
+
+<h3 id="b-lookup-vs-master-detail">B. 「Lookup vs Master-Detail」 — 一番混同しやすい関係定義</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>Lookup</th><th>Master-Detail</th></tr></thead><tbody><tr><td>親なし</td><td>許容 (orphan OK)</td><td><strong>不可</strong> (必ず親が必要)</td></tr><tr><td>親削除時</td><td>子は残る (またはエラー)</td><td><strong>子も削除</strong> (Cascade)</td></tr><tr><td>共有設定</td><td>子が独自に持つ</td><td><strong>親に従属</strong> (Controlled by Parent)</td></tr><tr><td>Roll-up Summary</td><td>❌ 作れない</td><td>✅ 作れる</td></tr><tr><td>親変更</td><td>自由</td><td>設定で許可した時のみ可</td></tr><tr><td>1レコードあたり</td><td>最大25個</td><td>最大2個まで</td></tr><tr><td>代表ユースケース</td><td>商談 → 担当者 (担当者削除しても商談残す)</td><td>商品明細 → 商談 (商談消えたら明細も消す)</td></tr></tbody></table>
+<p><strong>Jr.の判断基準:</strong></p>
+<ul><li><p><strong>「親が消えたら子も消える」</strong> が業務的に正しいなら Master-Detail</p>
+</li><li><p><strong>「親が消えても子を残したい」</strong> なら Lookup</p>
+</li><li><p><strong>「子を集計したい (合計/件数)」</strong> なら Master-Detail 必須</p>
+</li><li><p>迷ったら <strong>Lookup から始める</strong>。後から Master-Detail に変換可 (条件付き)</p>
+</li></ul>
+<hr>
+<h3 id="c-13">C. 「フィールド型 13選」 — 試験に出る型の使い分け</h3>
+<table class="rich-table"><thead><tr><th>型</th><th>用途</th><th>注意点</th></tr></thead><tbody><tr><td><strong>Text (Text)</strong></td><td>短文 (255字まで)</td><td>インデックス可、Unique 制約可</td></tr><tr><td><strong>Text Area</strong></td><td>長文 (32,768字まで)</td><td>リッチテキストは別型</td></tr><tr><td><strong>Number</strong></td><td>整数・小数</td><td>桁数 (Length) と小数点 (Decimal) を別指定</td></tr><tr><td><strong>Currency</strong></td><td>金額</td><td>通貨単位、複数通貨対応</td></tr><tr><td><strong>Percent</strong></td><td>パーセント</td><td>0.5 = 50% ではなく 50 = 50% で保存</td></tr><tr><td><strong>Date</strong></td><td>日付のみ</td><td>タイムゾーン非依存</td></tr><tr><td><strong>Date/Time</strong></td><td>日付 + 時刻</td><td>タイムゾーン考慮</td></tr><tr><td><strong>Email</strong></td><td>メール</td><td>形式チェック内蔵</td></tr><tr><td><strong>Phone</strong></td><td>電話番号</td><td>自動フォーマット (米国形式)</td></tr><tr><td><strong>URL</strong></td><td>URL</td><td>形式チェック + リンク化</td></tr><tr><td><strong>Picklist</strong></td><td>選択リスト</td><td>単一/複数、Record Type 別制御可</td></tr><tr><td><strong>Checkbox</strong></td><td>True/False</td><td>デフォルト値設定可</td></tr><tr><td><strong>Lookup / Master-Detail</strong></td><td>関連</td><td>§B 参照</td></tr><tr><td><strong>Formula</strong></td><td>計算結果</td><td>読取専用、保存しない</td></tr><tr><td><strong>Roll-up Summary</strong></td><td>子の集計</td><td><strong>M-D 必須</strong></td></tr><tr><td><strong>Auto Number</strong></td><td>自動採番</td><td>例: <code class="rich-inline-code">OPP-{0000}</code></td></tr><tr><td><strong>Geolocation</strong></td><td>緯度経度</td><td>DISTANCE 関数で距離計算</td></tr></tbody></table>
+<blockquote>
+<p>⚠️ <strong>型変換の落とし穴</strong>: Text → Picklist は OK、Picklist → Text は OK、しかし <strong>Number → Text は不可逆</strong>。型変更前に必ずバックアップ。</p>
+</blockquote>
+<hr>
+<h3 id="d-page-layout-vs-record-type-vs-lightning-record-page-ui-3">D. 「Page Layout vs Record Type vs Lightning Record Page」 — UI 3層</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>Page Layout</th><th>Record Type</th><th>Lightning Record Page</th></tr></thead><tbody><tr><td>役割</td><td>項目の配置 + 関連リスト</td><td>プロセス分岐 (Picklist 値 + Layout)</td><td>コンポーネント配置 (Tabs / Path / Sidebar)</td></tr><tr><td>必須</td><td>1つは必要</td><td>任意 (使わなくても可)</td><td>任意 (Lightning 環境のみ)</td></tr><tr><td>切替軸</td><td>プロファイル × Record Type</td><td>プロファイルごとに割当</td><td>App / Record Type / Profile</td></tr><tr><td>編集</td><td>Layout Editor (古UI)</td><td>Setup &gt; Object &gt; Record Types</td><td>Lightning App Builder</td></tr><tr><td>代表ユースケース</td><td>「経理用に金額セクションを上に」</td><td>「新規契約」と「更新契約」で項目分岐</td><td>「営業用にPath表示」「マネージャ用に集計タブ」</td></tr></tbody></table>
+<p><strong>Jr.の判断基準:</strong></p>
+<ul><li><p>1つのプロセスで項目並びだけ変えたい → Page Layout のみ</p>
+</li><li><p>プロセスごとに Picklist 値を変えたい → Record Type を作る (Page Layout も別途必要)</p>
+</li><li><p>Lightning 画面でコンポーネント差し替えたい → Lightning Record Page</p>
+</li></ul>
+<hr>
+<h3 id="e-validation-rule-vs-required-field-vs-flow-3">E. 「Validation Rule vs Required Field vs Flow」 — 入力制御の3手段</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>Validation Rule</th><th>Required (Layout)</th><th>Flow (Before Save)</th></tr></thead><tbody><tr><td>効くタイミング</td><td>保存時</td><td>画面入力時</td><td>保存直前 (Layout 経由しない API も適用)</td></tr><tr><td>経路</td><td>UI / API 両方</td><td>UI のみ</td><td>UI / API 両方</td></tr><tr><td>複雑な条件</td><td>可 (数式)</td><td>不可 (固定)</td><td>可 (Decision)</td></tr><tr><td>エラー表示位置</td><td>指定可</td><td>フィールド横に固定</td><td>カスタム可</td></tr><tr><td>自動補正</td><td>不可 (拒否のみ)</td><td>不可</td><td>可 (値を書き換え可能)</td></tr><tr><td>代表ユースケース</td><td>「金額&gt;0」「日付未来」</td><td>「商談名」「ステージ」必須</td><td>「ステージが Won なら確度を100に強制」</td></tr></tbody></table>
+<p><strong>Jr.の鉄則:</strong></p>
+<ul><li><p><strong>静的な必須化</strong> → Required (Layout)</p>
+</li><li><p><strong>条件付き必須・複雑チェック</strong> → Validation Rule</p>
+</li><li><p><strong>値の自動補正・派生計算</strong> → Before-Save Flow</p>
+</li><li><p>API インポート時もチェックしたい → Validation Rule か Flow</p>
+</li></ul>
+<hr>
+<h3 id="f-formula-field-vs-roll-up-summary-vs-flow-update-3">F. 「Formula Field vs Roll-up Summary vs Flow Update」 — 派生値の3手段</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>Formula Field</th><th>Roll-up Summary</th><th>Flow (After Save) で更新</th></tr></thead><tbody><tr><td>データ保存</td><td>しない (参照時計算)</td><td>する (再計算は SF が管理)</td><td>する</td></tr><tr><td>集計対象</td><td>自レコード or 親参照</td><td><strong>子レコード集計</strong></td><td>任意</td></tr><tr><td>必要な関係</td><td>なし or Lookup</td><td><strong>Master-Detail 必須</strong></td><td>なし</td></tr><tr><td>パフォーマンス</td><td>高 (計算は表示時のみ)</td><td>中 (再計算負荷あり)</td><td>低 (DML 実行)</td></tr><tr><td>レポート使用</td><td>可</td><td>可</td><td>可</td></tr><tr><td>代表ユースケース</td><td>税込金額、契約期間日数</td><td>商談明細の合計、ケース件数</td><td>親の最新ステータス、複雑な集計</td></tr></tbody></table>
+<p><strong>Jr.の鉄則:</strong></p>
+<ul><li><p><strong>計算するだけで保存不要</strong> → Formula</p>
+</li><li><p><strong>子の合計/件数を持ちたい (M-D あり)</strong> → Roll-up Summary</p>
+</li><li><p><strong>Lookup 関係で集計したい / 複雑な集計</strong> → Flow + Get Records</p>
+</li></ul>
+<hr>
+<h3 id="g-flow-4">G. 「Flow の4種類」 — 自動化の使い分け</h3>
+<table class="rich-table"><thead><tr><th>種類</th><th>起動契機</th><th>代表ユースケース</th></tr></thead><tbody><tr><td><strong>Screen Flow</strong></td><td>ユーザがボタン押下</td><td>ガイド付き入力ウィザード、複数オブジェクト一括登録</td></tr><tr><td><strong>Record-Triggered Flow</strong></td><td>レコード CRUD</td><td>保存時に値補正、関連レコード生成、メール送信</td></tr><tr><td><strong>Scheduled Flow</strong></td><td>時刻起動 (cron的)</td><td>毎朝の停滞案件抽出、月次バッチ</td></tr><tr><td><strong>Autolaunched Flow</strong></td><td>他 Flow / Apex / Process から呼出</td><td>共通サブルーチン、再利用可能ロジック</td></tr></tbody></table>
+<p><strong>Record-Triggered Flow の起動タイミング:</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/16940723-02.png" alt="Record-Triggered Flow 実行順序 (Save → Before-Save → Validation → DB Commit → After-Save → Trigger → Workflow → Roll-up → 完了)" width="1536" height="1024">
+
+<blockquote>
+<p>💡 <strong>Before-Save Flow vs After-Save Flow</strong>: Before は同レコードの値を書換え、DML が走らないので高速。After は他オブジェクト操作・メール送信に使う。</p>
+</blockquote>
+<hr>
+<h3 id="h-vs-vs">H. 「列の追加 vs 行の検証 vs リレーションの確立」 — サンプルレコードで可視化</h3>
+<p>Jr.エンジニアが一番腹落ちしにくいのが <strong>「フィールド・検証ルール・リレーションはそれぞれ何を実現するのか」</strong> です。
+答えは <strong>「効く対象が違う」</strong> から。テーブルで見ると明快になります。</p>
+<h4 id="heading-3">📋 サンプル: 物件契約管理オブジェクトの設計 — 生データ要件</h4>
+<p>「ライフライン契約案件 (Contract__c)」を管理したい。要件:</p>
+<ol><li><p>契約には必ず物件 (Property__c) が紐づく</p>
+</li><li><p>物件には複数の契約が紐づく (1物件に電気・ガス・水道で別契約)</p>
+</li><li><p>金額は0より大きく、契約日は未来日付</p>
+</li><li><p>契約ステータスが Closed Won のとき確度は100%固定</p>
+</li><li><p>物件ごとの契約合計金額を物件側で集計表示</p>
+</li></ol>
+<h4 id="1">🟦 ステップ1 — オブジェクト + フィールド (列を作る)</h4>
+<table class="rich-table"><thead><tr><th>Object</th><th>Field 名</th><th>型</th><th>必須</th><th>説明</th></tr></thead><tbody><tr><td>Property__c</td><td>Name</td><td>Text</td><td>✅</td><td>物件名</td></tr><tr><td>Property__c</td><td>Address__c</td><td>Text Area</td><td>✅</td><td>住所</td></tr><tr><td>Property__c</td><td>Total_Amount__c</td><td>Roll-up Summary</td><td>-</td><td>契約合計</td></tr><tr><td>Contract__c</td><td>Name</td><td>Auto Number</td><td>-</td><td><code class="rich-inline-code">CON-{0000}</code></td></tr><tr><td>Contract__c</td><td>Property__c</td><td>Master-Detail (Property__c)</td><td>✅</td><td>親物件</td></tr><tr><td>Contract__c</td><td>Amount__c</td><td>Currency</td><td>✅</td><td>契約金額</td></tr><tr><td>Contract__c</td><td>Contract_Date__c</td><td>Date</td><td>✅</td><td>契約日</td></tr><tr><td>Contract__c</td><td>Stage__c</td><td>Picklist</td><td>✅</td><td>Prospecting / Negotiation / Closed Won / Closed Lost</td></tr><tr><td>Contract__c</td><td>Probability__c</td><td>Percent</td><td>✅</td><td>確度</td></tr><tr><td>Contract__c</td><td>Tax_Included__c</td><td>Formula (Currency)</td><td>-</td><td><code class="rich-inline-code">Amount__c * 1.1</code></td></tr></tbody></table>
+<p>→ <strong>列の枠組み</strong>ができた。データはまだ無効入力も入る。</p>
+<h4 id="2">🟨 ステップ2 — リレーション (行同士をつなぐ)</h4>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/cba118e5-03.png" alt="🟨 ステップ2 — リレーション (行同士をつなぐ) (flowchart TB)" width="1536" height="1024">
+
+<p>→ <strong>Master-Detail</strong> にしたので:</p>
+<ul><li><p>物件削除時に契約も自動削除</p>
+</li><li><p>物件側で <code class="rich-inline-code">Total_Amount__c = SUM(Contract__c.Amount__c)</code> の Roll-up Summary が作れる</p>
+</li><li><p>契約の共有は物件と同じ (Controlled by Parent)</p>
+</li></ul>
+<h4 id="3">🟩 ステップ3 — 検証ルール (行の正しさを担保)</h4>
+<pre><code>Validation Rule 1: 金額は0より大きい
+  Rule Name: Amount_Must_Be_Positive
+  Formula: Amount__c &lt;= 0
+  Error Message: &quot;契約金額は0より大きい値を入力してください&quot;
+  Error Location: Field (Amount__c)
+
+Validation Rule 2: 契約日は未来
+  Rule Name: Contract_Date_Future
+  Formula: Contract_Date__c &lt; TODAY()
+  Error Message: &quot;契約日は今日以降を指定してください&quot;
+  Error Location: Field (Contract_Date__c)</code></pre>
+<p>→ <strong>不正な行</strong>が DB に入らなくなる。</p>
+<h4 id="4-flow">🟪 ステップ4 — Flow (条件付き自動補正)</h4>
+<pre><code>Record-Triggered Flow (Before Save):
+  Object: Contract__c
+  Trigger: Create or Update
+  Condition: ISCHANGED(Stage__c) AND Stage__c = &quot;Closed Won&quot;
+  Action: Probability__c = 100</code></pre>
+<p>→ Closed Won に変えた瞬間、確度は100に<strong>自動補正</strong>。Validation Rule では「拒否」しかできないが、Flow では「書き換え」ができる。</p>
+<h4 id="heading-4">🎯 まとめ: 制御軸 × 効くタイミング</h4>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/6eb6778c-01.png" alt="Order of Execution — レコード保存時の実行順 (Required → Before-Save Flow → Validation Rule → Master-Detail → After-Save Flow / Roll-up)" width="3072" height="1728">
+
+<h4 id="jr-1">💡 Jr.が覚えるべき1行メッセージ</h4>
+<blockquote>
+<p><strong>Field = 「列の定義」(構造)</strong>
+<strong>Relationship = 「行同士の関係」(結合)</strong>
+<strong>Validation Rule = 「行の正しさ」(保存可否)</strong>
+<strong>Flow = 「保存前後の自動処理」(派生・連鎖)</strong></p>
+<p>どれか1つが欠けると業務が成立しない。<strong>スキーマ → リレーション → ルール → 自動化</strong> の順で設計する。</p>
+</blockquote>
+<hr>
+<h2 id="2-object">2. Object (オブジェクト) — 「データのテーブル」</h2>
+<h3 id="2-1-standard-object">2.1 標準オブジェクト (Standard Object)</h3>
+<p>Salesforce が事前定義している既製テーブル。代表例:</p>
+<table class="rich-table"><thead><tr><th>Object</th><th>用途</th></tr></thead><tbody><tr><td>Account</td><td>取引先 (会社)</td></tr><tr><td>Contact</td><td>取引先責任者 (人)</td></tr><tr><td>Lead</td><td>見込み客 (商談化前)</td></tr><tr><td>Opportunity</td><td>商談 (案件)</td></tr><tr><td>Case</td><td>サポートケース</td></tr><tr><td>Product</td><td>製品マスタ</td></tr><tr><td>Pricebook</td><td>価格表</td></tr></tbody></table>
+<h3 id="2-2-custom-object">2.2 カスタムオブジェクト (Custom Object)</h3>
+<p>要件に応じて Admin が作成。API Name は <strong><code class="rich-inline-code">__c</code></strong> が末尾に自動付与。</p>
+<pre><code>Object Label: 物件
+API Name: Property__c
+Plural: 物件
+Record Name: Property Name (Text) または Auto Number
+Help Text, Description
+Allow Reports / Activities / Field History Tracking 等の有効化</code></pre>
+<blockquote>
+<p>⚠️ <strong>誤解しやすい点</strong>: API Name は <strong>後から変更不可</strong>。命名は慎重に (PascalCase or snake_case)。</p>
+</blockquote>
+<h3 id="2-3-external-object">2.3 External Object (外部オブジェクト)</h3>
+<p>Salesforce 外部の DB を <strong>Salesforce Connect</strong> 経由でリアルタイム参照。<strong><code class="rich-inline-code">__x</code></strong> が末尾につく。データは Salesforce 内に保存されない。</p>
+<hr>
+<h2 id="3-field">3. Field (フィールド) — 「列の定義」</h2>
+<h3 id="3-1">3.1 フィールド型早見表</h3>
+<p>§ C 早見表参照。</p>
+<h3 id="3-2-field-dependency">3.2 Field Dependency (項目の依存関係)</h3>
+<p>選択リストの値を <strong>別の選択リストの値で絞り込む</strong>。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/faa644da-02.png" alt="Field Dependency 概念図 — Country (Controlling) の値で State/Region (Dependent) の選択候補が絞り込まれる" width="3072" height="1728">
+
+<p>設定: Setup &gt; Object &gt; Fields &gt; Field Dependencies &gt; New</p>
+<h3 id="3-3-field-level-security-fls">3.3 Field-Level Security (FLS)</h3>
+<p>各プロファイル/権限セットで項目の <strong>Read/Edit</strong> を個別制御。<strong>Page Layout と独立</strong>。</p>
+<blockquote>
+<p>⚠️ <strong>落とし穴</strong>: Page Layout で項目を必須にしても、FLS で Read Only ならエラーになる。両方の整合が必要。</p>
+</blockquote>
+<h3 id="3-4-history-tracking">3.4 History Tracking (項目履歴管理)</h3>
+<p>各オブジェクトで最大 <strong>20項目</strong> まで変更履歴を保持。Field History Related List で表示、レポートも可。</p>
+<hr>
+<h2 id="4-relationship">4. Relationship (リレーション) — 「行同士の関係」</h2>
+<h3 id="4-1">4.1 リレーションの種類</h3>
+<table class="rich-table"><thead><tr><th>種類</th><th>用途</th><th>削除挙動</th><th>Roll-up</th></tr></thead><tbody><tr><td><strong>Lookup</strong></td><td>ゆるい参照</td><td>子残る (or エラー or null)</td><td>❌</td></tr><tr><td><strong>Master-Detail</strong></td><td>強い親子</td><td>子も削除 (Cascade)</td><td>✅</td></tr><tr><td><strong>External Lookup</strong></td><td>External Object 参照</td><td>-</td><td>❌</td></tr><tr><td><strong>Indirect Lookup</strong></td><td>External から Salesforce へ</td><td>-</td><td>❌</td></tr><tr><td><strong>Hierarchical</strong></td><td>User → User 専用 (上司階層)</td><td>子残る</td><td>❌</td></tr><tr><td><strong>Many-to-Many</strong></td><td>M:N (Junction Object 経由で M-D 2本)</td><td>中間消える</td><td>✅ (Junction で)</td></tr></tbody></table>
+<h3 id="4-2-many-to-many">4.2 Many-to-Many リレーション</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/2604d33b-04.png" alt="4.2 Many-to-Many リレーション (flowchart LR)" width="1536" height="1024">
+
+<p><strong>実装:</strong></p>
+<ol><li><p>Junction Object (Enrollment) を作成</p>
+</li><li><p>Junction に <strong>Master-Detail を2本</strong> 張る (Student と Course それぞれ)</p>
+</li><li><p>1本目が Primary (共有・所有を支配)、2本目が Secondary</p>
+</li></ol>
+<h3 id="4-3-lookup">4.3 Lookup の動作オプション</h3>
+<p>Lookup フィールド作成時に「親が削除された時の挙動」を選択:</p>
+<table class="rich-table"><thead><tr><th>オプション</th><th>動作</th></tr></thead><tbody><tr><td><strong>Clear the value</strong> (推奨)</td><td>子の Lookup 値を null に</td></tr><tr><td><strong>Don&#39;t allow deletion</strong></td><td>親削除を<strong>拒否</strong></td></tr><tr><td><strong>Delete this record</strong></td><td>子も削除 (M-D相当)</td></tr></tbody></table>
+<hr>
+<h2 id="5-page-layout">5. Page Layout (ページレイアウト) — 「入力フォーム」</h2>
+<h3 id="5-1">5.1 構成要素</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/13449625-03.png" alt="Page Layout 構成要素 — Highlights / Path / Detail Section / Related Lists / Buttons の 5 ブロックレイアウト" width="3072" height="1728">
+
+<h3 id="5-2-page-layout-record-type-profile">5.2 Page Layout × Record Type × Profile の割当</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/dca4066a-05.png" alt="5.2 Page Layout × Record Type × Profile の割当 (flowchart LR)" width="1536" height="1024">
+
+<p>設定: Setup &gt; Object &gt; Record Types &gt; Page Layout Assignment</p>
+<hr>
+<h2 id="6-record-type">6. Record Type (レコードタイプ) — 「プロセス分岐」</h2>
+<h3 id="6-1">6.1 何が切替えられるか</h3>
+<table class="rich-table"><thead><tr><th>要素</th><th>Record Type で切替可?</th></tr></thead><tbody><tr><td>Page Layout</td><td>✅</td></tr><tr><td>Picklist Values</td><td>✅</td></tr><tr><td>Business Process (Sales Process / Support Process)</td><td>✅</td></tr><tr><td>Field Required</td><td>❌ (Layout で別途)</td></tr><tr><td>Validation Rule</td><td>❌ (Rule 内で <code class="rich-inline-code">RecordTypeId</code> 判定可)</td></tr></tbody></table>
+<h3 id="6-2">6.2 設計例: 「新規契約」と「更新契約」を分岐</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/bc4116f7-04.png" alt="Record Type 設計例 — 同じ Object でも Record Type を分けて Page Layout / Stage / Required 項目を切り替える" width="3072" height="1728">
+
+<blockquote>
+<p>💡 <strong>実務Tips</strong>: Record Type は<strong>増やしすぎない</strong>。3〜5個が目安。10個以上になると保守困難。</p>
+</blockquote>
+<hr>
+<h2 id="7-list-view">7. List View (リストビュー) — 「一覧の絞込」</h2>
+<p>各オブジェクト一覧画面で使える <strong>絞込済みビュー</strong>。</p>
+<h3 id="7-1">7.1 設定項目</h3>
+<pre><code>List Name: My Open Opportunities
+Filter:
+  - Owner = 自分
+  - Stage NOT IN (Closed Won, Closed Lost)
+Columns: Name, Account, Amount, Stage, Close Date
+Sort: Close Date ASC
+Sharing: Only me / All users / Specific users-roles</code></pre>
+<h3 id="7-2-list-view">7.2 List View の権限</h3>
+<ul><li><p><strong>Personal List View</strong>: 自分専用 (誰でも作成可)</p>
+</li><li><p><strong>Public List View</strong>: 全員/指定範囲に公開 (権限が必要: Manage Public List Views)</p>
+</li></ul>
+<blockquote>
+<p>💡 <strong>Inline Edit</strong>: List View 上で値を直接編集可。一括編集にも対応 (Mass Inline Edit)。</p>
+</blockquote>
+<hr>
+<h2 id="8-validation-rule">8. Validation Rule (検証ルール) — 「保存時の拒否」</h2>
+<h3 id="8-1">8.1 構文の基本</h3>
+<p><strong>Formula が <code class="rich-inline-code">TRUE</code> のときエラーになる</strong> (= エラー条件を書く)。</p>
+<pre><code>ルール名: Amount_Positive
+Formula:
+  Amount__c &lt;= 0
+Error Message: 金額は0より大きい値を入力してください
+Error Location: Field (Amount__c) または Top of Page</code></pre>
+<h3 id="8-2">8.2 よく使うパターン</h3>
+<pre><code>1. 必須化 (条件付き):
+   AND(ISPICKVAL(Stage__c, &quot;Closed Won&quot;), ISBLANK(Close_Date__c))
+
+2. 過去日禁止:
+   Contract_Date__c &lt; TODAY()
+
+3. 特定 Record Type の時だけチェック:
+   AND(
+     RecordType.DeveloperName = &quot;Renew&quot;,
+     ISBLANK(Previous_Contract__c)
+   )
+
+4. 金額と確度の整合:
+   AND(
+     ISPICKVAL(Stage__c, &quot;Closed Won&quot;),
+     Probability__c &lt;&gt; 100
+   )
+
+5. Email形式チェック (内蔵だが業務固有):
+   NOT(REGEX(Email, &quot;^[A-Za-z0-9._%+-]+@example\\.co\\.jp$&quot;))</code></pre>
+<h3 id="8-3">8.3 評価順序</h3>
+<pre><code>1. System Validation (形式チェック、必須項目)
+2. Before-Save Flow / Apex Trigger (Before)
+3. Custom Validation Rule
+4. Duplicate Rule
+5. DB Commit
+6. After-Save Flow / Apex Trigger (After)</code></pre>
+<blockquote>
+<p>⚠️ <strong>Before-Save Flow で値補正したのに Validation Rule で蹴られた</strong>、という事故は頻発。順序を理解する。</p>
+</blockquote>
+<hr>
+<h2 id="9-formula-field-roll-up-summary">9. Formula Field &amp; Roll-up Summary</h2>
+<h3 id="9-1-formula-field">9.1 Formula Field</h3>
+<pre><code>Field Name: Tax_Included_Amount__c
+Return Type: Currency
+Formula: Amount__c * 1.1</code></pre>
+<pre><code>Field Name: Days_Until_Close__c
+Return Type: Number
+Formula: Close_Date__c - TODAY()</code></pre>
+<pre><code>Field Name: Status_Label__c (cross-object)
+Return Type: Text
+Formula:
+  CASE(
+    Account.Industry,
+    &quot;Real Estate&quot;, &quot;不動産&quot;,
+    &quot;Construction&quot;, &quot;建設&quot;,
+    &quot;その他&quot;
+  )</code></pre>
+<blockquote>
+<p>💡 <strong>Cross-object 数式</strong>: <code class="rich-inline-code">Account.Field__c</code> で親の値を参照可。最大 <strong>10階層</strong> まで遡れる。</p>
+</blockquote>
+<h3 id="9-2-roll-up-summary">9.2 Roll-up Summary</h3>
+<pre><code>Parent Object: Property__c
+Field Name: Total_Contract_Amount__c
+Type: Roll-up Summary
+Source: Contract__c (Master-Detail child)
+Operation: SUM
+Field to aggregate: Amount__c
+Filter: Stage__c = &quot;Closed Won&quot;</code></pre>
+<p>→ 親に「Closed Won の契約金額合計」が自動計算される。子レコード追加・削除・編集で<strong>自動再計算</strong>。</p>
+<table class="rich-table"><thead><tr><th>Operation</th><th>説明</th></tr></thead><tbody><tr><td>COUNT</td><td>子レコード件数</td></tr><tr><td>SUM</td><td>数値項目の合計</td></tr><tr><td>MIN / MAX</td><td>最小・最大</td></tr></tbody></table>
+<blockquote>
+<p>⚠️ <strong>制限</strong>: 1オブジェクトあたり Roll-up Summary は <strong>最大25個</strong>。再計算負荷を考慮。</p>
+</blockquote>
+<hr>
+<h2 id="10-duplicate-management">10. 重複管理 (Duplicate Management)</h2>
+<h3 id="10-1">10.1 構成要素</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/c344344d-06.png" alt="10.1 構成要素 (flowchart TB)" width="1536" height="1024">
+
+<h3 id="10-2-matching-rule">10.2 Matching Rule (照合ルール)</h3>
+<p>「何をもって重複とするか」を定義:</p>
+<pre><code>Object: Account
+Match Field 1: Name (Exact, ignore whitespace)
+Match Field 2: BillingPostalCode (Exact)
+Match Logic: 1 AND 2</code></pre>
+<h3 id="10-3-duplicate-rule">10.3 Duplicate Rule (重複ルール)</h3>
+<p>「いつ・どう動くか」を定義:</p>
+<pre><code>Object: Account
+Conditions:
+  - Source: 全ユーザ
+  - Action on Create: Block (拒否)
+  - Action on Edit: Allow with Alert (警告のみ)
+  - Matching Rule: 上で作ったルール</code></pre>
+<blockquote>
+<p>💡 <strong>デフォルトで標準ルール</strong> (Standard Account Duplicate Rule など) が有効。カスタムで差し替え可。</p>
+</blockquote>
+<hr>
+<h2 id="11-flow">11. 自動化 (Flow 中心)</h2>
+<h3 id="11-1-flow-trigger-order">11.1 Flow の起動方法と Trigger Order</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/sf-object-config-tech-jr/b214aa48-07.png" alt="11.1 Flow の起動方法と Trigger Order (sequenceDiagram)" width="1536" height="1024">
+
+<h3 id="11-2-flow">11.2 よくある Flow パターン</h3>
+<h4 id="pattern-1-before-save">Pattern 1: 値の自動補正 (Before-Save)</h4>
+<pre><code>Trigger: Contract__c, Create or Update
+Condition: ISCHANGED(Stage__c) AND Stage__c = &quot;Closed Won&quot;
+Action: Set Probability__c = 100</code></pre>
+<h4 id="pattern-2-after-save">Pattern 2: 関連レコード生成 (After-Save)</h4>
+<pre><code>Trigger: Account, Create
+Action:
+  1. Create Task: 「初回ヒアリング」担当=Owner、期日=今日+3日
+  2. Create Contact: 仮Contact「未確認」</code></pre>
+<h4 id="pattern-3-scheduled-flow">Pattern 3: スケジュール (Scheduled Flow)</h4>
+<pre><code>Schedule: 毎朝 9:00
+Action:
+  1. Get Records: Contract where Stage = Negotiation AND LastModifiedDate &lt; TODAY-30
+  2. Loop: 各レコードに対して
+     - メール送信: 担当者に「停滞案件アラート」</code></pre>
+<h3 id="11-3-approval-process">11.3 Approval Process (承認プロセス)</h3>
+<table class="rich-table"><thead><tr><th>用途</th><th>例</th></tr></thead><tbody><tr><td>金額閾値超過の承認</td><td>1000万超の商談は部長承認</td></tr><tr><td>ステータス変更承認</td><td>Closed Won に変える前に CFO 承認</td></tr><tr><td>多段承認</td><td>部長 → 本部長 → CEO</td></tr></tbody></table>
+<p>設定: Setup &gt; Approval Processes &gt; New Approval Process</p>
+<hr>
+<h2 id="12-order-of-execution">12. データ保存順序 (Order of Execution) — 試験頻出</h2>
+<pre><code>1. システムバリデーション (必須項目、データ型、最大長)
+2. ★ Before-Save Flow (Record-Triggered)
+3. ★ Apex Trigger (before insert / before update)
+4. ★ カスタム Validation Rule
+5. Duplicate Rule
+6. ★ DB Commit
+7. ★ Apex Trigger (after insert / after update)
+8. ★ After-Save Flow (Record-Triggered)
+9. Assignment Rule (Lead/Case)
+10. Auto-Response Rule
+11. Workflow Rule (廃止予定)
+12. Process Builder (廃止予定)
+13. Escalation Rule (Case)
+14. Roll-up Summary 再計算
+15. グリッドビュー / リストビュー反映
+16. レコードロック解除
+17. Post-Commit Logic (送信メール・Outboundメッセージ)</code></pre>
+<blockquote>
+<p>💡 <strong>Before-Save Flow が最速</strong>な理由: ステップ2で完結、DML が走らないため。値補正用途で使うべき。</p>
+</blockquote>
+<hr>
+<h2 id="13-jr">13. よくあるハマりどころ (Jr.向けチートシート)</h2>
+<h3 id="1-2">❌ ハマり1: 「フィールドを作ったのに画面に出ない」</h3>
+<ul><li><p>原因: <strong>Page Layout に追加していない</strong></p>
+</li><li><p>対処: Setup &gt; Object &gt; Page Layouts で対象 Layout を編集、フィールドをドラッグ</p>
+</li></ul>
+<h3 id="2-roll-up-summary">❌ ハマり2: 「Roll-up Summary が作れない」</h3>
+<ul><li><p>原因: <strong>Lookup 関係しか張ってない (Master-Detail が必要)</strong></p>
+</li><li><p>対処: Lookup → Master-Detail に変換 (子レコードに親が全件入っている前提)</p>
+</li></ul>
+<h3 id="3-master-detail">❌ ハマり3: 「Master-Detail に変換できない」</h3>
+<ul><li><p>原因: 子レコードに <strong>null の Lookup が1件でもある</strong></p>
+</li><li><p>対処: 全子レコードの Lookup を埋める → 変換実行</p>
+</li></ul>
+<h3 id="4-validation-rule">❌ ハマり4: 「Validation Rule が動かない」</h3>
+<ul><li><p>原因候補:</p>
+<ol><li><p><strong>Active チェックが OFF</strong></p>
+</li><li><p>Formula が <code class="rich-inline-code">FALSE</code> を返す書き方になっている (エラー時に TRUE が正解)</p>
+</li><li><p>Profile の <strong>System Permissions に &quot;Bypass Validation Rules&quot; が ON</strong></p>
+</li></ol>
+</li><li><p>対処: Activate、Formula 反転、権限確認</p>
+</li></ul>
+<h3 id="5-page-layout-api">❌ ハマり5: 「Page Layout に必須項目を追加したのに API インポートで弾かれない」</h3>
+<ul><li><p>原因: <strong>Page Layout の Required は UI のみ。API には効かない</strong></p>
+</li><li><p>対処: Field 自体を Required にする or Validation Rule で <code class="rich-inline-code">ISBLANK()</code> チェック</p>
+</li></ul>
+<h3 id="6-picklist-record-type">❌ ハマり6: 「Picklist の選択肢を増やしたのに Record Type 別画面で出ない」</h3>
+<ul><li><p>原因: <strong>Record Type の Picklist Values で割当てていない</strong></p>
+</li><li><p>対処: Setup &gt; Record Types &gt; Edit &gt; Picklist Values</p>
+</li></ul>
+<h3 id="7-record-triggered-flow">❌ ハマり7: 「Record-Triggered Flow が想定と違うタイミングで動く」</h3>
+<ul><li><p>原因: <strong>Before-Save / After-Save の選択ミス</strong></p>
+</li><li><p>対処:</p>
+<ul><li><p>値補正・同レコード書換 → Before-Save</p>
+</li><li><p>関連レコード操作・メール → After-Save</p>
+</li></ul>
+</li></ul>
+<h3 id="8-roll-up-summary">❌ ハマり8: 「Roll-up Summary の値が再計算されない」</h3>
+<ul><li><p>原因: <strong>手動 Apex 操作 / 大量データ更新の遅延</strong></p>
+</li><li><p>対処: Setup &gt; Object &gt; field details &gt; &quot;Force a Mass Recalculation&quot;</p>
+</li></ul>
+<h3 id="9-api-name">❌ ハマり9: 「カスタムオブジェクトの API Name が長くて怒られる」</h3>
+<ul><li><p>原因: API Name は <strong>40文字以内</strong> (<code class="rich-inline-code">__c</code> 除く)</p>
+</li><li><p>対処: 短く命名 (<code class="rich-inline-code">Property__c</code> not <code class="rich-inline-code">RealEstatePropertyManagement__c</code>)</p>
+</li></ul>
+<h3 id="10-field-dependency">❌ ハマり10: 「Field Dependency が表示されない」</h3>
+<ul><li><p>原因: Controlling Field と Dependent Field の Page Layout 配置順 (Controlling が先になければならない)</p>
+</li><li><p>対処: Layout で順序を入れ替え</p>
+</li></ul>
+<hr>
+<h2 id="14">14. 設定の確認場所まとめ</h2>
+<table class="rich-table"><thead><tr><th>設定</th><th>場所</th></tr></thead><tbody><tr><td>オブジェクト一覧</td><td>設定 &gt; Object Manager</td></tr><tr><td>フィールド管理</td><td>Object Manager &gt; 対象 Object &gt; Fields &amp; Relationships</td></tr><tr><td>ページレイアウト</td><td>Object Manager &gt; 対象 Object &gt; Page Layouts</td></tr><tr><td>Lightning Record Page</td><td>Object Manager &gt; 対象 Object &gt; Lightning Record Pages</td></tr><tr><td>Compact Layout</td><td>Object Manager &gt; 対象 Object &gt; Compact Layouts</td></tr><tr><td>レコードタイプ</td><td>Object Manager &gt; 対象 Object &gt; Record Types</td></tr><tr><td>リストビュー</td><td>各オブジェクト一覧画面 &gt; List View Controls &gt; New</td></tr><tr><td>検証ルール</td><td>Object Manager &gt; 対象 Object &gt; Validation Rules</td></tr><tr><td>Field Dependencies</td><td>Object Manager &gt; 対象 Object &gt; Fields &gt; Field Dependencies</td></tr><tr><td>Roll-up Summary</td><td>Object Manager &gt; 対象 Object &gt; Fields &gt; New &gt; Roll-Up Summary</td></tr><tr><td>Schema Builder</td><td>設定 &gt; Schema Builder</td></tr><tr><td>Flow</td><td>設定 &gt; Process Automation &gt; Flows</td></tr><tr><td>Approval Process</td><td>設定 &gt; Process Automation &gt; Approval Processes</td></tr><tr><td>Duplicate Rule</td><td>設定 &gt; Data &gt; Duplicate Rules / Matching Rules</td></tr><tr><td>Object Limits</td><td>Object Manager &gt; 対象 Object &gt; Object Limits</td></tr></tbody></table>
+<hr>
+<h2 id="15">15. 学習チェックリスト ✅</h2>
+<p>以下が答えられれば合格ラインです。</p>
+<ul class="rich-checklist"><li><p>Lookup と Master-Detail の決定的な違いを4つ挙げよ</p>
+</li><li><p>Roll-up Summary を作るための前提条件は？</p>
+</li><li><p>Many-to-Many リレーションはどう実装する？</p>
+</li><li><p>Page Layout、Record Type、Lightning Record Page の役割の違いは？</p>
+</li><li><p>Validation Rule で「TRUE になったらエラー」を表現するロジックを書け</p>
+</li><li><p>Required (Layout) と Validation Rule のチェックタイミングの違いは？</p>
+</li><li><p>Before-Save Flow と After-Save Flow の使い分けは？</p>
+</li><li><p>Order of Execution で Validation Rule はどこで動く？</p>
+</li><li><p>Field Dependency と Record Type の Picklist 値制御の違いは？</p>
+</li><li><p>Formula Field、Roll-up Summary、Flow Update を使い分ける基準は？</p>
+</li><li><p>Master-Detail 関係で親を削除すると子はどうなる？</p>
+</li><li><p>Custom Object の API Name の命名ルールと制限は？</p>
+</li><li><p>Record-Triggered Flow の4種類のトリガー条件を挙げよ</p>
+</li><li><p>Duplicate Rule の Action で Block と Allow with Alert の使い分けは？</p>
+</li></ul>
+<hr>
+<h2 id="heading-5">付録: 用語集</h2>
+<table class="rich-table"><thead><tr><th>用語</th><th>意味</th></tr></thead><tbody><tr><td>Object</td><td>データを格納するテーブル相当</td></tr><tr><td>Standard Object</td><td>Salesforce 標準提供のオブジェクト</td></tr><tr><td>Custom Object</td><td>Admin が作成するオブジェクト (<code class="rich-inline-code">__c</code>)</td></tr><tr><td>External Object</td><td>外部DB参照のオブジェクト (<code class="rich-inline-code">__x</code>)</td></tr><tr><td>Field</td><td>オブジェクトの列・型</td></tr><tr><td>Lookup</td><td>ゆるい参照リレーション</td></tr><tr><td>Master-Detail</td><td>親子強結合リレーション</td></tr><tr><td>Junction Object</td><td>M:N を実現する中継オブジェクト (M-D 2本)</td></tr><tr><td>Hierarchical Relationship</td><td>User オブジェクト専用の階層 Lookup</td></tr><tr><td>FLS</td><td>Field-Level Security。項目レベルセキュリティ</td></tr><tr><td>Field Dependency</td><td>選択リスト間の依存制御</td></tr><tr><td>Page Layout</td><td>レコード詳細画面のレイアウト</td></tr><tr><td>Compact Layout</td><td>ハイライトパネル (上部要約)</td></tr><tr><td>Record Type</td><td>プロセス分岐とレイアウト切替</td></tr><tr><td>Lightning Record Page</td><td>Lightning App Builder で作る画面</td></tr><tr><td>List View</td><td>一覧の絞込ビュー</td></tr><tr><td>Validation Rule</td><td>入力検証ルール</td></tr><tr><td>Formula Field</td><td>計算結果を返す読取専用フィールド</td></tr><tr><td>Roll-up Summary</td><td>子レコードを集計するフィールド (M-D 必須)</td></tr><tr><td>Auto Number</td><td>自動採番フィールド</td></tr><tr><td>Duplicate Rule</td><td>重複検知ルール</td></tr><tr><td>Matching Rule</td><td>重複の照合条件</td></tr><tr><td>Flow</td><td>宣言的自動化ツール</td></tr><tr><td>Record-Triggered Flow</td><td>レコード CRUD 時に起動する Flow</td></tr><tr><td>Screen Flow</td><td>UI を伴うガイド付き Flow</td></tr><tr><td>Scheduled Flow</td><td>時刻起動の Flow</td></tr><tr><td>Approval Process</td><td>承認ワークフロー</td></tr><tr><td>Order of Execution</td><td>データ保存時の処理順序</td></tr><tr><td>Schema Builder</td><td>ER 図形式のオブジェクト管理ツール</td></tr></tbody></table>
+<hr>
+<p><strong>参考公式ドキュメント:</strong></p>
+<ul><li><p>Trailhead: <em>Data Modeling</em> モジュール</p>
+</li><li><p>Trailhead: <em>Flow Builder</em> モジュール</p>
+</li><li><p>Help: <em>Object Relationships Overview</em></p>
+</li><li><p>Help: <em>Triggers and Order of Execution</em></p>
+</li><li><p>Help: <em>Validation Rules Considerations</em></p>
+</li></ul>

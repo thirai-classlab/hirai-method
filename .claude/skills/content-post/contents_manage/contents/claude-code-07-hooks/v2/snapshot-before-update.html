@@ -1,0 +1,289 @@
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-07-hooks/b41156ba-ch07-hero.png" alt="" width="1536" height="864">
+
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>フック（特定タイミングで必ず動く自動処理）が <strong>「お願い」と何が違う</strong> かを理解する</p>
+</li><li><p>6つのフックイベントの使い分けが分かる</p>
+</li><li><p>危険コマンド阻止 / 自動フォーマット / 通知などを実装できる</p>
+</li><li><p>フックを <strong>使いすぎない</strong> 線引きができる</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約60分</strong></p>
+<hr>
+<h2 id="1-なぜフックが必要なのか">1. なぜフックが必要なのか</h2>
+<h3 id="claude-md-でお願い-vs-フックで強制">CLAUDE.md でお願い vs フックで強制</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-07-hooks/28e4ecbc-ch07-m1.png" alt="" width="1536" height="864">
+
+<p>LLM（Claude のような生成AIの中身）は確率的なので、<strong>「やめて」と書いても確率で破る</strong> ことがあるんですよ。正直、これは「指示が悪い」とかじゃなくて、AIの性質の話です。一方フックは <strong>シェルスクリプト</strong>(コマンドを並べた小さなプログラム)として動くので、<strong>100%</strong> 実行されます。決定論的(必ず同じ動作をする、ランダムじゃない)な世界、つまりタイマーや信号機と同じノリですね。</p>
+<blockquote>
+<p><strong>覚え方</strong>：</p>
+<ul><li><p><strong>CLAUDE.md</strong> は「マナー」 — だいたい守る</p>
+</li><li><p><strong>フック</strong> は「法律」 — 必ず守る</p>
+</li></ul>
+</blockquote>
+<p>例えるなら、<strong>「先生が口頭で『廊下を走るな』と言うのが CLAUDE.md、校門に警備員が立ってて止めるのがフック」</strong> です。絶対守らせたいルールは、口頭注意よりガチロックの方が安心ですよね。</p>
+<hr>
+<h2 id="2-フックの-6つのイベント">2. フックの 6つのイベント</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-07-hooks/2c17d05c-ch07-m2.png" alt="" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>イベント</th><th>発火タイミング</th><th>主な用途</th></tr></thead><tbody><tr><td><code class="rich-inline-code">SessionStart</code></td><td>セッション起動時</td><td>git status / ブランチ情報を注入</td></tr><tr><td><code class="rich-inline-code">UserPromptSubmit</code></td><td>ユーザーがプロンプト送信時</td><td>動的にコンテキスト追加</td></tr><tr><td><code class="rich-inline-code">PreToolUse</code></td><td>ツール実行<strong>前</strong></td><td>危険コマンドの阻止・引数検証</td></tr><tr><td><code class="rich-inline-code">PostToolUse</code></td><td>ツール実行<strong>後</strong></td><td>フォーマッタ / Lint / 型チェック</td></tr><tr><td><code class="rich-inline-code">Stop</code></td><td>1ターン終了時</td><td>テスト実行 / 通知</td></tr><tr><td><code class="rich-inline-code">PostCompact</code></td><td>自動圧縮後</td><td>重要情報の再注入</td></tr></tbody></table>
+<p>例えで言うと、<strong>PreToolUse(ツール実行前のフック)は「入店前のセキュリティチェック」、PostToolUse(ツール実行後のフック)は「退店時のレシート発行」</strong> みたいな感じです。前後でやることが違うんですよね。</p>
+<hr>
+<h2 id="3-設定の場所">3. 設定の場所</h2>
+<p><code class="rich-inline-code">~/.claude/settings.json</code> または <code class="rich-inline-code">&lt;project&gt;/.claude/settings.json</code> の <code class="rich-inline-code">hooks</code> セクション(JSONの「フック」欄)に書きます。</p>
+<pre data-lang="json"><code>{
+  &quot;hooks&quot;: {
+    &quot;PreToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Bash&quot;,
+        &quot;hooks&quot;: [
+          {
+            &quot;type&quot;: &quot;command&quot;,
+            &quot;command&quot;: &quot;bash ~/.claude/scripts/protect-main.sh&quot;,
+            &quot;timeout&quot;: 5,
+            &quot;statusMessage&quot;: &quot;main保護チェック中...&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<h3 id="マッチャー-matcher">マッチャー（matcher）</h3>
+<p>ツール名を正規表現(文字列パターンを表現する書き方)で指定します。「どのツールを引っかけたいか」のフィルターですね。</p>
+<table class="rich-table"><thead><tr><th>matcher例</th><th>対象</th></tr></thead><tbody><tr><td><code class="rich-inline-code">&quot;Bash&quot;</code></td><td>Bash ツールのみ</td></tr><tr><td><code class="rich-inline-code">&quot;Edit|Write&quot;</code></td><td>Edit と Write</td></tr><tr><td><code class="rich-inline-code">&quot;*&quot;</code></td><td>すべてのツール</td></tr></tbody></table>
+<hr>
+<h2 id="4-フックの入出力">4. フックの入出力</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-07-hooks/ff494156-ch07-m3.png" alt="" width="1536" height="864">
+
+<p>ざっくり言うと、Claude Code がフックに「これからこのツールを動かすよ」とJSONで知らせて、フックが「OKだよ」「ダメだよ」「こう変えて」と返事する仕組みです。<strong>自動ドアセンサーが「人が来たら開く」と判断するのに似てます。</strong></p>
+<h3 id="入力-stdin-フックに渡される情報">入力（stdin、フックに渡される情報）</h3>
+<pre data-lang="json"><code>{
+  &quot;tool_name&quot;: &quot;Bash&quot;,
+  &quot;tool_input&quot;: {
+    &quot;command&quot;: &quot;git push origin main&quot;
+  },
+  &quot;session_id&quot;: &quot;...&quot;,
+  &quot;transcript_path&quot;: &quot;...&quot;
+}</code></pre>
+<h3 id="出力-stdout-フックが返す指示">出力（stdout、フックが返す指示）</h3>
+<pre data-lang="json"><code>// 何もしない（許可）
+{}
+
+// ブロックする
+{ &quot;decision&quot;: &quot;block&quot;, &quot;reason&quot;: &quot;main への直接 push は禁止&quot; }
+
+// 追加コンテキストを注入
+{ &quot;hookSpecificOutput&quot;: {
+    &quot;hookEventName&quot;: &quot;PreToolUse&quot;,
+    &quot;additionalContext&quot;: &quot;現在のブランチは main です。注意してください。&quot;
+  } }</code></pre>
+<p><code class="rich-inline-code">decision</code> には <code class="rich-inline-code">block</code>（止める）、<code class="rich-inline-code">ask</code>（確認を取る）、<code class="rich-inline-code">allow</code>（明示的に許可）といった選択肢があります。状況に応じて使い分けてくださいね。</p>
+<hr>
+<h2 id="5-実例集-コピペで使える">5. 実例集（コピペで使える）</h2>
+<p>ここからは「コピペして動かしてみてほしい」実例を8つ並べます。<strong>全部理解しなくて大丈夫</strong>、まずは気になるやつから試して、徐々に手元に揃えていく感じで。</p>
+<h3 id="5-1-main-への直接-commit-push-を禁止">5-1. main への直接 commit/push を禁止</h3>
+<p><code class="rich-inline-code">.claude/scripts/protect-main.sh</code>：</p>
+<pre data-lang="bash"><code>#!/usr/bin/env bash
+set -euo pipefail
+
+input=&quot;$(cat)&quot;
+cmd=&quot;$(printf '%s' &quot;$input&quot; | jq -r '.tool_input.command // empty')&quot;
+
+if ! git rev-parse --is-inside-work-tree &gt;/dev/null 2&gt;&amp;1; then
+  echo &quot;{}&quot;
+  exit 0
+fi
+
+branch=&quot;$(git symbolic-ref --short HEAD 2&gt;/dev/null || echo &quot;&quot;)&quot;
+
+case &quot;$cmd&quot; in
+  *&quot;git commit&quot;*|*&quot;git push&quot;*)
+    if [ &quot;$branch&quot; = &quot;main&quot; ] || [ &quot;$branch&quot; = &quot;master&quot; ]; then
+      cat &lt;&lt;'JSON'
+{&quot;decision&quot;:&quot;block&quot;,&quot;reason&quot;:&quot;main/master への直接 commit/push は禁止です。feature ブランチを切ってください。&quot;}
+JSON
+      exit 0
+    fi
+    ;;
+esac
+
+echo &quot;{}&quot;</code></pre>
+<p><code class="rich-inline-code">settings.json</code>：</p>
+<pre data-lang="json"><code>{
+  &quot;hooks&quot;: {
+    &quot;PreToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Bash&quot;,
+        &quot;hooks&quot;: [
+          { &quot;type&quot;: &quot;command&quot;, &quot;command&quot;: &quot;bash .claude/scripts/protect-main.sh&quot;, &quot;timeout&quot;: 5 }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<p>これで main ブランチ上でうっかり commit/push しようとすると、警備員が「ストップ」してくれます。</p>
+<h3 id="5-2-ファイル編集後に自動フォーマット">5-2. ファイル編集後に自動フォーマット</h3>
+<pre data-lang="json"><code>{
+  &quot;hooks&quot;: {
+    &quot;PostToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Edit|Write&quot;,
+        &quot;hooks&quot;: [
+          { &quot;type&quot;: &quot;command&quot;, &quot;command&quot;: &quot;npx prettier --write \&quot;$CLAUDE_FILE_PATH\&quot;&quot;, &quot;timeout&quot;: 30 }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<p>書いたそばからフォーマッタ(コードの見た目を整えるツール)が走るので、コードのインデントずれで悩むこともなくなります。地味ですけど効きます。</p>
+<h3 id="5-3-sessionstart-で-git-情報を注入">5-3. SessionStart で git 情報を注入</h3>
+<p><code class="rich-inline-code">.claude/scripts/inject-git-info.sh</code>：</p>
+<pre data-lang="bash"><code>#!/usr/bin/env bash
+status=&quot;$(git status --short 2&gt;/dev/null | head -10)&quot;
+branch=&quot;$(git symbolic-ref --short HEAD 2&gt;/dev/null || echo &quot;no-git&quot;)&quot;
+recent=&quot;$(git log --oneline -5 2&gt;/dev/null)&quot;
+
+jq -n --arg s &quot;$status&quot; --arg b &quot;$branch&quot; --arg r &quot;$recent&quot; '{
+  hookSpecificOutput: {
+    hookEventName: &quot;SessionStart&quot;,
+    additionalContext: &quot;## Git情報\n- ブランチ: \($b)\n\n### 変更中\n\($s)\n\n### 直近のコミット\n\($r)&quot;
+  }
+}'</code></pre>
+<p>セッションが立ち上がった瞬間に「いまどのブランチで何が変わってるか」を Claude に教えてあげる仕組みです。<strong>朝の朝礼で状況共有するノリ</strong>ですね。</p>
+<h3 id="5-4-stop-で-macos-通知">5-4. Stop で macOS 通知</h3>
+<pre data-lang="json"><code>{
+  &quot;hooks&quot;: {
+    &quot;Stop&quot;: [
+      {
+        &quot;hooks&quot;: [
+          { &quot;type&quot;: &quot;command&quot;, &quot;command&quot;: &quot;osascript -e 'display notification \&quot;ターン終了\&quot; with title \&quot;Claude Code\&quot;'&quot; }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<p>長めの作業を Claude に頼んで、ぶっちゃけ別の画面でぼーっとしてる人(私です)向け。終わったら通知が飛ぶので、目を離せます。</p>
+<h3 id="5-5-slack-通知">5-5. Slack 通知</h3>
+<pre data-lang="json"><code>{
+  &quot;hooks&quot;: {
+    &quot;Stop&quot;: [
+      {
+        &quot;hooks&quot;: [
+          {
+            &quot;type&quot;: &quot;command&quot;,
+            &quot;command&quot;: &quot;curl -X POST -H 'Content-type: application/json' --data '{\&quot;text\&quot;:\&quot;Claude のターンが終了しました\&quot;}' $SLACK_WEBHOOK_URL&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<p>チームで使うなら Slack 通知。「Claude が休憩入りました」が共有されるので、レビュー待ちのタイミングが分かりやすくなります。</p>
+<h3 id="5-6-危険コマンドのブロック-強化版">5-6. 危険コマンドのブロック（強化版）</h3>
+<pre data-lang="bash"><code>#!/usr/bin/env bash
+set -euo pipefail
+
+input=&quot;$(cat)&quot;
+cmd=&quot;$(printf '%s' &quot;$input&quot; | jq -r '.tool_input.command // empty')&quot;
+
+# 危険パターン
+patterns=(
+  &quot;rm -rf /&quot;
+  &quot;rm -rf ~&quot;
+  &quot;sudo rm&quot;
+  &quot;:(){ :|:&amp; };:&quot;            # フォーク爆弾
+  &quot;dd if=/dev/zero&quot;
+  &quot;mkfs&quot;
+  &quot;git push --force&quot;
+)
+
+for p in &quot;${patterns[@]}&quot;; do
+  if [[ &quot;$cmd&quot; == *&quot;$p&quot;* ]]; then
+    cat &lt;&lt;JSON
+{&quot;decision&quot;:&quot;block&quot;,&quot;reason&quot;:&quot;危険コマンドが検出されました: $p&quot;}
+JSON
+    exit 0
+  fi
+done
+
+echo &quot;{}&quot;</code></pre>
+<p>これは正直に言うと、人間が手で打っても怖い系のコマンドリストです。AIが万が一暴走してもここで止まる、という保険ですね。<strong>シートベルトみたいなもの</strong>だと思ってください。</p>
+<h3 id="5-7-postcompact-で-claude-md-を再注入">5-7. PostCompact で CLAUDE.md を再注入</h3>
+<p>圧縮(セッションが長くなったときに会話を要約する処理)で重要情報が落ちることを防ぎます：</p>
+<pre data-lang="json"><code>{
+  &quot;hooks&quot;: {
+    &quot;PostCompact&quot;: [
+      {
+        &quot;hooks&quot;: [
+          {
+            &quot;type&quot;: &quot;command&quot;,
+            &quot;command&quot;: &quot;echo '{\&quot;hookSpecificOutput\&quot;:{\&quot;hookEventName\&quot;:\&quot;PostCompact\&quot;,\&quot;additionalContext\&quot;:\&quot;圧縮されました。docs/architecture.md と CLAUDE.md を改めて参照してください。\&quot;}}'&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<p>長い会話で記憶が圧縮されたあと、「大事な書類はもう一回読み返してね」と念押しする役目です。</p>
+<h3 id="5-8-編集ログを記録-自己改善ループの材料">5-8. 編集ログを記録（自己改善ループの材料）</h3>
+<p><code class="rich-inline-code">.claude/scripts/log-edit.sh</code>：</p>
+<pre data-lang="bash"><code>#!/usr/bin/env bash
+input=&quot;$(cat)&quot;
+file=&quot;$(printf '%s' &quot;$input&quot; | jq -r '.tool_input.file_path // empty')&quot;
+[ -z &quot;$file&quot; ] &amp;&amp; exit 0
+
+mkdir -p .claude/sessions
+ts=&quot;$(date +%FT%T%z)&quot;
+echo &quot;$ts	edit	$file&quot; &gt;&gt; &quot;.claude/sessions/$(date +%F).log&quot;
+
+echo &quot;{}&quot;</code></pre>
+<p>→ サンプルハーネス（<a href="/articles/claude-code-12-sample-harness">第12回</a>）の自己改善ループの基盤になります。地味ですが、あとで「何を編集したか」を見返せると、改善のヒントが山ほど出てきますよ。</p>
+<hr>
+<h2 id="6-フックの組み合わせパターン">6. フックの組み合わせパターン</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-07-hooks/1856eae1-ch07-m4.png" alt="" width="1536" height="864">
+
+<p>「防御」「品質」「認識」の3層で組み合わせると、<strong>家のセキュリティシステムみたいに多層防御</strong>ができます。1個1個は地味でも、重なるとかなり強力です。</p>
+<hr>
+<h2 id="7-落とし穴とアンチパターン">7. 落とし穴とアンチパターン</h2>
+<p>ここは「みんな同じところで詰まる」あるあるコーナーです。</p>
+<h3 id="7-1-タイムアウトに注意">7-1. タイムアウトに注意</h3>
+<pre data-lang="json"><code>{ &quot;timeout&quot;: 5 }</code></pre>
+<p>5秒以内に完了しないとフックがエラーになります。長い処理は避けてください(重いビルドは Stop ではなく非同期で別プロセスに逃がすのがコツ)。</p>
+<h3 id="7-2-フックが多すぎると遅い">7-2. フックが多すぎると遅い</h3>
+<p>PostToolUse に5個も6個もフックを入れると、毎編集で数秒のラグが積み重なります。<strong>本当に必要なものだけ</strong>にしましょう。盛りすぎると、自分の作業も遅くなりますよ。</p>
+<h3 id="7-3-デバッグ難しい">7-3. デバッグ難しい</h3>
+<p>フック内で <code class="rich-inline-code">echo</code>(画面に文字を出すコマンド)してもユーザーには見えないんですよ、これがまた厄介で。<strong>ログファイルに出力</strong> してデバッグするのが定番です：</p>
+<pre data-lang="bash"><code>echo &quot;[hook] cmd=$cmd&quot; &gt;&gt; /tmp/claude-hook.log</code></pre>
+<p>「あれ、フック動いてる？」と不安になったら、まずログを見る癖をつけてください。</p>
+<h3 id="7-4-exit-code-を間違える">7-4. exit code を間違える</h3>
+<table class="rich-table"><thead><tr><th>exit code</th><th>意味</th></tr></thead><tbody><tr><td>0</td><td>成功（stdoutで指示）</td></tr><tr><td>2</td><td>ブロック（stderr の内容を Claude に伝える）</td></tr><tr><td>その他</td><td>エラー（フックが失敗）</td></tr></tbody></table>
+<p><code class="rich-inline-code">exit 1</code>(プログラムが「失敗で終わる」を意味する終了コード)とかで返すと「フックがコケた」扱いになって、思った挙動になりません。意図的にブロックしたいときは <code class="rich-inline-code">exit 2</code> を使ってくださいね。</p>
+<h3 id="7-5-jsonパースエラー">7-5. JSONパースエラー</h3>
+<p>stdout が無効な JSON だと挙動不定になります。常に <code class="rich-inline-code">echo &quot;{}&quot;</code> をデフォルトに置いておくと安全です。「とりあえず空のJSON返しとけば事故らない」という保険。</p>
+<hr>
+<h2 id="8-パーミッション-と-フックの使い分け">8. パーミッション と フックの使い分け</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-07-hooks/e47893b8-ch07-m5.png" alt="" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>観点</th><th>Permissions</th><th>Hooks</th></tr></thead><tbody><tr><td>設定の手軽さ</td><td>◎ JSONだけ</td><td>△ シェル必要</td></tr><tr><td>柔軟性</td><td>△ 単純マッチ</td><td>◎ なんでもできる</td></tr><tr><td>パフォーマンス</td><td>◎ ほぼゼロ</td><td>△ シェル起動コスト</td></tr><tr><td>副作用（通知等）</td><td>❌</td><td>◎</td></tr></tbody></table>
+<p><strong>結論</strong>：</p>
+<ul><li><p>単純な禁止 = Permissions</p>
+</li><li><p>動的判断 / 副作用 = Hooks</p>
+</li></ul>
+<p>ぶっちゃけ、最初は Permissions でできることは Permissions に寄せた方が楽です。フックはシェル書く分だけ手間が増えるので、「ここは絶対フックじゃないと無理」という場面で投入するのがちょうどいいバランスですね。</p>
+<hr>
+<h2 id="9-ふりかえり">9. ふりかえり</h2>
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th></tr></thead><tbody><tr><td>☐</td><td>フックは「お願い」ではなく「強制」と分かった</td></tr><tr><td>☐</td><td>6つのフックイベントの使い分けができる</td></tr><tr><td>☐</td><td>settings.json の hooks セクションを書ける</td></tr><tr><td>☐</td><td>入出力 JSON の仕様を理解した</td></tr><tr><td>☐</td><td>5つ以上の実例パターンを覚えた</td></tr><tr><td>☐</td><td>Permissions と Hooks の使い分けが分かる</td></tr></tbody></table>
+<hr>
+<h2 id="ふりかえり">✅ ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-07-hooks/d2e643dd-ch07-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章">📚 関連する章</h2>
+<ul><li><p>🔗 <strong>トリガーするコマンド</strong>：<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a> — フックから自作コマンドを呼ぶことも</p>
+</li><li><p>🔗 <strong>エージェント自動起動</strong>：<a href="/articles/claude-code-06-subagents">第6回 サブエージェント</a> — Stopフックでレビューエージェントを呼ぶ</p>
+</li><li><p>🔗 <strong>設計パターン</strong>：<a href="/articles/claude-code-11-harness-patterns">第11回 設計パターン</a> — #11 決定論的ライフサイクル</p>
+</li><li><p>🔗 <strong>実装の見本</strong>：<a href="/articles/claude-code-12-sample-harness">第12回 サンプルハーネス</a> — 自己改善ループのフック構成</p>
+</li><li><p>🔗 <strong>困ったとき</strong>：<a href="/articles/claude-code-a2-troubleshooting#7-フック関連">付録 B. トラブルシューティング</a> — フックが動かないとき</p>
+</li></ul>
+<h2 id="次へ">🎬 次へ</h2>
+<p>→ <a href="/articles/claude-code-08-mcp-tools">第8回 外部ツール連携：MCP</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅️ 前へ</td><td><a href="/articles/claude-code-06-subagents">第6回 サブエージェント</a></td></tr><tr><td>➡️ 次へ</td><td><a href="/articles/claude-code-08-mcp-tools">第8回 MCP</a></td></tr><tr><td>🏠 目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

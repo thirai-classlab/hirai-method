@@ -9,6 +9,10 @@
 #                CLAUDE.md は CLAUDE.md.template として配置（user が <...> placeholder を埋める）。
 #   --update   : 既存 .claude/ を退避せず rsync で増分上書き。state dir / settings.local.json は保持。
 #                CLAUDE.md / .mcp.json / .gitignore は触らない (既存保護)。
+#                完了時に sync 変更 file 一覧 + 分離 commit 案内を出力 (task-58 G1)。
+#   --commit   : (--update と併用、opt-in) sync 対象 .claude/ path のみ git add + chore(harness): sync で
+#                自動 commit する。project file (root README.md 等) は触らない。git reset 禁止 (HIGH 教訓)。
+#                非 git target なら commit skip + WARN (task-58 G1)。
 #   --force    : 既存 .claude / CLAUDE.md を backup せず上書き。CLAUDE.md は placeholder 入りで上書き。
 #   --dry-run  : 実行内容を表示するのみ (rsync -n + 各 cp / mkdir を echo)。
 #   --no-mcp   : .mcp.json を配置しない (Serena 不要な project)。
@@ -48,11 +52,13 @@ MODE="install"          # install / update / force
 DRY_RUN=false
 WITH_MCP=true
 WITH_DOCS=true
+COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
 
 for arg in "$@"; do
   case "$arg" in
     --update)   MODE="update" ;;
     --force)    MODE="force"  ;;
+    --commit)   COMMIT_AFTER_SYNC=true ;;
     --dry-run)  DRY_RUN=true  ;;
     --no-mcp)   WITH_MCP=false ;;
     --no-docs)  WITH_DOCS=false ;;
@@ -76,7 +82,13 @@ for arg in "$@"; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "usage: ./install.sh <target-project-dir> [--update|--force|--dry-run|--no-mcp|--no-docs]" >&2
+  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--dry-run|--no-mcp|--no-docs]" >&2
+  exit 64
+fi
+
+# --commit は --update mode 専用 (task-58 G1)
+if $COMMIT_AFTER_SYNC && [[ "$MODE" != "update" ]]; then
+  echo "[install] error: --commit requires --update mode" >&2
   exit 64
 fi
 
@@ -105,6 +117,47 @@ echo "[install] target : $TARGET"
 echo "[install] mode   : $MODE  (dry-run=$DRY_RUN, with-mcp=$WITH_MCP, with-docs=$WITH_DOCS)"
 echo ""
 
+# ============================================================
+# dirty-tree safety: --update / --force 前に target の未 commit 変更を warn
+# (task-55: user 無警告で上書き rsync する事故を防ぐ。block ではなく warn のみ)
+# ============================================================
+if [[ "$MODE" == "update" || "$MODE" == "force" ]] && ! $DRY_RUN; then
+  if command -v git >/dev/null 2>&1 && [[ -d "$TARGET/.git" ]]; then
+    DIRTY=$(cd "$TARGET" && git status --short 2>/dev/null | head -20)
+    if [[ -n "$DIRTY" ]]; then
+      echo "[install] WARN: target has uncommitted changes (showing up to 20 lines):"
+      echo "$DIRTY" | sed 's/^/  /'
+      echo "[install] WARN: rsync is about to overwrite .claude/ — review or commit/stash first."
+      echo "[install] WARN: continuing in 3s (Ctrl-C to abort)..."
+      sleep 3 || true
+    fi
+  fi
+fi
+
+# ============================================================
+# migration helper: project 固有 override が SSoT yml に直接書かれている場合の案内
+# (task-55: docs_approved_dir 等が SSoT yml に書かれていると --update で巻き戻る潜在事故。
+#  自動移動はしない、案内のみ。違反が見つかったら user が手で local.yml へ移行する)
+# ============================================================
+if [[ "$MODE" == "update" || "$MODE" == "force" ]] && ! $DRY_RUN; then
+  TARGET_SSOT="$TARGET/.claude/harness-config.yml"
+  SRC_SSOT="$SCRIPT_DIR/.claude/harness-config.yml"
+  if [[ -f "$TARGET_SSOT" && -f "$SRC_SSOT" ]]; then
+    # 比較対象 key (project 固有 override が起こりやすい代表例)
+    for key in docs_approved_dir task_dir draft_dir protected_paths; do
+      tgt_val=$(grep -E "^${key}:" "$TARGET_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//")
+      src_val=$(grep -E "^${key}:" "$SRC_SSOT" 2>/dev/null | head -1 | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]*$//")
+      if [[ -n "$tgt_val" && "$tgt_val" != "$src_val" ]]; then
+        echo "[install] MIGRATE: $TARGET_SSOT has project-specific '$key: $tgt_val' (SSoT default: '$src_val')."
+        echo "[install] MIGRATE: --update will overwrite SSoT yml. Move this value to .claude/harness-config.local.yml to preserve it across updates."
+      fi
+    done
+    unset key tgt_val src_val
+  fi
+  unset TARGET_SSOT SRC_SSOT
+fi
+
+
 # helper: run or echo (dry-run aware)
 run() {
   if $DRY_RUN; then
@@ -128,6 +181,7 @@ RSYNC_EXCLUDES=(
   --exclude=.workflow-state/
   --exclude=settings.local.json
   --exclude=settings.local.example.json
+  --exclude=harness-config.local.yml
   --exclude=bash-whitelist-requests/
   --exclude=worktrees/
 )
@@ -287,6 +341,122 @@ if [[ "$MODE" != "update" ]] || true; then
 fi
 
 # ============================================================
+# 6.5. harness_version stamp 書込 (task-56 F)
+# ============================================================
+# stale-harness-detect.sh (SessionStart hook) が読む同期 stamp。
+# `bash install.sh --update <repo>` 実行日 (UTC) を YYYY-MM-DD で
+# target の harness-config.yml に書き込む (in-place、portable sed -i 互換)。
+# 既存 `harness_version:` 行があれば差し替え、無ければ追記。
+# fail-open: stamp 書込失敗は WARN のみで install 自体は継続。
+if ! $DRY_RUN; then
+  TARGET_HC="$TARGET/.claude/harness-config.yml"
+  if [[ -f "$TARGET_HC" ]]; then
+    NEW_STAMP="$(date -u +%Y-%m-%d)"
+    if grep -qE '^harness_version:' "$TARGET_HC" 2>/dev/null; then
+      # 既存 line を置換 (BSD sed / GNU sed 両対応: -i '' / -i バックアップ拡張子なし)
+      TMP_HC="$(mktemp /tmp/harness-config.XXXXXX.yml)"
+      sed -E "s|^harness_version:.*|harness_version: \"${NEW_STAMP}\"|" "$TARGET_HC" > "$TMP_HC" 2>/dev/null \
+        && mv "$TMP_HC" "$TARGET_HC" \
+        && echo "[install] harness_version stamp updated -> $NEW_STAMP" \
+        || echo "[install] WARN: failed to update harness_version stamp (install continues)" >&2
+      rm -f "$TMP_HC" 2>/dev/null || true
+    else
+      # 未設定なら top に append (insert at top of file)
+      {
+        echo "# === Harness Version Stamp (task-56 F, install.sh が書込) ==="
+        echo "harness_version: \"${NEW_STAMP}\""
+        echo ""
+        cat "$TARGET_HC"
+      } > "${TARGET_HC}.tmp" 2>/dev/null \
+        && mv "${TARGET_HC}.tmp" "$TARGET_HC" \
+        && echo "[install] harness_version stamp inserted -> $NEW_STAMP" \
+        || echo "[install] WARN: failed to insert harness_version stamp (install continues)" >&2
+    fi
+    unset NEW_STAMP TMP_HC
+  fi
+  unset TARGET_HC
+fi
+
+# ============================================================
+# 6.7. sync drift 案内 + --commit による分離 commit (task-58 G1)
+# ============================================================
+# install.sh --update が SSoT を同期した直後、target 側 .claude/ 配下の
+# git diff を検出して user に「分離 commit せよ」案内 + 変更 file 一覧を出力。
+# --commit flag 併用時のみ harness-sync 対象 path のみ git add + 単独 commit。
+# project file (root README.md 等) は完全に触らない。git reset 禁止 (HIGH 教訓)。
+# 設計: docs/draft/harness-sync-uncommitted-drift.md (採用案 C ハイブリッド)
+if [[ "$MODE" == "update" ]] && ! $DRY_RUN; then
+  if command -v git >/dev/null 2>&1 && [[ -d "$TARGET/.git" ]]; then
+    # .claude/ 配下の変更 path を git status --porcelain で安全に列挙
+    # (rename 検出は対象外、付属 path のみ抽出)
+    SYNC_CHANGES=$(cd "$TARGET" && git status --porcelain -- .claude/ 2>/dev/null | awk '{
+      # XY status (2 char) + space + path. rename は " -> " で arrow 後ろを採用
+      sub(/^.. /, "")
+      if (match($0, / -> /)) {
+        print substr($0, RSTART + 4)
+      } else {
+        print
+      }
+    }')
+    if [[ -n "$SYNC_CHANGES" ]]; then
+      SYNC_COUNT=$(printf '%s\n' "$SYNC_CHANGES" | wc -l | tr -d ' ')
+      echo ""
+      echo "[install] === harness sync drift detected ==="
+      echo "[install] ${SYNC_COUNT} file(s) under .claude/ changed by this --update:"
+      printf '%s\n' "$SYNC_CHANGES" | sed 's/^/  - /'
+      echo ""
+      if $COMMIT_AFTER_SYNC; then
+        # 安全な git add (specific paths only、CLAUDE.md HIGH 教訓: git reset 禁止)
+        # path に space を含む場合に備えて while-read + git add 個別
+        echo "[install] --commit: staging ${SYNC_COUNT} synced file(s) (project files untouched)"
+        ADDED=0
+        while IFS= read -r p; do
+          [[ -z "$p" ]] && continue
+          if (cd "$TARGET" && git add -- "$p" 2>/dev/null); then
+            ADDED=$((ADDED + 1))
+          else
+            echo "[install] WARN: git add skipped: $p" >&2
+          fi
+        done <<<"$SYNC_CHANGES"
+        if [[ "$ADDED" -gt 0 ]]; then
+          # commit 対象が staging にあるか最終確認 (空 commit 防止)
+          if (cd "$TARGET" && git diff --cached --quiet); then
+            echo "[install] WARN: nothing staged after git add — skip commit" >&2
+          else
+            COMMIT_MSG="chore(harness): sync .claude/ from hirai-method $(date -u +%Y-%m-%d)"
+            if (cd "$TARGET" && git commit -q -m "$COMMIT_MSG"); then
+              COMMIT_SHA=$(cd "$TARGET" && git rev-parse --short HEAD)
+              echo "[install] committed harness sync: ${COMMIT_SHA} (${ADDED} file(s))"
+            else
+              echo "[install] WARN: git commit failed (manual commit needed)" >&2
+            fi
+          fi
+        else
+          echo "[install] WARN: no files staged — skip commit" >&2
+        fi
+        unset ADDED COMMIT_MSG COMMIT_SHA
+      else
+        # default 案内 (honor system、user に分離 commit を促す)
+        echo "[install] HINT: commit these as a SEPARATE commit, e.g.:"
+        echo "  cd $TARGET"
+        echo "  git add .claude/"
+        echo "  git commit -m 'chore(harness): sync .claude/ from hirai-method'"
+        echo "[install] HINT: or rerun with '--commit' to auto-commit harness sync only:"
+        echo "  bash install.sh $TARGET --update --commit"
+        echo "[install] NOTE: keeping harness-sync separate from project work helps revert / blame."
+      fi
+      unset SYNC_COUNT
+    fi
+    unset SYNC_CHANGES
+  else
+    if $COMMIT_AFTER_SYNC; then
+      echo "[install] WARN: --commit requested but target is not a git repo — skip commit"
+      echo "[install] HINT: initialize git first: cd $TARGET && git init"
+    fi
+  fi
+fi
+
+# ============================================================
 # 7. 検証 (config-loader 動作確認)
 # ============================================================
 if ! $DRY_RUN; then
@@ -315,11 +485,16 @@ Counts at target:
 
 Next steps:
   1. cd $TARGET
-  2. \$EDITOR .claude/harness-config.yml         # protected_paths / task_dir / ... を project に合わせる
-  3. \$EDITOR .claude/bash-whitelist.txt         # 使う CLI (pnpm/poetry/cargo/...) を追記
+  2. project 固有 override (docs_approved_dir / protected_paths 追加分 等) は
+     \$EDITOR .claude/harness-config.local.yml     # ←ココに書く (install.sh --update で温存される)
+     (SSoT .claude/harness-config.yml は触らない — --update で SSoT 値が上書きされる)
+  3. \$EDITOR .claude/bash-whitelist.txt           # 使う CLI (pnpm/poetry/cargo/...) を追記
   4. mv CLAUDE.md.template CLAUDE.md && \$EDITOR CLAUDE.md   # <...> placeholders を埋める
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
   6. Claude Code session 起動 → /init-tasks → /mode loop
+
+Override precedence (高 → 低):
+  env(HC_*) > .claude/harness-config.local.yml > .claude/harness-config.yml (SSoT) > hardcoded default
 
 Documentation:
   - README.md         (採用 5 ステップ)

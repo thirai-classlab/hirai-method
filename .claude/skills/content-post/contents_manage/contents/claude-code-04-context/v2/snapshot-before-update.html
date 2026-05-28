@@ -1,0 +1,198 @@
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/dd99993a-ch04-hero.png" alt="" width="1536" height="864">
+
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>コンテキスト（Claudeが今ぱっと思い出せる情報の総量）の <strong>積み上げ順</strong> を理解する</p>
+</li><li><p><code class="rich-inline-code">CLAUDE.md</code>（プロジェクトの指示書）を効果的に書ける</p>
+</li><li><p><code class="rich-inline-code">/context</code> <code class="rich-inline-code">/compact</code> <code class="rich-inline-code">/branch</code> を使い分けられる</p>
+</li><li><p>不要なコンテキストで精度が落ちる仕組みを理解する</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約60分</strong></p>
+<hr>
+<h2 id="1-なぜ-コンテキスト-が一番大事なのか">1. なぜ「コンテキスト」が一番大事なのか</h2>
+<p>LLM には <strong>注意の上限</strong> があります。一度に意識できるのはざっくり 150〜200個ぐらいの情報まで、と言われていて、<strong>それ以上を詰め込むと精度がガクッと落ちる</strong> んです。</p>
+<p>人間でも同じですよね。<strong>机の上が書類で埋め尽くされてると、肝心な書類を見落とす。</strong> あれと同じです。</p>
+<p>Claude Code はコンテキストウィンドウ（一度に取り込める文字数の枠）が 200K（約20万トークン）まで入りますが、</p>
+<blockquote>
+<p><strong>80%超えてからは急速に賢くなくなる。65〜70%でコンパクション（履歴の圧縮）が理想。</strong>
+— 数理の弾丸動画より</p>
+</blockquote>
+<p>つまり「20万トークン入る」≠「20万トークン使い切ってOK」。<strong>いかに余裕を持って動かすか</strong> が腕の見せどころなんです。</p>
+<hr>
+<h2 id="2-コンテキストの積み上げ順">2. コンテキストの積み上げ順</h2>
+<p>セッション中に <strong><code class="rich-inline-code">/context</code></strong> コマンドを実行すると、いま何が机の上に積まれているか可視化できます。<strong>「いまの机の上、何が乗ってる？」を見る道具</strong> ですね。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/d409788b-ch04-m1.png" alt="" width="1536" height="864">
+
+<p>積み上がりの <strong>重要なポイント</strong>：</p>
+<ol><li><p><strong>①〜⑤ は起動時に固定で積まれる</strong> → 余計なものを入れると毎回トークンを浪費（<strong>毎日カバンに使わない教科書を入れて学校に行ってる感じ</strong>）</p>
+</li><li><p><strong>⑥ CLAUDE.md</strong> はあなたが書いた指示書 → ここを <strong>太らせるな</strong>（あとで詳述）</p>
+</li><li><p><strong>⑦ メッセージ履歴</strong> が伸びるほどコンテキスト圧迫 → <code class="rich-inline-code">/clear</code> <code class="rich-inline-code">/compact</code> <code class="rich-inline-code">/branch</code> で管理</p>
+</li><li><p><strong>MCPサーバー（外部サービス連携）の説明</strong> はサーバー数だけ膨らむ → 不要なものは外す</p>
+</li></ol>
+<p>📝 <strong>やってみる</strong>：起動直後に <code class="rich-inline-code">/context</code> で何が積まれているか見てみてください。<strong>意外と最初から色々乗ってるな、と気づきます</strong>。</p>
+<hr>
+<h2 id="3-claude-md-プロジェクトの指示書">3. CLAUDE.md：プロジェクトの指示書</h2>
+<h3 id="3-1-役割">3-1. 役割</h3>
+<p><code class="rich-inline-code">CLAUDE.md</code> はプロジェクトのルート（一番上の階層）に置く Markdown ファイル。<strong>毎セッション自動で読み込まれて</strong> 文脈に注入されます。<strong>「家に来た人がまず最初に読む張り紙」</strong> だと思ってください。</p>
+<h3 id="3-2-階層と読み込み順">3-2. 階層と読み込み順</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/22b531db-ch04-m2.png" alt="" width="1536" height="864">
+
+<h3 id="3-3-注意点">3-3. 注意点</h3>
+<table class="rich-table"><thead><tr><th>注意</th><th>内容</th></tr></thead><tbody><tr><td>兄弟ディレクトリ（隣の同じ階層のフォルダ）は読まれない</td><td>横並びの別フォルダの CLAUDE.md は無視される</td></tr><tr><td>子ディレクトリも自動では読まない</td><td>ファイルにアクセスした時に <strong>遅延ロード</strong>（必要になってから読む） される</td></tr><tr><td><code class="rich-inline-code">settings.json</code>（環境設定ファイル）は逆</td><td>こちらは「プロジェクト側が優先」で上書きされる</td></tr></tbody></table>
+<h3 id="3-4-何を書くべきか">3-4. 何を書くべきか</h3>
+<p>書いていいもの：</p>
+<ul><li><p>✅ プロジェクトの目的・ゴール</p>
+</li><li><p>✅ ディレクトリ構造（簡潔に）</p>
+</li><li><p>✅ 使用する言語・フレームワーク・固有名詞（<strong>具体的に</strong>）</p>
+</li><li><p>✅ 禁止事項（「main に直接コミット禁止」など）</p>
+</li><li><p>✅ コーディング規約のキモだけ</p>
+</li><li><p>✅ 詳細はどこを見るかの <strong>ポインター</strong>（参照先の案内、後述）</p>
+</li></ul>
+<p>書いてはいけないもの：</p>
+<ul><li><p>❌ ありとあらゆる詳細（注意力を奪う）</p>
+</li><li><p>❌ 一回限りの事情（PR説明文に書くべき）</p>
+</li><li><p>❌ Linter（コードの自動チェックツール）で機械的にチェックできる規約（自動化に任せるべき）</p>
+</li><li><p>❌ 暗黙知のすべて（書ききれない）</p>
+</li></ul>
+<blockquote>
+<p>💡 <strong>CLAUDE.md は「ダイエットしたい」</strong>：書きたくなる気持ちは分かるんですが、太れば太るほど Claude の注意力が削られます。<strong>「最低限、これだけは知っておいて」だけ書くのがコツ</strong>。</p>
+</blockquote>
+<h3 id="3-5-段階的開示-progressive-disclosure">3-5. 段階的開示（Progressive Disclosure）</h3>
+<p>CLAUDE.md は <strong>概要 + ポインター</strong> にとどめて、詳細はサブドキュメント（補助資料）へ。<strong>「お品書きには概要だけ書いて、詳しい食材リストは別冊」</strong> のイメージです。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/07926a90-ch04-m3.png" alt="" width="1536" height="864">
+
+<p>CLAUDE.md には：</p>
+<blockquote>
+<p>このプロジェクトのアーキテクチャは <code class="rich-inline-code">docs/architecture.md</code> を参照してください。</p>
+</blockquote>
+<p>と書いておくだけ。これで CLAUDE.md は痩せたまま、必要な時だけ詳細が読まれる、という仕組み。これが <a href="/articles/claude-code-05-skills-and-commands">第5回</a> で扱う <strong>スキル</strong>（必要なときだけ読む専門知識）の本質と同じ考え方です。</p>
+<h3 id="3-6-テンプレート">3-6. テンプレート</h3>
+<p>そのまま使えるテンプレートを置いておきます。<strong>最初はこれをコピペして、自分のプロジェクトに合わせて削るのが早い</strong> です。</p>
+<pre data-lang="markdown"><code># CLAUDE.md
+
+## このプロジェクトについて
+（1〜3行で目的を書く）
+
+## 開発方針
+- TDD（Test-Driven Development = テストを先に書く開発スタイル。Red → Green → Refactor）
+- 言語: TypeScript / Node.js 22 LTS
+- フレームワーク: Next.js App Router
+- スタイル: shadcn/ui + Tailwind v4
+
+## ディレクトリ
+- src/ — アプリ本体
+- tests/ — テスト
+- docs/ — 設計資料・規約集
+
+## 禁止事項
+- ⚠️ main ブランチへの直接コミット
+- ⚠️ 仕様変更を伴うリファクタリング（コード書き直し）はタスク化してから
+
+## 詳細は以下を参照
+- アーキテクチャ: docs/architecture.md
+- コーディング規約: docs/conventions.md
+- 認証フロー: docs/auth-flow.md</code></pre>
+<hr>
+<h2 id="4-rules-スコープ付きルール">4. Rules（スコープ付きルール）</h2>
+<h3 id="4-1-rules-とは">4-1. Rules とは</h3>
+<p>Rules（ルール）は、<code class="rich-inline-code">.claude/rules/</code> ディレクトリに置く Markdown ファイル。<strong>特定のパス・特定の条件で自動ロードされる</strong> Claude 用の指示書なんですよ。</p>
+<p>CLAUDE.md と何が違うかというと、こんな感じです。</p>
+<table class="rich-table"><thead><tr><th>観点</th><th>CLAUDE.md</th><th>Rules</th></tr></thead><tbody><tr><td>読み込みタイミング</td><td>セッション開始時に常時</td><td>パス・条件にマッチしたとき</td></tr><tr><td>スコープ（適用範囲）</td><td>プロジェクト全体</td><td>特定のパス配下のみ</td></tr><tr><td>用途</td><td>プロジェクト概要・全体方針</td><td>特定領域の詳細ルール</td></tr></tbody></table>
+<p>例えるなら、<strong>CLAUDE.md = 会社の就業規則（全社共通）、Rules = 各部署のローカルルール（部門固有）</strong>。両方とも効きますが、Rules は <strong>該当する部門に行ったときにだけ</strong> 読まれます。</p>
+<h3 id="4-2-ディレクトリ構成">4-2. ディレクトリ構成</h3>
+<pre><code>.claude/rules/
+├── communication.md     ← 常時ロード（コミュニケーション作法）
+├── development.md       ← src/**, tests/** 配下で自動ロード
+└── task-flow.md         ← docs/tasks/**, docs/draft/** で自動ロード</code></pre>
+<h3 id="4-3-ファイルの書き方-フロントマター">4-3. ファイルの書き方（フロントマター）</h3>
+<pre data-lang="markdown"><code>---
+description: コーディング規約・TDD ガイド
+glob: src/**, tests/**
+---
+
+# Development Rules
+
+ここに本文（規約・手順・禁止事項など）</code></pre>
+<table class="rich-table"><thead><tr><th>フィールド</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">description</code></td><td>このルールの目的（一行で）</td></tr><tr><td><code class="rich-inline-code">glob</code></td><td>自動ロードするパスパターン（<strong>指定なし=常時ロード</strong>）</td></tr></tbody></table>
+<h3 id="4-4-なぜ-rules-を使うか-コンテキストを膨張させない">4-4. なぜ Rules を使うか：コンテキストを膨張させない</h3>
+<p>ぶっちゃけ、CLAUDE.md に「コーディング規約」「議事録テンプレ」「認証フロー詳細」と全部詰め込むと、Claude が <strong>毎セッションで全部読まされて</strong> コンテキスト（机のスペース）が一気に圧迫されます。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/69f12c5c-ch04-m4.png" alt="" width="1536" height="864">
+
+<p>Rules を使うと、こうなります。</p>
+<ul><li><p><strong>コーディングしているとき</strong> だけ <code class="rich-inline-code">development.md</code> を読む</p>
+</li><li><p><strong>議事録作成時</strong> だけ <code class="rich-inline-code">meeting-notes.md</code> を読む</p>
+</li><li><p><strong>タスク管理画面</strong> に行ったときだけ <code class="rich-inline-code">task-flow.md</code> を読む</p>
+</li></ul>
+<p>普段は <strong>「あるけど寝てる」</strong> 状態。Claude が必要な場面に来てはじめて「お、これ読まなきゃ」と起こされる、というイメージです。</p>
+<h3 id="4-5-claude-md-と-rules-の使い分けベストプラクティス">4-5. CLAUDE.md と Rules の使い分けベストプラクティス</h3>
+<p>CLAUDE.md は <strong>目次（索引）</strong> に徹して、詳細は Rules に分散させる。これが鉄則。</p>
+<pre data-lang="markdown"><code># CLAUDE.md (索引のみ・薄く保つ)
+
+## このプロジェクトについて
+（1〜3行で目的を書く）
+
+## 詳細ルール（必要時に Claude が読みに行く）
+- コーディング: .claude/rules/development.md（src/, tests/ で自動ロード）
+- コミュニケーション: .claude/rules/communication.md（常時ロード）
+- タスクフロー: .claude/rules/task-flow.md（docs/ で自動ロード）
+- 認証フロー: docs/auth-flow.md（必要時 @ で参照）</code></pre>
+<p>これで CLAUDE.md は <strong>薄く、Claude は必要時にだけ詳細を読む</strong> 状態になります。<strong>会社のマニュアルを一冊にまとめず、章ごとに別冊にする発想</strong> ですね。</p>
+<h3 id="4-6-アンチパターン">4-6. アンチパターン</h3>
+<p>「これやりがちだけどダメ」をまとめておきます。</p>
+<table class="rich-table"><thead><tr><th>ダメパターン</th><th>なぜダメ</th><th>直し方</th></tr></thead><tbody><tr><td>すべて CLAUDE.md に詰める</td><td>コンテキスト膨張・注意力低下</td><td>rules / docs に分離</td></tr><tr><td>Rules の <code class="rich-inline-code">glob</code> が広すぎ</td><td>不要時にも読まれる</td><td>適切なパス絞り込み</td></tr><tr><td>Rules 同士で内容が重複</td><td>矛盾の温床</td><td>1つにまとめる or 役割分離</td></tr><tr><td>Rules を作らず <code class="rich-inline-code">@</code> で毎回手動指定</td><td>自動化の利点を失う</td><td>autoload を活用</td></tr></tbody></table>
+<h3 id="4-7-第12回のサンプルハーネスで体験する">4-7. 第12回のサンプルハーネスで体験する</h3>
+<p>実際の Rules 設計は <a href="/articles/claude-code-12-sample-harness">第12回のサンプルハーネス</a> に同梱されています。<code class="rich-inline-code">development.md</code> <code class="rich-inline-code">communication.md</code> <code class="rich-inline-code">task-flow.md</code> の3ファイルが配置済みなので、<strong>動かしてみるのが一番早い</strong> です。</p>
+<hr>
+<h2 id="5-自動メモリ-auto-memory">5. 自動メモリ（Auto Memory）</h2>
+<p>Claude Code は会話の中で「これは覚えておくべき」と判断したことを <code class="rich-inline-code">~/.claude/projects/&lt;path&gt;/memory.md</code>（プロジェクト用のメモ置き場）に <strong>自動保存</strong> します。<strong>机に勝手に付箋を貼っていく</strong> イメージ。</p>
+<table class="rich-table"><thead><tr><th>操作</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/memory</code></td><td>メモリの一覧と中身を表示</td></tr><tr><td>自動</td><td>「このコマンドはビルド用」のような気付きが蓄積</td></tr></tbody></table>
+<blockquote>
+<p>⚠️ <strong>動画より</strong>：自動メモリは便利な反面、<strong>ノイズ（不要な情報）が溜まりやすい</strong> という声も多いです。<strong>気がつくと付箋だらけの机になってる</strong> やつ。気になるなら <code class="rich-inline-code">/memory</code> で定期的にチェック・整理。</p>
+</blockquote>
+<hr>
+<h2 id="6-メッセージ履歴の管理-3つのテクニック">6. メッセージ履歴の管理：3つのテクニック</h2>
+<p>会話が長くなってきたら、3つの選択肢があります。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/fa32a838-ch04-m5.png" alt="" width="1536" height="864">
+
+<h3 id="5-1-clear-リセット">5-1. <code class="rich-inline-code">/clear</code> — リセット</h3>
+<p>履歴を全部消して、CLAUDE.md と組み込みツールだけの状態に戻ります。<strong>話題を完全に切り替えるとき</strong>。<strong>ホワイトボードを消して書き直す感覚</strong> です。</p>
+<h3 id="5-2-compact-圧縮">5-2. <code class="rich-inline-code">/compact</code> — 圧縮</h3>
+<p>会話履歴を <strong>要約</strong> して短くする機能。Claude が「ここまでに何をしてきたか」のサマリーを作って、それで履歴を置き換える。<strong>書類を要約してファイリングする感じ</strong> です。</p>
+<table class="rich-table"><thead><tr><th>設定</th><th>内容</th></tr></thead><tbody><tr><td>デフォルト発火（自動で動くタイミング）</td><td>コンテキストの <strong>約83.5%</strong> を超えたとき自動</td></tr><tr><td>閾値（しきいち = ボーダーライン）変更</td><td>環境変数 <code class="rich-inline-code">CLAUDE_AUTO_COMPACT_PERCENTAGE_OVERRIDE</code></td></tr><tr><td>推奨</td><td><strong>60〜70%</strong> に下げる（精度を保つため）</td></tr><tr><td>手動実行</td><td><code class="rich-inline-code">/compact</code></td></tr></tbody></table>
+<blockquote>
+<p>💡 デフォルトの83.5%は「ギリギリまで粘る」設定。<strong>精度重視なら早めに発火させた方がいい</strong>、というのが現場の声です。</p>
+</blockquote>
+<h3 id="5-3-branch-分岐">5-3. <code class="rich-inline-code">/branch</code> — 分岐</h3>
+<p>「いまの会話を引き継いだまま、別の方向も試したい」とき。<strong>ゲームの「セーブして別ルートも試す」</strong> ノリです。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/42a42b2f-ch04-m6.png" alt="" width="1536" height="864">
+
+<p>セッション履歴は <code class="rich-inline-code">~/.claude/projects/&lt;dir&gt;/*.jsonl</code>（履歴ファイルが置かれる場所）に保存されます。<strong>分岐したい先のディレクトリに JSONL ファイルをコピーすれば、別作業ディレクトリでも履歴を引き継げる</strong> という小技も（<a href="/articles/claude-code-13-tips-techniques">第13回Tip</a>）。</p>
+<hr>
+<h2 id="7-セッション履歴の保持期間">7. セッション履歴の保持期間</h2>
+<table class="rich-table"><thead><tr><th>設定</th><th>デフォルト</th><th>変更</th></tr></thead><tbody><tr><td><code class="rich-inline-code">cleanupPeriodDays</code>（履歴を残す日数）</td><td>30日</td><td><code class="rich-inline-code">~/.claude/settings.json</code> で変更可</td></tr></tbody></table>
+<pre data-lang="json"><code>{
+  &quot;cleanupPeriodDays&quot;: 365
+}</code></pre>
+<p>ハードディスクは少し圧迫しますが、<strong>昔のセッションを呼び出して再開</strong> したい人には設定をおすすめ。<strong>「あのときどう解決したっけ？」を半年後でも引っ張れる</strong> のは結構強いです。</p>
+<hr>
+<h2 id="8-コンテキスト節約のチェックリスト">8. コンテキスト節約のチェックリスト</h2>
+<p>セッションが重い・精度が落ちてきた、と感じたら：</p>
+<table class="rich-table"><thead><tr><th></th><th>チェック</th></tr></thead><tbody><tr><td>☐</td><td><code class="rich-inline-code">/context</code> で何が積まれているか見る</td></tr><tr><td>☐</td><td>不要な MCP サーバー（外部連携）を外す</td></tr><tr><td>☐</td><td>CLAUDE.md が太りすぎていないか</td></tr><tr><td>☐</td><td>スキル（専門知識ファイル）が大量にロードされていないか</td></tr><tr><td>☐</td><td><code class="rich-inline-code">/compact</code> で圧縮</td></tr><tr><td>☐</td><td>別話題なら <code class="rich-inline-code">/clear</code></td></tr><tr><td>☐</td><td>サブエージェント（<a href="/articles/claude-code-06-subagents">第6回</a>）に切り出す</td></tr></tbody></table>
+<hr>
+<h2 id="9-ふりかえり">9. ふりかえり</h2>
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th></tr></thead><tbody><tr><td>☐</td><td>コンテキストの積み上げ順を説明できる</td></tr><tr><td>☐</td><td>CLAUDE.md の階層と読み込み順を理解した</td></tr><tr><td>☐</td><td><strong>Rules（スコープ付きルール）を使った分割術が分かった</strong></td></tr><tr><td>☐</td><td>段階的開示（必要時だけ詳細を読ませる）の概念が分かった</td></tr><tr><td>☐</td><td><code class="rich-inline-code">/clear</code> <code class="rich-inline-code">/compact</code> <code class="rich-inline-code">/branch</code> の使い分けができる</td></tr><tr><td>☐</td><td>自動メモリの存在を知った</td></tr></tbody></table>
+<hr>
+<h2 id="ふりかえり">✅ ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-04-context/d9edc375-ch04-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章">📚 関連する章</h2>
+<ul><li><p>🔗 <strong>コンテキストを実践で活かす</strong>：<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a> — 段階的開示の実装</p>
+</li><li><p>🔗 <strong>重い作業の切り出し</strong>：<a href="/articles/claude-code-06-subagents">第6回 サブエージェント</a></p>
+</li><li><p>🔗 <strong>コマンド一覧</strong>：<a href="/articles/claude-code-a1-cheatsheet">付録 A. チートシート</a> — <code class="rich-inline-code">/context</code> <code class="rich-inline-code">/compact</code> <code class="rich-inline-code">/branch</code> のリファレンス</p>
+</li><li><p>🔗 <strong>ハーネス全体観</strong>：<a href="/articles/claude-code-10-harness-design">第10回 ハーネス設計</a></p>
+</li><li><p>🔗 <strong>コンテキスト破綻時</strong>：<a href="/articles/claude-code-a2-troubleshooting">付録 B. トラブルシューティング</a></p>
+</li></ul>
+<h2 id="次へ">🎬 次へ</h2>
+<p>→ <a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅️ 前へ</td><td><a href="/articles/claude-code-03-understanding">第3回 Claude Code を理解する</a></td></tr><tr><td>➡️ 次へ</td><td><a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a></td></tr><tr><td>🏠 目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

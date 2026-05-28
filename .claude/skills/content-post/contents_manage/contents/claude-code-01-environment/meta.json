@@ -1,0 +1,45 @@
+{
+  "slug": "claude-code-01-environment",
+  "kind": "tech_article",
+  "title": "第1回 環境構築 — 最大の難関を30分で越える完全ガイド",
+  "current_version": 5,
+  "published_version": 5,
+  "published_at": null,
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-04-30T06:22:26.988Z",
+      "author": "format-from-cc研修",
+      "snapshot_taken": false,
+      "note": "v1 = cc研修/01-environment.md を contents_manage にコピーしてフォーマット"
+    },
+    {
+      "v": 2,
+      "created_at": "2026-04-30T06:46:08.381Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 第1回 環境構築 — 最大の難関を30分で越える完全ガイド)"
+    },
+    {
+      "v": 3,
+      "created_at": "2026-04-30T08:18:27.182Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】第1回 環境構築 — 最大の難関を30分で越える完全ガイド)"
+    },
+    {
+      "v": 4,
+      "created_at": "2026-04-30T10:28:57.915Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】第1回 環境構築 — 最大の難関を30分で越える完全ガイド)"
+    },
+    {
+      "v": 5,
+      "created_at": "2026-05-23T05:25:44.510Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】第1回 環境構築 — 最大の難関を30分で越える完全ガイド)"
+    }
+  ]
+}

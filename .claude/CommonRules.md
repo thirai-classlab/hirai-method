@@ -121,6 +121,10 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 
 その他の教訓は memory `feedback_*.md` を参照。
 
+## harness 取込チェックリスト (consuming repo proactive sync)
+
+consuming repo は `bash install.sh --update <repo>` で harness 最新版を proactive に取り込む義務がある (タイミング: stg*/main merge 前 / 定期週次 / F WARN 検出時)。詳細 checklist (取込タイミング 4 経路 / 手順 5 step / 検証 / bypass / CI 将来) は [`.claude/rules/development-process.md`](.claude/rules/development-process.md) §「harness 取込チェックリスト」を参照。
+
 ## ハーネスドキュメント
 
 - [`README.md`](README.md) — 概要 + 採用 5 ステップ

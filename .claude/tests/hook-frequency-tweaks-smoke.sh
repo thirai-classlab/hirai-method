@@ -80,12 +80,16 @@ _cb_input() {
 # Case 1: context-budget 30% (低 ratio) → 完全 silent (W1.4 kill switch)
 # ----------------------------------------------------------------------
 case_1_cb_low_ratio_silent() {
-  # 50% fixture を使い、閾値 60% (default) なら silent
+  # 50% fixture を使い、閾値 60% で silent。
+  # 本 repo の yml は context_budget_threshold: 0.66 を採用するため env で 0.60 を明示
+  # (task-55 で config-loader の env-guard bug を修正、yml 値が確実に load されるようになった
+  # ことで本 smoke の暗黙 default 依存が露呈、明示 env override で deterministic 化)。
   local state_dir="$TMP_BASE/cb-case1"
   mkdir -p "$state_dir"
   local out
   out=$(_cb_input "${FIXTURES_CB}/transcript-50pct.jsonl" "case1" \
     | env HC_MODE=loop HC_CONTEXT_BUDGET_STATE_DIR="$state_dir" \
+          HC_CONTEXT_BUDGET_THRESHOLD=0.60 \
         bash "$CB_HOOK" 2>&1)
   local code=$?
   # stdout / stderr どちらにも system-reminder が無く、exit 0
@@ -101,11 +105,14 @@ case_1_cb_low_ratio_silent() {
 # Case 2: context-budget 60% → fire (kill switch 通過)
 # ----------------------------------------------------------------------
 case_2_cb_threshold_fires() {
+  # 本 repo の yml は context_budget_threshold: 0.66、60% fixture が fire するよう
+  # env で閾値 0.60 を明示 (Case 1 と同じ理由、task-55 修正後の deterministic 化)。
   local state_dir="$TMP_BASE/cb-case2"
   mkdir -p "$state_dir"
   local out
   out=$(_cb_input "${FIXTURES_CB}/transcript-60pct.jsonl" "case2" \
     | env HC_MODE=loop HC_CONTEXT_BUDGET_STATE_DIR="$state_dir" \
+          HC_CONTEXT_BUDGET_THRESHOLD=0.60 \
         bash "$CB_HOOK" 2>&1)
   local code=$?
   if [ "$code" = "0" ] && printf '%s' "$out" | grep -q "system-reminder" \

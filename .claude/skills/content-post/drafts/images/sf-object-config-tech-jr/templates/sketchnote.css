@@ -1,0 +1,229 @@
+/* sketchnote.css — sf-object-config-tech-jr 用 共通スタイル */
+
+@import url('https://fonts.googleapis.com/css2?family=Yusei+Magic&family=Klee+One:wght@400;600&family=Kaisei+Decol:wght@400;500;700&display=swap');
+
+:root {
+  --bg: #fdfbf7;
+  --ink: #2d2a26;
+  --pink: #ff6b9d;
+  --pink-bg: #ffe5ee;
+  --mint: #4fb59c;
+  --mint-bg: #d8f0e7;
+  --blue: #4a90d9;
+  --blue-bg: #d6e8f7;
+  --yellow: #f4c430;
+  --yellow-bg: #fff3b0;
+  --purple: #a06fbf;
+  --purple-bg: #ebdcf3;
+  --orange: #f08e3a;
+  --orange-bg: #ffe1c4;
+  --gray-line: #555;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: 'Klee One', 'Kaisei Decol', 'Hiragino Maru Gothic Pro', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-feature-settings: "palt";
+}
+
+.canvas {
+  position: relative;
+  background: var(--bg);
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(255,107,157,0.04) 0, transparent 40%),
+    radial-gradient(circle at 80% 20%, rgba(74,144,217,0.04) 0, transparent 40%);
+  padding: 60px 80px;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* タイトル: 大きい手書き風 */
+.title {
+  font-family: 'Yusei Magic', 'Klee One', sans-serif;
+  font-weight: 700;
+  font-size: 56px;
+  line-height: 1.2;
+  color: var(--ink);
+  margin-bottom: 12px;
+  letter-spacing: 0.02em;
+}
+
+.title.lg { font-size: 72px; }
+.title.xl { font-size: 88px; }
+
+.subtitle {
+  font-family: 'Klee One', sans-serif;
+  font-size: 28px;
+  color: #666;
+  margin-bottom: 40px;
+  font-weight: 400;
+}
+.subtitle.lg { font-size: 36px; }
+
+/* 手書き風ボックス */
+.box {
+  position: relative;
+  background: white;
+  border: 3px solid var(--ink);
+  border-radius: 18px 22px 16px 24px;
+  padding: 18px 24px;
+  box-shadow: 4px 4px 0 var(--ink);
+  display: inline-block;
+}
+.box.pink { background: var(--pink-bg); border-color: var(--pink); box-shadow: 4px 4px 0 var(--pink); }
+.box.mint { background: var(--mint-bg); border-color: var(--mint); box-shadow: 4px 4px 0 var(--mint); }
+.box.blue { background: var(--blue-bg); border-color: var(--blue); box-shadow: 4px 4px 0 var(--blue); }
+.box.yellow { background: var(--yellow-bg); border-color: var(--yellow); box-shadow: 4px 4px 0 #c89000; }
+.box.purple { background: var(--purple-bg); border-color: var(--purple); box-shadow: 4px 4px 0 var(--purple); }
+.box.orange { background: var(--orange-bg); border-color: var(--orange); box-shadow: 4px 4px 0 var(--orange); }
+
+.box .label {
+  font-family: 'Yusei Magic', sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.box.pink .label { color: var(--pink); }
+.box.mint .label { color: var(--mint); }
+.box.blue .label { color: var(--blue); }
+.box.yellow .label { color: #b08200; }
+.box.purple .label { color: var(--purple); }
+.box.orange .label { color: var(--orange); }
+
+.box .desc {
+  font-size: 22px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.box .desc.sm { font-size: 18px; }
+.box .item {
+  font-size: 20px;
+  line-height: 1.5;
+  display: block;
+  padding: 2px 0;
+}
+
+/* 吹き出し */
+.bubble {
+  position: relative;
+  background: #fffce8;
+  border: 2.5px solid var(--ink);
+  border-radius: 26px;
+  padding: 14px 22px;
+  font-size: 22px;
+  font-family: 'Klee One', sans-serif;
+  display: inline-block;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.bubble.pink { background: var(--pink-bg); }
+.bubble.mint { background: var(--mint-bg); }
+.bubble.blue { background: var(--blue-bg); }
+
+/* 矢印・装飾 */
+.arrow-svg {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* レイアウトユーティリティ */
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.center { align-items: center; justify-content: center; }
+.gap-12 { gap: 12px; }
+.gap-20 { gap: 20px; }
+.gap-32 { gap: 32px; }
+.gap-48 { gap: 48px; }
+.absolute { position: absolute; }
+.relative { position: relative; }
+
+/* ヘッダ星マーク */
+.star-mark {
+  display: inline-block;
+  color: var(--yellow);
+  font-size: 36px;
+  margin-right: 8px;
+  vertical-align: -4px;
+}
+
+/* キャラクター（顔） */
+.face {
+  display: inline-block;
+  width: 56px;
+  height: 56px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: #fff8d8;
+  position: relative;
+  vertical-align: middle;
+}
+.face::before, .face::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 8px;
+  background: var(--ink);
+  border-radius: 50%;
+  top: 18px;
+}
+.face::before { left: 16px; }
+.face::after { right: 16px; }
+.face .smile {
+  position: absolute;
+  width: 24px;
+  height: 12px;
+  border: 2.5px solid var(--ink);
+  border-top: none;
+  border-radius: 0 0 24px 24px;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* 矢印（→ →） */
+.arrow-r {
+  display: inline-block;
+  font-size: 40px;
+  color: var(--ink);
+  font-weight: 900;
+  margin: 0 8px;
+}
+
+/* badge / tag */
+.tag {
+  display: inline-block;
+  background: var(--yellow-bg);
+  border: 2px solid var(--yellow);
+  border-radius: 16px;
+  padding: 4px 14px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #8a6a00;
+}
+.tag.pink { background: var(--pink-bg); border-color: var(--pink); color: var(--pink); }
+.tag.mint { background: var(--mint-bg); border-color: var(--mint); color: var(--mint); }
+.tag.blue { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+
+/* underline 強調 */
+.uline {
+  text-decoration: underline wavy var(--pink);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 6px;
+}
+
+/* footer */
+.footer-note {
+  position: absolute;
+  bottom: 30px;
+  right: 60px;
+  font-size: 20px;
+  color: #888;
+  font-family: 'Klee One', sans-serif;
+}

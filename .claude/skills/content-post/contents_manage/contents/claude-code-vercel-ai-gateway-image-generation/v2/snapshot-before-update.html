@@ -1,0 +1,166 @@
+<h2 id="この記事でできる成果物">この記事でできる成果物</h2>
+<p>最終的に、Claude Code でこう打つだけで画像が出力できるようになります。</p>
+<pre><code>/ai-image-gen
+gpt-image2で高品質なRIRIFEのイラスト広告を作成してください。
+
+classlabのサイトからサービスは理解してください。</code></pre>
+<p>すると、Claude が</p>
+<ol><li><p>ClassLab のサイトをフェッチして RIRIFE サービスの内容を理解</p>
+</li><li><p>ターゲット・ブランドトーンに合わせたプロンプトを英語で組み立て</p>
+</li><li><p>Vercel AI Gateway 経由で <code class="rich-inline-code">openai/gpt-image-2</code> を叩く</p>
+</li><li><p>ローカルに PNG を保存</p>
+</li></ol>
+<p>を全部勝手にやってくれて、こちらが手に入ります。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-vercel-ai-gateway-image-generation/9666f025-rirife-ad-result.png" alt="RIRIFE 広告イラスト（生成結果）" width="1024" height="1536">
+
+<p>引越し直後の若いカップル / RIRIFE アプリの UI モック / 「新生活をもっと快適に」キャッチ / クーポン札 / マップピン / ハザードマップ / App Store・Google Play バッジ — <strong>広告として必要な要素が一発で揃った 1 枚が、入力 3 行から生成されました</strong>。</p>
+<p>これを Photoshop でゼロから作ったら半日コース、外注したら数万円。それが「サイトを読んで広告を作って」で完結する状態を、本記事ではこのあと <strong>5 分のセットアップ</strong> で作ります。</p>
+<hr>
+<h2 id="解決したい課題">解決したい課題</h2>
+<p>Claude Code で画像生成をしているエンジニアの「あるある」がこれです。</p>
+<ul><li><p><strong>モデルが変わるたびに使い方を学習するのがだるい</strong>
+画像生成 AI は数週間ごとに新モデルが出る。FLUX 2 が来た、Imagen 4 Ultra が来た、gpt-image-2 が来た。そのたびに API リファレンスを読み直し、SDK を入れ直し、認証を組み直す。</p>
+</li><li><p><strong>最新モデルをリリース当初に「学習コストゼロ」で気軽に試したい</strong>
+業務でガッツリ使うわけじゃない。広告イラスト1枚、ブログのアイキャッチ1枚、社内資料の差し込み1枚。そのために毎回プロバイダの SDK を読み込みたくない。</p>
+</li></ul>
+<p>この記事のゴールは、<strong>「Claude Code から <code class="rich-inline-code">/ai-image-gen &quot;&lt;指示&gt;&quot;</code> で最新モデルを叩ける」状態を 5 分で作る</strong>ことです。</p>
+<hr>
+<h2 id="解決アプローチ-vercel-ai-gateway-を-claude-スキルでラップする">解決アプローチ — Vercel AI Gateway を Claude スキルでラップする</h2>
+<p>このアプローチを支える 2 つの Vercel プロダクトをまず押さえておきます。</p>
+<h3 id="vercel-ai-gateway-とは">Vercel AI Gateway とは</h3>
+<p>Vercel AI Gateway は、<strong>複数の AI プロバイダ（OpenAI / Google / Anthropic / BFL / xAI / ByteDance / Recraft …）のモデルを 1 本の API キー + OpenAI 互換エンドポイントで叩ける統一ゲートウェイ</strong>です。</p>
+<p>詳細はこちらのナレッジにまとめています:</p>
+<div class="link-card" data-url="https://classlab-weekly-news.vercel.app/knowledge/vercel-ai-gateway-unified-access"><a href="https://classlab-weekly-news.vercel.app/knowledge/vercel-ai-gateway-unified-access" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Vercel AI Gateway とは — 1本のキーで全AIプロバイダを横断する統一ゲートウェイ</h3><p class="link-card__description">Vercel AI Gateway は OpenAI / Google / Anthropic / BFL / xAI / ByteDance / Recraft などの AI プロバイダを 1 本の API キー + OpenAI 互換エンドポイントで叩ける統一ゲートウェイ。プロバイダ毎の SDK 契約・キー管理が不要になり、新モデルが追加されても即日呼べる。本ナレッジでは概要・主要機能・課金モデル・類似サービス比較・向き不向きをコンパクトにまとめる。</p><div class="link-card__meta"><img class="link-card__favicon" src="https://classlab-weekly-news.vercel.app/favicon.ico?favicon.0x3dzn~oxb6tn.ico" alt="" width="16" height="16" /><span class="link-card__domain">classlab-weekly-news.vercel.app</span></div></div><img class="link-card__thumbnail" src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-unified-access/thumbnail-d67ce174-architecture-thumb.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<ul><li><p>プロバイダ毎の SDK 契約・キー管理が不要（Vercel に請求も集約）</p>
+</li><li><p>モデル切り替えは「リクエストの <code class="rich-inline-code">model</code> フィールド」を書き換えるだけ</p>
+</li><li><p>新プロバイダ・新モデルがゲートウェイに追加されると即日呼べる</p>
+</li><li><p>月額 spending limit / レート制限 / observability も Vercel 側で完結</p>
+</li></ul>
+<p>つまり「画像生成の <strong>Cloudflare</strong> や <strong>Stripe</strong> のような立ち位置」を担うレイヤーです。</p>
+<h4 id="課金について-重要">課金について（重要）</h4>
+<p>Vercel AI Gateway は <strong>AI Gateway 自体の利用料は無料</strong>ですが、<strong>ゲートウェイ経由で叩いた各プロバイダのモデル使用料は従量課金</strong>で発生します。</p>
+<ul><li><p>課金単位は <strong>モデルごとに異なる</strong>（gpt-image-2 は画像 1 枚あたり数セント、FLUX 系は秒単位など。最新料金は <a href="https://vercel.com/docs/ai-gateway/models" target="_blank" rel="noopener noreferrer">公式モデル一覧</a>を参照）</p>
+</li><li><p>支払いは <strong>Vercel 側に集約</strong>される（プロバイダ個別契約の必要なし）</p>
+</li><li><p><strong>Hobby プラン無料枠 $5/月相当</strong>（2026 年時点の参考値、最新値は Vercel の Pricing ページで確認）が付与され、軽い検証ならそこに収まる</p>
+</li><li><p>本番運用や大量生成を行うなら <strong>Pro プラン（$20/月）+ Spending Limit 設定</strong>が推奨。ダッシュボードで月額上限を設定しておけば、想定外の高額請求を防げる</p>
+</li></ul>
+<blockquote>
+<p>💡 「画像 1 枚生成して試してみたい」程度なら Hobby プラン無料枠で十分収まります。本記事の RIRIFE 広告生成 1 回も無料枠の範囲内です。</p>
+</blockquote>
+<h3 id="vercel-ai-sdk-とは">Vercel AI SDK とは</h3>
+<p><a href="https://sdk.vercel.ai/" target="_blank" rel="noopener noreferrer">Vercel AI SDK</a> は、<strong>LLM / 画像生成 / 音声などを TypeScript から叩くための統一クライアント SDK</strong>。AI Gateway と組み合わせると、<code class="rich-inline-code">generateText</code> や <code class="rich-inline-code">generateImage</code> のような共通インタフェースに provider 文字列（例: <code class="rich-inline-code">openai/gpt-image-2</code>）を渡すだけでプロバイダ横断の呼び出しが書けます。</p>
+<p>今回は CLI（<code class="rich-inline-code">scripts/gen.mjs</code>）から直接 OpenAI 互換エンドポイントを叩くシンプル構成ですが、Web アプリやエージェントに組み込む場合は AI SDK 側が便利です。Claude が今回のスキルを生成するときの <strong>設計知識ソース</strong>として <code class="rich-inline-code">ai-sdk</code> 公式スキルを使います（後述 Step 2）。</p>
+<h3 id="上記に-claude-code-の-skill-を被せると">上記に Claude Code の Skill を被せると</h3>
+<ul><li><p>モデル一覧は <strong>ゲートウェイから動的取得</strong> → 新モデルが追加されても即座に使える</p>
+</li><li><p>API キーは <strong><code class="rich-inline-code">.env</code> に1本</strong> → プロバイダごとの認証管理から解放</p>
+</li><li><p>スキル自体は <strong>Claude に作らせる</strong> → 自分で TypeScript を書かない</p>
+</li></ul>
+<p>つまり「最新モデルが出た当日に、ゼロ学習コストで試せる」状態になります。</p>
+<hr>
+<h2 id="手順">手順</h2>
+<h3 id="step-1-skill-sh-をインストール">Step 1 — Skill.sh をインストール</h3>
+<p>Claude Code のスキル管理 CLI である <code class="rich-inline-code">skill.sh</code> を入れます。</p>
+<pre data-lang="bash"><code>curl -fsSL https://skill.sh/install | bash</code></pre>
+<p><code class="rich-inline-code">skill.sh</code> の詳細（コマンド一覧 / インストール時の選択肢 / 運用上のコツ）はこちらのナレッジにまとめています:</p>
+<div class="link-card" data-url="https://classlab-weekly-news.vercel.app/knowledge/skillsh-claude-code-npx-skills-add-1-cli"><a href="https://classlab-weekly-news.vercel.app/knowledge/skillsh-claude-code-npx-skills-add-1-cli" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">skill.sh とは — Claude Code のスキルを npx skills add で1行インストールする CLI</h3><p class="link-card__description">skill.sh は Claude Code のスキル（Skills）を GitHub リポジトリから 1 行でインストール / 管理できる CLI。`npx skills add` でインストール先（Claude Code / Cursor / Windsurf）・スコープ（Global / Project）・方式（Symlink / Copy）を対話的に選べる。本ナレッジでは概要・主要コマンド・インストール時の選択肢・運用上のコツをコンパクトにまとめる。</p><div class="link-card__meta"><img class="link-card__favicon" src="https://classlab-weekly-news.vercel.app/favicon.ico?favicon.0x3dzn~oxb6tn.ico" alt="" width="16" height="16" /><span class="link-card__domain">classlab-weekly-news.vercel.app</span></div></div><img class="link-card__thumbnail" src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/skillsh-claude-code-npx-skills-add-1-cli/thumbnail-7996834c-flow-thumb.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<hr>
+<h3 id="step-2-ai-sdk-スキルをインストール">Step 2 — <code class="rich-inline-code">ai-sdk</code> スキルをインストール</h3>
+<p>Vercel AI Gateway 連携の前提となる <strong>公式スキル <code class="rich-inline-code">ai-sdk</code></strong> を直接入れます。</p>
+<pre data-lang="bash"><code>npx skills add https://github.com/vercel/ai --skill ai-sdk</code></pre>
+<p>実行すると以下 3 つの対話プロンプトが順に出るので選択していきます。</p>
+<table class="rich-table"><thead><tr><th>#</th><th>プロンプト</th><th>選ぶもの</th><th>補足</th></tr></thead><tbody><tr><td>1</td><td>どのツールに入れるか</td><td><strong>Claude Code</strong></td><td>Cursor / Windsurf 等が並ぶが今回は Claude Code を選択</td></tr><tr><td>2</td><td>スコープ（インストール先）</td><td><strong>Global</strong> または <strong>Project</strong></td><td>普段使い回したいなら Global（<code class="rich-inline-code">~/.claude/skills/</code>）。特定リポジトリだけで使うなら Project（<code class="rich-inline-code">.claude/skills/</code>）</td></tr><tr><td>3</td><td>インストール方式</td><td><strong>Symlink</strong></td><td>コピーではなく shimlink を張る方式。リポジトリ更新を <code class="rich-inline-code">git pull</code> だけで反映できるので推奨</td></tr></tbody></table>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-vercel-ai-gateway-image-generation/44c0f0e7-u9b3l2hd_image.png" alt="image" width="699" height="187">
+
+<hr>
+<h3 id="step-3-claude-にスキル本体を作ってもらう">Step 3 — Claude にスキル本体を作ってもらう</h3>
+<p>ここが本記事の肝です。<strong>自分で書きません。Claude に作らせます。</strong></p>
+<p>Claude Code に以下のように指示します。</p>
+<pre><code>/ai-sdk
+claudeスキルを作成してください。
+
+vercel ai-gatewayを利用して画像生成を行うスキル
+モデルは動的に使用可能
+.envにAPIキーを設定します</code></pre>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-vercel-ai-gateway-image-generation/a8038ff1-0tmgdbal_image.png" alt="image" width="640" height="155">
+
+<p>Claude Code は <code class="rich-inline-code">ai-sdk</code> スキルの知識を参照しながら、</p>
+<ul><li><p><code class="rich-inline-code">scripts/gen.mjs</code>（CLI 本体）</p>
+</li><li><p><code class="rich-inline-code">SKILL.md</code>（スキル仕様）</p>
+</li><li><p><code class="rich-inline-code">.env.example</code></p>
+</li><li><p>モデル一覧取得 / 画像生成 / 画像編集の3コマンド</p>
+</li></ul>
+<p>を一気に作ってくれます。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-vercel-ai-gateway-image-generation/2446f1dd-wbry97mo_image.png" alt="image" width="883" height="372">
+---
+
+<h3 id="step-4-vercel-で-ai-gateway-の-api-キーを発行">Step 4 — Vercel で AI Gateway の API キーを発行</h3>
+<p>スキルが作られている<strong>裏で並行作業</strong>するのが効率的です。</p>
+<ol><li><p><a href="https://vercel.com/" target="_blank" rel="noopener noreferrer">Vercel</a> にアカウント作成（無料）</p>
+</li><li><p>ダッシュボードから <code class="rich-inline-code">AI Gateway</code> → <code class="rich-inline-code">API Keys</code> へ</p>
+</li><li><p><code class="rich-inline-code">Create Key</code> で <code class="rich-inline-code">vck_xxxxxxx</code> 形式のキーを発行</p>
+</li></ol>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-vercel-ai-gateway-image-generation/ea5384b3-tnmbynse_image.png" alt="image" width="790" height="408">
+*キーは削除済みです
+
+<hr>
+<h3 id="step-5-env-に-api-キーを設定">Step 5 — <code class="rich-inline-code">.env</code> に API キーを設定</h3>
+<p>Step 3 で生成されたスキルフォルダ（例: <code class="rich-inline-code">~/.claude/skills/ai-image-gen/</code>）の <code class="rich-inline-code">.env</code> に貼ります。</p>
+<pre data-lang="env"><code>AI_GATEWAY_API_KEY=vck_xxxxxxxxxxxxxxxxxx</code></pre>
+<hr>
+<h3 id="step-6-生成を試す">Step 6 — 生成を試す</h3>
+<p>ここからが本番。Claude Code に話しかけるだけ。</p>
+<pre><code>/ai-image-gen
+gpt-image2で高品質なRIRIFEのイラスト広告を作成してください。
+
+classlabのサイトからサービスは理解してください。</code></pre>
+<p>スキルは内部で</p>
+<ol><li><p><code class="rich-inline-code">classlab.co.jp</code> を WebFetch して RIRIFE の特徴を理解</p>
+</li><li><p>モデル一覧から <code class="rich-inline-code">openai/gpt-image-2</code> を選択</p>
+</li><li><p>プロンプトを最適化して生成</p>
+</li><li><p>ローカルに PNG 保存</p>
+</li></ol>
+<p>を全部やってくれます。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-vercel-ai-gateway-image-generation/12e65ba6-ygiphshk_image.png" alt="image" width="760" height="158">
+
+<p>実行結果は本記事冒頭で示した RIRIFE 広告のとおりです。</p>
+<hr>
+<h2 id="なぜこの構成が強いのか">なぜこの構成が強いのか</h2>
+<h3 id="1-モデルが変わっても破綻しない">1. モデルが変わっても破綻しない</h3>
+<p>スキル本体は Vercel AI Gateway の <strong>OpenAI 互換 <code class="rich-inline-code">/v1/images/generations</code> エンドポイント</strong>を叩いているだけです。</p>
+<pre data-lang="bash"><code>node scripts/gen.mjs models</code></pre>
+<p>を実行すれば、その瞬間にゲートウェイで使える全モデルが返ってきます。新モデルが追加されたら <code class="rich-inline-code">--model &lt;新ID&gt;</code> を渡すだけ。<strong>スキル本体の改修は不要</strong>です。</p>
+<h3 id="2-プロバイダ認証から解放される">2. プロバイダ認証から解放される</h3>
+<p>OpenAI / Google / BFL に個別契約してキーを管理する代わりに、<strong>Vercel AI Gateway の1本のキー</strong>で全プロバイダを横断できます。請求も Vercel に集約されます。</p>
+<h3 id="3-プロンプト設計を-claude-に任せられる">3. プロンプト設計を Claude に任せられる</h3>
+<p>「RIRIFE の広告を作って」と言うだけで、Claude が</p>
+<ul><li><p>サービス内容を Web から理解</p>
+</li><li><p>ターゲットとブランドトーンを整理</p>
+</li><li><p>英語の詳細プロンプトに翻訳</p>
+</li><li><p>モデル特性に合わせたパラメータ選択（<code class="rich-inline-code">size</code>, <code class="rich-inline-code">quality</code>）</p>
+</li></ul>
+<p>までやってくれます。プロンプトエンジニアリングの学習コストもゼロです。</p>
+<hr>
+<h2 id="応用-自律的に-300-パターン生成してみた">応用 — 自律的に 300 パターン生成してみた</h2>
+<p><code class="rich-inline-code">/ai-image-gen</code> を 1 枚生成だけで終わらせるのはもったいないので、<strong>Claude Code に WebSearch とコンテキスト探索をさせて、自律的に 300 パターンほど生成させてみました</strong>。</p>
+<p>「業界・テーマ・テイスト」を切り替えながら、Claude が自分でプロンプトを組み立てて生成 → 保存 → 次のテーマへと連続実行する流れです。</p>
+<p>生成結果のサムネイル一覧:</p>
+<div class="link-card" data-url="https://thumbnail-gallery-xi.vercel.app/"><a href="https://thumbnail-gallery-xi.vercel.app/" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">サムネイル図鑑</h3><div class="link-card__meta"><img class="link-card__favicon" src="https://thumbnail-gallery-xi.vercel.app/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">thumbnail-gallery-xi.vercel.app</span></div></div></a></div>
+<p>人手では発想しないテイストの組み合わせが大量に出てくるので、<strong>「ブレストの広さを AI に任せて、選定だけ人間がやる」</strong> というワークフローが現実的に回ることが確認できました。Vercel AI Gateway の課金は 300 枚でも数ドル程度に収まる範囲です。</p>
+<hr>
+<h2 id="まとめ-画像生成モデルのトレンドが変わっても-最新モデルを常に-claude-code-から触れる">まとめ — 画像生成モデルのトレンドが変わっても、最新モデルを常に Claude Code から触れる</h2>
+<p>この構成のキモは <strong>「スキル自体を Claude に作らせる」</strong> ことと、<strong>「モデル一覧をゲートウェイから動的に引く」</strong> こと。この 2 点を押さえると、</p>
+<ul><li><p>新モデルが出た日 → 即試せる</p>
+</li><li><p>プロバイダ仕様変更 → ゲートウェイ側が吸収</p>
+</li><li><p>自分で書くコードは <code class="rich-inline-code">.env</code> の 1 行だけ</p>
+</li></ul>
+<p>という状態になります。</p>
+<p>画像生成 AI のトレンドはこれからも変わり続けます。<strong>追いかけるのではなく、追いかけなくていい仕組みを作る</strong>のが最短ルートです。</p>
+<hr>
+<h2 id="関連リンク">関連リンク</h2>
+<h3 id="関連ナレッジ">関連ナレッジ</h3>
+<div class="link-card" data-url="https://classlab-weekly-news.vercel.app/knowledge/vercel-ai-gateway-unified-access"><a href="https://classlab-weekly-news.vercel.app/knowledge/vercel-ai-gateway-unified-access" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Vercel AI Gateway とは — 1本のキーで全AIプロバイダを横断する統一ゲートウェイ</h3><p class="link-card__description">Vercel AI Gateway は OpenAI / Google / Anthropic / BFL / xAI / ByteDance / Recraft などの AI プロバイダを 1 本の API キー + OpenAI 互換エンドポイントで叩ける統一ゲートウェイ。プロバイダ毎の SDK 契約・キー管理が不要になり、新モデルが追加されても即日呼べる。本ナレッジでは概要・主要機能・課金モデル・類似サービス比較・向き不向きをコンパクトにまとめる。</p><div class="link-card__meta"><img class="link-card__favicon" src="https://classlab-weekly-news.vercel.app/favicon.ico?favicon.0x3dzn~oxb6tn.ico" alt="" width="16" height="16" /><span class="link-card__domain">classlab-weekly-news.vercel.app</span></div></div><img class="link-card__thumbnail" src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-unified-access/thumbnail-d67ce174-architecture-thumb.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://classlab-weekly-news.vercel.app/knowledge/skillsh-claude-code-npx-skills-add-1-cli"><a href="https://classlab-weekly-news.vercel.app/knowledge/skillsh-claude-code-npx-skills-add-1-cli" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">skill.sh とは — Claude Code のスキルを npx skills add で1行インストールする CLI</h3><p class="link-card__description">skill.sh は Claude Code のスキル（Skills）を GitHub リポジトリから 1 行でインストール / 管理できる CLI。`npx skills add` でインストール先（Claude Code / Cursor / Windsurf）・スコープ（Global / Project）・方式（Symlink / Copy）を対話的に選べる。本ナレッジでは概要・主要コマンド・インストール時の選択肢・運用上のコツをコンパクトにまとめる。</p><div class="link-card__meta"><img class="link-card__favicon" src="https://classlab-weekly-news.vercel.app/favicon.ico?favicon.0x3dzn~oxb6tn.ico" alt="" width="16" height="16" /><span class="link-card__domain">classlab-weekly-news.vercel.app</span></div></div><img class="link-card__thumbnail" src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/skillsh-claude-code-npx-skills-add-1-cli/thumbnail-7996834c-flow-thumb.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<h3 id="公式ドキュメント">公式ドキュメント</h3>
+<div class="link-card" data-url="https://vercel.com/docs/ai-gateway"><a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">AI Gateway</h3><p class="link-card__description">AI Gateway provides a unified API to access hundreds of AI models through a single endpoint, with built-in budgets, usage monitoring, and fallbacks.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://assets.vercel.com/image/upload/q_auto/front/favicon/vercel/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">vercel.com</span></div></div></a></div>
+<div class="link-card" data-url="https://docs.claude.com/en/docs/claude-code/skills"><a href="https://docs.claude.com/en/docs/claude-code/skills" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Extend Claude with skills - Claude Code Docs</h3><p class="link-card__description">Create, manage, and share skills to extend Claude's capabilities in Claude Code. Includes custom commands and bundled skills.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://docs.claude.com/docs/_mintlify/favicons/claude-code/pLsy-mRpNksna2sx/_generated/favicon/favicon-16x16.png" alt="" width="16" height="16" /><span class="link-card__domain">docs.claude.com</span></div></div><img class="link-card__thumbnail" src="https://claude-code.mintlify.app/_next/image?url=%2F_mintlify%2Fapi%2Fog%3Fdivision%3DTools%2Band%2Bplugins%26appearance%3Dsystem%26title%3DExtend%2BClaude%2Bwith%2Bskills%26description%3DCreate%252C%2Bmanage%252C%2Band%2Bshare%2Bskills%2Bto%2Bextend%2BClaude%2527s%2Bcapabilities%2Bin%2BClaude%2BCode.%2BIncludes%2Bcustom%2Bcommands%2Band%2Bbundled%2Bskills.%26logoLight%3Dhttps%253A%252F%252Fmintcdn.com%252Fclaude-code%252Fc5r9_6tjPMzFdDDT%252Flogo%252Flight.svg%253Ffit%253Dmax%2526auto%253Dformat%2526n%253Dc5r9_6tjPMzFdDDT%2526q%253D85%2526s%253D78fd01ff4f4340295a4f66e2ea54903c%26logoDark%3Dhttps%253A%252F%252Fmintcdn.com%252Fclaude-code%252Fc5r9_6tjPMzFdDDT%252Flogo%252Fdark.svg%253Ffit%253Dmax%2526auto%253Dformat%2526n%253Dc5r9_6tjPMzFdDDT%2526q%253D85%2526s%253D1298a0c3b3a1da603b190d0de0e31712%26primaryColor%3D%25230E0E0E%26lightColor%3D%2523D4A27F%26darkColor%3D%25230E0E0E%26backgroundLight%3D%2523FDFDF7%26backgroundDark%3D%252309090B&amp;w=1200&amp;q=100" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://sdk.vercel.ai/"><a href="https://sdk.vercel.ai/" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">AI SDK</h3><p class="link-card__description">The AI Toolkit for TypeScript, from the creators of Next.js.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://sdk.vercel.ai/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">sdk.vercel.ai</span></div></div><img class="link-card__thumbnail" src="https://e742qlubrjnjqpp0.public.blob.vercel-storage.com/og.png" alt="" loading="lazy" width="120" height="120" /></a></div>

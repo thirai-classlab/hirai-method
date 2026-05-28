@@ -1,0 +1,17 @@
+{
+  "slug": "weekly-news-summary-2026-04-18-25",
+  "kind": "weekly_issue",
+  "title": "週間ニュースまとめ（2026年4月18日〜4月25日）",
+  "current_version": 1,
+  "published_version": 1,
+  "published_at": "2026-04-26T05:23:43.846451+00:00",
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-04-26T17:06:54.136Z",
+      "author": "task-41-seed",
+      "snapshot_taken": true,
+      "note": "v1 = 復旧後の現状サイト内容 (画像復旧済)"
+    }
+  ]
+}

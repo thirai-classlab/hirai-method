@@ -1,0 +1,314 @@
+<blockquote>
+<p><strong>このページの位置づけ</strong>
+詰まったら最初に開くページなんですよ。
+症状 → 原因 → 解決策の順に並んでいるので、<strong>病院の問診票</strong> みたいに使ってください。</p>
+</blockquote>
+<hr>
+<h2 id="よくあるトラブル早見表">よくあるトラブル早見表</h2>
+<p>まずは「自分はどのカテゴリで詰まってるのか」を切り分けましょう。下の図で当てはまりそうな枝をたどってください。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-a2-troubleshooting/e2f9ea48-A2-m1.png" alt="" width="1536" height="864">
+
+<hr>
+<h2 id="1-インストール関連">1. インストール関連</h2>
+<p><strong>「あ、それなった」筆頭セクション</strong>。インストールでつまずく人、本当に多いのでご安心を。<strong>ターミナル開き直すだけで9割解決します</strong>、という伝説のフレーズはここでも有効です。</p>
+<h3 id="q1-1-command-not-found-claude">Q1-1. <code class="rich-inline-code">command not found: claude</code></h3>
+<p><strong>原因</strong>:パスが通っていない(パソコンがまだ <code class="rich-inline-code">claude</code> の居場所を覚えてない状態)/ インストールが完了していない、のどちらかです。</p>
+<p><strong>解決</strong>:</p>
+<pre data-lang="bash" data-raw="%23%201.%20%E6%96%B0%E3%81%97%E3%81%84%E3%82%BF%E3%83%BC%E3%83%9F%E3%83%8A%E3%83%AB%E3%82%92%E9%96%8B%E3%81%8F%0A%23%202.%20%E3%83%91%E3%82%B9%E7%A2%BA%E8%AA%8D%0Aecho%20%24PATH%0A%0A%23%203.%20%E5%86%8D%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB(macOS%2FLinux)%0Acurl%20-fsSL%20https%3A%2F%2Fclaude.ai%2Finstall.sh%20%7C%20bash%0A%0A%23%204.%20%E3%81%9D%E3%82%8C%E3%81%A7%E3%82%82%E3%83%80%E3%83%A1%E3%81%AA%E3%82%89%E6%89%8B%E5%8B%95%E3%81%A7%E3%83%91%E3%82%B9%E8%BF%BD%E5%8A%A0%0Aecho%20'export%20PATH%3D%22%24HOME%2F.local%2Fbin%3A%24PATH%22'%20%3E%3E%20~%2F.zshrc%0Asource%20~%2F.zshrc" data-raw-encoding="url"><code># 1. 新しいターミナルを開く
+# 2. パス確認
+echo $PATH
+
+# 3. 再インストール(macOS/Linux)
+curl -fsSL https://claude.ai/install.sh | bash
+
+# 4. それでもダメなら手動でパス追加
+echo 'export PATH=&quot;$HOME/.local/bin:$PATH&quot;' &gt;&gt; ~/.zshrc
+source ~/.zshrc</code></pre>
+<p>まず <strong>新しいターミナルを開き直す</strong> のを試してください。これで直る人、めちゃくちゃ多いんですよ。</p>
+<h3 id="q1-2-eacces-permission-denied-mac-linux">Q1-2. <code class="rich-inline-code">EACCES: permission denied</code>(Mac/Linux)</h3>
+<p><strong>原因</strong>:npm のグローバルディレクトリ(全ユーザー共通の保存場所)の権限不足です。</p>
+<p><strong>解決</strong>:</p>
+<pre data-lang="bash" data-raw="%23%20%E6%8E%A8%E5%A5%A8%3A%E3%83%8D%E3%82%A4%E3%83%86%E3%82%A3%E3%83%96%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%A9%E3%83%BC%E3%81%AB%E5%88%87%E3%82%8A%E6%9B%BF%E3%81%88%E3%82%8B%0Acurl%20-fsSL%20https%3A%2F%2Fclaude.ai%2Finstall.sh%20%7C%20bash%0A%0A%23%20%E3%82%84%E3%82%80%E3%82%92%E5%BE%97%E3%81%9A%20npm%20%E3%82%92%E4%BD%BF%E3%81%86%E5%A0%B4%E5%90%88%E3%81%AF%20npm%20prefix%20%E3%82%92%E5%A4%89%E6%9B%B4%0Amkdir%20-p%20~%2F.npm-global%0Anpm%20config%20set%20prefix%20'~%2F.npm-global'%0Aecho%20'export%20PATH%3D~%2F.npm-global%2Fbin%3A%24PATH'%20%3E%3E%20~%2F.zshrc%0Asource%20~%2F.zshrc" data-raw-encoding="url"><code># 推奨:ネイティブインストーラーに切り替える
+curl -fsSL https://claude.ai/install.sh | bash
+
+# やむを得ず npm を使う場合は npm prefix を変更
+mkdir -p ~/.npm-global
+npm config set prefix '~/.npm-global'
+echo 'export PATH=~/.npm-global/bin:$PATH' &gt;&gt; ~/.zshrc
+source ~/.zshrc</code></pre>
+<p>権限まわりで沼にハマるくらいなら、<strong>素直にネイティブインストーラーに乗り換える</strong> のが一番早いです。</p>
+<h3 id="q1-3-windows-でうまく動かない">Q1-3. Windows でうまく動かない</h3>
+<p><strong>原因</strong>:Git for Windows(Git というファイル履歴管理ツールの Windows 版)が無い / シェル(コマンド入力環境)違いです。</p>
+<p><strong>解決</strong>:</p>
+<ol><li><p><a href="https://git-scm.com/download/win" target="_blank" rel="noopener noreferrer">Git for Windows</a> をインストール</p>
+</li><li><p>PowerShell から：</p>
+<pre data-lang="powershell" data-raw="irm%20https%3A%2F%2Fclaude.ai%2Finstall.ps1%20%7C%20iex" data-raw-encoding="url"><code>irm https://claude.ai/install.ps1 | iex</code></pre>
+</li><li><p>それでもダメなら WSL2(Windows の中で Linux を動かす仕組み)利用も検討してください</p>
+</li></ol>
+<h3 id="q1-4-node-js-のバージョンが古い">Q1-4. <code class="rich-inline-code">Node.js のバージョンが古い</code></h3>
+<p><strong>原因</strong>:Node 18 以下です。</p>
+<p><strong>解決</strong>:v22 LTS(長く安定して使える版)にアップデートしてください。</p>
+<pre data-lang="bash" data-raw="%23%20nodebrew%20%E3%81%BE%E3%81%9F%E3%81%AF%20nvm%20%E3%81%A7%E3%82%A2%E3%83%83%E3%83%97%E3%83%87%E3%83%BC%E3%83%88%0Anvm%20install%20--lts%0Anvm%20use%20--lts" data-raw-encoding="url"><code># nodebrew または nvm でアップデート
+nvm install --lts
+nvm use --lts</code></pre>
+<hr>
+<h2 id="2-ログイン-api-キー関連">2. ログイン / API キー関連</h2>
+<p>ログインで詰まると、<strong>スタート地点に立てない</strong> ので焦りますよね。でもだいたいキーかブラウザの問題なので、落ち着いていきましょう。</p>
+<h3 id="q2-1-authentication-failed">Q2-1. <code class="rich-inline-code">Authentication failed</code></h3>
+<p><strong>原因</strong>:APIキー誤り / 残高ゼロ / IP制限のいずれかです。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a> で残高確認</p>
+</li><li><p>API キーを再発行 → 環境変数(OS側に保存される設定値)を更新</p>
+</li><li><p>先頭・末尾のスペースを削除して再設定</p>
+</li></ul>
+<p>意外と多いのが <strong>コピペで余計な空白が混入</strong> しているパターン。<strong>「目に見えない空白」が悪さしてる</strong> こと、本当によくあります。</p>
+<h3 id="q2-2-ブラウザでログイン詰まる">Q2-2. ブラウザでログイン詰まる</h3>
+<p><strong>原因</strong>:ポップアップブロッカー(小窓を勝手に開かないようにする設定)/ Cookieブロックです。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p>ブラウザのポップアップ制限を一時解除</p>
+</li><li><p>シークレットモード(履歴を残さないモード)で再試行</p>
+</li><li><p><code class="rich-inline-code">claude logout &amp;&amp; claude login</code> で再ログイン</p>
+</li></ul>
+<h3 id="q2-3-bedrock-vertex-ai-で認証エラー">Q2-3. Bedrock / Vertex AI で認証エラー</h3>
+<p><strong>解決</strong>:<a href="https://code.claude.com/docs/en/amazon-bedrock" target="_blank" rel="noopener noreferrer">公式 Bedrock / Vertex セットアップガイド</a> を参照してください。AWS / GCP のクレデンシャル(認証情報)設定が必要です。</p>
+<hr>
+<h2 id="3-動作関連">3. 動作関連</h2>
+<p>「なんか動きが変…」と感じたときのコーナーです。<strong>故障診断モード</strong> だと思ってください。</p>
+<h3 id="q3-1-応答が遅い-止まった">Q3-1. 応答が遅い / 止まった</h3>
+<p><strong>原因候補</strong>:</p>
+<ul><li><p>Anthropic 側障害</p>
+</li><li><p>ネットワーク不安定</p>
+</li><li><p>コンテキスト満杯</p>
+</li><li><p>レート制限(使用量の上限)</p>
+</li></ul>
+<p><strong>解決</strong>:</p>
+<ol><li><p><a href="https://status.anthropic.com/" target="_blank" rel="noopener noreferrer">status.anthropic.com</a> で稼働状況確認</p>
+</li><li><p><code class="rich-inline-code">Ctrl+C × 2</code> で中断 → 再実行</p>
+</li><li><p><code class="rich-inline-code">/context</code> で状況確認、満杯なら <code class="rich-inline-code">/compact</code></p>
+</li><li><p><code class="rich-inline-code">/status</code> でレート状況確認</p>
+</li></ol>
+<p>まずは <strong>自分のせいなのか、Anthropic 側のせいなのか</strong> を切り分けるのが大事です。Status ページを最初にチェック、これクセにしてください。</p>
+<h3 id="q3-2-突然-200k-の体力ゲージが残ってるのに性能が落ちる">Q3-2. 突然 200K の体力ゲージが残ってるのに性能が落ちる</h3>
+<p><strong>原因</strong>:80%超えると注意力低下する仕様なんですよ。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">/compact</code> を実行(手動で65〜70%に下げる)</p>
+</li><li><p>環境変数で自動圧縮閾値を下げる：</p>
+<pre data-lang="json" data-raw="%7B%20%22env%22%3A%20%7B%20%22CLAUDE_AUTO_COMPACT_PERCENTAGE_OVERRIDE%22%3A%20%2265%22%20%7D%20%7D" data-raw-encoding="url"><code>{ &quot;env&quot;: { &quot;CLAUDE_AUTO_COMPACT_PERCENTAGE_OVERRIDE&quot;: &quot;65&quot; } }</code></pre>
+</li></ul>
+<p>ゲージが残ってても性能落ちる、これは仕様なんです。<strong>「体力満タンに見えても疲れてる」</strong> イメージですね。</p>
+<h3 id="q3-3-ループする-同じ修正を繰り返す">Q3-3. ループする / 同じ修正を繰り返す</h3>
+<p><strong>原因</strong>:プロンプト(指示文)が曖昧 / コンテキストが汚染されています。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">/clear</code> でリセット</p>
+</li><li><p>より具体的な指示で再依頼</p>
+</li><li><p>Plan Mode に切り替えて計画から見直す</p>
+</li></ul>
+<p>同じ場所をぐるぐる回り始めたら、<strong>いったん <code class="rich-inline-code">/clear</code> で全部捨ててやり直す</strong> のが結局一番早いです。</p>
+<h3 id="q3-4-ファイルが意図せず変更された">Q3-4. ファイルが意図せず変更された</h3>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">Esc × 2</code> で巻き戻し(直前なら)</p>
+</li><li><p>Git で <code class="rich-inline-code">git restore &lt;file&gt;</code> または <code class="rich-inline-code">git diff</code> で確認後 reset</p>
+</li></ul>
+<hr>
+<h2 id="4-コスト-レート関連">4. コスト・レート関連</h2>
+<p>お金とレート制限の話。<strong>カウンターをチラ見する習慣</strong> が大事です。</p>
+<h3 id="q4-1-急に-rate-limited-と出る">Q4-1. 急に「rate limited」と出る</h3>
+<p><strong>原因</strong>:プランの上限到達です。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">/cost</code> で使用状況確認</p>
+</li><li><p>Sonnet / Haiku に切り替えて節約</p>
+</li><li><p>プランをアップグレード(Pro → Max)</p>
+</li></ul>
+<h3 id="q4-2-api課金が高すぎる">Q4-2. API課金が高すぎる</h3>
+<p><strong>原因</strong>:Opus 多用 / コンテキスト肥大が主犯です。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p>サブエージェントに Haiku を使う</p>
+</li><li><p>スキルで段階的開示してコンテキスト圧縮</p>
+</li><li><p>不要な MCP を外す</p>
+</li><li><p><code class="rich-inline-code">DISABLE_AUTOUPDATER=1</code> でシステムプロンプト50%削減</p>
+</li></ul>
+<p>「<strong>全部 Opus でやればいい</strong>」は富豪しかできない発想なので、<strong>用途に応じて Sonnet / Haiku を使い分ける</strong> のが現実解です。</p>
+<hr>
+<h2 id="5-出力関連">5. 出力関連</h2>
+<p>「なんか思った通りに動かない…」のコーナー。<strong>だいたいプロンプトのせい</strong>、なんですが、それだけじゃない場合もあります。</p>
+<h3 id="q5-1-精度が低い-期待と違う出力">Q5-1. 精度が低い / 期待と違う出力</h3>
+<p><strong>原因</strong>:プロンプトが曖昧 / クセが出ているなどです。</p>
+<p><strong>解決</strong>:<a href="/articles/claude-code-09-prompt-quality">第9回</a> を参照してください。</p>
+<ul><li><p>固有名詞を使う</p>
+</li><li><p>「やってほしくないこと」も明示</p>
+</li><li><p>Plan Mode → 実行</p>
+</li><li><p><code class="rich-inline-code">ultrathink</code> を追加</p>
+</li></ul>
+<h3 id="q5-2-暴走して大量にファイル変更">Q5:2. 暴走して大量にファイル変更</h3>
+<p><strong>原因</strong>:パーミッション(操作権限)が甘い / Plan モードを使わなかった、です。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">Esc × 2</code> で巻き戻し</p>
+</li><li><p>Git で reset</p>
+</li><li><p>今後は Plan Mode から始める</p>
+</li><li><p><code class="rich-inline-code">permissions.deny</code> で危険操作を禁止</p>
+</li></ul>
+<p><strong>やらかしたとき用の応急処置</strong> をまず覚えておくと、心の余裕が違います。</p>
+<h3 id="q5-3-文字化け">Q5-3. 文字化け</h3>
+<p><strong>原因</strong>:ターミナルの文字コード(文字を表示するときの規格)です。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p>ターミナルを UTF-8(世界共通の文字の書き方)に</p>
+</li><li><p>Warp / Windows Terminal なら標準でOK</p>
+</li></ul>
+<hr>
+<h2 id="6-claude-md-スキル関連">6. CLAUDE.md / スキル関連</h2>
+<p>「設定したはずなのに効いてない」系トラブル。<strong>ファイル名と置き場所</strong> で詰まる人、多いんですよね。</p>
+<h3 id="q6-1-claude-md-が読まれていない">Q6-1. CLAUDE.md が読まれていない</h3>
+<p><strong>原因</strong>:CLAUDE.md の場所が違うことが多いです。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">/context</code> で「Memory Files」セクション確認</p>
+</li><li><p>プロジェクトルート直下に置いているか確認</p>
+</li><li><p>ファイル名のスペル(大文字小文字)を確認</p>
+</li></ul>
+<p><code class="rich-inline-code">claude.md</code> と <code class="rich-inline-code">CLAUDE.md</code> は別物として扱われるので、<strong>大文字小文字も合わせる</strong> のが大事です。</p>
+<h3 id="q6-2-スキルが呼ばれない">Q6-2. スキルが呼ばれない</h3>
+<p><strong>原因</strong>:description が曖昧 / トリガーが不明確、です。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">description</code> を「いつ使うか」明確に書き直す</p>
+</li><li><p>スキル名を直接指定して呼ぶ</p>
+</li><li><p><code class="rich-inline-code">/skills</code> で一覧表示して確認</p>
+</li></ul>
+<h3 id="q6-3-サブエージェントが呼ばれない">Q6-3. サブエージェントが呼ばれない</h3>
+<p><strong>原因</strong>:description / tools 設定不備です。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">.claude/agents/&lt;name&gt;.md</code> の存在確認</p>
+</li><li><p><code class="rich-inline-code">description</code> に呼び出しトリガーを明記</p>
+</li><li><p><code class="rich-inline-code">@&lt;agent-name&gt;</code> で明示呼び出しテスト</p>
+</li></ul>
+<hr>
+<h2 id="7-フック関連">7. フック関連</h2>
+<p>フックは <strong>動かないときに無言</strong> という特性があるので、デバッグが少し面倒なんですよ。</p>
+<h3 id="q7-1-フックが動かない">Q7-1. フックが動かない</h3>
+<p><strong>原因</strong>:パス / 権限 / JSON誤りのどれかです。</p>
+<p><strong>解決</strong>:</p>
+<pre data-lang="bash" data-raw="%23%201.%20%E3%82%B9%E3%82%AF%E3%83%AA%E3%83%97%E3%83%88%E3%81%AB%E5%AE%9F%E8%A1%8C%E6%A8%A9%E9%99%90%0Achmod%20%2Bx%20.claude%2Fscripts%2F*.sh%0A%0A%23%202.%20%E3%83%AD%E3%82%B0%E3%82%92%E4%BB%95%E8%BE%BC%E3%82%93%E3%81%A7%E3%83%87%E3%83%90%E3%83%83%E3%82%B0%0Aecho%20%22%5Bhook%5D%20called%22%20%3E%3E%20%2Ftmp%2Fclaude-hook.log%0A%0A%23%203.%20settings.json%20%E3%82%92JSON%20validator%E3%81%A7%E6%A4%9C%E8%A8%BC%0Acat%20.claude%2Fsettings.json%20%7C%20jq%20." data-raw-encoding="url"><code># 1. スクリプトに実行権限
+chmod +x .claude/scripts/*.sh
+
+# 2. ログを仕込んでデバッグ
+echo &quot;[hook] called&quot; &gt;&gt; /tmp/claude-hook.log
+
+# 3. settings.json をJSON validatorで検証
+cat .claude/settings.json | jq .</code></pre>
+<p><strong>まずログを仕込む</strong>、これがフックデバッグの鉄則です。「動いてないのか」「動いてるけど何かが違うのか」を切り分けましょう。</p>
+<h3 id="q7-2-フックがタイムアウト">Q7-2. フックがタイムアウト</h3>
+<p><strong>解決</strong>:</p>
+<ul><li><p><code class="rich-inline-code">timeout</code> を伸ばす(デフォルト 5秒)</p>
+</li><li><p>処理を非同期化</p>
+</li><li><p>重い処理は Stop 以外のタイミングへ</p>
+</li></ul>
+<h3 id="q7-3-pretooluseが効かずブロックできない">Q7-3. PreToolUseが効かずブロックできない</h3>
+<p><strong>原因</strong>:<code class="rich-inline-code">matcher</code> ミス / exit code 違いです。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p>ブロック時は <code class="rich-inline-code">{&quot;decision&quot;:&quot;block&quot;,&quot;reason&quot;:&quot;...&quot;}</code> を stdout に</p>
+</li><li><p><code class="rich-inline-code">exit 2</code> でも可</p>
+</li><li><p><code class="rich-inline-code">matcher</code> の正規表現を確認</p>
+</li></ul>
+<hr>
+<h2 id="8-mcp-関連">8. MCP 関連</h2>
+<p>MCP は <strong>外部サーバーが絡む</strong> ので、つながらないときは「自分側か、相手側か、間か」を疑っていきます。</p>
+<h3 id="q8-1-mcp-サーバーが繋がらない">Q8-1. MCP サーバーが繋がらない</h3>
+<p><strong>原因</strong>:起動失敗 / 認証 / コマンド誤りです。</p>
+<p><strong>解決</strong>:</p>
+<pre data-lang="bash" data-raw="%23%20%E6%8E%A5%E7%B6%9A%E7%8A%B6%E6%B3%81%E7%A2%BA%E8%AA%8D%0A%2Fmcp%0A%0A%23%20%E6%89%8B%E5%8B%95%E3%81%A7%E8%B5%B7%E5%8B%95%E3%83%86%E3%82%B9%E3%83%88%0Anpx%20%40modelcontextprotocol%2Fserver-github%0A%0A%23%20%E7%92%B0%E5%A2%83%E5%A4%89%E6%95%B0%E3%82%92%E7%A2%BA%E8%AA%8D%0Aecho%20%24GITHUB_TOKEN" data-raw-encoding="url"><code># 接続状況確認
+/mcp
+
+# 手動で起動テスト
+npx @modelcontextprotocol/server-github
+
+# 環境変数を確認
+echo $GITHUB_TOKEN</code></pre>
+<h3 id="q8-2-mcp-の追加で精度が落ちた">Q8-2. MCP の追加で精度が落ちた</h3>
+<p><strong>原因</strong>:ツール定義のトークン消費が増えたためです。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p>不要な MCP を外す</p>
+</li><li><p>Claude Code 標準ツールで代替できないか検討</p>
+</li><li><p>スキルで段階的開示に置き換える</p>
+</li></ul>
+<p>「<strong>入れれば便利になる</strong>」と思って MCP を増やしすぎると、逆に頭が悪くなる、という現象が起きます。<strong>必要なものだけ</strong> が鉄則です。</p>
+<hr>
+<h2 id="9-セキュリティ関連">9. セキュリティ関連</h2>
+<p> <strong>このセクションは緊急対応マニュアル</strong> として読んでください。<strong>やらかした瞬間の判断が一番大事</strong> です。</p>
+<h3 id="q9-1-機密情報を-claude-が触ったかも">Q9-1.  機密情報を Claude が触ったかも</h3>
+<p><strong>緊急対応</strong>:</p>
+<ol><li><p>触れた可能性のあるファイル / シークレット(秘密の文字列)を <strong>即時 rotate</strong>(GitHub PAT、AWSキー、DB接続文字列など)</p>
+</li><li><p><code class="rich-inline-code">~/.claude/projects/</code> のセッションログを確認・削除</p>
+</li><li><p><code class="rich-inline-code">.gitignore</code> を見直して二度と入らないように</p>
+</li><li><p><code class="rich-inline-code">permissions.deny</code> に該当パスを追加</p>
+</li></ol>
+<p><strong>気づいた瞬間に rotate する</strong>、これが最優先です。「あとでやろう」は無しでお願いします。</p>
+<h3 id="q9-2-dangerously-skip-permissions-を本番で使ってしまった">Q9-2. <code class="rich-inline-code">dangerously-skip-permissions</code> を本番で使ってしまった</h3>
+<p><strong>緊急対応</strong>:</p>
+<ol><li><p>ターミナルを <strong>すぐ閉じる</strong>(<code class="rich-inline-code">Ctrl+C × 2</code>)</p>
+</li><li><p>直近の変更を <code class="rich-inline-code">git diff</code> で精査</p>
+</li><li><p>不要な変更は revert / restore</p>
+</li><li><p>今後は <strong>Docker サンドボックス</strong>(隔離された実験環境)や使い捨てVMでのみ使う</p>
+</li></ol>
+<p><strong>本番でこのフラグを使った時点で「事故」</strong> です。落ち着いて被害確認 → 環境分離、の順で動きましょう。</p>
+<h3 id="q9-3-プロンプトインジェクション疑惑">Q9-3. プロンプトインジェクション疑惑</h3>
+<p><strong>症状</strong>:Webから取り込んだコンテンツの後、Claudeの挙動がおかしいというパターンです。</p>
+<p><strong>解決</strong>:</p>
+<ul><li><p>セッションを <code class="rich-inline-code">/clear</code> してやり直し</p>
+</li><li><p>そのソースは信頼できないとマーク</p>
+</li><li><p>今後は <strong>読み取り権限を絞る</strong> / サンドボックス利用</p>
+</li></ul>
+<p>外部から取り込んだ文章に <strong>悪意ある指示が混じっていた</strong> 可能性があります。<strong>「変だな」と思ったらいったん <code class="rich-inline-code">/clear</code></strong>、が安全策です。</p>
+<hr>
+<h2 id="10-アップデート関連">10. アップデート関連</h2>
+<h3 id="q10-1-古いバージョンを使い続けている">Q10-1. 古いバージョンを使い続けている</h3>
+<p><strong>解決</strong>:</p>
+<pre data-lang="bash" data-raw="%23%20%E3%83%8D%E3%82%A4%E3%83%86%E3%82%A3%E3%83%96%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%A9%E3%83%BC%E7%89%88%E3%81%AA%E3%82%89%E8%87%AA%E5%8B%95%E6%9B%B4%E6%96%B0%0A%23%20Homebrew%E7%89%88%0Abrew%20upgrade%20claude-code%0A%0A%23%20WinGet%E7%89%88%0Awinget%20upgrade%20Anthropic.ClaudeCode%0A%0A%23%20%E3%83%90%E3%83%BC%E3%82%B8%E3%83%A7%E3%83%B3%E7%A2%BA%E8%AA%8D%0Aclaude%20--version" data-raw-encoding="url"><code># ネイティブインストーラー版なら自動更新
+# Homebrew版
+brew upgrade claude-code
+
+# WinGet版
+winget upgrade Anthropic.ClaudeCode
+
+# バージョン確認
+claude --version</code></pre>
+<h3 id="q10-2-アップデート後に動かなくなった">Q10-2. アップデート後に動かなくなった</h3>
+<p><strong>解決</strong>:</p>
+<ul><li><p>リリースノート確認： <code class="rich-inline-code">/release-notes</code></p>
+</li><li><p>一旦削除して再インストール</p>
+</li><li><p>動画・記事は <strong>古い情報</strong> が混じっています。公式ドキュメントを優先してください</p>
+</li></ul>
+<p>このツール、<strong>進化が早すぎて 3ヶ月前の記事が陳腐化する</strong> ことがザラなので、<strong>公式ドキュメント最優先</strong> で行きましょう。</p>
+<hr>
+<h2 id="11-その他のヘルプ">11. その他のヘルプ</h2>
+<p>ここまで見ても解決しない場合の <strong>最終手段ルート</strong> です。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-a2-troubleshooting/32dcf509-A2-m2.png" alt="" width="1536" height="864">
+
+<h3 id="公式情報源">公式情報源</h3>
+<ul><li><p>ドキュメント： <a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener noreferrer">https://code.claude.com/docs/en/overview</a></p>
+</li><li><p>ステータス： <a href="https://status.anthropic.com/" target="_blank" rel="noopener noreferrer">https://status.anthropic.com/</a></p>
+</li><li><p>CHANGELOG: <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md</a></p>
+</li><li><p>GitHub Issues: <a href="https://github.com/anthropics/claude-code/issues" target="_blank" rel="noopener noreferrer">https://github.com/anthropics/claude-code/issues</a></p>
+</li></ul>
+<h3 id="コミュニティ">コミュニティ</h3>
+<ul><li><p>Reddit: r/ClaudeAI</p>
+</li><li><p>Discord: Anthropic公式</p>
+</li><li><p>日本語： Zenn / Qiita / X</p>
+</li></ul>
+<p><strong>「自分だけハマってる」と思っても、たいてい誰かが先にハマって解決策を残してくれてます</strong>。GitHub Issue や Reddit で同じ症状を検索してみてください。</p>
+<hr>
+<h2 id="ふりかえり">ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-a2-troubleshooting/62ea4d08-A2-outro.png" alt="" width="1536" height="864">
+
+<p>トラブル時の問診票、ここまでお疲れさまでした。<strong>詰まるのは恥ずかしいことではなく、みんな通る道</strong> です。このページをブックマークしておいて、困ったらまずここに戻ってきてください。</p>
+<h2 id="関連する章-症状別ジャンプ">関連する章(症状別ジャンプ)</h2>
+<ul><li><p><strong>環境構築でつまずく</strong>:<a href="/articles/claude-code-01-environment">第1回 環境構築</a></p>
+</li><li><p><strong>コンテキスト関連</strong>:<a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a></p>
+</li><li><p><strong>スキル/コマンドが呼ばれない</strong>:<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; コマンド</a></p>
+</li><li><p><strong>エージェントが動かない</strong>:<a href="/articles/claude-code-06-subagents">第6回 サブエージェント</a></p>
+</li><li><p><strong>フックが効かない</strong>:<a href="/articles/claude-code-07-hooks">第7回 フック</a></p>
+</li><li><p><strong>MCPが繋がらない</strong>:<a href="/articles/claude-code-08-mcp-tools">第8回 MCP</a></p>
+</li><li><p><strong>精度が上がらない</strong>:<a href="/articles/claude-code-09-prompt-quality">第9回 精度の高いアウトプット</a></p>
+</li><li><p><strong>コマンド一覧</strong>:<a href="/articles/claude-code-a1-cheatsheet">付録 A. チートシート</a></p>
+</li><li><p><strong>事故を未然に防ぐ</strong>:<a href="/articles/claude-code-a3-cautions">付録 C. 注意事項</a></p>
+</li></ul>
+<h2 id="次へ">次へ</h2>
+<p>→ <a href="/articles/claude-code-a3-cautions">付録 C. 注意事項</a> で事故が起きる前の予防策を確認しましょう。</p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅ 前へ</td><td><a href="/articles/claude-code-a1-cheatsheet">付録 A. チートシート</a></td></tr><tr><td>次へ</td><td><a href="/articles/claude-code-a3-cautions">付録 C. 注意事項</a></td></tr><tr><td>目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

@@ -282,6 +282,12 @@
           },
           {
             "type": "command",
+            "command": "bash .claude/hooks/stale-harness-detect.sh",
+            "timeout": 5,
+            "statusMessage": "stale-harness 検出中 (task-56)..."
+          },
+          {
+            "type": "command",
             "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
             "timeout": 3,
             "statusMessage": "観察記録中 (SessionStart)..."

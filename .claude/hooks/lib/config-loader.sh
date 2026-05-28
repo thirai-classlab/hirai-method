@@ -183,6 +183,50 @@ for _hc_k in $_HC_KNOWN_KEYS; do
 done
 unset _hc_k _hc_v _hc_set
 
+# --- Step 1b: 真の env preset key 名 set をスナップショット (task-55) ---
+# 目的: 「env で genuine に設定された HC_* key」を Step 2 defaults / YAML load 値と
+#       区別するため、source 時点で env に存在する全 HC_* key 名を space-delimited で保持する。
+#
+# 背景 (task-55 で判明した既存 bug):
+#   旧 parse loop は env > YAML guard を `${HC_<KEY>+set}` の live check で行っていたが、
+#   Step 2 defaults が全 known key を set 済にするため、known key の YAML 値が
+#   defaults に上書き skip され「YAML を書いても効かない」状態だった
+#   (docs_approved_dir / task_dir 等の project override が SSoT yml で効かなかった真因)。
+#
+# 修正方針:
+#   parse guard は live value ではなく本 Step 1b で取った「genuine env preset set」
+#   への所属判定で行う。これにより:
+#     - Step 2 defaults は YAML / local.yml に上書きされる (期待動作)
+#     - genuine env preset (known / 任意 key 問わず) は YAML / local.yml に勝つ
+#   _HC_KNOWN_KEYS に無い任意 key (例: HC_FEATURE_FOO_ENABLED) も拾うため、
+#   `env` / compgen ではなく POSIX 互換の `set` 出力 grep で HC_ 接頭辞 key を抽出する。
+#
+# 値解決の優先順 (高 → 低): env(HC_*) > local.yml > SSoT yml > hardcoded default
+_HC_ENV_PRESET_SET=" "
+while IFS='=' read -r _hc_envk _hc_envrest; do
+  case "$_hc_envk" in
+    HC_*)
+      # `HC_` 接頭辞を除去し upper key 名のみ保持 (space で囲んで部分一致誤検出を防ぐ)
+      _hc_envk="${_hc_envk#HC_}"
+      case " $_HC_ENV_PRESET_SET " in
+        *" $_hc_envk "*) ;;  # 既出なら skip
+        *) _HC_ENV_PRESET_SET="${_HC_ENV_PRESET_SET}${_hc_envk} " ;;
+      esac
+      ;;
+  esac
+done <<EOF
+$(set | grep '^HC_[A-Za-z0-9_]*=' 2>/dev/null || true)
+EOF
+unset _hc_envk _hc_envrest
+
+# _hc_is_env_preset <UPPER_KEY> — genuine env preset への所属判定 (return 0 = preset)
+_hc_is_env_preset() {
+  case "$_HC_ENV_PRESET_SET" in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # --- Step 2: 既定値 (fallback) ---
 # config 不在時 / 該当 key 欠如時にこの値が採用される。
 # 旧来の hardcode と同等の振る舞いを保つ。
@@ -311,11 +355,16 @@ _hc_normalize() {
   printf '%s' "$v"
 }
 
-# --- Step 3: YAML parse ---
-# config 不在は warning のみ (fail-open)。
-if [ ! -f "$HC_CONFIG_PATH" ]; then
-  printf '[config-loader] WARN: %s not found, using defaults\n' "$HC_CONFIG_PATH" >&2
-else
+# --- Step 3 helper: 1 つの YAML file を parse して HC_* に反映 ---
+# _hc_parse_yaml_file <path>
+#   file の各 key: value 行を HC_<UPPER>= に load する。
+#   genuine env preset key (Step 1b の _HC_ENV_PRESET_SET 所属) は上書き skip
+#   (env > file priority)。defaults / 先に load した別 file の値は上書きする
+#   (これにより local.yml が SSoT yml に勝つ tier 関係を実現)。
+#   存在しない file は no-op (graceful、SSoT 不在時のみ caller が WARN を出す)。
+_hc_parse_yaml_file() {
+  _hc_file="$1"
+  [ -f "$_hc_file" ] || return 0
   # bash の read を使う。IFS で分割しない (line 全体保持)。
   while IFS= read -r _hc_line || [ -n "$_hc_line" ]; do
     # 行頭空白 trim (CRLF も除去)
@@ -342,16 +391,15 @@ else
     # 値の前後空白 trim
     _hc_val="${_hc_val#"${_hc_val%%[![:space:]]*}"}"
     _hc_val="${_hc_val%"${_hc_val##*[![:space:]]}"}"
-    # env > YAML priority guard (task-44 hot fix):
-    # 既に env で `HC_<KEY>` が設定済 (空文字含む) ならば YAML 値で上書きしない。
-    # _HC_KNOWN_KEYS の Step 1 snapshot は known keys のみ対象だったが、
-    # 任意 key (例: HC_FEATURE_<NAME>_ENABLED) でも env > YAML を機能させる。
-    eval "_hc_preset=\${HC_${_hc_key_upper}+set}"
-    if [ "${_hc_preset:-}" = "set" ]; then
-      unset _hc_preset
+    # env > file priority guard (task-55 修正):
+    # genuine env preset (Step 1b で snapshot した key) のみ上書き skip。
+    # 旧実装は `${HC_<KEY>+set}` の live check だったが、Step 2 defaults が
+    # 全 known key を set 済にするため YAML 値が defaults に負ける bug があった。
+    # 本判定は env preset set への所属で行うため、defaults / 別 file の load 値は
+    # 正しく上書きされる (local.yml > SSoT yml > defaults の tier が成立)。
+    if _hc_is_env_preset "$_hc_key_upper"; then
       continue
     fi
-    unset _hc_preset
     # 配列構文 [a, b, c] 判定
     case "$_hc_val" in
       \[*\])
@@ -383,10 +431,47 @@ else
         eval "HC_${_hc_key_upper}=\"\$_hc_norm\""
         ;;
     esac
-  done < "$HC_CONFIG_PATH"
+  done < "$_hc_file"
+}
+
+# --- Step 3: SSoT YAML parse ---
+# config 不在は warning のみ (fail-open)。
+if [ ! -f "$HC_CONFIG_PATH" ]; then
+  printf '[config-loader] WARN: %s not found, using defaults\n' "$HC_CONFIG_PATH" >&2
+else
+  _hc_parse_yaml_file "$HC_CONFIG_PATH"
 fi
 
-# --- Step 4: env preset を復元 (env > YAML > defaults) ---
+# --- Step 3.5: project 固有 override (harness-config.local.yml) parse (task-55) ---
+# 役割:
+#   project 固有の override 値を SSoT harness-config.yml とは別 file に置く。
+#   この file は install.sh の rsync で除外される (settings.local.json と同じ扱い)
+#   ため、`install.sh --update` で SSoT が上書きされても project override が温存される。
+#
+# 値解決の優先順 (高 → 低): env(HC_*) > local.yml > SSoT yml > hardcoded default
+#   - local.yml は SSoT load 後に parse するため SSoT 値に勝つ
+#   - genuine env preset には負ける (_hc_parse_yaml_file の env guard で skip)
+#
+# graceful degrade:
+#   local.yml 不在環境は完全に現状通り (no-op)。`cp -r .claude` で即動く portability を維持。
+#
+# path 解決:
+#   SSoT yml と同 dir の harness-config.local.yml を採用。
+#   HC_LOCAL_CONFIG_PATH env で明示上書きも可 (test isolation 用)。
+if [ -n "${HC_LOCAL_CONFIG_PATH:-}" ]; then
+  _hc_local_config="$HC_LOCAL_CONFIG_PATH"
+else
+  _hc_config_dir=$(dirname "$HC_CONFIG_PATH")
+  _hc_local_config="${_hc_config_dir}/harness-config.local.yml"
+  unset _hc_config_dir
+fi
+# 不在なら no-op (graceful)。存在すれば SSoT 値を上書き parse。
+_hc_parse_yaml_file "$_hc_local_config"
+export HC_LOCAL_CONFIG_PATH="$_hc_local_config"
+unset _hc_local_config
+unset -f _hc_parse_yaml_file
+
+# --- Step 4: env preset を復元 (env > local.yml > YAML > defaults) ---
 # Step 1 で snapshot した preset key について、env 値を強制適用する。
 # tilde 展開は env override 値に対しても適用する (homunculus_root 等で
 # `~/foo` を export している場合に展開される)。
@@ -401,6 +486,8 @@ for _hc_k in $_HC_PRESET_KEYS; do
   unset "_HC_PRESET_${_hc_k}"
 done
 unset _HC_PRESET_KEYS _HC_KNOWN_KEYS
+unset _HC_ENV_PRESET_SET
+unset -f _hc_is_env_preset
 unset _hc_k _hc_v
 
 # --- protected_paths 派生値 ---

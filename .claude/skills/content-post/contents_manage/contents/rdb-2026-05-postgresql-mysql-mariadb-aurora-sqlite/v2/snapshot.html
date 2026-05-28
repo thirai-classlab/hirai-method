@@ -1,0 +1,196 @@
+<blockquote>
+<p>PostgreSQL / MySQL / MariaDB / Amazon Aurora / SQLite の 5 大 RDB を横断比較。理念・機能マトリクス・サービス × 機能 早見表・ユースケース別 HowTo を 1 ドキュメントに集約。</p>
+</blockquote>
+<hr>
+<h2 id="0-tl-dr">0. TL;DR</h2>
+<h3 id="各-db-の一行ポジショニング">各 DB の一行ポジショニング</h3>
+<table class="rich-table"><thead><tr><th>DB</th><th>一行で言うと</th></tr></thead><tbody><tr><td><strong>PostgreSQL</strong></td><td>ボランティア駆動の OSS、標準 SQL 準拠と拡張性で「何でも詰め込める」万能型</td></tr><tr><td><strong>MySQL</strong></td><td>Oracle 主導の商用色強い OSS、Web 用途で世界最大の実装ベース</td></tr><tr><td><strong>MariaDB</strong></td><td>MySQL の永続フォーク、GPLv2 保証と独立イノベーション</td></tr><tr><td><strong>Amazon Aurora</strong></td><td>AWS マネージドのクラウドネイティブ RDB (MySQL/PostgreSQL 互換 + DSQL 新世代)</td></tr><tr><td><strong>SQLite</strong></td><td>ファイル代替の組込み DB、世界最デプロイ DB (デバイス上に偏在)</td></tr></tbody></table>
+<h3 id="旧知識との差分-2024-以降の主要変化">旧知識との差分 (2024 以降の主要変化)</h3>
+<blockquote>
+<p><strong>LLM の訓練データはここを取り違えやすい</strong>。以下は明示的に上書きする:</p>
+</blockquote>
+<table class="rich-table"><thead><tr><th>項目</th><th>旧理解 (〜2023)</th><th>2026-05 時点の実態</th></tr></thead><tbody><tr><td>MySQL バージョン</td><td>8.0 が主流</td><td><strong>8.0 は 2026-04 EOL</strong>、<strong>8.4 LTS</strong> (2024 リリース) と <strong>9.7 LTS</strong> (2026-05 リリース) が現役</td></tr><tr><td>MySQL のリリース戦略</td><td>年次メジャー</td><td><strong>Innovation + LTS の 2 軸</strong>、9.x 系は Innovation、9.7 が初の 9.x LTS</td></tr><tr><td>MariaDB</td><td>MySQL 互換の代替</td><td>バージョン 11.x で独立路線、optimizer / Storage Engine が大きく分岐</td></tr><tr><td>Aurora</td><td>MySQL/Postgres 互換のマネージド</td><td><strong>Aurora DSQL</strong> (2024 GA、サーバーレス分散 SQL) + <strong>Aurora Serverless v2</strong> が主流の二本柱</td></tr><tr><td>Aurora 料金</td><td>RDS 比 1.5x の固定</td><td>DSQL は <strong>DPU 課金</strong>、Serverless v2 は <strong>ACU 秒課金</strong> で大幅に弾力的</td></tr><tr><td>SQLite</td><td>プロトタイプ・モバイル専用</td><td><strong>Turso/libSQL/Cloudflare D1/LiteFS</strong> で本番分散デプロイ可能、Edge で再評価</td></tr><tr><td>ベクトル DB</td><td>専用 DB が必要</td><td><strong>pgvector</strong> (Postgres) + <strong>HeatWave Vector</strong> (MySQL) で既存 RDB に組込可能</td></tr><tr><td>PostgreSQL</td><td>バージョン 15 が安定</td><td><strong>17</strong> が現役、<strong>18</strong> リリース済、<strong>19 が 2026-09 予定</strong></td></tr></tbody></table>
+<h3 id="最大差別化点">最大差別化点</h3>
+<pre data-raw="PostgreSQL%20%20%E2%86%92%20%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%E3%82%A8%E3%82%B3%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0%20(pgvector%2C%20PostGIS%2C%20TimescaleDB)%20%E3%81%A8%20SQL%20%E5%AE%8C%E5%85%A8%E6%BA%96%E6%8B%A0%0AMySQL%20%20%20%20%20%20%20%E2%86%92%20Oracle%20%E3%83%90%E3%83%83%E3%82%AF%E3%81%AE%E5%95%86%E7%94%A8%E3%82%B5%E3%83%9D%E3%83%BC%E3%83%88%20%2B%20HeatWave%20%E3%81%AB%E3%82%88%E3%82%8B%E5%88%86%E6%9E%90%E3%83%BBGenAI%20%E7%B5%B1%E5%90%88%0AMariaDB%20%20%20%20%20%E2%86%92%20GPLv2%20%E6%B0%B8%E7%B6%9A%E4%BF%9D%E8%A8%BC%20%2B%2038%25%20%E9%AB%98%E9%80%9F%20TPS%20(%E5%85%AC%E7%A7%B0)%20%2B%2015x%20%E5%B0%91%E3%81%AA%E3%81%84%20CVE%20%E4%BB%B6%E6%95%B0%0AAurora%20DSQL%20%E2%86%92%205-9s%20%E5%8F%AF%E7%94%A8%E6%80%A7%E3%80%81active-active%20%E3%83%9E%E3%83%AB%E3%83%81%E3%83%AA%E3%83%BC%E3%82%B8%E3%83%A7%E3%83%B3%E3%80%81%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E3%83%AC%E3%82%B9%E5%88%86%E6%95%A3%20SQL%0ASQLite%20%20%20%20%20%20%E2%86%92%20%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E3%83%97%E3%83%AD%E3%82%BB%E3%82%B9%E4%B8%8D%E8%A6%81%E3%80%81KISS%E3%80%81edge%20%E3%81%A7%20sub-10ms%20read" data-raw-encoding="url"><code>PostgreSQL  → 拡張機能エコシステム (pgvector, PostGIS, TimescaleDB) と SQL 完全準拠
+MySQL       → Oracle バックの商用サポート + HeatWave による分析・GenAI 統合
+MariaDB     → GPLv2 永続保証 + 38% 高速 TPS (公称) + 15x 少ない CVE 件数
+Aurora DSQL → 5-9s 可用性、active-active マルチリージョン、サーバーレス分散 SQL
+SQLite      → サーバープロセス不要、KISS、edge で sub-10ms read</code></pre>
+<hr>
+<h2 id="1-5-db-の理念とミッション">1. 5 DB の理念とミッション</h2>
+<h3 id="1-1-postgresql-ボランティア駆動-標準準拠">1.1 PostgreSQL: 「ボランティア駆動 × 標準準拠」</h3>
+<blockquote>
+<p>&quot;PostgreSQL is a noncommercial, all volunteer, free software project with no formal list of feature requirements required for development.&quot;</p>
+</blockquote>
+<ul><li><p>1986 年 UC Berkeley の POSTGRES プロジェクト発祥</p>
+</li><li><p>ベンダー支配なし、PostgreSQL Global Development Group (PGDG) によるコミュニティガバナンス</p>
+</li><li><p>ANSI SQL 標準への準拠を強く重視 (MERGE, JSON_TABLE, WINDOW 関数等)</p>
+</li><li><p>「全部 SQL でやる」哲学 (拡張機能でベクトル・地理・時系列まで包含)</p>
+</li></ul>
+<h3 id="1-2-mysql-web-のデフォルト-oracle-商用支援">1.2 MySQL: 「Web のデフォルト × Oracle 商用支援」</h3>
+<blockquote>
+<p>&quot;The world&#39;s most popular open source database&quot;</p>
+</blockquote>
+<ul><li><p>1995 年 MySQL AB 創業、2008 Sun 買収、2010 Oracle 傘下</p>
+</li><li><p>Web/LAMP スタックのデフォルト DB として圧倒的シェア</p>
+</li><li><p>Innovation (機能追加重視) + LTS (安定性重視) の 2 軸リリース</p>
+</li><li><p>Enterprise Edition は商用機能 (HeatWave / Audit / TDE 等) を分離</p>
+</li></ul>
+<h3 id="1-3-mariadb-oracle-脱却-gplv2-永続保証">1.3 MariaDB: 「Oracle 脱却 × GPLv2 永続保証」</h3>
+<blockquote>
+<p>&quot;MariaDB Foundation&#39;s governance structure provides a structural guarantee against proprietary re-licensing&quot;</p>
+</blockquote>
+<ul><li><p>2009 年 MySQL 共同創業者 Monty Widenius が Oracle 買収を受けてフォーク</p>
+</li><li><p>MariaDB Foundation (非営利) によるガバナンスで proprietary 化を構造的に阻止</p>
+</li><li><p>11.x で MySQL から独立、独自の Optimizer / Storage Engine</p>
+</li><li><p>「Maria は娘の名前」 = 永続的に GPLv2 を守るという誓い</p>
+</li></ul>
+<h3 id="1-4-amazon-aurora-クラウドネイティブ-rdb">1.4 Amazon Aurora: 「クラウドネイティブ RDB」</h3>
+<blockquote>
+<p>&quot;Built for the cloud — separating compute from storage with 6-way replication&quot;</p>
+</blockquote>
+<ul><li><p>2015 年 AWS が re:Invent で発表</p>
+</li><li><p>MySQL/PostgreSQL ワイヤープロトコル互換 + 独自のクラウドネイティブストレージ</p>
+</li><li><p>ストレージは 3 AZ × 2 = 6 way 複製、ログベース I/O</p>
+</li><li><p>DSQL (2024) で分散 SQL に進出、Spanner 系へ対抗</p>
+</li></ul>
+<h3 id="1-5-sqlite-kiss-ファイル代替">1.5 SQLite: 「KISS × ファイル代替」</h3>
+<blockquote>
+<p>&quot;Small. Fast. Reliable. Choose any three.&quot;
+&quot;SQLite competes with fopen() — not with client/server databases&quot;</p>
+</blockquote>
+<ul><li><p>2000 年 D. Richard Hipp 開発、Public Domain</p>
+</li><li><p>パブリックドメイン (商用利用完全自由)</p>
+</li><li><p>サーバープロセス・設定不要、1 ファイルで完結</p>
+</li><li><p>世界で最も多くデプロイされた DB (Android/iOS/Chrome/Firefox/航空機システム等)</p>
+</li></ul>
+<h3 id="1-6-各-db-の哲学比較">1.6 各 DB の哲学比較</h3>
+<table class="rich-table"><thead><tr><th>DB</th><th>ガバナンス</th><th>ライセンス</th><th>開発主体</th><th>開発リズム</th></tr></thead><tbody><tr><td>PostgreSQL</td><td>コミュニティ (PGDG)</td><td>PostgreSQL License (BSD 系)</td><td>ボランティア + Vendor 貢献</td><td>年次メジャー + 四半期マイナー</td></tr><tr><td>MySQL</td><td>Oracle 単独</td><td>GPLv2 + 商用</td><td>Oracle 社員中心</td><td>Innovation 四半期 / LTS 年次</td></tr><tr><td>MariaDB</td><td>MariaDB Foundation</td><td>GPLv2 (永続保証)</td><td>MariaDB Corp + Foundation</td><td>半年ごと安定リリース</td></tr><tr><td>Aurora</td><td>AWS 単独</td><td>AWS Proprietary</td><td>AWS 社員</td><td>AWS の独自サイクル</td></tr><tr><td>SQLite</td><td>D. Richard Hipp + 少数</td><td>Public Domain</td><td>Hipp + Hwaci 社</td><td>自由 (頻度高い)</td></tr></tbody></table>
+<hr>
+<h2 id="2-全体マップ">2. 全体マップ</h2>
+<h3 id="2-1-rdb-エコシステム俯瞰-mindmap">2.1 RDB エコシステム俯瞰 (mindmap)</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/rdb-2026-05-postgresql-mysql-mariadb-aurora-sqlite/cdb19412-02-1-ecosystem-mindmap.png" alt="RDB エコシステム俯瞰 — PostgreSQL/MySQL/MariaDB/Aurora/SQLite の派生・マネージド・サーバーレス・エッジ系列マップ" width="1536" height="864">
+
+<h3 id="2-2-クライアント-サーバー型-vs-組込み型">2.2 クライアント・サーバー型 vs 組込み型</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/rdb-2026-05-postgresql-mysql-mariadb-aurora-sqlite/7cef0f1c-02-2-server-vs-embedded.png" alt="クライアント・サーバー型 (PG/MySQL/MariaDB/Aurora) と組込み型 (SQLite) の構造比較" width="1536" height="864">
+
+<hr>
+<h2 id="3-デプロイ形態と運用モデル">3. デプロイ形態と運用モデル</h2>
+<h3 id="3-1-デプロイ形態比較表">3.1 デプロイ形態比較表</h3>
+<table class="rich-table"><thead><tr><th>形態</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>Self-host (オンプレ・VM)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>不可 (AWS専用)</td><td>利用可</td></tr><tr><td>Docker / k8s</td><td>利用可</td><td>利用可</td><td>利用可</td><td>不可</td><td>利用可</td></tr><tr><td>マネージド (主要クラウド)</td><td>RDS / Cloud SQL / Supabase / Neon</td><td>RDS / Cloud SQL / HeatWave</td><td>RDS / SkySQL</td><td>RDS Aurora 系</td><td>(該当なし)</td></tr><tr><td>サーバーレス</td><td>Aurora DSQL / Neon</td><td>Aurora Serverless v2 (MySQL)</td><td>不可</td><td>Aurora Serverless v2 / DSQL</td><td>(該当なし)</td></tr><tr><td>組込み (in-process)</td><td>不可</td><td>不可</td><td>不可</td><td>不可</td><td>利用可</td></tr><tr><td>Edge 配信</td><td>制限あり (Neon Edge)</td><td>不可</td><td>不可</td><td>制限あり (DSQL マルチリージョン)</td><td>利用可 (D1 / Turso / LiteFS)</td></tr></tbody></table>
+<h3 id="3-2-ライセンス比較表">3.2 ライセンス比較表</h3>
+<table class="rich-table"><thead><tr><th>DB</th><th>ライセンス</th><th>商用利用</th><th>プロプライエタリ再配布</th><th>フォーク自由度</th></tr></thead><tbody><tr><td>PostgreSQL</td><td>PostgreSQL License (BSD 系)</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>MySQL Community</td><td>GPLv2</td><td>利用可</td><td>制限あり (GPL 影響)</td><td>利用可</td></tr><tr><td>MySQL Enterprise</td><td>商用</td><td>利用可 (有償)</td><td>利用可 (有償)</td><td>不可</td></tr><tr><td>MariaDB Community</td><td>GPLv2 (永続保証)</td><td>利用可</td><td>制限あり</td><td>利用可</td></tr><tr><td>Aurora</td><td>AWS Service Terms</td><td>利用可 (AWS 経由のみ)</td><td>不可</td><td>不可</td></tr><tr><td>SQLite</td><td>Public Domain</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<h3 id="3-3-料金モデル軸">3.3 料金モデル軸</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/rdb-2026-05-postgresql-mysql-mariadb-aurora-sqlite/1275827a-03-3-pricing-axis.png" alt="料金軸の違い — 自前固定 / インスタンス時間 / ACU 秒 / DPU per query / リクエスト課金" width="1536" height="864">
+
+<hr>
+<h2 id="4-機能カタログ-機能-db-マトリクス">4. 機能カタログ (機能 × DB マトリクス)</h2>
+<h3 id="4-1-データ型">4.1 データ型</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora MySQL</th><th>Aurora PG</th><th>SQLite</th></tr></thead><tbody><tr><td>JSON</td><td>JSON + JSONB (バイナリ)</td><td>JSON (バイナリ)</td><td>JSON (= LONGTEXT 互換)</td><td>JSON (バイナリ)</td><td>JSON + JSONB</td><td>JSON1 拡張</td></tr><tr><td>UUID</td><td>利用可 (gen_random_uuid)</td><td>UUID() 関数のみ、型なし</td><td>UUID 型あり (10.7+)</td><td>MySQL と同等</td><td>PG と同等</td><td>TEXT/BLOB で代替</td></tr><tr><td>Array</td><td>利用可 (任意型の配列)</td><td>不可 (JSON で代替)</td><td>不可</td><td>不可</td><td>利用可</td><td>不可</td></tr><tr><td>Geometry</td><td>PostGIS 拡張で完全対応</td><td>制限あり (Spatial)</td><td>制限あり (Spatial)</td><td>制限あり</td><td>PostGIS 利用可</td><td>SpatiaLite 拡張</td></tr><tr><td>Vector (AI)</td><td>pgvector で完全対応</td><td>HeatWave Vector で対応</td><td>不可 (検討中)</td><td>PG: pgvector / MySQL: 不可</td><td>pgvector 利用可</td><td>sqlite-vec 拡張</td></tr><tr><td>Range 型</td><td>利用可 (int4range 等)</td><td>不可</td><td>不可</td><td>不可</td><td>利用可</td><td>不可</td></tr><tr><td>Enum</td><td>利用可 (CREATE TYPE)</td><td>利用可 (制限あり)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>不可</td></tr></tbody></table>
+<h3 id="4-2-トランザクション-同時実行">4.2 トランザクション・同時実行</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL (InnoDB)</th><th>MariaDB (InnoDB)</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>MVCC</td><td>利用可 (タプル多版)</td><td>利用可 (Undo log 方式)</td><td>利用可</td><td>利用可</td><td>利用可 (WAL モード)</td></tr><tr><td>分離レベル</td><td>4 レベル (RC が既定)</td><td>4 レベル (RR が既定)</td><td>4 レベル</td><td>各互換と同等</td><td>SERIALIZABLE 相当</td></tr><tr><td>Savepoint</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>行ロック</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td><td>制限あり (テーブル単位)</td></tr><tr><td>楽観ロック</td><td>xmin システム列</td><td>バージョン列で実装</td><td>同左</td><td>同左</td><td>rowid で代替</td></tr><tr><td>同時書き込み</td><td>高</td><td>高</td><td>高</td><td>高 (DSQL は分散)</td><td>低 (1 writer / N reader)</td></tr></tbody></table>
+<h3 id="4-3-レプリケーション">4.3 レプリケーション</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>物理レプリケーション</td><td>利用可 (ストリーミング)</td><td>不可 (論理のみ)</td><td>不可</td><td>利用可 (6-way ストレージ)</td><td>LiteFS で対応</td></tr><tr><td>論理レプリケーション</td><td>利用可 (Pub/Sub)</td><td>利用可 (Binlog)</td><td>利用可 (Binlog + GTID)</td><td>利用可</td><td>不可 (Litestream で代替)</td></tr><tr><td>マルチマスター</td><td>BDR 等の拡張</td><td>Group Replication</td><td>Galera Cluster</td><td>DSQL active-active</td><td>Turso で対応</td></tr><tr><td>Logical Slot Failover</td><td>PG17 で利用可</td><td>利用可</td><td>利用可</td><td>マネージド</td><td>不可</td></tr><tr><td>クロスリージョン</td><td>拡張で対応</td><td>拡張で対応</td><td>拡張で対応</td><td>Global Database / DSQL</td><td>Turso Edge replica</td></tr></tbody></table>
+<h3 id="4-4-拡張性-extension">4.4 拡張性 (Extension)</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>拡張機能 (CREATE EXTENSION)</td><td>利用可 (数千)</td><td>制限あり (Component)</td><td>利用可 (Plugin)</td><td>PG 互換系は同等</td><td>利用可 (Loadable)</td></tr><tr><td>Foreign Data Wrapper</td><td>利用可 (FDW)</td><td>FEDERATED Engine</td><td>CONNECT Engine</td><td>利用可</td><td>不可</td></tr><tr><td>カスタム関数 (C/Rust)</td><td>利用可</td><td>UDF</td><td>UDF</td><td>制限あり</td><td>利用可</td></tr><tr><td>カスタム型</td><td>利用可</td><td>不可</td><td>制限あり</td><td>利用可</td><td>不可</td></tr><tr><td>ベクトル拡張</td><td>pgvector</td><td>HeatWave Vector</td><td>検討中</td><td>pgvector (Aurora PG)</td><td>sqlite-vec</td></tr><tr><td>時系列拡張</td><td>TimescaleDB</td><td>不可</td><td>不可</td><td>不可</td><td>不可</td></tr><tr><td>地理空間拡張</td><td>PostGIS</td><td>Spatial (簡易)</td><td>Spatial (簡易)</td><td>PostGIS (Aurora PG)</td><td>SpatiaLite</td></tr></tbody></table>
+<h3 id="4-5-sql-機能">4.5 SQL 機能</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL 8.4+</th><th>MariaDB 11.x</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>CTE (WITH)</td><td>利用可 (再帰含む)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>Window 関数</td><td>利用可 (フル)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>MERGE 文 (SQL:2008)</td><td>利用可 (PG15+)</td><td>利用可 (8.0+ で部分)</td><td>利用可</td><td>利用可</td><td>不可</td></tr><tr><td>JSON_TABLE</td><td>利用可 (PG17+)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>不可</td></tr><tr><td>共通 SQL 標準準拠度</td><td>高</td><td>中</td><td>中</td><td>各互換に準じる</td><td>低 (簡略)</td></tr><tr><td>ストアドプロシージャ</td><td>PL/pgSQL + 多言語 (PL/Python, PL/R 等)</td><td>SQL/PSM</td><td>SQL/PSM + Oracle PL/SQL モード</td><td>各互換と同等</td><td>不可</td></tr><tr><td>マテリアライズドビュー</td><td>利用可</td><td>不可</td><td>不可</td><td>PG: 利用可 / MySQL: 不可</td><td>不可</td></tr></tbody></table>
+<h3 id="4-6-パフォーマンス機能">4.6 パフォーマンス機能</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>パーティショニング</td><td>利用可 (宣言的)</td><td>利用可</td><td>利用可</td><td>同左</td><td>不可</td></tr><tr><td>インデックス種別</td><td>B-tree / Hash / GIN / GiST / BRIN / SP-GiST / HNSW (pgvector)</td><td>B-tree / Hash / FullText</td><td>B-tree / Hash / FullText / RTree</td><td>互換に準じる + 内部最適化</td><td>B-tree のみ</td></tr><tr><td>並列クエリ</td><td>利用可 (PG10+)</td><td>制限あり (8.0+ で一部)</td><td>制限あり</td><td>高度な並列</td><td>不可</td></tr><tr><td>並列バキューム</td><td>利用可</td><td>(該当なし)</td><td>(該当なし)</td><td>(該当なし)</td><td>(該当なし)</td></tr><tr><td>列指向ストレージ</td><td>拡張 (Citus 等)</td><td>HeatWave (OCI のみ)</td><td>ColumnStore</td><td>(該当なし)</td><td>不可</td></tr><tr><td>自動チューニング</td><td>制限あり</td><td>Optimizer ヒント</td><td>Optimizer ヒント</td><td>高度な自動チューニング</td><td>不可</td></tr></tbody></table>
+<h3 id="4-7-運用機能">4.7 運用機能</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>物理バックアップ</td><td>pg_basebackup / 拡張</td><td>XtraBackup / mysqldump</td><td>mariabackup</td><td>自動 (S3)</td><td>ファイルコピー</td></tr><tr><td>PITR (Point-In-Time-Recovery)</td><td>WAL アーカイブ</td><td>Binlog から</td><td>Binlog から</td><td>自動 (5 分粒度)</td><td>WAL ファイル</td></tr><tr><td>増分バックアップ</td><td>PG17 で標準対応</td><td>XtraBackup 拡張</td><td>mariabackup 拡張</td><td>自動 (継続的)</td><td>不可</td></tr><tr><td>オンライン DDL</td><td>制限あり (拡張で改善)</td><td>INSTANT/INPLACE</td><td>INSTANT/INPLACE</td><td>同左</td><td>制限あり</td></tr><tr><td>pg_stat_statements 等の監視</td><td>利用可</td><td>Performance Schema</td><td>Performance Schema</td><td>CloudWatch 統合</td><td>EXPLAIN のみ</td></tr></tbody></table>
+<h3 id="4-8-セキュリティ">4.8 セキュリティ</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>RBAC (ロール)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td><td>不可 (アプリ層)</td></tr><tr><td>Row Level Security</td><td>利用可</td><td>不可</td><td>不可</td><td>PG: 利用可 / MySQL: 不可</td><td>不可</td></tr><tr><td>TDE (透過的暗号化)</td><td>拡張 / マネージドで対応</td><td>Enterprise / RDS</td><td>MariaDB 単体で対応</td><td>利用可</td><td>拡張 (SEE)</td></tr><tr><td>監査ログ</td><td>拡張 (pgaudit)</td><td>Enterprise Audit</td><td>MariaDB Audit Plugin</td><td>CloudTrail / Audit</td><td>不可 (アプリ層)</td></tr><tr><td>動的データマスキング</td><td>拡張</td><td>Enterprise / 9.x</td><td>利用可</td><td>同左</td><td>不可</td></tr><tr><td>IAM 認証</td><td>マネージドで対応</td><td>同左</td><td>同左</td><td>利用可</td><td>(該当なし)</td></tr></tbody></table>
+<h3 id="4-9-ai-ベクトル機能">4.9 AI / ベクトル機能</h3>
+<table class="rich-table"><thead><tr><th>機能</th><th>PostgreSQL</th><th>MySQL</th><th>MariaDB</th><th>Aurora</th><th>SQLite</th></tr></thead><tbody><tr><td>ベクトル型</td><td>pgvector で完全対応 (halfvec/sparsevec/bit)</td><td>HeatWave Vector</td><td>検討中</td><td>Aurora PG: pgvector / MySQL: 不可</td><td>sqlite-vec</td></tr><tr><td>ANN 検索</td><td>HNSW / IVFFlat / DiskANN</td><td>HeatWave 自動 Vector Index</td><td>不可</td><td>同左</td><td>sqlite-vec で対応</td></tr><tr><td>埋め込み生成</td><td>外部 API 呼び出し</td><td>HeatWave LLM 内蔵</td><td>不可</td><td>Bedrock 連携</td><td>外部 API</td></tr><tr><td>RAG 統合</td><td>LangChain / LlamaIndex で対応</td><td>HeatWave GenAI 統合</td><td>不可</td><td>Bedrock RAG</td><td>外部</td></tr><tr><td>In-DB LLM</td><td>不可</td><td>HeatWave (Llama 3 等)</td><td>不可</td><td>不可</td><td>不可</td></tr></tbody></table>
+<hr>
+<h2 id="5-プラン-機能-早見表-主要サービス形態-一覧">5. プラン × 機能 早見表 (主要サービス形態 一覧)</h2>
+<blockquote>
+<p>縦軸 = 実際の提供形態、横軸 = 主要機能カテゴリ。<strong>OSS の素の機能 + マネージド固有機能</strong> の両方を横断比較する。</p>
+</blockquote>
+<table class="rich-table"><thead><tr><th>サービス形態</th><th>デプロイ</th><th>ベクトル</th><th>自動スケール</th><th>マルチリージョン</th><th>サーバーレス</th><th>増分バックアップ</th><th>料金粒度</th></tr></thead><tbody><tr><td>PostgreSQL 17 self-host</td><td>自前</td><td>pgvector で対応</td><td>不可</td><td>拡張 (BDR/Citus)</td><td>不可</td><td>利用可 (PG17 標準)</td><td>インフラ固定費</td></tr><tr><td>AWS RDS for PostgreSQL</td><td>マネージド</td><td>pgvector</td><td>Storage 自動</td><td>Read Replica</td><td>不可</td><td>自動</td><td>インスタンス時間</td></tr><tr><td>Aurora PostgreSQL</td><td>マネージド</td><td>pgvector</td><td>Storage 自動</td><td>Global Database</td><td>Serverless v2 で対応</td><td>自動 (継続)</td><td>ACU 秒 or インスタンス時間</td></tr><tr><td><strong>Aurora DSQL</strong></td><td>サーバーレス分散</td><td>pgvector</td><td>完全自動</td><td>Active-active 5-9s</td><td>利用可</td><td>自動</td><td>DPU per query</td></tr><tr><td>Neon</td><td>サーバーレス</td><td>pgvector</td><td>branch / autoscale</td><td>利用可</td><td>利用可</td><td>自動</td><td>計算 + ストレージ</td></tr><tr><td>Supabase</td><td>マネージド</td><td>pgvector</td><td>利用可</td><td>制限あり</td><td>制限あり</td><td>自動</td><td>プラン固定</td></tr><tr><td>MySQL 8.4 / 9.7 self-host</td><td>自前</td><td>不可 (Community)</td><td>不可</td><td>拡張</td><td>不可</td><td>XtraBackup</td><td>インフラ固定費</td></tr><tr><td>AWS RDS for MySQL</td><td>マネージド</td><td>不可</td><td>Storage 自動</td><td>Read Replica</td><td>不可</td><td>自動</td><td>インスタンス時間</td></tr><tr><td>Aurora MySQL</td><td>マネージド</td><td>不可</td><td>Storage 自動</td><td>Global Database</td><td>Serverless v2 で対応</td><td>自動</td><td>ACU 秒 or インスタンス時間</td></tr><tr><td><strong>MySQL HeatWave (OCI)</strong></td><td>マネージド</td><td>HeatWave Vector</td><td>利用可</td><td>利用可</td><td>自動</td><td>自動</td><td>OCPU 時間 ($0.3536〜)</td></tr><tr><td>MariaDB 11.x self-host</td><td>自前</td><td>不可</td><td>不可</td><td>Galera/MaxScale</td><td>不可</td><td>mariabackup</td><td>インフラ固定費</td></tr><tr><td>SkySQL</td><td>マネージド</td><td>不可</td><td>利用可</td><td>利用可</td><td>不可</td><td>自動</td><td>プラン固定</td></tr><tr><td>AWS RDS for MariaDB</td><td>マネージド</td><td>不可</td><td>Storage 自動</td><td>Read Replica</td><td>不可</td><td>自動</td><td>インスタンス時間</td></tr><tr><td>SQLite (local file)</td><td>ローカル</td><td>sqlite-vec</td><td>(該当なし)</td><td>(該当なし)</td><td>(該当なし)</td><td>ファイルコピー</td><td>無料</td></tr><tr><td><strong>Cloudflare D1</strong></td><td>エッジ分散</td><td>制限あり</td><td>自動</td><td>利用可 (グローバル)</td><td>利用可</td><td>自動</td><td>リクエスト数 + ストレージ</td></tr><tr><td><strong>Turso (libSQL)</strong></td><td>エッジ分散</td><td>利用可 (libsql-vector)</td><td>利用可</td><td>Embedded replicas</td><td>利用可</td><td>自動</td><td>リクエスト数 + ストレージ</td></tr><tr><td>LiteFS (Fly.io)</td><td>エッジ分散</td><td>sqlite-vec</td><td>利用可</td><td>利用可</td><td>制限あり</td><td>自動</td><td>Fly.io 計算</td></tr></tbody></table>
+<hr>
+<h2 id="6-料金体系の詳細">6. 料金体系の詳細</h2>
+<h3 id="6-1-oss-自己ホスト">6.1 OSS 自己ホスト</h3>
+<table class="rich-table"><thead><tr><th>DB</th><th>ライセンス料</th><th>必要なもの</th></tr></thead><tbody><tr><td>PostgreSQL</td><td>0 円</td><td>ハードウェア + 運用人件費</td></tr><tr><td>MySQL Community</td><td>0 円</td><td>同上</td></tr><tr><td>MariaDB</td><td>0 円</td><td>同上</td></tr><tr><td>SQLite</td><td>0 円</td><td>アプリプロセス内で動く (追加コスト 0)</td></tr></tbody></table>
+<h3 id="6-2-マネージド主要料金">6.2 マネージド主要料金</h3>
+<table class="rich-table"><thead><tr><th>サービス</th><th>料金単位</th><th>例 (US East)</th></tr></thead><tbody><tr><td>AWS RDS for PostgreSQL</td><td>インスタンス時間 + ストレージ</td><td>db.t4g.medium $0.073/h + gp3 $0.115/GB-month</td></tr><tr><td>AWS RDS for MySQL</td><td>同上</td><td>同上</td></tr><tr><td>Aurora MySQL/PG (provisioned)</td><td>インスタンス時間 + I/O or I/O-Optimized</td><td>db.r7g.large $0.29/h + I/O 課金</td></tr><tr><td><strong>Aurora Serverless v2</strong></td><td>ACU 秒</td><td>$0.12/ACU-h (1 ACU ≒ 2 GiB RAM)</td></tr><tr><td><strong>Aurora DSQL</strong></td><td>DPU + ストレージ</td><td>$8/M DPU + $0.33/GB-month、月 100K DPU + 1GB 無料</td></tr><tr><td>MySQL HeatWave (OCI)</td><td>OCPU 時間</td><td>$0.3536/h〜</td></tr><tr><td>Neon</td><td>計算 + ストレージ</td><td>Free / Pro $19/月〜</td></tr><tr><td>Supabase</td><td>プラン固定</td><td>Free / Pro $25/月〜</td></tr><tr><td>Cloudflare D1</td><td>リクエスト + ストレージ</td><td>25 M read/月無料、500 K write/月無料</td></tr><tr><td>Turso</td><td>リクエスト + ストレージ</td><td>Free 9 GB / Pro $29/月</td></tr></tbody></table>
+<h3 id="6-3-競合との料金構造の違い">6.3 競合との料金構造の違い</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/rdb-2026-05-postgresql-mysql-mariadb-aurora-sqlite/10474abb-06-3-cost-optimization.png" alt="コスト最適化の判断フロー — スパイク / アイドル / グローバル / 定常 / 読み中心 で分岐" width="1536" height="864">
+
+<h3 id="6-4-コスト最適化の勘所">6.4 コスト最適化の勘所</h3>
+<ol><li><p><strong>アイドルが長い</strong>: Aurora DSQL (アイドル 0 円) or Neon (スケールゼロ)</p>
+</li><li><p><strong>スパイクが激しい</strong>: Aurora Serverless v2 (秒単位 ACU)</p>
+</li><li><p><strong>定常負荷</strong>: プロビジョンドインスタンス (Serverless より 20-40% 安い)</p>
+</li><li><p><strong>読み 9 割</strong>: Edge SQLite (Turso/D1) で CDN 並のレイテンシ</p>
+</li><li><p><strong>分析併用</strong>: MySQL HeatWave (OLTP + OLAP + AI 統合で ETL 不要)</p>
+</li><li><p><strong>ライセンスコスト警戒</strong>: MariaDB (GPLv2 永続) or PostgreSQL (BSD 系)</p>
+</li></ol>
+<hr>
+<h2 id="7-howto-どういう場合にどれを選ぶか">7. HowTo: どういう場合にどれを選ぶか</h2>
+<h3 id="7-1-ユースケース別-decision-matrix">7.1 ユースケース別 Decision Matrix</h3>
+<table class="rich-table"><thead><tr><th>ユースケース</th><th>第一候補</th><th>第二候補</th><th>理由</th></tr></thead><tbody><tr><td><strong>スマホアプリのローカル DB</strong></td><td>SQLite</td><td>(該当なし)</td><td>サーバープロセス不要、組込</td></tr><tr><td><strong>オフライン対応 PWA / Local-first</strong></td><td>SQLite + Turso</td><td>Cloudflare D1</td><td>Embedded replica で 0ms read</td></tr><tr><td><strong>CLI ツール / デスクトップアプリ</strong></td><td>SQLite</td><td>(該当なし)</td><td>配布ファイル 1 個</td></tr><tr><td><strong>WordPress / LAMP / EC</strong></td><td>MySQL 8.4 LTS</td><td>MariaDB 11.x</td><td>互換性とエコシステム</td></tr><tr><td><strong>既存 MySQL からの脱却 (Oracle 回避)</strong></td><td>MariaDB 11.x</td><td>PostgreSQL</td><td>ほぼドロップイン互換</td></tr><tr><td><strong>地理空間 (GIS) アプリ</strong></td><td>PostgreSQL + PostGIS</td><td>(該当なし)</td><td>業界標準、300+ 空間関数</td></tr><tr><td><strong>高度な SQL / 解析 SQL</strong></td><td>PostgreSQL</td><td>MariaDB</td><td>ウィンドウ・MERGE・CTE 完全対応</td></tr><tr><td><strong>RAG / ベクトル検索 (AI)</strong></td><td>PostgreSQL + pgvector</td><td>MySQL HeatWave</td><td>既存 RDB に統合可能</td></tr><tr><td><strong>グローバル マルチリージョン書込み</strong></td><td>Aurora DSQL</td><td>(該当なし)</td><td>active-active 5-9s 可用性</td></tr><tr><td><strong>トラフィック スパイク (キャンペーン等)</strong></td><td>Aurora Serverless v2</td><td>Neon</td><td>ACU 秒課金で追従</td></tr><tr><td><strong>AWS 完結のスタートアップ</strong></td><td>Aurora Serverless v2 / DSQL</td><td>RDS</td><td>マネージド + 弾力性</td></tr><tr><td><strong>オンプレ中心の大企業</strong></td><td>PostgreSQL / MariaDB</td><td>(該当なし)</td><td>自己ホスト + GPLv2 安全</td></tr><tr><td><strong>分析 + トランザクション統合</strong></td><td>MySQL HeatWave</td><td>PostgreSQL + Citus</td><td>HTAP、ETL 不要</td></tr><tr><td><strong>In-Database LLM</strong></td><td>MySQL HeatWave (GenAI)</td><td>(該当なし)</td><td>Llama 3 内蔵</td></tr><tr><td><strong>時系列データ (IoT/メトリクス)</strong></td><td>PostgreSQL + TimescaleDB</td><td>(該当なし)</td><td>圧縮 + 連続集計</td></tr><tr><td><strong>Edge / CDN 配信 (読み中心)</strong></td><td>Cloudflare D1 / Turso</td><td>LiteFS</td><td>Sub-10ms グローバル read</td></tr><tr><td><strong>Salesforce 連携バッファ DB</strong></td><td>Aurora PostgreSQL</td><td>RDS for PostgreSQL</td><td>マネージド + 高可用</td></tr><tr><td><strong>コスト最小の MVP</strong></td><td>SQLite (Turso Free)</td><td>Supabase Free / Neon Free</td><td>0 円スタート</td></tr><tr><td><strong>ベンダーロックイン回避</strong></td><td>PostgreSQL</td><td>MariaDB</td><td>標準 SQL + OSS</td></tr><tr><td><strong>PCI DSS / SOC2 要件</strong></td><td>RDS / Aurora / Supabase</td><td>(要件依存)</td><td>マネージドで監査統合</td></tr></tbody></table>
+<h3 id="7-2-業務領域別の典型例-classlab-文脈">7.2 業務領域別の典型例 (ClassLab. 文脈)</h3>
+<table class="rich-table"><thead><tr><th>業務領域</th><th>想定 DB</th><th>理由</th></tr></thead><tbody><tr><td>Salesforce 外部キャッシュ / バッファ</td><td>Aurora PostgreSQL</td><td>マネージド + Heroku Connect 互換</td></tr><tr><td>ライフライン契約代行のサブシステム</td><td>RDS for MySQL or Aurora MySQL</td><td>Web 系標準、過去資産流用</td></tr><tr><td>通話ログ・録音メタデータ</td><td>PostgreSQL + TimescaleDB</td><td>時系列大量データ</td></tr><tr><td>エンジニア採用サイトのコンテンツ</td><td>SQLite + Turso or Supabase</td><td>読み中心、低コスト</td></tr><tr><td>AI ナレッジ検索 (RAG)</td><td>PostgreSQL + pgvector</td><td>既存 RDB を流用しつつベクトル拡張</td></tr><tr><td>経費精算・社内 SaaS</td><td>Aurora Serverless v2</td><td>スパイク負荷、夜間アイドル</td></tr><tr><td>モバイルアプリのオフライン DB</td><td>SQLite</td><td>標準、組込</td></tr></tbody></table>
+<hr>
+<h2 id="8-採用判断フロー">8. 採用判断フロー</h2>
+<h3 id="8-1-質問駆動の選定フロー">8.1 質問駆動の選定フロー</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/rdb-2026-05-postgresql-mysql-mariadb-aurora-sqlite/7a7ba75d-08-1-decision-flow.png" alt="DB 採用判断フロー — 質問駆動で 5 系統に振り分け" width="1536" height="864">
+
+<h3 id="8-2-採用適性-quadrant">8.2 採用適性 Quadrant</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/rdb-2026-05-postgresql-mysql-mariadb-aurora-sqlite/f9b4ca03-08-2-quadrant.png" alt="採用適性 Quadrant — 運用負荷と機能リッチさの 2 軸マップ (14 サービス)" width="1536" height="864">
+
+<hr>
+<h2 id="9-classlab-での想定活用ロードマップ-汎用例">9. ClassLab. での想定活用ロードマップ (汎用例)</h2>
+<h3 id="9-1-短期-3ヶ月">9.1 短期 (〜3ヶ月)</h3>
+<table class="rich-table"><thead><tr><th>活用候補</th><th>推奨 DB</th><th>期待効果</th></tr></thead><tbody><tr><td>既存 Salesforce 外部システムの DB 棚卸し</td><td>(現状確認)</td><td>統一基準を持つ</td></tr><tr><td>新規 MVP / 社内ツール</td><td>Supabase / Neon / Turso</td><td>サーバーレスで素早く立ち上げ</td></tr><tr><td>AI ナレッジ検索 PoC</td><td>Postgres + pgvector</td><td>RAG 統合の検証</td></tr><tr><td>経費・申請系のサブシステム</td><td>Aurora Serverless v2 PG</td><td>日中スパイク・夜間アイドル</td></tr></tbody></table>
+<h3 id="9-2-中長期-3-12ヶ月">9.2 中長期 (3〜12ヶ月)</h3>
+<table class="rich-table"><thead><tr><th>活用候補</th><th>推奨 DB</th><th>期待効果</th></tr></thead><tbody><tr><td>ライフライン事業の周辺 DB 統合</td><td>Aurora MySQL</td><td>マネージド + 既存資産</td></tr><tr><td>Salesforce バッファ DB</td><td>Aurora PostgreSQL</td><td>Heroku Connect 連携</td></tr><tr><td>マルチリージョン読み込み (BCP)</td><td>Aurora DSQL</td><td>active-active で災害対策</td></tr><tr><td>通話・録音ログ集積</td><td>PostgreSQL + TimescaleDB</td><td>時系列圧縮で長期保管</td></tr><tr><td>エッジ API のローカルキャッシュ</td><td>Turso / D1</td><td>sub-10ms 応答</td></tr><tr><td>社内 AI チャット (Slack 統合)</td><td>Postgres + pgvector</td><td>既存資料の RAG</td></tr></tbody></table>
+<h3 id="9-3-既存資産棚卸しの観点">9.3 既存資産棚卸しの観点</h3>
+<ul><li><p>Salesforce 内部で完結する場合は RDB 採用不要 → 採用判断の最初の質問</p>
+</li><li><p>既存に RDS for MySQL があるなら、新規も MySQL 系で揃えてオペレーション集約</p>
+</li><li><p>既存に PostgreSQL があるなら、ベクトル・地理空間・時系列で pgvector / PostGIS / TimescaleDB の追加検討</p>
+</li></ul>
+<hr>
+<h2 id="10-公式リファレンス-sources">10. 公式リファレンス &amp; Sources</h2>
+<h3 id="公式ドキュメント">公式ドキュメント</h3>
+<ul><li><p><strong>PostgreSQL</strong>: <a href="https://www.postgresql.org/docs/" target="_blank" rel="noopener noreferrer">https://www.postgresql.org/docs/</a></p>
+</li><li><p><strong>PostgreSQL Roadmap</strong>: <a href="https://www.postgresql.org/developer/roadmap/" target="_blank" rel="noopener noreferrer">https://www.postgresql.org/developer/roadmap/</a></p>
+</li><li><p><strong>MySQL</strong>: <a href="https://dev.mysql.com/doc/" target="_blank" rel="noopener noreferrer">https://dev.mysql.com/doc/</a></p>
+</li><li><p><strong>MySQL HeatWave</strong>: <a href="https://www.mysql.com/products/heatwave/" target="_blank" rel="noopener noreferrer">https://www.mysql.com/products/heatwave/</a></p>
+</li><li><p><strong>MariaDB</strong>: <a href="https://mariadb.org/documentation/" target="_blank" rel="noopener noreferrer">https://mariadb.org/documentation/</a></p>
+</li><li><p><strong>Amazon Aurora</strong>: <a href="https://aws.amazon.com/rds/aurora/" target="_blank" rel="noopener noreferrer">https://aws.amazon.com/rds/aurora/</a></p>
+</li><li><p><strong>Aurora DSQL</strong>: <a href="https://aws.amazon.com/rds/aurora/dsql/" target="_blank" rel="noopener noreferrer">https://aws.amazon.com/rds/aurora/dsql/</a></p>
+</li><li><p><strong>SQLite</strong>: <a href="https://sqlite.org/docs.html" target="_blank" rel="noopener noreferrer">https://sqlite.org/docs.html</a></p>
+</li><li><p><strong>Turso (libSQL)</strong>: <a href="https://docs.turso.tech/" target="_blank" rel="noopener noreferrer">https://docs.turso.tech/</a></p>
+</li><li><p><strong>Cloudflare D1</strong>: <a href="https://developers.cloudflare.com/d1/" target="_blank" rel="noopener noreferrer">https://developers.cloudflare.com/d1/</a></p>
+</li></ul>
+<h3 id="機能別ドキュメント">機能別ドキュメント</h3>
+<ul><li><p>pgvector: <a href="https://github.com/pgvector/pgvector" target="_blank" rel="noopener noreferrer">https://github.com/pgvector/pgvector</a></p>
+</li><li><p>PostGIS: <a href="https://postgis.net/" target="_blank" rel="noopener noreferrer">https://postgis.net/</a></p>
+</li><li><p>TimescaleDB: <a href="https://docs.timescale.com/" target="_blank" rel="noopener noreferrer">https://docs.timescale.com/</a></p>
+</li><li><p>MySQL Releases (Innovation / LTS): <a href="https://dev.mysql.com/doc/refman/9.1/en/mysql-releases.html" target="_blank" rel="noopener noreferrer">https://dev.mysql.com/doc/refman/9.1/en/mysql-releases.html</a></p>
+</li><li><p>MariaDB vs MySQL: <a href="https://mariadb.com/reference/mariadb-vs-mysql-comparison-guide-enterprise-features-security-2026/" target="_blank" rel="noopener noreferrer">https://mariadb.com/reference/mariadb-vs-mysql-comparison-guide-enterprise-features-security-2026/</a></p>
+</li><li><p>Aurora DSQL pricing: <a href="https://aws.amazon.com/rds/aurora/dsql/pricing/" target="_blank" rel="noopener noreferrer">https://aws.amazon.com/rds/aurora/dsql/pricing/</a></p>
+</li></ul>
+<h3 id="参照-web-sources">参照 Web Sources</h3>
+<ul><li><p><a href="https://www.postgresql.org/developer/roadmap/" target="_blank" rel="noopener noreferrer">PostgreSQL: Roadmap</a></p>
+</li><li><p><a href="https://devstarsj.github.io/database/postgresql/backend/2026/03/16/postgresql17-features-you-should-use-2026/" target="_blank" rel="noopener noreferrer">PostgreSQL 17 Features You Should Actually Be Using</a></p>
+</li><li><p><a href="https://dev.mysql.com/doc/refman/9.1/en/mysql-releases.html" target="_blank" rel="noopener noreferrer">MySQL Releases: Innovation and LTS</a></p>
+</li><li><p><a href="https://www.infoq.com/news/2026/05/mysql-97-lts/" target="_blank" rel="noopener noreferrer">MySQL 9.7: First Major LTS Since 8.4 - InfoQ</a></p>
+</li><li><p><a href="https://www.mysql.com/support/eol-notice.html" target="_blank" rel="noopener noreferrer">MySQL EOL Notice</a></p>
+</li><li><p><a href="https://dev.to/piteradyson/mariadb-vs-mysql-8-reasons-developers-are-switching-in-2026-19cg" target="_blank" rel="noopener noreferrer">MariaDB vs MySQL — 8 reasons developers are switching in 2026</a></p>
+</li><li><p><a href="https://mariadb.com/reference/mariadb-vs-mysql-comparison-guide-enterprise-features-security-2026/" target="_blank" rel="noopener noreferrer">MariaDB vs MySQL Comparison Guide 2026</a></p>
+</li><li><p><a href="https://aws.amazon.com/rds/aurora/dsql/pricing/" target="_blank" rel="noopener noreferrer">Amazon Aurora DSQL Pricing</a></p>
+</li><li><p><a href="https://www.dash0.com/knowledge/aws-aurora-serverless" target="_blank" rel="noopener noreferrer">Aurora Serverless v2: Features and Pricing - Dash0</a></p>
+</li><li><p><a href="https://sqlite.org/whentouse.html" target="_blank" rel="noopener noreferrer">SQLite: Appropriate Uses For SQLite</a></p>
+</li><li><p><a href="https://dev.to/pockit_tools/the-sqlite-renaissance-why-the-worlds-most-deployed-database-is-taking-over-production-in-2026-3jcc" target="_blank" rel="noopener noreferrer">The SQLite Renaissance 2026</a></p>
+</li><li><p><a href="https://dev.to/dataformathub/distributed-sqlite-why-libsql-and-turso-are-the-new-standard-in-2026-58fk" target="_blank" rel="noopener noreferrer">Distributed SQLite: Why LibSQL and Turso are the New Standard in 2026</a></p>
+</li><li><p><a href="https://www.postgresql.org/about/news/pgvector-070-released-2852/" target="_blank" rel="noopener noreferrer">pgvector 0.7.0 Released - PostgreSQL News</a></p>
+</li><li><p><a href="https://blogs.oracle.com/mysql/introducing-vector-store-and-generative-ai-in-mysql-heatwave" target="_blank" rel="noopener noreferrer">Introducing Vector Store and Generative AI in MySQL HeatWave</a></p>
+</li></ul>
+<hr>
+<blockquote>
+<p>本ドキュメントは ClassLab. システム事業部の RDB 採用判断資料として 2026-05-25 時点で作成。
+各 DB の最新情報は公式ドキュメントを必ず参照のこと。</p>
+</blockquote>

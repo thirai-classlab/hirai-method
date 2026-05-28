@@ -1,0 +1,184 @@
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/0606be48-ch11-hero.png" alt="" width="1536" height="864">
+
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p><strong>構成要素 vs 設計パターン</strong> の違いを理解する</p>
+</li><li><p>12パターンを覚えて、設計時にチェックリストとして使える</p>
+</li><li><p>業務シナリオに対応するパターンを選べる</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約60分</strong></p>
+<hr>
+<h2 id="1-中身-と-組み立て方-の違い">1. 「中身」と「組み立て方」の違い</h2>
+<table class="rich-table"><thead><tr><th>観点</th><th>例</th></tr></thead><tbody><tr><td><strong>構成要素</strong>(中身)</td><td>ツール、コンテキスト、スキル、フック…(<a href="/articles/claude-code-10-harness-design">第10回</a>)</td></tr><tr><td><strong>設計パターン</strong>(組み立て方)</td><td>連続命令ファイル、フォークジョイン並列、漸進的ツール拡張…(本章)</td></tr></tbody></table>
+<p>レゴで言うとですね：</p>
+<ul><li><p><strong>構成要素</strong> = どんなブロックがあるか(パーツのカタログ)</p>
+</li><li><p><strong>設計パターン</strong> = どう組み立てるか(説明書)</p>
+</li></ul>
+<p>ぶっちゃけ、ブロックだけ眺めてても何も建ちません。説明書(レシピ集)があってはじめて、お城になったり宇宙船になったりするんですよ。この章はそのレシピ集です。</p>
+<p>これらは Claude Code のソースコード解析から抽出された <strong>設計思想</strong>(エージェントハーネスを組み立てるときの考え方)です。Anthropic の哲学であり、ChatGPT などの他のエージェントツールにも応用可能な汎用パターンになっています。</p>
+<hr>
+<h2 id="2-12パターンの全体マップ">2. 12パターンの全体マップ</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/f6d52b20-ch11-m1.png" alt="" width="1536" height="864">
+
+<hr>
+<h2 id="3-カテゴリ1-記憶と文脈">3. カテゴリ1:記憶と文脈</h2>
+<h3 id="1-連続命令ファイルパターン">#1 連続命令ファイルパターン</h3>
+<p><strong>何を解決するか</strong>:プロジェクト固有のルールを毎回指示しなくて済むようにする</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/d46e35cc-ch11-m2.png" alt="" width="1536" height="864">
+
+<p><strong>実装</strong>:プロジェクトルートに <code class="rich-inline-code">CLAUDE.md</code> を置くだけ。これだけです。</p>
+<p><strong>ベストプラクティス</strong>:</p>
+<ul><li><p>✅ ビルド/テスト/Lint(コード品質チェック)コマンド</p>
+</li><li><p>✅ 命名規則・アーキテクチャ判断</p>
+</li><li><p>✅ レビューチェックリスト</p>
+</li><li><p>❌ 一回限りの事情(PR説明文へ)</p>
+</li></ul>
+<p><strong>注意点</strong>:</p>
+<ul><li><p>必ず守ってくれるわけではない(プロンプトベースのお願いなので)</p>
+</li><li><p>メンテナンスを怠ると <strong>古いルールが残る</strong> → 精度低下。実はね、これが一番ありがちな落とし穴なんですよ</p>
+</li></ul>
+<hr>
+<h3 id="2-スコープ付きコンテキストアセンブリ">#2 スコープ付きコンテキストアセンブリ</h3>
+<p><strong>何を解決するか</strong>:組織共通ルールと個人カスタマイズの両立</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/64a52f94-ch11-m3.png" alt="" width="1536" height="864">
+
+<p><strong>実装</strong>:</p>
+<ul><li><p>インポート構文(別ファイル取り込み) <code class="rich-inline-code">@import other.md</code></p>
+</li><li><p>ポインター(「詳細は docs/auth.md」)</p>
+</li><li><p>階層的スキル</p>
+</li></ul>
+<p><strong>ベストプラクティス</strong>:</p>
+<ul><li><p>各レイヤー(層)は <strong>痩せている</strong> こと</p>
+</li><li><p>上位ほど抽象度が高く、下位ほど具体に</p>
+</li></ul>
+<p>会社共通のドレスコードと、自分の私服をどう混ぜるか、みたいな話ですね。土台は会社、上に個性を乗せていくイメージです。</p>
+<hr>
+<h3 id="3-階層型メモリパターン">#3 階層型メモリパターン</h3>
+<p><strong>何を解決するか</strong>:セッションを跨いで学習を引き継ぐ</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/80537f5f-ch11-m4.png" alt="" width="1536" height="864">
+
+<p><strong>実装</strong>:自動メモリ機能 + <code class="rich-inline-code">/memory</code> コマンド</p>
+<p><strong>注意点</strong>:</p>
+<ul><li><p><strong>ノイズが溜まりやすい</strong> ので定期的に整理してください</p>
+</li><li><p>不要な学習を消すのは現状人手。実家の物置と同じで、ほっとくと勝手に増えるんですよね</p>
+</li></ul>
+<hr>
+<h3 id="4-autodream-夢の統合-パターン-将来機能">#4 AutoDream(夢の統合)パターン ※将来機能</h3>
+<p><strong>何を解決するか</strong>:メモリの整理・重複排除を自動化</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/2cb47a1c-ch11-m5.png" alt="" width="1536" height="864">
+
+<p><strong>現状</strong>:<code class="rich-inline-code">/memory</code> で <code class="rich-inline-code">OFF / Never</code> として機能の存在のみ確認可能。実装は未公開です。</p>
+<p>人間が睡眠中に記憶を整理するメカニズムをエージェントにも持たせよう、というアイデアなんですよ。エージェントも夜中に夢を見て頭の中を片付ける、ロマンがありますよね。</p>
+<hr>
+<h2 id="4-カテゴリ2-ワークフローとオーケストレーション-全体の段取り">4. カテゴリ2:ワークフローとオーケストレーション(全体の段取り)</h2>
+<h3 id="5-探索計画実行のループパターン">#5 探索計画実行のループパターン</h3>
+<p><strong>何を解決するか</strong>:複雑タスクを <strong>計画→生成→評価</strong> に分けて精度UP</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/570588c3-ch11-m6.png" alt="" width="1536" height="864">
+
+<p>これ、軍事で言う「<strong>偵察→作戦→突入</strong>」みたいな流れですね。いきなり突っ込まずに、まず下調べして、計画立てて、それから動く。そして第三者がチェックする。</p>
+<p><strong>ポイント</strong>:</p>
+<ul><li><p><strong>生成と評価は別エージェント</strong>(自己評価は甘くなる。テストの自己採点が高めになるアレと一緒です)</p>
+</li><li><p>Plan Mode → 実装 → レビュー専用エージェントが理想</p>
+</li></ul>
+<hr>
+<h3 id="6-コンテキスト分離型サブエージェントパターン">#6 コンテキスト分離型サブエージェントパターン</h3>
+<p><strong>何を解決するか</strong>:直列実行(順番に処理)で責務分離</p>
+<p>各サブエージェントが <strong>独立したコンテキスト</strong> で作業し、親はオーケストレーション(全体の段取り)だけに集中。<strong>「会議に呼ばずに別室で資料調査だけ頼む」</strong> スタイルですね。</p>
+<p>→ <a href="/articles/claude-code-06-subagents">第6回</a>で詳述</p>
+<hr>
+<h3 id="7-フォークジョイン並列処理パターン">#7 フォークジョイン並列処理パターン</h3>
+<p><strong>何を解決するか</strong>:独立タスクを並列実行で高速化</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/e71f619d-ch11-m7.png" alt="" width="1536" height="864">
+
+<p><strong>フォークジョイン</strong>(分担して作業し、最後に集約するパターン)は、<strong>チームで分業して、最後にホチキスで留める</strong> イメージなんですよ。</p>
+<p><strong>実装</strong>:<code class="rich-inline-code">/batch</code> コマンド or 手動で <code class="rich-inline-code">Task</code> を複数並列起動</p>
+<p><strong>適用例</strong>:</p>
+<ul><li><p>20ファイルの一括翻訳</p>
+</li><li><p>多言語対応</p>
+</li><li><p>大規模リファクタリング(コードの整理・書き直し)</p>
+</li></ul>
+<hr>
+<h2 id="5-カテゴリ3-ツールと権限">5. カテゴリ3:ツールと権限</h2>
+<h3 id="8-漸進的ツール拡張パターン">#8 漸進的ツール拡張パターン</h3>
+<p><strong>何を解決するか</strong>:ツール過多による精度低下を防ぐ</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/f09848cc-ch11-m8.png" alt="" width="1536" height="864">
+
+<p>最初から道具箱パンパンにせず、<strong>必要になったら道具を足す</strong>、というスタイル。みんな同じ罠にハマるんですが、ツール盛りすぎると逆に Claude が迷子になるんですよ。</p>
+<p><strong>ベストプラクティス</strong>:</p>
+<ul><li><p>最初は <strong>20個未満</strong> のツールで始める</p>
+</li><li><p>増えてきたら <strong>不要なMCP(外部ツール接続規格)を外す</strong></p>
+</li><li><p>スキル化して on-demand(必要なときだけ呼び出し)に</p>
+</li></ul>
+<hr>
+<h3 id="9-リスク分類モード-オートモード-パターン">#9 リスク分類モード(オートモード)パターン</h3>
+<p><strong>何を解決するか</strong>:安全な操作は自動・危険なものは確認</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/5c540889-ch11-m9.png" alt="" width="1536" height="864">
+
+<p><strong>実装</strong>:<code class="rich-inline-code">settings.json</code> の <code class="rich-inline-code">permissions.allow / ask / deny</code></p>
+<p>信号機みたいなもので、青(自動)・黄(確認)・赤(ブロック)に分けて運用する感じですね。</p>
+<hr>
+<h3 id="10-単一目的ツール設計パターン">#10 単一目的ツール設計パターン</h3>
+<p><strong>何を解決するか</strong>:1つのツールに複数機能を持たせると誤用が増える</p>
+<table class="rich-table"><thead><tr><th>アンチ(よくない例)</th><th>ベター(より良い例)</th></tr></thead><tbody><tr><td><code class="rich-inline-code">Bash</code> で全部やる</td><td><code class="rich-inline-code">Read</code> / <code class="rich-inline-code">Write</code> / <code class="rich-inline-code">Edit</code> / <code class="rich-inline-code">Grep</code> / <code class="rich-inline-code">Glob</code> を分離</td></tr><tr><td>大きな汎用ツール</td><td>1責任 = 1ツール</td></tr></tbody></table>
+<p><strong>メリット</strong>:</p>
+<ul><li><p>LLM(大規模言語モデル)がツール選択しやすい</p>
+</li><li><p>権限制御を細かく</p>
+</li><li><p>監査(あとから何をやったか追跡)が容易</p>
+</li></ul>
+<p>包丁・まな板・フライパンを別々に持つのと同じ。ぶっちゃけ「何でも切れる万能ツール」って、結局どれにも中途半端なんですよ。</p>
+<hr>
+<h2 id="6-カテゴリ4-オートメーション">6. カテゴリ4:オートメーション</h2>
+<h3 id="11-決定論的ライフサイクル-フック-パターン">#11 決定論的ライフサイクル(フック)パターン</h3>
+<p><strong>何を解決するか</strong>:絶対実行したい処理を保証する</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/b1680bc7-ch11-m10.png" alt="" width="1536" height="864">
+
+<p>CLAUDE.md でお願いするのではなく、フック(イベント発火時の自動実行)で <strong>強制</strong> するパターンです。「お願いベース」だと忘れることもあるけど、フックなら確実に動くので、ご安心を。</p>
+<p>→ <a href="/articles/claude-code-10-harness-design">第10回</a> で詳述</p>
+<hr>
+<h3 id="12-自己改善ループパターン-拡張">#12 自己改善ループパターン(拡張)</h3>
+<p><strong>何を解決するか</strong>:使うほど賢くなるハーネス</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/12af29b0-ch11-m11.png" alt="" width="1536" height="864">
+
+<p><strong>育てるアシスタント</strong> という発想ですね。失敗パターンを記録して、ルールに昇格させて、次は同じ轍を踏まない。観葉植物みたいに、手入れすればするほど育ちます。</p>
+<p>→ サンプルハーネス(<a href="./13-sample-harness.md">第13回</a>)で実装例を提供</p>
+<hr>
+<h2 id="7-ユースケース対応表">7. ユースケース対応表</h2>
+<p>業務シナリオごとに「どのパターンを使うか」の早見表です：</p>
+<table class="rich-table"><thead><tr><th>業務シナリオ</th><th>使うパターン</th><th>ねらい</th></tr></thead><tbody><tr><td>問い合わせメール返信ドラフト</td><td>#1 連続命令ファイル<br/>#10 単一目的ツール</td><td>口調・テンプレを CLAUDE.md で固定</td></tr><tr><td>議事録の要約・整形</td><td>#1 + Skill</td><td>フォーマット指定をスキルに切り出し</td></tr><tr><td>大量ファイルの一括処理</td><td>#7 フォークジョイン</td><td>Worktree(同一リポジトリの並行作業ディレクトリ)並列で時間短縮</td></tr><tr><td>新機能の設計→実装</td><td>#5 探索計画実行<br/>#6 コンテキスト分離</td><td>Plan/Gen/Evalで責務分離</td></tr><tr><td>毎朝の競合ニュース調査</td><td>#1 + #5 + MCP</td><td>CLAUDE.mdに観点固定 + Plan→Search→Sum</td></tr><tr><td>本番DBへのSQL投入</td><td>#9 リスク分類<br/>#11 フック</td><td>DROP/TRUNCATE(削除系コマンド)はブロック</td></tr><tr><td>営業のSFAレコード更新</td><td>#10 + MCP</td><td>更新系/参照系を別ツール化</td></tr><tr><td>長時間セッションでコンテキスト破綻防止</td><td>#3 階層型メモリ<br/>#5 探索計画実行</td><td>長期記憶に逃がし、定期 /clear</td></tr><tr><td>コードレビュー自動化</td><td>#6 + #11</td><td>専用エージェント+Stopフック</td></tr><tr><td>運用しながら賢くする</td><td>#12 自己改善</td><td>失敗→ルール化候補</td></tr></tbody></table>
+<hr>
+<h2 id="8-パターン選択フロー">8. パターン選択フロー</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/cff81103-ch11-m12.png" alt="" width="1536" height="864">
+
+<hr>
+<h2 id="9-パターンの組み合わせ例">9. パターンの組み合わせ例</h2>
+<p>実際の業務ハーネスは <strong>複数パターンの組み合わせ</strong> で構築します。一個ずつ単体で使うことは、正直あんまりないんですよ。</p>
+<h3 id="例-問い合わせ自動応答ハーネス">例：問い合わせ自動応答ハーネス</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/3587a4f2-ch11-m13.png" alt="" width="1536" height="1024">
+
+<hr>
+<h2 id="参考動画-12のエージェントハーネスパターン-まさやん">🎬 参考動画：12のエージェントハーネスパターン（まさやん）</h2>
+<p>本章の <strong>12パターン</strong> はこの動画から派生・整理したものです。各パターンの背景・実例を口頭で聞きたい方はこちら。「ツール入れすぎ厳禁」など本章の引用元でもあります。</p>
+<p>🔗 <a href="https://www.youtube.com/watch?v=FfABuQiDw8Q" target="_blank" rel="noopener noreferrer">Claude Codeによる12のエージェントハーネスパターン（まさやん）</a></p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/FfABuQiDw8Q" title="Claude Codeによる12のエージェントハーネスパターン" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
+<hr>
+<h2 id="10-ふりかえり">10. ふりかえり</h2>
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th></tr></thead><tbody><tr><td>☐</td><td>構成要素と設計パターンの違いが分かる</td></tr><tr><td>☐</td><td>12パターンを4カテゴリで分類できる</td></tr><tr><td>☐</td><td>自分の業務に該当するパターンを選べる</td></tr><tr><td>☐</td><td>パターンを組み合わせる発想が持てる</td></tr></tbody></table>
+<hr>
+<h2 id="ふりかえり">✅ ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-11-harness-patterns/877c05ae-ch11-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章-パターンの構成要素">📚 関連する章(パターンの構成要素)</h2>
+<p>各パターンを実装するためのリソース：</p>
+<ul><li><p>🔗 <strong>#1〜#3 の土台</strong>:<a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a> — CLAUDE.md / メモリ</p>
+</li><li><p>🔗 <strong>#5〜#7 の実装</strong>:<a href="/articles/claude-code-06-subagents">第6回 サブエージェント</a></p>
+</li><li><p>🔗 <strong>#11 の実装</strong>:<a href="/articles/claude-code-07-hooks">第7回 フック</a></p>
+</li><li><p>🔗 <strong>#8 の根拠</strong>:<a href="/articles/claude-code-08-mcp-tools">第8回 MCP</a> — 入れすぎ注意</p>
+</li><li><p>🔗 <strong>段階的開示パターン</strong>:<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; コマンド</a></p>
+</li><li><p>🔗 <strong>#12 自己改善の実装</strong>:<a href="/articles/claude-code-12-sample-harness">第12回 サンプルハーネス</a></p>
+</li><li><p>🔗 <strong>複数パターンを組み合わせた事例</strong>:<a href="/articles/claude-code-14-role-based-paths">第14回 役職別パス</a></p>
+</li></ul>
+<h2 id="次へ">🎬 次へ</h2>
+<p>→ <a href="/articles/claude-code-12-sample-harness">第12回 サンプルハーネス</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅️ 前へ</td><td><a href="/articles/claude-code-10-harness-design">第10回 ハーネス設計</a></td></tr><tr><td>➡️ 次へ</td><td><a href="/articles/claude-code-12-sample-harness">第12回 サンプルハーネス</a></td></tr><tr><td>🏠 目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

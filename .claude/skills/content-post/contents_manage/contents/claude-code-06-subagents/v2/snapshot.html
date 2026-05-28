@@ -1,0 +1,201 @@
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>サブエージェント（専門担当の別働隊として動くAI）が <strong>何のために</strong> 存在するかを言える</p>
+</li><li><p><strong>関心ごとの分離</strong>（役割を分ける）が精度に効く理由を理解する</p>
+</li><li><p>自作サブエージェントを <code class="rich-inline-code">.claude/agents/</code> に書ける</p>
+</li><li><p>並列実行で速度を稼げる場面が分かる</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約60分</strong></p>
+<hr>
+<h2 id="1-なぜサブエージェントが必要か-3つの動機">1. なぜサブエージェントが必要か：3つの動機</h2>
+<p>サブエージェントは、ひとことで言うと <strong>「専門の外注スタッフ」</strong> です。本人（親エージェント）が全部やる代わりに、得意分野ごとに別働隊に頼んで、結果だけ受け取る、という分業スタイル。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-06-subagents/65320984-ch06-m1.png" alt="" width="1536" height="864">
+
+<h3 id="動機1-コンテキスト分離">動機1：コンテキスト分離</h3>
+<p><strong>「会議に呼ばずに、別室で資料調査だけ頼む」</strong> ような感覚です。会議室の机の上を散らかさずに済む。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-06-subagents/4cfed5a5-ch06-m2.png" alt="" width="1536" height="864">
+
+<p>→ 親の体力（コンテキスト残量）を守れます。</p>
+<h3 id="動機2-関心ごとの分離">動機2：関心ごとの分離</h3>
+<p>「あれもこれも」を1人にやらせると注意が散ります。<strong>専門担当に切り出して</strong> 役割を絞ることで、精度が上がる。<strong>「総合医より専門医の方が、その分野は鋭い」</strong> あれです。</p>
+<table class="rich-table"><thead><tr><th>専門サブエージェント例</th><th>役割</th></tr></thead><tbody><tr><td><code class="rich-inline-code">code-reviewer</code></td><td>品質レビューだけ</td></tr><tr><td><code class="rich-inline-code">tdd-guide</code></td><td>テストファースト開発の伴走</td></tr><tr><td><code class="rich-inline-code">security-reviewer</code></td><td>脆弱性（セキュリティ上の弱点）チェックだけ</td></tr><tr><td><code class="rich-inline-code">release-notes-writer</code></td><td>コミット履歴からリリースノート（バージョン更新の説明文）生成</td></tr><tr><td><code class="rich-inline-code">feedback-distiller</code></td><td>セッション振り返りで教訓抽出</td></tr></tbody></table>
+<h3 id="動機3-並列処理-フォークジョイン">動機3：並列処理（フォークジョイン）</h3>
+<p>20ファイルの一括翻訳のような <strong>独立した作業</strong> は、<strong>Gitワークツリー</strong>（同じリポジトリの複数バージョンを並行で開ける機能）で隔離して同時実行すると速いです。<strong>「分担して持ち帰り、最後に集約する」</strong> やつ。</p>
+<hr>
+<h2 id="2-サブエージェントの正体">2. サブエージェントの正体</h2>
+<p><code class="rich-inline-code">.claude/agents/&lt;name&gt;.md</code> というファイルに、フロントマター（先頭のメタ情報）+ 本文で書きます。</p>
+<pre data-lang="markdown"><code>---
+name: reviewer
+description: コードの可読性・規約遵守・脆弱性をチェックするレビュアー。コード変更後に呼び出す
+tools: Read, Grep, Glob
+---
+
+# Reviewer
+
+あなたは厳格だが建設的なコードレビュアーです。
+（プロンプト本文）</code></pre>
+<table class="rich-table"><thead><tr><th>フィールド</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">name</code></td><td>呼び出し名（<code class="rich-inline-code">@reviewer</code> で呼ぶ）</td></tr><tr><td><code class="rich-inline-code">description</code></td><td><strong>いつ使うか</strong>（自動でロード判定するときの目印）。重要フィールド</td></tr><tr><td><code class="rich-inline-code">tools</code></td><td>使用可能ツール（絞ると安定。<strong>全権渡しは事故の元</strong>）</td></tr><tr><td>本文</td><td>システムプロンプト相当（その担当の人格・指示）</td></tr></tbody></table>
+<h3 id="配置場所">配置場所</h3>
+<table class="rich-table"><thead><tr><th>場所</th><th>スコープ</th></tr></thead><tbody><tr><td><code class="rich-inline-code">~/.claude/agents/</code></td><td>全プロジェクト共通（ユーザー）</td></tr><tr><td><code class="rich-inline-code">.claude/agents/</code></td><td>プロジェクト固有</td></tr></tbody></table>
+<hr>
+<h2 id="3-親-サブの呼び出し">3. 親 → サブの呼び出し</h2>
+<h3 id="パターンa-明示呼び出し">パターンA：明示呼び出し</h3>
+<pre><code>@reviewer このディレクトリ全体をレビューして</code></pre>
+<h3 id="パターンb-自動呼び出し">パターンB：自動呼び出し</h3>
+<p>description（説明）に「コード編集後に必ず呼ぶ」と書いておけば、Claude が判断して呼びます。</p>
+<h3 id="パターンc-task-ツール">パターンC：Task ツール</h3>
+<p>内部的には <code class="rich-inline-code">Task</code> ツール（委譲機能）が起動します。並列起動するならこれ：</p>
+<pre><code>このリポジトリの src/, tests/, docs/ を3つのサブエージェントで並列レビューして</code></pre>
+<hr>
+<h2 id="4-実装例-5つの典型サブエージェント">4. 実装例：5つの典型サブエージェント</h2>
+<p>「どんなのを作ればいいの？」のヒントとして、5パターン置いておきます。</p>
+<h3 id="4-1-code-reviewer-md">4-1. <code class="rich-inline-code">code-reviewer.md</code></h3>
+<pre data-lang="markdown"><code>---
+name: code-reviewer
+description: コード変更後に呼び出すレビュアー。可読性・規約・セキュリティを確認
+tools: Read, Grep, Glob
+---
+
+# Code Reviewer
+
+## 役割
+変更されたコードを読み、以下の観点で問題を指摘する:
+- 命名の一貫性
+- 関数の長さ（50行超は警告）
+- ファイル長（400行超は警告）
+- エラーハンドリングの抜け
+- セキュリティリスク（XSS / SQLi / 機密情報漏洩）
+
+## 出力形式</code></pre>
+<h2 id="レビュー結果">レビュー結果</h2>
+<h3 id="critical">CRITICAL</h3>
+<ul><li><p>ファイル:行 — 問題</p>
+</li></ul>
+<h3 id="high">HIGH</h3>
+<ul><li><p>...</p>
+</li></ul>
+<h3 id="総評">総評</h3>
+<p>（1-2行）</p>
+<pre><code>
+## 制約
+- 推測ではなく読んだ事実だけで指摘
+- 改修コードは書かない</code></pre>
+<h3 id="4-2-tdd-guide-md">4-2. <code class="rich-inline-code">tdd-guide.md</code></h3>
+<pre data-lang="markdown"><code>---
+name: tdd-guide
+description: 新機能/バグ修正でテストファーストを徹底させる
+tools: Read, Write, Edit, Bash
+---
+
+# TDD Guide
+
+## 役割
+ユーザーの依頼に対して、必ず以下の順で進める:
+1. 失敗するテストを書く（Red）
+2. テストを実行して赤を確認
+3. 通す最小コードを書く（Green）
+4. テストを実行して緑を確認
+5. リファクタリング（コードの整理・書き直し）（Refactor）
+6. 80%以上のカバレッジ（テストでチェックされている割合）を確認
+
+テストなしの実装は行わない。</code></pre>
+<h3 id="4-3-security-reviewer-md">4-3. <code class="rich-inline-code">security-reviewer.md</code></h3>
+<pre data-lang="markdown"><code>---
+name: security-reviewer
+description: 認証/認可/入力処理/外部API呼び出しを変更したら必ず呼ぶ
+tools: Read, Grep, Glob
+---
+
+# Security Reviewer
+
+OWASP Top 10（Webセキュリティの代表的な脆弱性10選）の観点で精査:
+- A01 Broken Access Control（権限制御の不備）
+- A02 Cryptographic Failures（暗号化の失敗）
+- A03 Injection（注入攻撃）
+- A07 Authentication Failures（認証の失敗）
+...
+
+各指摘に CVSS（脆弱性深刻度の標準スコア）ベーススコアを添える。</code></pre>
+<h3 id="4-4-feedback-distiller-md-自己改善用">4-4. <code class="rich-inline-code">feedback-distiller.md</code>（自己改善用）</h3>
+<p>サンプルハーネス（<a href="/articles/claude-code-12-sample-harness">第12回</a>）で利用。</p>
+<pre data-lang="markdown"><code>---
+name: feedback-distiller
+description: 直近のセッションから教訓を抽出してルール化候補を提案する
+tools: Read, Grep, Glob
+---
+
+# Feedback Distiller
+
+セッションから:
+- 同じ修正が3回以上発生したパターン
+- ユーザーから明示的に否定されたアプローチ
+- 既存ルールでは防げなかった失敗
+
+を抽出し、`.claude/rules/&lt;file&gt;.md` への追記案を diff（変更差分）形式で提案。</code></pre>
+<h3 id="4-5-release-notes-writer-md">4-5. <code class="rich-inline-code">release-notes-writer.md</code></h3>
+<pre data-lang="markdown"><code>---
+name: release-notes-writer
+description: 直近のコミットからリリースノートを書く
+tools: Bash, Read
+---
+
+# Release Notes Writer
+
+`git log v1.0..HEAD --oneline`（直近のコミット履歴コマンド）から:
+- Feat（新機能） / Fix（バグ修正） / Refactor（書き直し） / Docs（ドキュメント）に分類
+- ユーザー視点の影響を1行で
+- 破壊的変更（後方互換性が壊れる変更）があれば BREAKING CHANGES セクションへ
+
+形式は Keep a Changelog（変更履歴フォーマットの標準）準拠。</code></pre>
+<hr>
+<h2 id="5-並列起動-フォークジョイン">5. 並列起動：フォークジョイン</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-06-subagents/26a0a091-ch06-m3.png" alt="" width="1536" height="864">
+
+<p>「<strong>チームで分担して、最後に成果物をホチキスで留める</strong>」のフォークジョイン（Fork = 分岐、Join = 合流）。</p>
+<h3 id="適している作業">適している作業</h3>
+<ul><li><p>独立した複数ファイルの一括翻訳</p>
+</li><li><p>大規模リファクタリング（モジュール単位で並列）</p>
+</li><li><p>競合分析（複数サイトを同時取得）</p>
+</li><li><p>レビュー（フロント / バック / DBを別エージェントで）</p>
+</li></ul>
+<h3 id="適していない作業">適していない作業</h3>
+<ul><li><p>順序依存があるタスク（<strong>前の人の結果を待ってから次、みたいな作業</strong>）</p>
+</li><li><p>互いの結果を参照する必要があるタスク</p>
+</li><li><p>マージ（合流）が難しい変更</p>
+</li></ul>
+<h3 id="batch-コマンド"><code class="rich-inline-code">/batch</code> コマンド</h3>
+<p>最新版では <code class="rich-inline-code">/batch</code> で 5〜30 個の並列ワークツリーエージェントを起動可能（v2.x）。<strong>人海戦術モード</strong> ですね。</p>
+<hr>
+<h2 id="6-モデル選択の使い分け">6. モデル選択の使い分け</h2>
+<p>サブエージェントごとに、モデルを変えられます。<strong>「部長（Opus）が指示出して、若手（Haiku）が手を動かす」</strong> イメージ。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-06-subagents/dd6c5fef-ch06-m4.png" alt="" width="1536" height="864">
+
+<p>サブエージェントごとに <code class="rich-inline-code">model: haiku</code> のようにフロントマター（先頭の設定欄）で指定可能。<strong>API課金の節約</strong> と <strong>タスクごとの最適化</strong> を両立できます。</p>
+<hr>
+<h2 id="7-アンチパターン">7. アンチパターン</h2>
+<p>「これやりがちだけどダメ」をまとめておきます。</p>
+<table class="rich-table"><thead><tr><th>アンチパターン</th><th>何が問題</th></tr></thead><tbody><tr><td>サブエージェントを過剰に作る</td><td>親が選択で迷う / 説明トークン消費（<strong>家事ごとに専属メイド雇うコスト感</strong>）</td></tr><tr><td>description が曖昧</td><td>ロード判定（自動読み込みの判断）が機能しない</td></tr><tr><td>ツールを絞らない</td><td>不適切なツール選択で事故る</td></tr><tr><td>親文脈を期待する</td><td>サブは独立コンテキスト（記憶を共有してない）。プロンプトに必要情報を全部書く</td></tr><tr><td>順序依存タスクを並列に</td><td>レース条件（タイミングずれによる不具合） / 結果がぐちゃぐちゃ</td></tr></tbody></table>
+<hr>
+<h2 id="8-公開されているサブエージェント集">8. 公開されているサブエージェント集</h2>
+<p>参考になるリポジトリ：</p>
+<ul><li><p><a href="https://github.com/hesreallyhim/awesome-claude-code-subagents" target="_blank" rel="noopener noreferrer">hesreallyhim/awesome-claude-code-subagents</a></p>
+</li><li><p><a href="https://github.com/VoltAgent/awesome-claude-code-subagents" target="_blank" rel="noopener noreferrer">VoltAgent/awesome-claude-code-subagents</a></p>
+</li></ul>
+<p>「車輪の再発明をしない」精神で、まず良いものを借りてから自分用にカスタマイズしましょう。<strong>コーヒーを毎回豆から育てる必要はないんですよ。</strong></p>
+<hr>
+<h2 id="9-ふりかえり">9. ふりかえり</h2>
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th></tr></thead><tbody><tr><td></td><td>サブエージェントの3つの動機を説明できる</td></tr><tr><td></td><td><code class="rich-inline-code">.claude/agents/&lt;name&gt;.md</code> の書き方が分かる</td></tr><tr><td></td><td>description の重要性を理解した</td></tr><tr><td></td><td>親の文脈は引き継がれない事を覚えた</td></tr><tr><td></td><td>並列実行が向く / 向かないタスクを見分けられる</td></tr><tr><td></td><td>モデル使い分け（Haiku でワーカー）を意識できる</td></tr></tbody></table>
+<hr>
+<h2 id="ふりかえり">ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-06-subagents/c6c16c02-ch06-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章">関連する章</h2>
+<ul><li><p><strong>同じ抽象階層</strong>：<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a> — 軽量化の手段としてスキル併用</p>
+</li><li><p><strong>強制実行</strong>：<a href="/articles/claude-code-07-hooks">第7回 フック</a> — エージェント呼び出しを Stop フックで自動化</p>
+</li><li><p><strong>品質が効く</strong>：<a href="/articles/claude-code-09-prompt-quality">第9回 精度の高いアウトプット</a> — エージェントへの指示も具体化が肝</p>
+</li><li><p><strong>設計パターン</strong>：<a href="/articles/claude-code-11-harness-patterns">第11回 設計パターン</a> — #5 探索計画実行 / #6 コンテキスト分離 / #7 フォークジョイン</p>
+</li></ul>
+<h2 id="次へ">次へ</h2>
+<p>→ <a href="/articles/claude-code-07-hooks">第7回 フック（Hooks）</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅ 前へ</td><td><a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a></td></tr><tr><td>次へ</td><td><a href="/articles/claude-code-07-hooks">第7回 フック</a></td></tr><tr><td>目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

@@ -1,0 +1,121 @@
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>Claude Code の <strong>基本ループ</strong>（起動→依頼→確認→終了）を体験する</p>
+</li><li><p>よく使うコマンド10個を覚える</p>
+</li><li><p>パーミッション（権限：何をやっていいかを決めるルール）の仕組みを理解する</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約20分</strong></p>
+<hr>
+<h2 id="1-1分で分かる-claude-code-の基本ループ">1. 1分で分かる Claude Code の基本ループ</h2>
+<p>Claude Code を使う流れは、<strong>レストランで料理を注文するのとほぼ同じ</strong> です。注文する → 出てくる → 食べてみる → OK なら次のオーダー、違ったら作り直してもらう。それだけ。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-02-first-session/db927e90-ch02-m1.png" alt="" width="1536" height="864">
+
+<p>これが Claude Code を使う <strong>すべての基本</strong> です。あとは「どんな依頼を、どれくらいのサイズでするか」「途中で何をどう設定するか」のバリエーションでしかありません。<strong>この絵をぼんやり覚えておけば、もう半分マスターしたようなもの</strong> です。</p>
+<hr>
+<h2 id="2-最初の3つの依頼を体験する">2. 最初の3つの依頼を体験する</h2>
+<p> <strong>ハンズオン</strong>（手を動かすターン）：このセクションを実際に試してみてください。<strong>読むだけより 100 倍記憶に残ります</strong>。</p>
+<h3 id="準備">準備</h3>
+<pre data-lang="bash"><code>mkdir ~/work/first-claude &amp;&amp; cd ~/work/first-claude
+echo &quot;name,age,city
+Alice,30,Tokyo
+Bob,25,Osaka
+Charlie,40,Kyoto&quot; &gt; people.csv
+claude</code></pre>
+<p>これで <strong>ダミーの名簿（people.csv）が入った練習用フォルダ</strong> ができて、その中で Claude Code が起動します。</p>
+<h3 id="依頼1-ファイルを読んでもらう">依頼1：ファイルを読んでもらう</h3>
+<pre><code>people.csv の中身を要約してください</code></pre>
+<p>→ Claude が <code class="rich-inline-code">Read</code> ツール（ファイルを読む道具）を使って <code class="rich-inline-code">people.csv</code> を読み、要約してくれます。<strong>初対面のあいさつ的な動作確認</strong> です。</p>
+<h3 id="依頼2-分析してもらう">依頼2：分析してもらう</h3>
+<pre><code>平均年齢を計算して、最も若い人と最も年長の人を教えてください</code></pre>
+<p>→ 計算結果が返ってきます。<code class="rich-inline-code">Bash</code> ツール（コマンド実行用）で <code class="rich-inline-code">awk</code>（テキスト処理コマンド）を使う場合もあれば、頭の中で計算する場合も。<strong>お好みで</strong> やってくれます。</p>
+<h3 id="依頼3-新しいファイルを作ってもらう">依頼3：新しいファイルを作ってもらう</h3>
+<pre><code>people.csv を読んで、年齢の若い順に並び替えた sorted.csv を作ってください</code></pre>
+<p>→ Claude は <code class="rich-inline-code">Read</code>（読む）→ 計算 → <code class="rich-inline-code">Write</code>（書く）で新しいファイルを作成します。</p>
+<p>ここで <strong>権限確認のダイアログ</strong>（「これやっていい？」のお伺い）が出るかもしれません。次のセクションで解説します。</p>
+<hr>
+<h2 id="3-必須コマンド10選">3. 必須コマンド10選</h2>
+<p>セッション中に <code class="rich-inline-code">/</code>（スラッシュ）から始めると、<strong>Claude Code 本体が用意してる組み込みコマンド</strong> が使えます。</p>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>やること</th><th>いつ使う</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/help</code></td><td>ヘルプ表示</td><td>わからなくなったら（命綱）</td></tr><tr><td><code class="rich-inline-code">/clear</code></td><td>会話をリセット</td><td>別の話題に切り替えるとき</td></tr><tr><td><code class="rich-inline-code">/compact</code></td><td>履歴を圧縮（要点だけ残す）</td><td>コンテキストが満杯になりかけ</td></tr><tr><td><code class="rich-inline-code">/context</code></td><td>コンテキスト構成を可視化</td><td>何が読み込まれているか確認</td></tr><tr><td><code class="rich-inline-code">/model</code></td><td>モデル切り替え</td><td>Sonnet（標準） ↔ Opus（高性能） を切り替え</td></tr><tr><td><code class="rich-inline-code">/plan</code></td><td>プランモード（実際は変更しない）</td><td>複雑な作業の前に計画だけ作る</td></tr><tr><td><code class="rich-inline-code">/status</code></td><td>使用状況・残量</td><td>レート制限（使用量の上限）が気になるとき</td></tr><tr><td><code class="rich-inline-code">/cost</code></td><td>課金状況</td><td>使いすぎていないか</td></tr><tr><td><code class="rich-inline-code">/init</code></td><td><code class="rich-inline-code">CLAUDE.md</code>（プロジェクト指示書）を初期化</td><td>新規プロジェクトで最初に</td></tr><tr><td><code class="rich-inline-code">/exit</code></td><td>終了</td><td>セッション終わり（<code class="rich-inline-code">Ctrl+D</code> でも）</td></tr></tbody></table>
+<p> <strong>小ネタ</strong>：何打っていいか分からないときは <code class="rich-inline-code">/</code> だけ入力すれば、利用可能なコマンドが全部表示されます。<strong>メニュー表が出てくる感じ</strong> です。</p>
+<hr>
+<h2 id="4-キーボードショートカット">4. キーボードショートカット</h2>
+<table class="rich-table"><thead><tr><th>ショートカット</th><th>動作</th></tr></thead><tbody><tr><td><strong>Shift+Tab</strong></td><td>パーミッションモード（権限の厳しさ）を切替（標準/Auto Edit/Plan）</td></tr><tr><td><strong>Esc × 2</strong></td><td>巻き戻し（直前の操作を取り消す）</td></tr><tr><td><strong>Ctrl+C</strong></td><td>実行中の処理を中断（緊急停止ボタン）</td></tr><tr><td><strong>Ctrl+L</strong></td><td>画面をクリア（履歴は保持）</td></tr><tr><td><strong>Tab</strong></td><td>自動補完</td></tr><tr><td><strong>Shift+Enter</strong></td><td>改行（Enter は送信）</td></tr><tr><td><strong>Ctrl+B</strong></td><td>バックグラウンドタスク（裏で動かす）</td></tr><tr><td><strong>Alt+T</strong></td><td>思考モード（じっくり考えてもらう）切替</td></tr><tr><td><strong>Ctrl+D</strong></td><td>終了</td></tr></tbody></table>
+<p>入力ボックス内の編集ショートカット：</p>
+<table class="rich-table"><thead><tr><th>ショートカット</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">Ctrl+A</code></td><td>行頭へ移動（A = ahead のイメージ）</td></tr><tr><td><code class="rich-inline-code">Ctrl+E</code></td><td>行末へ移動（E = end）</td></tr><tr><td><code class="rich-inline-code">Option+←/→</code></td><td>単語単位で移動</td></tr><tr><td><code class="rich-inline-code">Ctrl+W</code></td><td>直前の単語を削除（W = word）</td></tr><tr><td><code class="rich-inline-code">Ctrl+U</code></td><td>カーソルから行頭まで削除（一気に消す）</td></tr><tr><td><code class="rich-inline-code">Ctrl+G</code></td><td>外部エディタ（VSCode など）で編集</td></tr></tbody></table>
+<p><strong>全部覚える必要はありません</strong>。よく使うのは Shift+Tab、Esc×2、Ctrl+C くらい。あとは慣れてきたら徐々に。</p>
+<hr>
+<h2 id="5-パーミッション-権限-の3モード">5. パーミッション（権限）の3モード</h2>
+<p>Claude Code は危険な操作の前に <strong>「これやっていい？」と確認ダイアログ</strong> を出します。これがパーミッション。<strong>「家に来たお手伝いさんに、冷蔵庫を勝手に開けていいか確認させるか」</strong> のスタンスを 3 段階で切り替えられるイメージです。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-02-first-session/7fb1517e-ch02-m2.png" alt="" width="1536" height="864">
+
+<h3 id="モードの切り替え方">モードの切り替え方</h3>
+<ul><li><p><strong>Shift+Tab</strong> を押すと、3モードを循環します</p>
+</li><li><p>画面の下部に現在のモードが表示されます</p>
+</li></ul>
+<h3 id="推奨">推奨</h3>
+<table class="rich-table"><thead><tr><th>シーン</th><th>おすすめモード</th></tr></thead><tbody><tr><td>初めての作業 / 慣れていないコード</td><td><strong>標準</strong>（毎回確認、安全運転）</td></tr><tr><td>慣れたタスク / TDD（テスト駆動開発）で安心して回せる</td><td><strong>Auto Edit</strong>（編集は任せる）</td></tr><tr><td>「まず計画を見たい」</td><td><strong>Plan Mode</strong>（読むだけ、書かない）</td></tr><tr><td>サンドボックス（隔離環境） / 使い捨て環境のみ</td><td><strong>Bypass</strong>（全自動、劇薬）</td></tr></tbody></table>
+<blockquote>
+<p> <code class="rich-inline-code">--dangerously-skip-permissions</code>（権限確認を全スキップする起動オプション）や Bypass モードは、<strong>Docker などのサンドボックス（隔離された実験環境）</strong> か <strong>使い捨て VM（仮想マシン）</strong> でのみ使ってください。<strong>本番リポジトリでは絶対に使わない</strong>。お手伝いさんに金庫の鍵渡しちゃうレベルの劇薬です。</p>
+</blockquote>
+<hr>
+<h2 id="6-ファイル参照記法">6. ファイル参照記法（@・!）</h2>
+<p>入力中にいくつかの便利な記法が使えます。<strong>SNS の @メンション（誰かに呼びかける機能）と同じノリ</strong> で、ファイルやエージェントを呼び出せます。</p>
+<table class="rich-table"><thead><tr><th>記法</th><th>動作</th><th>例</th></tr></thead><tbody><tr><td><code class="rich-inline-code">@path/to/file.ts</code></td><td>ファイルを文脈に取り込む</td><td><code class="rich-inline-code">@src/auth.ts のバグを直して</code></td></tr><tr><td><code class="rich-inline-code">@agent-name</code></td><td>サブエージェント（専門担当）を呼ぶ</td><td><code class="rich-inline-code">@reviewer このPRをレビューして</code></td></tr><tr><td><code class="rich-inline-code">!ls</code></td><td>シェルコマンド（ターミナルの命令）を実行</td><td><code class="rich-inline-code">!git status</code></td></tr><tr><td><code class="rich-inline-code">$ARG</code> / <code class="rich-inline-code">$1</code>, <code class="rich-inline-code">$2</code></td><td>スラッシュコマンド内の引数（カスタムコマンドで使う）</td><td>カスタムコマンド内</td></tr></tbody></table>
+<p> <strong>試してみる</strong>：</p>
+<pre><code>@people.csv を表形式で表示して</code></pre>
+<p><code class="rich-inline-code">@</code> を入れると候補ファイルが補完で出てきます。<strong>これに慣れると、いちいちパスを打つのが面倒に感じるようになります</strong>。</p>
+<hr>
+<h2 id="7-セッション履歴と再開">7. セッション履歴と再開</h2>
+<h3 id="過去の会話を呼び出す">過去の会話を呼び出す</h3>
+<p>「昨日の続きから始めたい」みたいなとき用。</p>
+<pre data-lang="bash"><code># 最後のセッションを再開
+claude -c
+
+# 一覧から選んで再開
+claude --resume
+# または
+claude -r</code></pre>
+<p>セッションは <code class="rich-inline-code">~/.claude/projects/&lt;プロジェクトパスをハイフン化&gt;/*.jsonl</code>（履歴ファイルが置かれる場所）に保存されます。<strong>30日でデフォルト削除</strong> されますが、<code class="rich-inline-code">cleanupPeriodDays</code> 設定（保持日数の設定）で延長可能（<a href="/articles/claude-code-04-context">第4回</a> で詳述）。</p>
+<blockquote>
+<p> 自動削除されるのは、放置するとパソコンの中が履歴で重くなるからです。<strong>断捨離が標準装備</strong>、と思ってください。</p>
+</blockquote>
+<h3 id="セッションの分岐-branch">セッションの分岐（Branch）</h3>
+<p>複雑な開発で「ここまでの会話は使い回したいけど、別の方向も試したい」ときに便利。<strong>ゲームの「セーブして別ルートも試す」みたいなノリ</strong> です。</p>
+<pre><code>/branch</code></pre>
+<p>→ 現在のセッションをコピーして、新しい道を作れます。</p>
+<hr>
+<h2 id="8-失敗しても怖くない-巻き戻し">8. 失敗しても怖くない：巻き戻し</h2>
+<p>Claude Code の編集で <strong>「あれ、ちょっと違うな」</strong> と思ったら、</p>
+<pre><code>Esc を 2回押す</code></pre>
+<p>直前の状態に <strong>巻き戻し</strong> できます。<strong>ゲームのアンドゥ機能</strong> だと思ってください。プロンプト送信前に思いついた修正なら、これで安全です。</p>
+<p>ファイル編集を完全に元に戻したい場合は、Git（ファイルの履歴管理ツール）で差分管理しておくのが王道です（<a href="/articles/claude-code-13-tips-techniques">第13回</a> で詳述）。</p>
+<hr>
+<h2 id="9-このセッションで何が起きていたのか-裏側">9. このセッションで何が起きていたのか（裏側）</h2>
+<p>ここからは興味のある人だけ読めばOKです。<strong>裏側の動きが分かると、トラブったときに当たりがつけやすくなる</strong> のでおすすめ。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-02-first-session/5fd13ae4-ch02-m3.png" alt="" width="1536" height="864">
+
+<p>LLM 単体ではファイルを読めません。Claude Code が <strong>道具を渡し、行動を解釈し、結果をループ</strong> させているのが分かりますね。<strong>通訳兼マネージャー</strong> みたいな立ち位置です。</p>
+<hr>
+<h2 id="10-ふりかえり">10. ふりかえり</h2>
+<p>ここまでで体験したこと：</p>
+<ul><li><p>ターミナルから <code class="rich-inline-code">claude</code> を起動した</p>
+</li><li><p>ファイルの読み込み・分析・新規作成を依頼した</p>
+</li><li><p>パーミッションダイアログに対応した</p>
+</li><li><p><code class="rich-inline-code">/help</code> <code class="rich-inline-code">/context</code> などの組み込みコマンドを使った</p>
+</li><li><p>ショートカット（Shift+Tab / Esc×2 など）を試した</p>
+</li></ul>
+<p>ここから先は <strong>「より精度を上げる方法」</strong> を学びます。<strong>基本ループは握ったので、あとはレベルアップ要素を追加していくだけ</strong> です。</p>
+<hr>
+<h2 id="ふりかえり">ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-02-first-session/6fee5558-ch02-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章">関連する章</h2>
+<ul><li><p><strong>コマンド・ショートカット完全版</strong>：<a href="/articles/claude-code-a1-cheatsheet">付録 A. チートシート</a></p>
+</li><li><p><strong>全体像（次の章）</strong>：<a href="/articles/claude-code-03-understanding">第3回 Claude Code を理解する</a></p>
+</li><li><p><strong>CLAUDE.md を書きたくなったら</strong>：<a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a></p>
+</li><li><p><strong>詰まったら</strong>：<a href="/articles/claude-code-a2-troubleshooting">付録 B. トラブルシューティング</a></p>
+</li></ul>
+<h2 id="次へ">次へ</h2>
+<p>→ <a href="/articles/claude-code-03-understanding">第3回 Claude Code を理解する</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅ 前へ</td><td><a href="/articles/claude-code-01-environment">第1回 環境構築</a></td></tr><tr><td>次へ</td><td><a href="/articles/claude-code-03-understanding">第3回 Claude Code を理解する</a></td></tr><tr><td>目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

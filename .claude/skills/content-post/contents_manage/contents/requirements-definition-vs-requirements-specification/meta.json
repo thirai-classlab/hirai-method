@@ -1,0 +1,37 @@
+{
+  "slug": "requirements-definition-vs-requirements-specification",
+  "kind": "knowledge",
+  "title": "requirements-definition-vs-requirements-specification",
+  "current_version": 4,
+  "published_version": 4,
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-04-28T12:09:40.992Z",
+      "author": "snapshotBeforeUpdate (auto-seed)",
+      "snapshot_taken": true,
+      "note": "auto-seeded by snapshotBeforeUpdate — version management was not initialized"
+    },
+    {
+      "v": 2,
+      "created_at": "2026-04-28T12:09:54.940Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 要求定義 と 要件定義 の違い — 「ユーザの願い」を「作るものの仕様」に翻訳する開発工程)"
+    },
+    {
+      "v": 3,
+      "created_at": "2026-04-29T17:50:18.368Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 要求定義 と 要件定義 の違い — 「ユーザの願い」を「作るものの仕様」に翻訳する開発工程)"
+    },
+    {
+      "v": 4,
+      "created_at": "2026-04-30T08:27:28.827Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 要求定義 と 要件定義 の違い — 「ユーザの願い」を「作るものの仕様」に翻訳する開発工程)"
+    }
+  ]
+}

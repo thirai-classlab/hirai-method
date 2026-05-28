@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>フロー起動方法とトリガ順序</title>
+<link rel="stylesheet" href="sketchnote.css">
+<style>
+  body { width: 1536px; height: 1024px; }
+  .canvas { width: 1536px; height: 1024px; padding: 30px 40px; overflow: hidden; }
+
+  .h-title {
+    font-family: 'Yusei Magic', 'Klee One', sans-serif;
+    font-weight: 700;
+    font-size: 48px;
+    color: #2d2a26;
+    margin-bottom: 4px;
+  }
+  .h-title .star-mark { color: #f4c430; margin-right: 8px; font-size: 36px; }
+  .h-sub {
+    font-family: 'Klee One', sans-serif;
+    font-size: 21px;
+    color: #666;
+    margin-bottom: 22px;
+  }
+
+  .section-label {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 24px;
+    color: #2d2a26;
+    background: #fff3b0;
+    border: 3px solid #f4c430;
+    border-radius: 16px;
+    padding: 6px 18px;
+    box-shadow: 3px 3px 0 #c89000;
+    display: inline-block;
+    transform: rotate(-2deg);
+    margin-bottom: 14px;
+  }
+
+  /* === Top: 4 flow types === */
+  .flow-row {
+    display: grid;
+    grid-template-columns: repeat(4, 340px);
+    gap: 16px;
+    margin: 0 auto 28px;
+    justify-content: center;
+    width: 1408px;
+  }
+  .flow-card {
+    border-radius: 22px 26px 20px 28px;
+    border: 5px solid #2d2a26;
+    background: #ffffff;
+    box-shadow: 6px 6px 0 #2d2a26;
+    padding: 14px 12px 16px;
+    text-align: center;
+    min-width: 0;
+  }
+  .flow-card.f1 { background: #d6e8f7; border-color: #4a90d9; box-shadow: 6px 6px 0 #4a90d9; }
+  .flow-card.f2 { background: #ffe5ee; border-color: #ff6b9d; box-shadow: 6px 6px 0 #ff6b9d; }
+  .flow-card.f3 { background: #ebdcf3; border-color: #a06fbf; box-shadow: 6px 6px 0 #a06fbf; }
+  .flow-card.f4 { background: #d8f0e7; border-color: #4fb59c; box-shadow: 6px 6px 0 #4fb59c; }
+  .flow-emoji { font-size: 50px; line-height: 1; }
+  .flow-name {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 6px;
+    line-height: 1.15;
+  }
+  .flow-en {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 13px;
+    color: #555;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+  .flow-desc {
+    font-family: 'Klee One', sans-serif;
+    font-size: 15px;
+    color: #333;
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+  .flow-card.f1 .flow-name { color: #2670ba; }
+  .flow-card.f2 .flow-name { color: #d04777; }
+  .flow-card.f3 .flow-name { color: #7a4ea0; }
+  .flow-card.f4 .flow-name { color: #2d8a72; }
+
+  /* === Bottom: trigger order === */
+  .order-row {
+    display: grid;
+    grid-template-columns: repeat(7, 190px);
+    gap: 10px;
+    margin: 18px auto 0;
+    justify-content: center;
+    width: 1396px;
+  }
+  .step {
+    border-radius: 18px 22px 16px 24px;
+    border: 4px solid #2d2a26;
+    background: #ffffff;
+    box-shadow: 5px 5px 0 #2d2a26;
+    padding: 10px 6px 12px;
+    text-align: center;
+    position: relative;
+    min-width: 0;
+  }
+  .step.s1 { background: #fff3b0; border-color: #f4c430; box-shadow: 5px 5px 0 #c89000; }
+  .step.s2 { background: #d6e8f7; border-color: #4a90d9; box-shadow: 5px 5px 0 #4a90d9; }
+  .step.s3 { background: #ffe1c4; border-color: #f08e3a; box-shadow: 5px 5px 0 #f08e3a; }
+  .step.s4 { background: #ebdcf3; border-color: #a06fbf; box-shadow: 5px 5px 0 #a06fbf; }
+  .step.s5 { background: #d6e8f7; border-color: #4a90d9; box-shadow: 5px 5px 0 #4a90d9; }
+  .step.s6 { background: #ffe5ee; border-color: #ff6b9d; box-shadow: 5px 5px 0 #ff6b9d; }
+  .step.s7 { background: #d8f0e7; border-color: #4fb59c; box-shadow: 5px 5px 0 #4fb59c; }
+
+  .step-num {
+    position: absolute;
+    top: -18px; left: 50%;
+    transform: translateX(-50%);
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: #2d2a26;
+    color: #fff;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 3px solid #fff;
+    box-shadow: 2px 2px 0 #2d2a26;
+  }
+  .step-emoji { font-size: 32px; line-height: 1; margin-top: 8px; }
+  .step-name {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    margin-top: 4px;
+    line-height: 1.15;
+    color: #2d2a26;
+  }
+  .step-desc {
+    font-family: 'Klee One', sans-serif;
+    font-size: 12px;
+    color: #444;
+    margin-top: 4px;
+    line-height: 1.35;
+  }
+
+  .arrow-bar {
+    margin-top: 30px;
+    margin-bottom: 4px;
+    text-align: center;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 22px;
+    color: #2d2a26;
+    letter-spacing: 0.5em;
+  }
+
+  .footnote {
+    margin-top: 14px;
+    text-align: center;
+    font-family: 'Klee One', sans-serif;
+    font-size: 16px;
+    color: #555;
+    background: #fffce8;
+    border: 2.5px dashed #2d2a26;
+    border-radius: 18px;
+    padding: 8px 18px;
+    display: inline-block;
+    box-shadow: 3px 3px 0 #2d2a26;
+  }
+  .foot-wrap { text-align: center; }
+
+  .badge {
+    position: absolute;
+    top: 40px; right: 60px;
+    background: #d8f0e7;
+    border: 3px solid #4fb59c;
+    border-radius: 50%;
+    width: 110px; height: 110px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 17px;
+    color: #2d8a72;
+    box-shadow: 4px 4px 0 #4fb59c;
+    transform: rotate(8deg);
+    text-align: center;
+    line-height: 1.2;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="h-title"><span class="star-mark">✦</span>フロー起動方法とトリガ実行順序</div>
+  <div class="h-sub">4種のフローを場面で使い分け、レコード保存時の Order of Execution を意識する</div>
+
+  <div class="badge">順番が<br>命！</div>
+
+  <div class="section-label">起動方法（Flow Type）</div>
+  <div class="flow-row">
+    <div class="flow-card f1">
+      <div class="flow-emoji">🖥️</div>
+      <div class="flow-name">画面フロー</div>
+      <div class="flow-en">Screen Flow</div>
+      <div class="flow-desc">ボタンや Lightning ページから手動で起動</div>
+    </div>
+    <div class="flow-card f2">
+      <div class="flow-emoji">📝</div>
+      <div class="flow-name">レコードトリガーフロー</div>
+      <div class="flow-en">Record-Triggered Flow</div>
+      <div class="flow-desc">作成・更新・削除に連動して自動実行</div>
+    </div>
+    <div class="flow-card f3">
+      <div class="flow-emoji">⏰</div>
+      <div class="flow-name">スケジュールフロー</div>
+      <div class="flow-en">Scheduled Flow</div>
+      <div class="flow-desc">指定時刻に定期バッチとして起動</div>
+    </div>
+    <div class="flow-card f4">
+      <div class="flow-emoji">🔁</div>
+      <div class="flow-name">自動起動フロー</div>
+      <div class="flow-en">Autolaunched Flow</div>
+      <div class="flow-desc">他のフローや Apex から呼び出して実行</div>
+    </div>
+  </div>
+
+  <div class="section-label">実行順序（Order of Execution）</div>
+  <div class="order-row">
+    <div class="step s1">
+      <div class="step-num">1</div>
+      <div class="step-emoji">💾</div>
+      <div class="step-name">保存開始</div>
+      <div class="step-desc">クライアントから<br>レコード送信</div>
+    </div>
+    <div class="step s2">
+      <div class="step-num">2</div>
+      <div class="step-emoji">⚡</div>
+      <div class="step-name">保存前フロー</div>
+      <div class="step-desc">Before-Save<br>項目補正</div>
+    </div>
+    <div class="step s3">
+      <div class="step-num">3</div>
+      <div class="step-emoji">✅</div>
+      <div class="step-name">入力規則</div>
+      <div class="step-desc">Validation<br>条件チェック</div>
+    </div>
+    <div class="step s4">
+      <div class="step-num">4</div>
+      <div class="step-emoji">🗄️</div>
+      <div class="step-name">DB コミット</div>
+      <div class="step-desc">レコードを<br>DB に確定</div>
+    </div>
+    <div class="step s5">
+      <div class="step-num">5</div>
+      <div class="step-emoji">🌊</div>
+      <div class="step-name">保存後フロー</div>
+      <div class="step-desc">After-Save<br>関連レコード操作</div>
+    </div>
+    <div class="step s6">
+      <div class="step-num">6</div>
+      <div class="step-emoji">📋</div>
+      <div class="step-name">ワークフロー</div>
+      <div class="step-desc">承認・<br>項目自動更新</div>
+    </div>
+    <div class="step s7">
+      <div class="step-num">7</div>
+      <div class="step-emoji">📊</div>
+      <div class="step-name">積み上げ集計</div>
+      <div class="step-desc">親レコードへ<br>Roll-up 反映</div>
+    </div>
+  </div>
+
+  <div class="arrow-bar">→ → → → → → →</div>
+
+  <div class="foot-wrap">
+    <div class="footnote">※ 実行順序は Salesforce 公式の Order of Execution に基づく概念図</div>
+  </div>
+</div>
+</body>
+</html>

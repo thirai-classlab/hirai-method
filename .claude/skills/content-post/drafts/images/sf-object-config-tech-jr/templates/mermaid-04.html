@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>多対多（Junction Object）</title>
+<link rel="stylesheet" href="sketchnote.css">
+<style>
+  body { width: 1536px; height: 1024px; }
+  .canvas { width: 1536px; height: 1024px; padding: 40px 50px; overflow: hidden; }
+
+  .h-title {
+    font-family: 'Yusei Magic', 'Klee One', sans-serif;
+    font-weight: 700;
+    font-size: 52px;
+    color: #2d2a26;
+    margin-bottom: 4px;
+  }
+  .h-title .star-mark { color: #f4c430; margin-right: 8px; font-size: 36px; }
+  .h-sub {
+    font-family: 'Klee One', sans-serif;
+    font-size: 22px;
+    color: #666;
+    margin-bottom: 24px;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: 310px 130px 360px 130px 310px;
+    align-items: center;
+    justify-items: center;
+    gap: 0;
+    margin: 14px auto 0;
+    width: 1240px;
+  }
+  .obj-card {
+    width: 305px;
+    border-radius: 22px 26px 20px 28px;
+    border: 5px solid #2d2a26;
+    background: #ffffff;
+    box-shadow: 6px 6px 0 #2d2a26;
+    padding: 14px 14px 18px;
+    flex-shrink: 0;
+  }
+  .obj-card.left   { background: #d6e8f7; border-color: #4a90d9; box-shadow: 6px 6px 0 #4a90d9; }
+  .obj-card.right  { background: #ffe5ee; border-color: #ff6b9d; box-shadow: 6px 6px 0 #ff6b9d; }
+  .obj-card.junction {
+    background: #ebdcf3;
+    border-color: #a06fbf;
+    box-shadow: 6px 6px 0 #a06fbf;
+    width: 360px;
+    border-style: solid;
+    transform: rotate(-1deg);
+  }
+
+  .obj-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .obj-icon { font-size: 38px; }
+  .obj-name {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .obj-card.left .obj-name    { color: #2670ba; }
+  .obj-card.right .obj-name   { color: #d04777; }
+  .obj-card.junction .obj-name { color: #7a4ea0; }
+  .obj-tag {
+    margin-left: auto;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 14px;
+    background: #ffffff;
+    border: 2.5px dashed currentColor;
+    border-radius: 16px;
+    padding: 3px 10px;
+  }
+  .obj-card.left .obj-tag    { color: #2670ba; }
+  .obj-card.right .obj-tag   { color: #d04777; }
+  .obj-card.junction .obj-tag { color: #7a4ea0; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #ffffff;
+    border: 3px solid #2d2a26;
+    border-radius: 12px;
+    padding: 8px 14px;
+    margin-bottom: 8px;
+    font-size: 18px;
+  }
+  .row .ftype {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 13px;
+    background: #fff3b0;
+    border: 2px solid #f4c430;
+    color: #8a6a00;
+    border-radius: 10px;
+    padding: 2px 8px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .row .fname { font-weight: 600; }
+  .row.hi { background: #fff3b0; border-color: #f4c430; }
+  .row.hi .ftype { background: #ffffff; }
+
+  .conn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 90px;
+    flex-shrink: 0;
+  }
+  .conn-label {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 19px;
+    color: #2d2a26;
+    background: #fff3b0;
+    border: 3px solid #f4c430;
+    border-radius: 16px;
+    padding: 6px 12px;
+    box-shadow: 3px 3px 0 #c89000;
+    text-align: center;
+    line-height: 1.2;
+    transform: rotate(-2deg);
+  }
+  .conn-arrow {
+    font-size: 50px;
+    color: #2d2a26;
+    line-height: 1;
+    font-weight: 700;
+  }
+
+  .caption {
+    margin-top: 28px;
+    text-align: center;
+  }
+  .caption-inner {
+    display: inline-block;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 26px;
+    color: #2d2a26;
+    background: #fffce8;
+    border: 3px dashed #2d2a26;
+    border-radius: 24px;
+    padding: 14px 32px;
+    box-shadow: 4px 4px 0 #2d2a26;
+  }
+  .caption-inner .em { color: #a06fbf; font-weight: 700; }
+
+  .badge {
+    position: absolute;
+    top: 50px; right: 80px;
+    background: #ebdcf3;
+    border: 3px solid #a06fbf;
+    border-radius: 50%;
+    width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 19px;
+    color: #7a4ea0;
+    box-shadow: 4px 4px 0 #a06fbf;
+    transform: rotate(8deg);
+    text-align: center;
+    line-height: 1.2;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="h-title"><span class="star-mark">✦</span>多対多リレーション（Junction Object）</div>
+  <div class="h-sub">主従関係 2 本で M:N を実現するジャンクションオブジェクトの構成</div>
+
+  <div class="badge">主従×2で<br>M:N！</div>
+
+  <div class="pair">
+    <div class="obj-card left">
+      <div class="obj-head">
+        <div class="obj-icon">🧑‍🎓</div>
+        <div class="obj-name">Student__c</div>
+        <div class="obj-tag">受講生</div>
+      </div>
+      <div class="row"><span class="fname">Name</span><span class="ftype">テキスト</span></div>
+      <div class="row"><span class="fname">Email__c</span><span class="ftype">メール</span></div>
+      <div class="row"><span class="fname">Affiliation__c</span><span class="ftype">所属</span></div>
+      <div class="row"><span class="fname">CreatedDate</span><span class="ftype">日付</span></div>
+    </div>
+
+    <div class="conn">
+      <div class="conn-label">主従関係<br>Master-Detail</div>
+      <div class="conn-arrow">→</div>
+    </div>
+
+    <div class="obj-card junction">
+      <div class="obj-head">
+        <div class="obj-icon">🔗</div>
+        <div class="obj-name">Enrollment__c</div>
+        <div class="obj-tag">受講登録</div>
+      </div>
+      <div class="row"><span class="fname">Name</span><span class="ftype">受講ID</span></div>
+      <div class="row hi"><span class="fname">Student__c</span><span class="ftype">主・主従</span></div>
+      <div class="row hi"><span class="fname">Course__c</span><span class="ftype">副・主従</span></div>
+      <div class="row"><span class="fname">Status__c</span><span class="ftype">選択リスト</span></div>
+    </div>
+
+    <div class="conn">
+      <div class="conn-label">主従関係<br>Master-Detail</div>
+      <div class="conn-arrow">←</div>
+    </div>
+
+    <div class="obj-card right">
+      <div class="obj-head">
+        <div class="obj-icon">📚</div>
+        <div class="obj-name">Course__c</div>
+        <div class="obj-tag">コース</div>
+      </div>
+      <div class="row"><span class="fname">Name</span><span class="ftype">テキスト</span></div>
+      <div class="row"><span class="fname">Category__c</span><span class="ftype">分類</span></div>
+      <div class="row"><span class="fname">Description__c</span><span class="ftype">説明</span></div>
+      <div class="row"><span class="fname">CreatedDate</span><span class="ftype">日付</span></div>
+    </div>
+  </div>
+
+  <div class="caption">
+    <div class="caption-inner">
+      <span class="em">主従関係 2 本</span>でジャンクションを挟むと、<br>
+      受講生（Student）⇔ コース（Course）の <span class="em">M:N（多対多）</span> が成立する
+    </div>
+  </div>
+</div>
+</body>
+</html>

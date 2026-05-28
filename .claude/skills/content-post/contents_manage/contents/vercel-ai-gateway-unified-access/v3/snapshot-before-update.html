@@ -1,0 +1,79 @@
+<h2 id="1-これは何を解決するか">1. これは何を解決するか</h2>
+<p>複数の AI プロバイダ（OpenAI / Google / Anthropic / BFL / xAI / ByteDance / Recraft …）を組み合わせて使うとき、ふつうは</p>
+<ul><li><p>プロバイダごとに <strong>個別 API キーの管理</strong></p>
+</li><li><p>プロバイダごとに <strong>個別 SDK のセットアップ</strong></p>
+</li><li><p>プロバイダごとに <strong>個別の請求・支払い</strong></p>
+</li><li><p>新モデル追加のたびに <strong>SDK バージョン更新・型定義書き換え</strong></p>
+</li></ul>
+<p>が発生します。これがプロジェクトを増やすほど指数的に面倒になる。</p>
+<p><a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer">Vercel AI Gateway</a> は、<strong>「1 本のゲートウェイ API キー + OpenAI 互換エンドポイント」だけで、上記すべてのプロバイダを横断的に叩ける</strong>プロキシ型のレイヤーです。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-unified-access/d67ce174-architecture.png" alt="Vercel AI Gateway アーキテクチャ概念図" width="1536" height="1024">
+
+<hr>
+<h2 id="2-主要機能">2. 主要機能</h2>
+<h3 id="2-1-1-本のキーで全プロバイダ呼び出し">2-1. 1 本のキーで全プロバイダ呼び出し</h3>
+<p>リクエストの <code class="rich-inline-code">model</code> フィールドを <code class="rich-inline-code">openai/gpt-image-2</code> から <code class="rich-inline-code">bfl/flux-2-pro</code> に書き換えるだけで、別プロバイダのモデルに切り替わる。SDK の差し替えは不要。</p>
+<pre data-lang="bash"><code>curl https://ai-gateway.vercel.sh/v1/images/generations \
+  -H &quot;Authorization: Bearer $AI_GATEWAY_API_KEY&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;model&quot;: &quot;openai/gpt-image-2&quot;, &quot;prompt&quot;: &quot;...&quot;}'</code></pre>
+<h3 id="2-2-モデル一覧の動的取得">2-2. モデル一覧の動的取得</h3>
+<pre data-lang="bash"><code>GET /v1/models</code></pre>
+<p>で<strong>ゲートウェイで現在叩けるモデル一覧</strong>が返る。新プロバイダ追加 / 旧モデル削除がコード変更なしに反映される。</p>
+<h3 id="2-3-observability-リクエストログ-レイテンシ監視">2-3. Observability（リクエストログ・レイテンシ監視）</h3>
+<p>Vercel ダッシュボード上でリクエスト数・トークン数・レイテンシ・エラー率を可視化。プロバイダ別にも分解できる。</p>
+<h3 id="2-4-レート制限-spending-limit">2-4. レート制限 / Spending Limit</h3>
+<p>月額の最大支出を Vercel 側で設定可能。<strong>意図しない高額請求を防げる</strong>。</p>
+<hr>
+<h2 id="3-課金モデル">3. 課金モデル</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-unified-access/9d1c7b72-pricing.png" alt="Vercel AI Gateway 課金モデル" width="1536" height="1024">
+
+<table class="rich-table"><thead><tr><th>項目</th><th>課金</th></tr></thead><tbody><tr><td>AI Gateway 自体の利用料</td><td><strong>無料</strong></td></tr><tr><td>各プロバイダのモデル使用料</td><td><strong>従量課金（プロバイダ料金そのまま）</strong></td></tr><tr><td>月次無料枠</td><td><strong>Hobby プランで $5/月相当</strong>（参考値、最新は <a href="https://vercel.com/pricing" target="_blank" rel="noopener noreferrer">Pricing</a> で確認）</td></tr><tr><td>推奨プラン</td><td><strong>Pro プラン $20/月</strong>（Spending Limit 設定推奨）</td></tr></tbody></table>
+<blockquote>
+<p>💡 モデル毎の料金は <a href="https://vercel.com/docs/ai-gateway/models" target="_blank" rel="noopener noreferrer">公式モデル一覧</a>で確認できる。例: <code class="rich-inline-code">openai/gpt-image-2</code> は画像 1 枚あたり数セント、<code class="rich-inline-code">bfl/flux-2-pro</code> は秒単位。</p>
+</blockquote>
+<hr>
+<h2 id="4-対応プロバイダ-2026-04-時点">4. 対応プロバイダ（2026-04 時点）</h2>
+<ul><li><p><strong>OpenAI</strong>: gpt-5 系 / gpt-image 系</p>
+</li><li><p><strong>Anthropic</strong>: Claude 4.x 系</p>
+</li><li><p><strong>Google</strong>: Gemini / Imagen 系</p>
+</li><li><p><strong>BFL (Black Forest Labs)</strong>: FLUX 2 系 / Kontext 系</p>
+</li><li><p><strong>xAI</strong>: Grok / Grok Imagine</p>
+</li><li><p><strong>ByteDance</strong>: Seedream 系</p>
+</li><li><p><strong>Recraft</strong>: v3 / v4 系</p>
+</li><li><p><strong>Prodia</strong>: FLUX schnell 系</p>
+</li></ul>
+<p>最新の対応プロバイダは <code class="rich-inline-code">GET /v1/models</code> で動的取得すること。</p>
+<hr>
+<h2 id="5-類似サービスとの比較">5. 類似サービスとの比較</h2>
+<table class="rich-table"><thead><tr><th>サービス</th><th>特徴</th><th>違い</th></tr></thead><tbody><tr><td><strong>Vercel AI Gateway</strong></td><td>OpenAI 互換 + Vercel エコシステム統合</td><td>Vercel デプロイとの親和性が最高、画像生成も網羅</td></tr><tr><td><strong>OpenRouter</strong></td><td>OSS 寄り、LLM 中心</td><td>画像生成プロバイダのカバレッジは Vercel が広い</td></tr><tr><td><strong>LiteLLM</strong></td><td>セルフホスト OSS、高カスタマイズ</td><td>自前で運用する必要あり、observability は別途</td></tr><tr><td><strong>Cloudflare AI Gateway</strong></td><td>キャッシュとログ寄り</td><td>プロバイダ集約より「リクエスト front」の役割</td></tr></tbody></table>
+<p><strong>判断基準</strong>: Vercel にホストしている / これからホストする予定なら Vercel AI Gateway 一択。それ以外でも OpenAI 互換 API が欲しいだけなら最有力候補。</p>
+<hr>
+<h2 id="6-向いてる-向いてない">6. 向いてる / 向いてない</h2>
+<p><strong>向いてる</strong></p>
+<ul><li><p>個人・小規模チームのプロトタイピング</p>
+</li><li><p>Vercel デプロイのアプリで AI 機能を組み込む</p>
+</li><li><p>複数プロバイダのモデルを比較・切替して試したい</p>
+</li><li><p>画像生成で複数モデルを横断的に叩きたい</p>
+</li><li><p>spending を 1 箇所に集約してコスト管理したい</p>
+</li></ul>
+<p><strong>向いてない</strong></p>
+<ul><li><p>プロバイダ独自の高度な機能（OpenAI Realtime API のストリーミング音声など、ゲートウェイがまだ吸収していないもの）を最速で使いたい</p>
+</li><li><p>オンプレ / プライベートクラウドでセルフホストしたい</p>
+</li><li><p>ゲートウェイ自体の SLA より各プロバイダ直叩きの SLA を優先したい</p>
+</li></ul>
+<hr>
+<h2 id="7-始め方の最短ルート">7. 始め方の最短ルート</h2>
+<ol><li><p><a href="https://vercel.com/" target="_blank" rel="noopener noreferrer">Vercel</a> にアカウント作成（無料）</p>
+</li><li><p>ダッシュボード → AI Gateway → API Keys → <code class="rich-inline-code">Create Key</code></p>
+</li><li><p><code class="rich-inline-code">vck_xxxxxxx</code> を <code class="rich-inline-code">.env</code> に貼る</p>
+</li><li><p>OpenAI 互換エンドポイント <code class="rich-inline-code">https://ai-gateway.vercel.sh/v1/...</code> を叩くだけ</p>
+</li></ol>
+<p>実装の具体例は関連記事「<a href="/articles/claude-code-vercel-ai-gateway-image-generation">【5分でできる】Claude Code × Vercel AI Gateway で「画像生成スキル」を作って、最新モデルを学習コストゼロで使い回す</a>」を参照してください。</p>
+<hr>
+<h2 id="関連リンク">関連リンク</h2>
+<ul><li><p><a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer">Vercel AI Gateway 公式ドキュメント</a></p>
+</li><li><p><a href="https://vercel.com/docs/ai-gateway/models" target="_blank" rel="noopener noreferrer">対応モデル一覧</a></p>
+</li><li><p><a href="https://sdk.vercel.ai/" target="_blank" rel="noopener noreferrer">Vercel AI SDK</a></p>
+</li><li><p><a href="https://vercel.com/pricing" target="_blank" rel="noopener noreferrer">Vercel Pricing</a></p>
+</li></ul>
