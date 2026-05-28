@@ -1,8 +1,3 @@
----
-paths:
-  - "**/*"
----
-
 # 自己改善 5 層 + 事実性レイヤー（ECC 由来）
 
 このハーネスは ECC（Everything Claude Code）の自己改善アルゴリズム **5 層 + 事実検証 2 層** を完全模倣している。タスク受領時・失敗時・完了時に「どの層を使うか」を意識する。
@@ -72,4 +67,4 @@ PR 直前 → F2 /verify 6 phase → READY なら commit/push
 - F1: `/gate-status` `/gate-clear` `/gate-bypass` ([gateguard](../skills/gateguard/SKILL.md))
 - F2: `/verify` ([verification-loop](../skills/verification-loop/SKILL.md))
 
-> **全 skill / command 完全 list**: [self-improvement.details.md §関連スキル-コマンド-完全](./self-improvement.details.md#関連スキル-コマンド-完全)
+> **全 skill / command 完全 list**: [self-improvement.details.md §関連スキル--コマンド-完全](./self-improvement.details.md#関連スキル--コマンド-完全)
