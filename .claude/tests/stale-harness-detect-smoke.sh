@@ -381,6 +381,52 @@ EOF
     return 0
 }
 
+# === Case 10: WARN 取込手順 strengthen (task-59 G2 連携) ===
+# 規範: .claude/rules/development-process.md §「harness 取込チェックリスト」
+# F の WARN 文に install.sh --update 案内 + 採用案内構造 (system-reminder / 対処 keyword)
+# が含まれることを strengthen verify。Case 2 既存検証 (install.sh --update 含有) を
+# 補強し、task-59 採用案 C ハイブリッドの「F WARN 連携」を smoke で固定化する。
+case_10_warn_includes_proactive_sync_guidance() {
+    local root
+    root=$(_root_for 10)
+    _layout_full "$root" "$(_today)"
+    # marker 欠落で WARN を発火させる (Case 2 と同じ trigger だが verify 観点が異なる)
+    rm -f "$root/.claude/CommonRules.md"
+
+    local err
+    err=$(
+        unset HC_FEATURE_STALE_HARNESS_DETECT_ENABLED
+        CLAUDE_PROJECT_DIR="$root" \
+        HC_CONFIG_PATH="$root/.claude/harness-config.yml" \
+        bash "$HOOK" </dev/null 2>&1 >/dev/null
+    )
+    if [ -z "$err" ]; then
+        printf 'expected stderr WARN (proactive sync guidance), got empty\n' >&2
+        return 1
+    fi
+    # (1) install.sh --update 案内 (task-59 G2 case C: F WARN 連携の核心)
+    if ! printf '%s' "$err" | grep -q 'install.sh --update'; then
+        printf '[case 10/1] missing install.sh --update guidance. stderr:\n%s\n' "$err" >&2
+        return 1
+    fi
+    # (2) terminal 経路明示 (cross-repo write は user manual 必須、規範 §「cross-repo write 例外」連携)
+    if ! printf '%s' "$err" | grep -qE 'terminal|user manual|手動'; then
+        printf '[case 10/2] missing terminal/manual hint. stderr:\n%s\n' "$err" >&2
+        return 1
+    fi
+    # (3) system-reminder tag (Claude Code 注入経路、SessionStart hook の標準)
+    if ! printf '%s' "$err" | grep -q 'system-reminder'; then
+        printf '[case 10/3] missing system-reminder tag. stderr:\n%s\n' "$err" >&2
+        return 1
+    fi
+    # (4) bash prefix (実行コマンドであることを user に明示)
+    if ! printf '%s' "$err" | grep -qE 'bash[[:space:]]+install\.sh'; then
+        printf '[case 10/4] missing bash command prefix. stderr:\n%s\n' "$err" >&2
+        return 1
+    fi
+    return 0
+}
+
 printf '===== task-56 stale-harness-detect smoke =====\n'
 run_case 1 'silent when healthy (markers + valid version)' case_1_silent_when_healthy
 run_case 2 'WARN on missing marker (CommonRules.md absent)' case_2_warn_on_missing_marker
@@ -391,10 +437,11 @@ run_case 6 'feature OFF -> no-op silent' case_6_feature_off_noop
 run_case 7 'no config -> silent fail-open' case_7_silent_when_no_config
 run_case 8 'empty marker list -> silent fail-open' case_8_silent_when_no_markers
 run_case 9 'missing version key -> WARN UNKNOWN' case_9_warn_on_missing_version_key
+run_case 10 'WARN includes proactive sync guidance (task-59 G2)' case_10_warn_includes_proactive_sync_guidance
 
 printf '\n===== Result =====\n'
-printf 'PASS: %d / 9\n' "$PASS"
-printf 'FAIL: %d / 9\n' "$FAIL"
+printf 'PASS: %d / 10\n' "$PASS"
+printf 'FAIL: %d / 10\n' "$FAIL"
 if [ "$FAIL" -gt 0 ]; then
     printf 'Failed cases: %s\n' "${FAILED_CASES[*]}"
     exit 1

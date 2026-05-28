@@ -70,6 +70,39 @@
 
 -->
 
+### 🔍 P2 CI 自動 .claude diff 検出 (G2 案 B、consuming repo opt-in)
+
+**起案:** 2026-05-28 (task-59 G2 設計 §2 案 B「CI で SSoT との `.claude` diff 定期検出 → PR / issue 自動起票」を採用案 C ハイブリッドの将来オプションとして保留採用)
+**保留日:** 2026-05-28 (task-59 完了と同時に parking-lot へ登録)
+
+**保留理由:**
+task-59 で C ハイブリッド (規範チェックリスト + F WARN 連携) を採用済 → 採用 4 リポ全件で運用開始。案 B (CI 自動化) は工数 2.5 と高く、consuming repo ごとに GitHub Actions 設定が必要で **cross-repo は user manual** で対応不可。現状の reactive WARN (F) + proactive 規範 (G2 case C) で「取込忘れ」事故は構造的に抑止できているため、CI 自動化は consuming repo 側で「週次定期 sync が回らない」「team 規模で取込担当が分散して honor system が崩れる」等の trigger が成立した時点で opt-in 導入する。
+
+**設計書:**
+- [`docs/draft/harness-sync-proactive-workflow.md`](../draft/harness-sync-proactive-workflow.md) §2 案 B — CI 自動 diff 検出 (工数 2.5、メリット: 自動・確実 / デメリット: CI 構築 + consuming repo 個別設定、cross-repo は user manual)
+- [`.claude/rules/development-process.md`](../../.claude/rules/development-process.md) §「harness 取込チェックリスト」§ CI 自動化 (将来 opt-in、parking-lot) — 採用案 C ハイブリッドの記載
+- 統合分析資料: `docs/draft/harness-health-7items-analysis.md` §8/§9 (G2 起点)
+
+**実装状態:**
+- 未着手 (採用案 C ハイブリッド = 規範 + F WARN 連携で task-59 完遂、案 B は将来 opt-in 位置付け)
+- 関連 task: task-56 = F (stale-harness-detect、reactive 検出) / task-58 = G1 (未 commit drift、`install.sh --update --commit` flag) / task-59 = G2 case C (規範化)
+- 副産物 entry: なし (本 entry は task-59 完了時点で計画通り parking-lot 登録)
+
+**再検討トリガー（いずれか成立時に `list.md` へ移行）:**
+1. consuming repo 側で「週次定期 sync が回らない」事案が観測される (例: 同 consuming repo で F WARN が連続 4 週検出される、honor system 崩壊の signal)
+2. team 規模で取込担当が分散し、誰が `install.sh --update` を実行するか不明瞭になる
+3. hirai-method 側の hook / 規範更新頻度が週次以上に増加し、手動 sync の人的コストが ROI 負に転じる
+4. consuming repo 数が 4 件 → 10 件以上に増加し、user manual sync の管理工数が爆発する
+5. GitHub Actions / 同等 CI 経路で cross-repo diff 検出 → PR 自動起票する OSS template が登場 (実装工数が 2.5 → 0.5 に低下)
+
+**代替現状:**
+- 案 C ハイブリッド (規範チェックリスト + F WARN 連携) で「取込忘れ」の reactive 検出 + proactive 義務化を実現
+- consuming repo 側 user が weekly に `bash install.sh --update <repo>` を terminal 手動実行 (運用合意)
+- F WARN 検出時は表示された取込手順 (`bash install.sh --update <repo>`) を即座に user manual 実行
+- 四半期 review で本 parking-lot entry の再検討トリガー 1-5 該当を user manual で確認
+
+---
+
 ### 🔍 P1 cross-repo sandbox 緩和の future Claude Code 仕様変化追随
 
 **起案:** 2026-05-23（task-31 設計 Q1 案 B「自動代替策探索」を案 C ハイブリッドの一部として保留採用）

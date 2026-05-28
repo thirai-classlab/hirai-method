@@ -539,6 +539,48 @@ honor system: bypass の根拠は CLAUDE.md / docs/tasks/ の該当エントリ�
 
 詳細は [`task-management.md`](./task-management.md) §「メインエージェント専任（必須）」を参照。
 
+## harness 取込チェックリスト（proactive sync、consuming repo 必須）
+
+consuming repo (本 harness `hirai-method` を採用したプロジェクト) は **proactive に harness 最新版を取り込む** 義務を持つ。F (`.claude/hooks/stale-harness-detect.sh`、task-56) は SessionStart で **事後 WARN** を出すが、検出だけでは「いつ・どの branch に取り込むか」が決まらないため、本 checklist で取込タイミング / 手順 / 検証を規範化する。
+
+### 取込タイミング (いずれかが trigger、複数該当時は最早の trigger で取込)
+
+1. **stg* / main merge の直前** (必須) — feature branch の merge で WARN 状態のまま本番反映するのを防ぐ。merge PR レビュー時に `bash install.sh --update <consuming repo path>` 未実行なら reviewer が指摘
+2. **定期 sync** (推奨、週次) — `hirai-method` 側で hook / 規範 / template が更新されている可能性を週次で取り込む。曜日固定 (例: 月曜 AM) を user / team で運用合意
+3. **F WARN 検出時** (必須、reactive 補完) — `stale-harness-detect.sh` が `<system-reminder>` で WARN 発火 → 表示された具体的取込手順 (`bash install.sh --update <repo>`) を即座に実行
+4. **重大 fix が hirai-method 側で commit された通知時** (任意) — user が hirai-method release notes / commit log を監視 (manual)、critical fix (security / data loss / regression) は即時取込
+
+### 取込手順
+
+1. **hirai-method 最新化**: hirai-method repo で `git checkout main && git pull origin main` (consuming repo 側に直接 push する場合は不要)
+2. **`bash install.sh --update <consuming repo absolute path>` を terminal で実行** — cross-repo write は agent 経路 deny のため **user manual (terminal) 実行のみ可能** (詳細: 本 .md §「cross-repo write 例外」参照)
+3. **差分確認**: consuming repo で `git status` / `git diff` で取込内容を確認 (新規 hook / 規範文書 / template 等)
+4. **分離 commit (推奨、task-58 G1)**: 取込内容を独立した commit として記録 (`chore: sync .claude/ from hirai-method <YYYY-MM-DD>` 形式)。`install.sh --update --commit` flag で自動 commit 可能 (task-58 G1 で実装予定)
+5. **smoke 再実行**: consuming repo 側の smoke / test を再実行し、取込で regression が出ていないか確認
+
+### 取込後検証
+
+- [ ] `.claude/CommonRules.md` の harness_version (yml `harness_version` key) が最新 stamp に更新されている
+- [ ] consuming repo の SessionStart で stale-harness-detect の WARN が消えている (Case 1: silent when healthy 相当)
+- [ ] 既存 smoke / test が全 PASS (取込で誤って overwrite された file がないか確認)
+
+### bypass
+
+- consuming repo 側が **意図的に旧 harness で稼働継続** する場合 (例: 特定 hook の version pin) は `harness-config.yml` の `feature_stale_harness_detect_enabled: false` で WARN 抑制可。bypass 根拠は consuming repo の `CLAUDE.md` 該当 entry に記録すること (honor system)
+- env 経路: `HC_FEATURE_STALE_HARNESS_DETECT_ENABLED=false` (1 セッション限定)
+
+### CI 自動化 (将来 opt-in、parking-lot)
+
+CI (GitHub Actions 等) で hirai-method SSoT と `.claude/` の diff を定期検出 → PR / issue 自動起票する自動化案 (案 B) は **consuming repo 側の opt-in** で将来導入。詳細は `docs/tasks/parking-lot.md` の 🔍 entry「CI 自動 .claude diff 検出 (G2 案 B)」を参照。
+
+### 起源
+
+- 2026-05-28 task-59 (G2: harness-sync-proactive-workflow)、設計 draft: [`docs/draft/harness-sync-proactive-workflow.md`](../../docs/draft/harness-sync-proactive-workflow.md) §3 採用案 C ハイブリッド
+- 前提: task-56 = F (stale-harness-detect、reactive 検出 + WARN 案内、commit `f5149fb`) / task-58 = G1 (未 commit drift、`install.sh --update --commit` flag)
+- F WARN 連携: `stale-harness-detect.sh` の WARN 文に既に「`bash install.sh --update <repo>`」案内が含まれる (commit `f5149fb`、smoke Case 2 で grep verify 済、Case 10 で取込手順 strengthen)
+
+---
+
 ## 副産物発生時の即時 draft 起こし義務（必須・再発防止）
 
 タスク実装中・レビュー中・セッション中に「これは別 task として管理すべき」と判断した副産物 (byproduct) は **memory / 会話履歴に流すだけでは禁止**。必ず以下フローを取る:
