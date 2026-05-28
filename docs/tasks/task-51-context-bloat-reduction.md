@@ -253,44 +253,72 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 
 ### Step 4: (テスト設計レビュー)
 
-**Step status**: 🔲
+**Step status**: 🔄 (iter 2 進行中、2026-05-28)
 
 **作業概要**: 5+ reviewer 動的選定 (常時 base: tdd-guide / test-automator / qa-expert / pr-test-analyzer、domain-specific: harness-optimizer + architect-reviewer + technical-writer)。並列起動 (run_in_background: true)、収束まで反復 (上限 5 回、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`)。
 
-**Read trigger 4 条件 AI 判断 test scenario 4 件**:
-1. hook BLOCK 受領 → 該当 rule file の Layer B Read 経路に到達するか
-2. `.claude/rules/<rule>.md` 編集要請 → Layer A + Layer B 両方 Read するか
-3. 初遭遇 keyword (例: "retroactive draft") → grep Layer A → 不在なら Layer B Read するか
-4. 依存先必読 task 着手 → 依存先 task ファイル + 関連 Layer B Read するか
+**Read trigger 4 条件 AI 判断 test scenario** (Scenario 3 のみ smoke 化、1/2/4 は reviewer iter 内 manual judgment 確認):
+1. **(manual reviewer judgment)** hook BLOCK 受領 → 該当 rule file の Layer B Read 経路に到達するか — reviewer iter cycle で AI 行動を観察判定
+2. **(manual reviewer judgment)** `.claude/rules/<rule>.md` 編集要請 → Layer A + Layer B 両方 Read するか — reviewer iter cycle で確認
+3. **(smoke 化、`layer-b-context-isolation-smoke.sh` Case 6 で代用)** 初遭遇 keyword (例: "retroactive draft") → grep Layer A → 不在なら Layer B Read — smoke で「Layer A 内重要 keyword 存在 grep + Layer B 内詳細存在 grep」を機械検証
+4. **(manual reviewer judgment)** 依存先必読 task 着手 → 依存先 task ファイル + 関連 Layer B Read するか — reviewer iter cycle で確認
 
-**完了条件**: 全 reviewer approve / no objection (CRITICAL+HIGH+MEDIUM = 0)、iter cycle 5 回以内収束、Read trigger 4 条件 test scenario 全 PASS。
+> Scenario 1/2/4 が manual judgment なのは、AI 行動の semantic 判定が必要で bash regex で機械検証困難なため。reviewer iter cycle (実 AI 起動 + observation 評価) で代替。
+
+**完了条件**: 全 reviewer approve / no objection (CRITICAL+HIGH+MEDIUM = 0)、iter cycle 5 回以内収束、Read trigger Scenario 3 smoke PASS (Scenario 1/2/4 は reviewer iter 内 manual judgment で confirm)。
 
 ### Step 5: (テスト合格)
 
 **Step status**: 🔲
 
 **作業概要**:
-- 起動時 token 実測 (`session start` 直後の context tokens を `context-budget.sh` 出力経由で計測、before/after diff)
+- 起動時 token 実測 (具体的手順: 後述 §「token 計測手順」)
 - 既存 smoke 全 PASS (35 hook + ~100 smoke case、regression 0)
-- 新規 `layer-b-context-isolation-smoke.sh` 7+ cases PASS
+- 新規 `layer-b-context-isolation-smoke.sh` 8 cases PASS (Step A で達成済)
 - 機械強制 hook 各 1 case PASS (delegation-guard / autonomous-action-guard / workflow-guard / loop-confirmation-detector / task-rule-guard / draft-flow-guard / context-budget)
 
+#### token 計測手順 (具体化、iter 1 H-6 反映)
+
+**手段 (3 経路、いずれか or 併用)**:
+
+1. **claude-code-cli transcript JSONL parse (推奨、精度最高)**:
+   - `~/.claude/projects/<project-hash>/<session-id>/<turn>.jsonl` を Read
+   - 最初の assistant message の `usage.input_tokens` 値を抽出
+   - before / after の値 diff で削減量算定
+   - parse は subagent 委譲推奨 (path 長 + JSONL grep 重い、main の context 圧迫回避)
+
+2. **`context-budget.sh` 経由間接計測 (近似、easy)**:
+   - SessionStart hook で `context-budget.sh` が `tier 60/80/95` 警告を発火する閾値到達タイミングを観察
+   - before session の tier 60 到達 turn 数 vs after session の tier 60 到達 turn 数を比較
+   - 精度: ±5-10K tokens、傾向把握用
+
+3. **manual 計測 (fallback、user 主導)**:
+   - user が Claude Code CLI で session 起動 → `/save-state` 時の context_used_ratio を session/checkpoint に記録
+   - before/after session で同 ratio diff を user manual で算出
+
+**実施手順**:
+1. Step 1-3 完遂後の **現セッション最終時点** で手段 (1) or (2) で baseline before 値記録
+2. 全 4 リポへ `bash install.sh --update <target>` 配布完了後の **新 session 起動時** に同手段で after 値記録
+3. before/after diff を本 task DoD「44% 削減」と照合 (誤差 ±5K 許容)
+
 **完了条件**:
-- 起動時 tokens: before ~146K → after ~80K (44% 削減実測、誤差 ±5K 許容)
+- 起動時 tokens: **before ~146K → after ~80K (44% 削減実測、誤差 ±5K 許容)** — 手段 (1) or (2) のいずれかで実測値取得
 - 全 smoke `bash .claude/tests/<smoke>.sh` exit 0
-- regression 0 (差分 file 列挙)
+- 新規 `bash .claude/tests/layer-b-context-isolation-smoke.sh` 8/8 PASS (Step A 達成済、後続 commit で regression 0 維持)
+- regression 0 (差分 file 列挙、`git diff main...HEAD` の Layer A 内 SSoT 規範文言が変更されていないこと)
 
 ### Step 6: (リファクタリング)
 
 **Step status**: 🔲
 
-**作業概要**: Layer A ↔ Layer B back-link 両方向確認、link reference 規約 3 形式統一、anchor 整理 (navigation friendly)、`install.sh` の rule 同期 path pattern に `*.details.md` 追加。
+**作業概要**: Layer A ↔ Layer B back-link 両方向確認、link reference 規約 **2 要素 hard match** (Step H で緩和)、anchor 整理 (navigation friendly)、`install.sh` の rule 同期 path pattern に `*.details.md` 追加 + SSoT 化 comment 追加。
 
 **完了条件 (or skip)**:
-- `grep -c '> \*\*詳細\*\*: \[.*\.details\.md' .claude/rules/*.md` → 各 file 1+ 件
-- `grep -c '> Layer A: \[.*\.md' .claude/rules/*.details.md` → 各 file 1+ 件
-- `grep -q 'details.md' install.sh` → exit 0 (rule 同期 path に Layer B 含む)
-- 3 観点判定: 持続可能性 ✅改善 / 汎用性 ✅維持 / 非冗長化 ✅改善 (Layer A 圧縮で重複削減)
+- **Layer A→B forward-link**: `grep -cE '\[.*\.details\.md' .claude/rules/<rule>.md` → 各 file 1+ 件 (2 要素規約: details.md link + anchor 必須、3 形式厳格不要)
+- **Layer B→A back-link**: `grep -c '> Layer A: \[.*\.md' .claude/rules/*.details.md` → 各 file 1+ 件
+- **install.sh sync path**: `grep -q 'details.md' install.sh` → exit 0 (rule 同期 path に Layer B 含む) + 当該行近傍に「`*.details.md` も rule sync 対象 (Layer B、SSoT for context bloat reduction、task-51)」comment 追加で SSoT 化
+- **link 規約緩和反映**: draft §3 を 2 要素 hard match に緩和 (Step H 完了)、Layer A 既存 link は全て新規約 compliant
+- **3 観点判定**: 持続可能性 ✅改善 (Layer A/B 役割明確化で SSoT navigation 向上) / 汎用性 ✅維持 (新規範文書追加時の Layer A/B 分割 pattern 確立、template 雛形は副産物 entry #56 で deferred) / 非冗長化 ✅改善 (Layer A 圧縮で重複削減、Layer B は明示参照のみのため context 注入 0)
 
 ## 工数見積
 
