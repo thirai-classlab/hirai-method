@@ -329,6 +329,43 @@ if [[ "$MODE" != "update" ]] || true; then
 fi
 
 # ============================================================
+# 6.5. harness_version stamp 書込 (task-56 F)
+# ============================================================
+# stale-harness-detect.sh (SessionStart hook) が読む同期 stamp。
+# `bash install.sh --update <repo>` 実行日 (UTC) を YYYY-MM-DD で
+# target の harness-config.yml に書き込む (in-place、portable sed -i 互換)。
+# 既存 `harness_version:` 行があれば差し替え、無ければ追記。
+# fail-open: stamp 書込失敗は WARN のみで install 自体は継続。
+if ! $DRY_RUN; then
+  TARGET_HC="$TARGET/.claude/harness-config.yml"
+  if [[ -f "$TARGET_HC" ]]; then
+    NEW_STAMP="$(date -u +%Y-%m-%d)"
+    if grep -qE '^harness_version:' "$TARGET_HC" 2>/dev/null; then
+      # 既存 line を置換 (BSD sed / GNU sed 両対応: -i '' / -i バックアップ拡張子なし)
+      TMP_HC="$(mktemp /tmp/harness-config.XXXXXX.yml)"
+      sed -E "s|^harness_version:.*|harness_version: \"${NEW_STAMP}\"|" "$TARGET_HC" > "$TMP_HC" 2>/dev/null \
+        && mv "$TMP_HC" "$TARGET_HC" \
+        && echo "[install] harness_version stamp updated -> $NEW_STAMP" \
+        || echo "[install] WARN: failed to update harness_version stamp (install continues)" >&2
+      rm -f "$TMP_HC" 2>/dev/null || true
+    else
+      # 未設定なら top に append (insert at top of file)
+      {
+        echo "# === Harness Version Stamp (task-56 F, install.sh が書込) ==="
+        echo "harness_version: \"${NEW_STAMP}\""
+        echo ""
+        cat "$TARGET_HC"
+      } > "${TARGET_HC}.tmp" 2>/dev/null \
+        && mv "${TARGET_HC}.tmp" "$TARGET_HC" \
+        && echo "[install] harness_version stamp inserted -> $NEW_STAMP" \
+        || echo "[install] WARN: failed to insert harness_version stamp (install continues)" >&2
+    fi
+    unset NEW_STAMP TMP_HC
+  fi
+  unset TARGET_HC
+fi
+
+# ============================================================
 # 7. 検証 (config-loader 動作確認)
 # ============================================================
 if ! $DRY_RUN; then
