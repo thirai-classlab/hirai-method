@@ -140,6 +140,15 @@
 |    | ✅ | Step 6 | (リファクタリング) TUI 描画 4 関数を 8 helper 抽出で全関数 ≤45 LOC (commit `3e04b26`)、3 観点 (持続可能性 改善 / 汎用性・非冗長化 skip)、perf MED defer (entry #55)、behavior-preserving 14/14+21/21、closure + PR | | |
 | 49 | ✅ | **Task: UI 実装後のビジュアル検証必須化** | UI 実装で E2E PASS でも見た目崩れを捕捉できない品質 gap を埋めるため、採用 6 条 4「テスト合格 Step」に browser/web UI のビジュアル検証 (agent-browser + screenshot、E2E と別レイヤ) を必須化する。完成すれば AI が UI Task 完了前に必ず見た目を視覚確認し、E2E のみ / 型チェックのみでの完了宣言を防げるようになる。**完遂** (2026-05-27、honor-system doc 追記、user 承認済 draft、採用 6 条 5 小タスク) | — | [task-49-ui-visual-verification-mandate.md](task-49-ui-visual-verification-mandate.md) ← draft: [`docs/draft/ui-visual-verification-mandate.md`](../draft/ui-visual-verification-mandate.md) |
 |    | ✅ | Step 1 | 採用 6 条 4「テスト合格 Step」にビジュアル検証必須化追記 (agent-browser + screenshot + breakpoint/状態/theme + E2E 別レイヤ + terminal TUI 除外 + honor-system) + §UI 変更検出基準 future hook 案の整合更新 | | |
+| 50 | 🔲 | **Task: grep-whitelist-add** | Grep 不在環境の検索手段確保のため bash-whitelist に grep/find/rg を read-only 追加し、main が委譲なしで Bash 検索でき検索 friction (実測 43 件/3日) が消える | — | [harness-health-improvements.md](../draft/harness-health-improvements.md) + [分析§9](../draft/harness-health-7items-analysis.md) |
+| 51 | 🔲 | **Task: context-bloat-reduction** | parse 失敗の根本対策のため paths-scoped rule 要約化 + 未使用 MCP/plugin 棚卸し + 明示 compact 運用化を行い、context 肥大が抑制され tool 生成が安定する | — | [分析§10](../draft/harness-health-7items-analysis.md) |
+| 53 | 🔲 | **Task: observe-sh-flock** | 観察ログ corruption 防止のため observe.sh append に flock/mkdir lock を導入し、並行 subagent 下でも L4 学習データが壊れなくなる | — | [harness-health-improvements.md](../draft/harness-health-improvements.md) |
+| 54 | 🔲 | **Task: content-post-portable-idempotent** | skill 欠陥の全 PJ 波及防止のため content-post を hirai-method 移植 + 成功ログを publish ゲート外 + content-hash 冪等化し、--update 再実行で v 増殖しなくなる | — | [harness-health-improvements.md](../draft/harness-health-improvements.md) |
+| 55 | 🔲 | **Task: harness-config 保護 (A、B-1)** | install.sh --update の yml project 固有値破壊防止のため harness-config.local.yml に override 分離 (B-1) し、docs_approved_dir 等が --update で温存される | — | [harness-config-update-merge-protect.md](../draft/harness-config-update-merge-protect.md) |
+| 56 | 🔲 | **Task: stale-harness 検出 (F)** | 旧 harness 稼働継続の防止のため version stamp + marker 欠落を SessionStart で WARN し、consuming repo が旧 harness で動いていると検出できる | task-51 | [stale-harness-detection.md](../draft/stale-harness-detection.md) |
+| 57 | ⏸️ | **Task: confidence-gate 修正 (G)** | regex_no_match storm 解消のため regex 頑健化 + block→WARN 降格するが、F 適用で storm 消失なら不要化 (F 後に定量トリガーで再評価、保留) | task-56 | [分析§9](../draft/harness-health-7items-analysis.md) |
+| 58 | 🔲 | **Task: 未 commit drift 対応 (G1)** | 未 commit sync drift 解消のため install.sh --update に分離 commit 案内 + --commit flag を追加し、harness-sync と project 作業が混在しなくなる | task-55 | [harness-sync-uncommitted-drift.md](../draft/harness-sync-uncommitted-drift.md) |
+| 59 | 🔲 | **Task: sync-workflow proactive 改善 (G2)** | stale 再発防止のため harness 取込チェックリスト規範 + F WARN に取込手順を含め、旧 harness 稼働が proactive に防がれる | task-56 | [harness-sync-proactive-workflow.md](../draft/harness-sync-proactive-workflow.md) |
 
 <!--
 記入ルール:
