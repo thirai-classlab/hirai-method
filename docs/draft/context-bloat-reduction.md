@@ -7,7 +7,11 @@ retroactive: false
 
 # Context Bloat Reduction (task-51)
 
-**ステータス:** ✅ **draft 承認済 (2026-05-28 起案 + 承認、task-51 進行中)**
+**ステータス:** ✅ **draft 承認済 (2026-05-28 起案 + 承認、task-51 進行中、2026-05-28 A 案 redesign で Layer B 物理配置を `.claude/rules-details/` に訂正)**
+
+> **重要 (2026-05-28 A 案 redesign addendum)**: 本 draft §3 Step 3 が想定した「`.claude/rules/<rule>.details.md` + frontmatter `paths: []` で非注入」は Claude Code 仕様上**そもそも成立しない** ことが Step 5 token 実測 (after 153,780 tok、目標 ~80K 未達) + claude-code-guide subagent + 公式 doc ([code.claude.com/docs/en/memory.md](https://code.claude.com/docs/en/memory.md), conf 0.95) で確定。`.claude/rules/*.md` は再帰 discover + startup load される native 機構で、`paths:` は path match 時の**追加適用** (除外機構ではない)。frontmatter に negation/exclude pattern 不在。
+>
+> **訂正設計 (user 承認 2026-05-28)**: Layer B 6 file を `.claude/rules-details/` (`.claude/rules/` の外、Claude Code discover 対象外) へ物理移動。Layer A→B link は `../rules-details/<rule>.details.md`、Layer B→A back-link は `../rules/<rule>.md` (相対参照、深さ同じ sibling dir)。本 draft 内の `<rule>.details.md` path 表記は当時の想定であり、実装は `.claude/rules-details/<rule>.details.md` が SSoT。`install.sh` の `rsync -a .claude/` で `.claude/rules-details/` も自動同期、4 リポへの配布も同経路で完了する。詳細経緯: `docs/tasks/task-51-context-bloat-reduction.md` §「2026-05-28 A 案 redesign 経緯」。
 **起点:** 35th save-state (2026-05-28) で「context 肥大、tool call parse 失敗頻発」と報告。本 session の網羅調査 (37th save-state 復元後) で起動時 ~146K tokens / 11 Layer の構成を実測。
 **前提:**
 - task-50 / 53 / 54 / 55 / 56 / 58 / 59 完了 (harness 健全性 7 task ✅)

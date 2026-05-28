@@ -5,7 +5,7 @@ related: workflow.md
 
 # Workflow Enforcement — 詳細版 (Layer B)
 
-> Layer A: [`workflow.md`](./workflow.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`workflow.md`](../rules/workflow.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 本 file は Layer A の SSoT を補完する詳細解説。14-stage / 10-stage 各 stage の連携 command 詳細 / draft-flow-guard 緩和履歴 (旧 task-40 拡張撤廃) / リファクタリング 3 観点の sub-checklist / 20 MECE カテゴリ各論 / fan-out reviewer-registry stack heuristic 詳細 / 副産物 5 層処理フロー / Session 永続化の Serena 必須化詳細 / 関連 skill 完全 list / 起源を含む。Read trigger 4 条件は Layer A 冒頭参照。
 
@@ -17,7 +17,7 @@ related: workflow.md
 - **Task 最終 3 Steps = テスト設計レビュー → テスト合格 → リファクタリング (固定)**:
   - テスト設計レビューは 5+ reviewer 動的選定 + 修正収束まで反復 + 5 回上限
   - bypass: `ECC_TEST_DESIGN_REVIEW_OFF=1`
-  - 詳細: [task-management.md §タスク構造規範](./task-management.md#タスク構造規範-taskphasen-step-phase-中間階層廃止) 採用 6 条 4 [2026-05-25 採用]
+  - 詳細: [task-management.md §タスク構造規範](../rules/task-management.md#タスク構造規範-taskphasen-step-phase-中間階層廃止) 採用 6 条 4 [2026-05-25 採用]
   - 旧採用 5 条 4 を supersede
 
 ### Stage 10 `local-test` の Step 完了条件検証
@@ -28,7 +28,7 @@ related: workflow.md
 
 ### Stage 13 `scenario-test` の UI 必須化
 
-- **UI 変更を含む Task は E2E 必須** (検出基準: [task-management.md §UI 変更検出基準](./task-management.md#ui-変更検出基準))
+- **UI 変更を含む Task は E2E 必須** (検出基準: [task-management.md §UI 変更検出基準](../rules/task-management.md#ui-変更検出基準))
 - 採用 6 条 4 [2026-05-25 採用、旧採用 5 条 4 supersede] でビジュアル検証も併設必須化 (2026-05-27 採用、`agent-browser` skill + screenshot)
 - E2E (機能フロー動作) とビジュアル検証 (見た目) は別レイヤ、両方 PASS で初めて UI Task 完了
 
@@ -84,7 +84,7 @@ user 指示「既存 rules file の Edit は PASS (新規 Write のみ BLOCK) �
 
 - 2026-05-26 task-40 で `.claude/rules/*.md` 等の規範文書も draft 経由必須化 (機械強制 BLOCK)、設計起源: `docs/draft/task-mgmt-rules-with-draft-flow-enforcement.md`
 - 2026-05-28 緩和: user 直接指示「既存 rules file の Edit は PASS (新規 Write のみ BLOCK) → 書き込みも許容してください」で task-40 拡張部分 (規範文書 path の新規 Write block) を撤廃
-- 関連: [`task-management.md`](./task-management.md) §「設計→承認→タスク追加フロー」/ [`modes.md`](./modes.md) 遵守事項 2 例外条項「規範変更」
+- 関連: [`task-management.md`](../rules/task-management.md) §「設計→承認→タスク追加フロー」/ [`modes.md`](../rules/modes.md) 遵守事項 2 例外条項「規範変更」
 
 ## リファクタリング 3 観点詳細
 

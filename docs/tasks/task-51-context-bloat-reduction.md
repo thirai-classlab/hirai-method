@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #51: Context Bloat Reduction (2 層構造化)
 
-> Status: **🔄 進行中** (Step 1 ✅ / Step 2-6 🔲)
+> Status: **🔄 進行中** (Step 1-4 ✅ / Step 5 token 実測で FAIL → A 案 redesign 完了 / Step 5b (Layer B 物理移動) ✅ / Step 6 🔲)
 > 起案: 2026-05-28
 > 承認: 2026-05-28 (user)
 > 関連: harness 健全性 9 task umbrella の最終 2 task の 1 つ (task-51 / task-57)
@@ -20,6 +20,32 @@ total_steps: 6
 ## Task ゴール
 
 本 session 起動時の context tokens が **~146K → ~80K (44% 削減)** に減り、tool call parse 失敗が解消され、`.claude/rules/*.md` の規範 visibility は **Layer A (要約、context 注入) + Layer B (詳細、明示 Read のみ) の 2 層構造** で維持される。
+
+## 2026-05-28 A 案 redesign 経緯 (Step 5 → 5b、重要)
+
+**事案**: Step 5 token 実測で **DoD 未達** (after 153,780 tok vs 目標 ~80K、before ~146K より微増) が判明。
+
+**根本原因**: 当初設計 (`.claude/rules/<rule>.details.md` + frontmatter `paths: []` で非注入) は Claude Code 仕様上**そもそも成立しない** ことが claude-code-guide subagent + 公式 doc ([code.claude.com/docs/en/memory.md](https://code.claude.com/docs/en/memory.md), confidence 0.95) で確定:
+
+- `.claude/rules/*.md` は**再帰的に全件 discover + startup load** される
+- `paths:` は path match 時の**追加適用**機構で**除外には使えない**、`paths: []` は spec undefined (実装上「常時 load」扱い)
+- frontmatter に negation / exclude pattern は**存在しない**
+- 結果: Layer A + Layer B の**両方**が startup 注入され、分割は context を**増やした**
+
+**user 承認 (2026-05-28)**: 案 A + C で対応:
+- **A**: Layer B 6 file を `.claude/rules-details/` (`.claude/rules/` の外、Claude Code discover 対象外) へ物理移動 + Layer A の forward-link を `../rules-details/<rule>.details.md` 化 + Layer B の back-link を `../rules/<rule>.md` 化 + install.sh / smoke / 関連 doc 更新
+- **C** (user manual): `~/.claude/rules/zh.bak/` `web.bak/` を `~/.claude/rules/` の**外** (例 `~/.claude-archive/`) へ移動 (`.bak` rename では `.md` 再帰 discover で load され続けるため)
+
+**A 実施結果** (本 commit):
+- 6 file を `git mv` で `.claude/rules-details/` へ移動 (履歴保持)
+- Layer A 内 34 件の forward-link を `../rules-details/` 化
+- Layer B 内 10 件の back-link / cross-ref を `../rules/` 化
+- `.claude/rules-details/README.md` 新設 (Layer B SSoT)
+- `install.sh` に `.claude/rules-details/` 同期の SSoT comment 追加
+- `README.md` §2.6 / `docs/INVENTORY.md` Layer A/B Strategy section を新設計に書換
+- 期待効果: 次 session startup から Layer B (~25K tok) 注入が消失
+
+**実測再計測**: 本 commit / Step 5b 完了後の fresh session 起動時に再度 transcript JSONL parse で after 値計測 (Step 5 で再実施)。
 
 ## Task 依存先タスク
 
@@ -161,9 +187,11 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 1 | ✅ | (a/b) global plugin 棚卸し + user-level rule (zh / web) 整理 [user 手動] | 0.5h | — |
 | 2 | ✅ | (c/e) memory SUPERSEDED 5 件削除 (v8 既存削除済の死リンク含 MEMORY.md 6 行整理) + CommonRules 旧 Critical Lessons section 圧縮 [完了 2026-05-28、削減 ~6K tokens] | 1.5h | Step 1 |
 | 3 | ✅ | (d) project rules **6 file 2 層構造化完了** (git-workflow は退避不要)。**self-improvement** (pilot、~1.3K) / **development-process** (~1.3K) / **task-management** (~4.6K) / **workflow** (~2.1K) / **why-x5-output** (~0.3K) / **modes** (~0.3K) — 6 subagent 並列 + sequential で完遂、累計純削減 ~9.9K tokens、SSoT 劣化なし、Read trigger 4 条件 admonition 全 6 file 配置 | 8-11h | Step 2 |
-| 4 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 + Read trigger 4 条件 AI 判断 test scenario 4 件 | 1.5-2h | Step 3 |
-| 5 | 🔲 | (テスト合格) 起動時 token 実測 + 既存 smoke regression 0 + 新規 `layer-b-context-isolation-smoke.sh` 7+ cases PASS | 1.5h | Step 4 |
-| 6 | 🔲 | (リファクタリング) Layer A ↔ Layer B back-link 両方向確認、link reference 規約統一、anchor 整理 | 0.5-1h | Step 5 |
+| 4 | ✅ | (テスト設計レビュー) 5+ reviewer 動的選定 + Read trigger 4 条件 AI 判断 test scenario 4 件 | 1.5-2h | Step 3 |
+| 5 | ⚠️→5b | (テスト合格) token 実測で DoD 未達判明 (153K vs 目標 80K)、`paths: []` 仕様上無効と確定 → A 案 redesign で Step 5b に分岐 | 1.5h | Step 4 |
+| 5b | ✅ | (A 案 redesign) Layer B 6 file を `.claude/rules-details/` へ git mv + Layer A/B 双方の link 更新 + install.sh / README / INVENTORY / smoke 更新 | 0.5d | Step 5 |
+| 5c | 🔲 | (再計測 + smoke) fresh session 起動時に token 再実測 (after 値) + 既存 smoke regression 0 + 機械強制 hook 各 1 case PASS (smoke は API 週次 limit 後 5/31 以降に subagent 再実行) | 1h | Step 5b |
+| 6 | 🔲 | (リファクタリング) Layer A ↔ Layer B back-link 両方向確認、link reference 規約統一、anchor 整理 | 0.5-1h | Step 5c |
 
 合計工数: **14-18h (2.0-2.5d)**
 

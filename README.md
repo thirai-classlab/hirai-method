@@ -105,8 +105,10 @@ memory key schema: `session/*` (snapshot) / `plan/<feature>/*` (Plan) / `executi
 
 | 層 | 物理配置 | context 注入 | 内容 |
 |---|---|---|---|
-| **Layer A** | `.claude/rules/<rule>.md` | claudeMd 経由で常時注入 (現状維持) | 採用 N 条 / 遵守事項 / table (条文 keep) / bypass env 1-2 行 / 重要 keyword 見出し / Layer B link / hook 名 / 起源 1 行 |
-| **Layer B** | `.claude/rules/<rule>.details.md` | **frontmatter `paths: []` で非注入** | OK/NG 例詳細 / history / SUPERSEDED 履歴 / bypass 詳細仕様 / 起源詳細 / 5 層強制機構の詳細 / 関連 artifact 完全 list |
+| **Layer A** | `.claude/rules/<rule>.md` | claudeMd 経由で常時注入 (Claude Code が `.claude/rules/` を再帰 discover) | 採用 N 条 / 遵守事項 / table (条文 keep) / bypass env 1-2 行 / 重要 keyword 見出し / Layer B link / hook 名 / 起源 1 行 |
+| **Layer B** | `.claude/rules-details/<rule>.details.md` | **非注入** (Claude Code は `.claude/rules/` のみ discover、別 dir は対象外) | OK/NG 例詳細 / history / SUPERSEDED 履歴 / bypass 詳細仕様 / 起源詳細 / 5 層強制機構の詳細 / 関連 artifact 完全 list |
+
+> **設計経緯 (2026-05-28 A 案 redesign)**: 当初 `.claude/rules/<rule>.details.md` + frontmatter `paths: []` で非注入を狙ったが、Claude Code 公式仕様 (code.claude.com/docs/en/memory.md) で「`.claude/rules/*.md` は再帰 discover + startup load」「`paths:` は path match 時の**追加適用** (除外機構ではない)」が確定 (claude-code-guide subagent + 公式 doc、confidence 0.95)。token 実測でも `paths: []` は無効で逆に context が増えたため、Layer B を別 dir `.claude/rules-details/` (discover 対象外) へ物理移動して除外を実現。
 
 **Layer B Read trigger (4 条件、Layer A 冒頭に admonition 配置)**:
 1. **違反検出時**: hook BLOCK / warn 注入受領 / regex 不一致
@@ -114,9 +116,9 @@ memory key schema: `session/*` (snapshot) / `plan/<feature>/*` (Plan) / `executi
 3. **新規事案**: 初遭遇 keyword / 例外パターン疑い
 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 
-通常運用 (上記 4 trigger 非該当) は Layer A のみで判断、Layer B Read skip (token 節約)。詳細は `.claude/rules/<rule>.details.md` の各 §「<該当 section>」を参照。
+通常運用 (上記 4 trigger 非該当) は Layer A のみで判断、Layer B Read skip (token 節約)。詳細は `.claude/rules-details/<rule>.details.md` の各 §「<該当 section>」を参照。
 
-**規約**: Layer A → Layer B link は **2 要素 hard match** (`details.md` 含む markdown link + section anchor) を満たせば spec compliant (2026-05-28 緩和、iter 1 review H-2 反映)。
+**規約**: Layer A → Layer B link は **2 要素 hard match** (`details.md` 含む markdown link + section anchor) を満たせば spec compliant (2026-05-28 緩和、iter 1 review H-2 反映)。link path は forward `../rules-details/<rule>.details.md` / back `../rules/<rule>.md` (相対参照)。
 
 ### 2.7 アーキテクチャ
 

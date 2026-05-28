@@ -17,7 +17,7 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [task-management.details.md](./task-management.details.md)
+> 詳細: [task-management.details.md](../rules-details/task-management.details.md)
 
 ## bypass env naming convention (SSoT)
 
@@ -70,7 +70,7 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 
 > **3 観点 (リファクタリング、採用 6 条 4)**: 持続可能性 (Sustainability) / 汎用性 (Generality) / 非冗長化 (Deduplication)。詳細 sub-checklist は [`workflow.md`](./workflow.md) §「リファクタリング強制 (W3)」参照。
 
-> **OK/NG 例詳細 (条 2/3/6) / task-29 採用 5 条 supersede 経緯**: [task-management.details.md §採用-6-条-詳細](./task-management.details.md#採用-6-条-詳細)
+> **OK/NG 例詳細 (条 2/3/6) / task-29 採用 5 条 supersede 経緯**: [task-management.details.md §採用-6-条-詳細](../rules-details/task-management.details.md#採用-6-条-詳細)
 
 ### bypass
 
@@ -102,7 +102,7 @@ honor system: bypass 時は理由を CLAUDE.md or `docs/tasks/<task-N>.md` に�
 
 違反検出は当面 honor system (main agent が Why × 5 で必読宣言)、将来 `task-rule-guard.sh` 拡張で warn 注入予定。
 
-> **必読義務の起源 (2026-05-26 user 指示) / 効果 3 層 (list.md DAG + task.md 影響内容 + 開始時 Read 強制)**: [task-management.details.md §開発開始時必読-詳細](./task-management.details.md#開発開始時必読-詳細)
+> **必読義務の起源 (2026-05-26 user 指示) / 効果 3 層 (list.md DAG + task.md 影響内容 + 開始時 Read 強制)**: [task-management.details.md §開発開始時必読-詳細](../rules-details/task-management.details.md#開発開始時必読-詳細)
 
 ## 既存 task 移行ガイド
 
@@ -114,7 +114,7 @@ honor system: bypass 時は理由を CLAUDE.md or `docs/tasks/<task-N>.md` に�
 | **G2 (Phase→Step、2026-05-23〜25)** | task-29 採用 5 条 | task-21/23/24/27/28/29〜32/33 | 次回着手時に新採用 6 条へ再構造化推奨 (honor system) |
 | **G3 (Task=Phase=N Step、2026-05-25〜)** | 新採用 6 条 | task-34〜 | 必須適用 |
 
-> **移行優先度 task 個別 table / task-33 即 restructure 経緯**: [task-management.details.md §既存-task-移行-詳細](./task-management.details.md#既存-task-移行-詳細)
+> **移行優先度 task 個別 table / task-33 即 restructure 経緯**: [task-management.details.md §既存-task-移行-詳細](../rules-details/task-management.details.md#既存-task-移行-詳細)
 
 ## UI 変更検出基準
 
@@ -139,7 +139,7 @@ UI 変更だが view 影響なし時、Step 完了条件に明示:
 完了条件: skip: UI 変更だが view 影響なし (CSS 変数 rename のみ、レンダリング結果同一)
 ```
 
-> **機械強制 hook 案 (future work) 詳細**: [task-management.details.md §ui-検出-詳細](./task-management.details.md#ui-検出-詳細)
+> **機械強制 hook 案 (future work) 詳細**: [task-management.details.md §ui-検出-詳細](../rules-details/task-management.details.md#ui-検出-詳細)
 
 ## 設計→承認→タスク追加フロー（必須）
 
@@ -174,7 +174,7 @@ UI 変更だが view 影響なし時、Step 完了条件に明示:
 
 両用途で `/new-task` 実行時に 🔲 に update。
 
-> **経路 B ID 払い出し / 重複検知 / Loop モード整合 / 機械検出 hook フィルタ順序注意 / 起源 (recall_poc plan-first 不在事案)**: [task-management.details.md §plan-first-詳細](./task-management.details.md#plan-first-詳細)
+> **経路 B ID 払い出し / 重複検知 / Loop モード整合 / 機械検出 hook フィルタ順序注意 / 起源 (recall_poc plan-first 不在事案)**: [task-management.details.md §plan-first-詳細](../rules-details/task-management.details.md#plan-first-詳細)
 
 ### テンプレート
 
@@ -208,7 +208,7 @@ UI 変更だが view 影響なし時、Step 完了条件に明示:
 | `/task-bypass <slug>` | 1 file 分 pre-clear |
 | `/task-bypass --clear-all` | 全 marker 削除 |
 
-> **Hook 検出仕様詳細 / subagent 通過理由 / 違反パターン例**: [task-management.details.md §hook-強制-詳細](./task-management.details.md#hook-強制-詳細)
+> **Hook 検出仕様詳細 / subagent 通過理由 / 違反パターン例**: [task-management.details.md §hook-強制-詳細](../rules-details/task-management.details.md#hook-強制-詳細)
 
 ## チェックリスト
 

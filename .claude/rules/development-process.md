@@ -25,7 +25,7 @@ paths:
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [development-process.details.md](./development-process.details.md)
+> 詳細: [development-process.details.md](../rules-details/development-process.details.md)
 
 ## コーディング指針 / 出力 / 研究 (必読)
 
@@ -37,7 +37,7 @@ paths:
 
 context7 fail で loop 停止しない / 「training data で確信あり」で skip しない (verify before recommending 原則)。
 
-> **適用対象 task 完全 list / `.mcp.json` 設定詳細**: [details §研究と再利用-詳細](./development-process.details.md#研究と再利用-詳細)
+> **適用対象 task 完全 list / `.mcp.json` 設定詳細**: [details §研究と再利用-詳細](../rules-details/development-process.details.md#研究と再利用-詳細)
 
 ## TDD (テスト駆動開発)
 
@@ -148,9 +148,9 @@ state: `.claude/.parallel-subagent-state/recent.json` (TTL 5 分、atomic-mkdir 
 
 `harness-config.yml` 編集不要 (hook 内 hardcode 自動判定)、override は任意 (env `HC_AGENT_TYPE_KEYWORD_MAPPING`)。
 
-> **要件 1-7 各論詳細 / 違反例 / heredoc 保護仕様 / 機械強制判定境界**: [details §委譲必須要件-詳細](./development-process.details.md#委譲必須要件-詳細)
+> **要件 1-7 各論詳細 / 違反例 / heredoc 保護仕様 / 機械強制判定境界**: [details §委譲必須要件-詳細](../rules-details/development-process.details.md#委譲必須要件-詳細)
 >
-> **並列化義務 / agent type 選定の起源 (task-35 / task-34 実例)**: [details §並列化義務-起源](./development-process.details.md#並列化義務-起源)
+> **並列化義務 / agent type 選定の起源 (task-35 / task-34 実例)**: [details §並列化義務-起源](../rules-details/development-process.details.md#並列化義務-起源)
 
 ## サブエージェント `.claude/` 編集の staging 戦略 (必須)
 
@@ -177,7 +177,7 @@ Claude Code permission system は subagent context での `.claude/` 配下へ�
 - **メインからの `.claude/` Write/Edit は通過** (`delegation-guard.sh` がメイン許可)
 - `worktree` isolation でも同 policy (foreground / background / worktree いずれも denied)
 
-> **起源 (task #12 dual-mode-portability) / 規範化経緯 / 再発検出時の昇格判定 (案 B / 案 C)**: [details §staging-戦略-起源](./development-process.details.md#staging-戦略-起源)
+> **起源 (task #12 dual-mode-portability) / 規範化経緯 / 再発検出時の昇格判定 (案 B / 案 C)**: [details §staging-戦略-起源](../rules-details/development-process.details.md#staging-戦略-起源)
 
 ## cross-repo write 例外 (agent 経路 deny / user manual 専用)
 
@@ -205,7 +205,7 @@ Claude Code permission system は subagent context での `.claude/` 配下へ�
 - **単一 repo 内 (hirai-method 内 `.claude/hooks/` 編集) は staging 戦略で subagent から可能** (§「staging 戦略」)
 - cross-repo Write のみが完全 deny
 
-> **起源 (task-24 W1 実証 confidence 0.85) / 緩和 (task-42 4 リポ全件 agent 直接成功実証) / 将来追随窓口**: [details §cross-repo-write-起源](./development-process.details.md#cross-repo-write-起源)
+> **起源 (task-24 W1 実証 confidence 0.85) / 緩和 (task-42 4 リポ全件 agent 直接成功実証) / 将来追随窓口**: [details §cross-repo-write-起源](../rules-details/development-process.details.md#cross-repo-write-起源)
 
 ## サブエージェント完了サマリ (Confidence Gate / F3 必須)
 
@@ -236,7 +236,7 @@ subagent の **最後の assistant text** に **必ず `confidence: 0.X`** (0.0�
 
 詳細: [`docs/CONFIDENCE-GATE.md`](../../docs/CONFIDENCE-GATE.md)。bypass 根拠は CLAUDE.md / docs/tasks/ に記録 (honor system)。
 
-> **major subagent only block 仕様 (task #9) / 記載例 full**: [details §confidence-gate-詳細](./development-process.details.md#confidence-gate-詳細)
+> **major subagent only block 仕様 (task #9) / 記載例 full**: [details §confidence-gate-詳細](../rules-details/development-process.details.md#confidence-gate-詳細)
 
 ## 指摘対応
 
@@ -287,7 +287,7 @@ consuming repo は **proactive に harness 最新版を取り込む** 義務を�
 
 bypass 根拠は consuming repo の `CLAUDE.md` に記録 (honor system)。
 
-> **CI 自動化 (将来 opt-in 案 B) / 前提 task 連携詳細 / F WARN 案内文の grep 検証経緯**: [details §harness-取込-詳細](./development-process.details.md#harness-取込-詳細)
+> **CI 自動化 (将来 opt-in 案 B) / 前提 task 連携詳細 / F WARN 案内文の grep 検証経緯**: [details §harness-取込-詳細](../rules-details/development-process.details.md#harness-取込-詳細)
 
 ---
 
