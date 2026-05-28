@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #51: Context Bloat Reduction (2 層構造化)
 
-> Status: **🔄 進行中** (Step 1-4 ✅ / Step 5 token 実測 FAIL → A 案 redesign / Step 5b (Layer B 物理移動) ✅ / Step 6 (back-link verify + install.sh SSoT comment) ✅ / Step 5c (fresh session 再計測 + 残 smoke) 🔲)
+> Status: **🔄 進行中** (Step 1-4 ✅ / Step 5 token 実測 FAIL → A 案 redesign / Step 5b (Layer B 物理移動) ✅ / Step 6 (back-link verify + install.sh SSoT comment) ✅ / Step 5c token 再実測 ✅ ~100.1K (-45.9K 31.4% 削減、期待 ~91-101K 内、目標 ~80K 未達) / Step 5c 残 6 hook smoke ⏸️ (5/31 API limit reset 待ち))
 > 起案: 2026-05-28
 > 承認: 2026-05-28 (user)
 > 関連: harness 健全性 9 task umbrella の最終 2 task の 1 つ (task-51 / task-57)
@@ -395,14 +395,9 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 2026-05-28 | Step 5 FAIL → A 案 redesign | token 実測 153,780 tok (target ~80K 未達)、claude-code-guide subagent (conf 0.95) + 公式 doc で `paths: []` 仕様上無効と確定。user 承認「A+Cで」(2026-05-28) で A 案 (Layer B 物理移動 `.claude/rules-details/`) + C 案 (user manual zh.bak/web.bak 移動) に分岐 |
 | 2026-05-28 | Step 5b 完了 | Layer B 6 file を git mv で `.claude/rules-details/` へ移動 + Layer A 34 link + Layer B 10 link 更新 + `.claude/rules-details/README.md` 新設 + install.sh / README / INVENTORY / draft / task-51 / list.md 更新 + smoke 追従 (8/8 PASS conf 0.92) 全完了、commit `71c85d2` + `de1e851` 両 push 済 |
 | 2026-05-28 | Step 6 完了 | Layer A→B forward-link 34 件 + Layer B→A back-link 10 件 grep 確認 ✅、install.sh `.claude/rules-details/` 同期 SSoT comment 追加 ✅ (Step 5b commit 内で同時達成、別途 commit 不要) |
-| YYYY-MM-DD | Step 4 完了 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (次 session) |
-| YYYY-MM-DD | Step 5 完了 | (テスト合格) 起動時 token 実測 + smoke regression 0 + Layer B 非注入 smoke 7+ (次 session) |
-| YYYY-MM-DD | Step 6 完了 | (リファクタリング) Layer A↔B back-link 整合 + install.sh sync path (次 session) |
-| YYYY-MM-DD | 完了 | DoD 全 PASS + 4 リポ user manual install + commit `<sha>` |
-| YYYY-MM-DD | Step 4 完了 | reviewer iter `<N>` 回で収束 |
-| YYYY-MM-DD | Step 5 完了 | 起動時 token before/after 実測値 |
-| YYYY-MM-DD | Step 6 完了 | commit `<sha>` |
-| YYYY-MM-DD | 完了 | 4 リポ user manual install 完了 + DoD 全 PASS |
+| 2026-05-28 | Step 5c token 再実測完了 | fresh session 起動 (45th save-state、`/resume-state loop` 経由) で `usage.input_tokens` 抽出: input 5 + cache_creation 100,082 = **合算 100,087 tok (~100.1K)**。before 146K (44th) → after 100.1K = **-45.9K (削減 31.4%)**、期待値 ~91-101K 内達成 (上限近接)、目標 ~80K は未達。subagent aa8dbd4c6341cc386 conf 0.93、JSONL `/Users/t.hirai/.claude/projects/-Users-t-hirai-work-hirai-method/57c1a9fb-8d4e-4dec-8b5b-29f380f1d2f2.jsonl` (timestamp 2026-05-28T12:22:39.513Z) |
+| 5/31 以降 | Step 5c 残 6 hook smoke | API 週次 limit reset 5/31 9:00 JST 以降、delegation-guard / autonomous-action-guard / workflow-guard / loop-confirmation-detector / task-rule-guard / draft-flow-guard / context-budget の各 1 case PASS で完遂 |
+| 5/31 以降 | 完了宣言 | 残 6 hook smoke 完了後に DoD 全 PASS 判定 + list.md task-51 ✅ + commit |
 
 ## 派生 task / 次アクション候補
 
