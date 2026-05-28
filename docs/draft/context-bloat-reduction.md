@@ -196,9 +196,14 @@ Layer B の **Read trigger** は以下 4 条件 (Layer A の冒頭に明記、AI
 
 **通常運用 (上記 4 trigger 非該当)**: Layer A のみで判断、Layer B Read skip (token 節約)
 
-#### 詳細参照の **link reference 規約** (Layer A 内で機械強制)
+#### 詳細参照の **link reference 規約** (Layer A 内、緩和: 2 要素 hard match)
 
-Layer A 内の Layer B link は以下 3 形式に統一 (Step 4 reviewer で format 検査):
+Layer A 内の Layer B link は以下 **2 要素 (必須 + 形式自由)** を満たせば spec compliant:
+
+1. **必須**: `details.md` を path に含む markdown link (`[...](.../<rule>.details.md...)` の形)
+2. **必須**: section anchor (`#<anchor>`) を付与する (Layer B 内の特定 section 参照、broken link 防止)
+
+以下は推奨 form 例 (3 形式は推奨であり hard rule ではない、新規追加 link は任意の form で可):
 
 ```markdown
 > **詳細**: [<rule>.details.md §<section>](./<rule>.details.md#<anchor>)
@@ -206,7 +211,7 @@ Layer A 内の Layer B link は以下 3 形式に統一 (Step 4 reviewer で for
 > **起源詳細**: [<rule>.details.md §起源](./<rule>.details.md#起源)
 ```
 
-これにより grep `details.md` で「詳細参照経路の全件 list 化」が可能、Layer A から Layer B への参照漏れを smoke で検出可能。
+**規約緩和の経緯 (iter 1 review H-2 + iter 2 fix Step H、2026-05-28)**: 当初は 3 形式 hard rule を採用したが、iter 1 reviewer (qa-expert + architect-reviewer + pr-test-analyzer) が「Layer A 27 link 中 3 形式準拠は 2 件のみ、実装と spec の乖離」を HIGH として指摘。spec 側を緩和して既存 link を全て spec compliant にすることで、新規 link 追加時の柔軟性確保 + smoke 検証は 2 要素 hard match (`details.md` link 存在 + anchor 付与) のみに簡素化する。grep `details.md` で「詳細参照経路の全件 list 化」は引き続き可能。
 
 #### Layer B 機械的 context 非注入の担保
 
