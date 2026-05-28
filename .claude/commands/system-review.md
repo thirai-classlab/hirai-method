@@ -91,11 +91,21 @@ description: 全モジュール統合後の全体レビュー + リファクタ�
    - 個別 module は OK だが組み合わせで持続可能性が崩れる箇所
    - 全体として汎用性が低い (specific use case に縛られすぎ)
 
+5. **プロジェクト整合性 + 他 task 影響確認 (項目 5、`workflow.md` §reviewer prompt 共通規約 準拠、2026-05-28 追加)**:
+   - (a) `docs/tasks/list.md` を Read、本 system change が他 task (🔄/🔲/📝) と重複 / 競合 / 前提崩壊しないか — system 全体の cross-task 影響を判定
+   - (b) 本対象の依存先 + 派生先 task.md / draft.md を Read、影響範囲を把握
+   - (c) `docs/tasks/next-actions.md` の未処理 🔴 / 🟡 entry を確認、本 change で解決 / 関連する entry を特定
+   - (d) `.claude/rules/*.md` (Layer A 全 7 file) を Read、本 change が既存規範と矛盾していないか / 規範更新が必要か (system change は規範影響が広いため特に重要)
+   - (e) `README.md` / `docs/INVENTORY.md` を Read、本 change が project SSoT (architecture diagram / Layer A/B Strategy / INVENTORY path table 等) を破壊していないか
+   - (f) `.claude/hooks/` `.claude/commands/` `.claude/skills/` を Glob/Grep、類似機能が既存なら本変更との関係を findings に明記 (再発明回避)
+
 出力 format:
-- 4 観点ごとに findings (CRITICAL / HIGH / MED / LOW)
+- 5 観点ごとに findings (CRITICAL / HIGH / MED / LOW)
 - 各 finding に「該当箇所 / 問題 / 修正提案 (差分 + 影響範囲)」
+- 項目 5 (プロジェクト整合性) の findings には「他 task #N との重複」「既存 rule §X と矛盾」「副産物 entry #Y を解決可能」「既存実装再利用可」「SSoT 矛盾」のいずれかを該当時に明示
 - behavior-preserving 必須 (public API / DB schema 変更禁止)
 - 末尾に `confidence: 0.X` 必須
+- bypass: `HC_REVIEW_PROJECT_CONTEXT_REQUIRED=false` (system change の review では NG、bypass は NG ケース)
 ```
 
 ### Phase 4: 集約 + 修正案提示

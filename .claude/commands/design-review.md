@@ -66,7 +66,7 @@ description: 設計 draft に対し reviewer-registry の design + security カ�
 1. 選定 reviewer ごとに以下を実行:
    - **TaskCreate** で subagent_id metadata 付きタスク登録 (CLAUDE.md §4 必須)
    - **Agent tool** で起動 (`run_in_background: true` 必須):
-     - prompt: 共通テンプレ「対象 draft 全文 + 観点 (reviewer 別) + findings format (CRITICAL/HIGH/MED/LOW 分類, 具体修正提案) + confidence: 0.X 必須」
+     - prompt: 共通テンプレ「対象 draft 全文 + 観点 (reviewer 別) + findings format (CRITICAL/HIGH/MED/LOW 分類, 具体修正提案、behavior-preserving) + 末尾 `confidence: 0.X` 必須 + **項目 5 プロジェクト整合性 + 他 task 影響確認** (必須、`workflow.md` §reviewer prompt 共通規約準拠): `docs/tasks/list.md` (他 task ledger) + 依存先 task.md / draft.md + `docs/tasks/next-actions.md` (副産物 registry) + `.claude/rules/*.md` (既存規範 Layer A 全 7 file) + `README.md` / `docs/INVENTORY.md` (project SSoT) + 既存実装 (Glob/Grep で `.claude/hooks/` `.claude/commands/` `.claude/skills/` 内類似探索) を Read。findings に「他 task #N との重複 / 競合 / 前提崩壊」「既存 rule §X と矛盾 / 拡張必要」「副産物 entry #Y を本対象で解決可能」「既存 hook/command/skill 再利用可 (再発明回避)」「SSoT 重複 / 矛盾」を該当時に必ず含める。bypass: `HC_REVIEW_PROJECT_CONTEXT_REQUIRED=false` (新規 feature 初回 round-1 / `.claude/rules/` 編集 change の review では NG)」
 2. 全 agent 起動後、メインは即座に user 制御に戻る (notification を待たない、ユーザは次操作可能)
 
 ### Phase 4: 集約 + 収束判定 + 反復ループ (各 agent 完了通知到着時、2026-05-26 拡張)

@@ -242,6 +242,39 @@ CRITICAL / HIGH / MEDIUM 全て 0 件 → draft「承認待ち」へ遷移可、
 
 > **stack heuristic 絞り込みロジック詳細 (database / API / UI 検出) / 集約フォーマット**: [workflow.details.md §fan-out reviewer-registry 詳細](../rules-details/workflow.details.md#fan-out-reviewer-registry-詳細)
 
+## reviewer prompt 共通規約 (2026-05-28 追加)
+
+`/design-review` (W2) / `/test-design` (W1) / `/module-review` (W3) / `/system-review` (W3) + 採用 6 条 4「テスト設計レビュー」([`task-management.md`](./task-management.md)) で起動する**全 reviewer subagent prompt**の必須要件。reviewer は単一 draft の inside-out 評価では不十分であり、プロジェクト全体 + 他 task 文脈を踏まえた findings を必ず提示する。
+
+| # | 項目 | 内容 |
+|---:|---|---|
+| 1 | 対象 artifact Read | 対象 draft / test-design / module / system の全文 Read |
+| 2 | 観点 | reviewer-registry / agent type 固有の観点 (architect / security / qa 等) |
+| 3 | findings format | CRITICAL / HIGH / MEDIUM / LOW の 4 段階 + 具体修正提案 (behavior-preserving、public API 変更禁止) |
+| 4 | 末尾 `confidence: 0.X` | F3 confidence-gate 抽出対象 (閾値 0.6 未満は block) |
+| 5 | **プロジェクト整合性 + 他 task 影響確認** (本 §、2026-05-28 user 直接指示) | `docs/tasks/list.md` (他 task ledger) + 依存先 task.md / draft.md + `docs/tasks/next-actions.md` (副産物 registry) + `.claude/rules/*.md` (既存規範 Layer A) + `README.md` / `docs/INVENTORY.md` (project SSoT) + 既存実装 (Glob/Grep で類似 hook / command / skill 探索) を Read |
+
+### 項目 5 で findings に含めるべき観点 (該当時のみ)
+
+- **他 task #N との重複 / 競合** — list.md / 依存先 task で発見
+- **他 task #M の前提崩壊** — 本変更が他 task の前提を破壊する場合
+- **既存 rule §X と矛盾 / 拡張必要** — `.claude/rules/` 確認で発見
+- **副産物 entry #Y を本対象で解決可能** — `next-actions.md` 確認で機会発見
+- **既存 hook / command / skill 再利用可** — Glob/Grep で発見 (再発明回避)
+- **SSoT 重複 / 矛盾** — README / INVENTORY との不整合発見時
+
+### bypass
+
+| 経路 | env | スコープ | 用途 |
+|---|---|---|---|
+| project context 確認 skip | `HC_REVIEW_PROJECT_CONTEXT_REQUIRED=false` | 1 セッション | typo 1 行修正 / comment-only refactor / 直前 round で確認済 round-N+1 等の cost 過大ケース (honor system) |
+
+honor system: bypass 時は理由を `docs/tasks/<task-N>.md` or `ECC_BYPASS_REASON` env に記録。新規 feature の `/design-review` 初回 / `.claude/rules/` 編集 change / 採用 6 条 4 初回での bypass は NG。
+
+> **起源 (2026-05-28、user 直接指示)**: 「設計後,テスト設計後レビューする際プロジェクトの内容や、他のタスクの内容も鑑みてレビューするようにプロンプトを修正してください」。task-51 iter 2 reviewer 6 並列レビューでも single draft inside-out 評価が中心で、他 task 重複 / 既存規範矛盾 / 既存実装再利用機会の検出が弱かった経験を踏まえた規約化。
+>
+> **詳細 (OK/NG 例 / 既存規約 [behavior-preserving / confidence] との関係 / commands 連携 / 採用 6 条 4 連携 / 起源詳細)**: [workflow.details.md §reviewer prompt 共通規約 詳細](../rules-details/workflow.details.md#reviewer-prompt-共通規約-詳細)
+
 ## 副産物 discharge (5 層強制機構)
 
 タスク実装中・レビュー中・セッション中に発生した「副産物 (byproduct)」を **物理的に消えない設計** で管理。詳細は [`development-process.md`](./development-process.md) §「副産物発生時の即時 draft 起こし義務」参照。

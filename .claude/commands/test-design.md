@@ -60,7 +60,7 @@ description: 設計 draft からテスト設計を起こし、MECE 20 カテゴ�
    - **tdd-guide** — RED/GREEN/REFACTOR 視点で必要テストを抽出
    - **test-automator** — フレームワーク選定 + 自動化観点
    - **qa-expert** — QA 戦略 + 非機能テスト観点
-3. 各 agent に「20 カテゴリ各行への採用推奨 (☑/☒) + 1 行理由」を返答させる
+3. 各 agent に「20 カテゴリ各行への採用推奨 (☑/☒) + 1 行理由 + **項目 5 プロジェクト整合性 + 他 task 影響確認** (必須、`workflow.md` §reviewer prompt 共通規約準拠): `docs/tasks/list.md` (他 task のテスト戦略との重複) + 依存先 task の test-design.md + `docs/tasks/next-actions.md` (副産物 registry) + 既存 test infrastructure (`.claude/tests/` 配下の smoke / `tests/` 配下の既存テスト framework) を Read。findings に「他 task のテストカバレッジで本対象も網羅済 (existing-coverage)」「既存 smoke 再利用可」「他 task #N のテスト戦略と整合性確保」を該当時に必ず含める」を返答させる
 4. TaskCreate でタスク登録 (subagent_id を metadata 記録)
 5. 完了通知を待ち、3 agent の推奨を集約
 
