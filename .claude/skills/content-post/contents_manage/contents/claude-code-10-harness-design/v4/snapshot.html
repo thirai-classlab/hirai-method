@@ -1,0 +1,176 @@
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>ハーネス(LLMを動かすための足場・枠組み)を <strong>2層モデル</strong> で説明できる</p>
+</li><li><p><strong>8つの構成要素</strong> の役割と置き場所を理解する</p>
+</li><li><p><code class="rich-inline-code">~/.claude/</code> の中身を把握する</p>
+</li><li><p>自分の業務でどこをカスタマイズするか考えられる</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約90分</strong></p>
+<hr>
+<h2 id="1-ハーネスとは何か-再確認">1. ハーネスとは何か(再確認)</h2>
+<blockquote>
+<p><strong>ハーネス(Harness)= LLM を「自律的に動くエージェント」に変えるための仕組みの総体</strong></p>
+</blockquote>
+<p>LLM(大規模言語モデル)単体は、ぶっちゃけ「テキストを入れたらテキストを返す関数」でしかないんですよ。これに <strong>手足(ツール)・記憶(メモリ)・段取り(ループ)</strong> をまとわりつかせて、全体としてエージェントとして見えるようにしたもの、それがハーネスです。Claude Opus が LLM、それを <strong>Claude Code というハーネス</strong> が包むことでエージェントとして振る舞ってくれるんですね。</p>
+<p>イメージとしては、<strong>登山に行くときの安全装具一式</strong> に近いです。ザイル(ロープ)・カラビナ(金具)・ハーネス(腰に巻く帯)・ヘルメット…これらが揃って初めて、岩壁を登れるようになる。LLM 単体は「すごい体力を持った登山者」ですが、装具がないと怖くて崖に近づけないんですよ。</p>
+<hr>
+<h2 id="2-ハーネスの2層モデル-最重要">2. ハーネスの2層モデル(最重要)</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-10-harness-design/23d467d4-ch10-m1.png" alt="" width="1536" height="864">
+
+<h3 id="なぜこの分離が大事か">なぜこの分離が大事か</h3>
+<p>「ハーネスエンジニアリング」と語られるとき、<strong>実体は②カスタマイズ領域の話</strong> なんですよ。①基盤は Anthropic の責任で、ユーザーは触れない。これを混同すると会話がねじれます。実はね、現場で議論が噛み合わない原因のかなりの部分が、この層を取り違えていることだったりします。</p>
+<table class="rich-table"><thead><tr><th>文脈</th><th>議論しているレイヤー</th></tr></thead><tbody><tr><td>「Claude Code は速い」</td><td>①基盤の話</td></tr><tr><td>「自分のCLAUDE.mdの書き方」</td><td>②カスタマイズ領域</td></tr><tr><td>「サブエージェント設計」</td><td>②カスタマイズ領域</td></tr><tr><td>「Anthropicの新機能」</td><td>①基盤の話</td></tr></tbody></table>
+<hr>
+<h2 id="3-ギターアンプのアナロジー">3. ギターアンプのアナロジー</h2>
+<p>第3回でも触れた通り、ハーネスの2層モデルは <strong>ギターアンプ</strong> にそっくりなんですよ。改めて並べておきますね。</p>
+<table class="rich-table"><thead><tr><th>ギターアンプ</th><th>Claude Code</th></tr></thead><tbody><tr><td>アンプ本体(音を出す回路)</td><td>① 基盤</td></tr><tr><td>イコライザー / ゲイン / リバーブ</td><td>② カスタマイズ領域</td></tr><tr><td>良い音は使い手の腕次第</td><td>良い結果は設計次第</td></tr><tr><td>ベスト設定は曲・ジャンルで変わる</td><td>ベスト設定はプロジェクトで変わる</td></tr></tbody></table>
+<blockquote>
+<p>「これが正解」というベストプラクティス(業界の定石)は存在しません。あるのは <strong>手段</strong> と、それを <strong>自分の課題に当てはめる判断</strong> だけ。<strong>「ベストプラクティスはない、というのが正解」</strong> と腹落ちしておくと、迷いがだいぶ減ります。</p>
+</blockquote>
+<hr>
+<h2 id="4-claude-の中身">4. <code class="rich-inline-code">~/.claude/</code> の中身</h2>
+<p>ユーザーが触る場所は基本ここ。<strong>システムキッチンの引き出し</strong> をイメージしてください。引き出しごとに役割が決まっていて、必要なものをそこに置いていく感じです。</p>
+<pre data-lang="text" data-raw="fi8uY2xhdWRlLwrilJzilIDilIAgc2V0dGluZ3MuanNvbiAgICAgICAgICAgICAg4oaQIOODj+ODvOODjeOCueWFqOS9k+OBruioreWumu+8iOacgOmHjeimge+8iQrilJzilIDilIAga2V5YmluZGluZ3MuanNvbiAgICAgICAgICAg4oaQIOOCreODvOODkOOCpOODs+ODiQrilJzilIDilIAgQ0xBVURFLm1kICAgICAgICAgICAgICAgICAg4oaQIOWFqOODl+ODreOCuOOCp+OCr+ODiOWFsemAmuOBruaMh+ekuuabuArilJzilIDilIAgc2tpbGxzLyAgICAgICAgICAgICAgICAgICAg4oaQIOOCsOODreODvOODkOODq+OCueOCreODqwrilIIgICDilJTilIDilIAgPHNraWxsLW5hbWU+LwrilIIgICAgICAg4pSU4pSA4pSAIFNLSUxMLm1kCuKUnOKUgOKUgCBwbHVnaW5zLyAgICAgICAgICAgICAgICAgICDihpAg44OX44Op44Kw44Kk44Oz77yI44OR44OD44Kx44O844K45riI44G/5qmf6IO9576k77yJCuKUnOKUgOKUgCBjb21tYW5kcy8gICAgICAgICAgICAgICAgICDihpAg44K544Op44OD44K344Ol44Kz44Oe44Oz44OJ5a6a576pCuKUgiAgIOKUlOKUgOKUgCA8Y29tbWFuZC1uYW1lPi5tZArilJzilIDilIAgYWdlbnRzLyAgICAgICAgICAgICAgICAgICAg4oaQIOOCteODluOCqOODvOOCuOOCp+ODs+ODiOWumue+qQrilIIgICDilJTilIDilIAgPGFnZW50LW5hbWU+Lm1kCuKUlOKUgOKUgCBwcm9qZWN0cy8gICAgICAgICAgICAgICAgICDihpAg44K744OD44K344On44Oz5bGl5q20KEpTT05MKQogICAg4pSU4pSA4pSAIDxwYXRoLWFzLWh5cGhlbj4vCiAgICAgICAg4pSc4pSA4pSAICouanNvbmwgICAgICAgICAgICDihpAg6YGO5Y675Lya6KmxCiAgICAgICAg4pSU4pSA4pSAIG1lbW9yeS5tZCAgICAgICAgICDihpAg6Ieq5YuV44Oh44Oi44Oq" data-raw-encoding="base64"><code>~/.claude/
+├── settings.json              ← ハーネス全体の設定（最重要）
+├── keybindings.json           ← キーバインド
+├── CLAUDE.md                  ← 全プロジェクト共通の指示書
+├── skills/                    ← グローバルスキル
+│   └── &lt;skill-name&gt;/
+│       └── SKILL.md
+├── plugins/                   ← プラグイン（パッケージ済み機能群）
+├── commands/                  ← スラッシュコマンド定義
+│   └── &lt;command-name&gt;.md
+├── agents/                    ← サブエージェント定義
+│   └── &lt;agent-name&gt;.md
+└── projects/                  ← セッション履歴(JSONL)
+    └── &lt;path-as-hyphen&gt;/
+        ├── *.jsonl            ← 過去会話
+        └── memory.md          ← 自動メモリ</code></pre>
+<p>プロジェクト固有の設定にしたければ、作業ディレクトリ(いま作業しているフォルダ)の直下に <code class="rich-inline-code">.claude/</code> を作って同じ構造を置いてください。<strong>家全体のルール(<code class="rich-inline-code">~/.claude/</code>)と、各部屋のローカルルール(<code class="rich-inline-code">&lt;プロジェクト&gt;/.claude/</code>)</strong> みたいな住み分けです。</p>
+<hr>
+<h2 id="5-8つの構成要素">5. 8つの構成要素</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-10-harness-design/282cdb86-ch10-m2.png" alt="" width="1536" height="864">
+
+<p>8つも並ぶとちょっとひるみますよね。でも大丈夫、<strong>システムキッチンの引き出し</strong> を順番に開けていく感覚で見ていきましょう。</p>
+<h3 id="①-ツール-tools-手足">① ツール(Tools)— 手足</h3>
+<table class="rich-table"><thead><tr><th>ツール</th><th>役割</th></tr></thead><tbody><tr><td><code class="rich-inline-code">Read</code> / <code class="rich-inline-code">Write</code> / <code class="rich-inline-code">Edit</code></td><td>ファイル読み書き</td></tr><tr><td><code class="rich-inline-code">Grep</code> / <code class="rich-inline-code">Glob</code></td><td>検索</td></tr><tr><td><code class="rich-inline-code">Bash</code></td><td>シェル実行</td></tr><tr><td><code class="rich-inline-code">Task</code></td><td>サブエージェント起動</td></tr><tr><td><code class="rich-inline-code">WebFetch</code> / <code class="rich-inline-code">WebSearch</code></td><td>Web取得</td></tr><tr><td><code class="rich-inline-code">TodoWrite</code></td><td>タスクリスト</td></tr><tr><td><code class="rich-inline-code">LSP</code></td><td>コード理解(v2.0.74+)</td></tr></tbody></table>
+<h3 id="②-コンテキスト-記憶">② コンテキスト — 記憶</h3>
+<table class="rich-table"><thead><tr><th>種類</th><th>内容</th></tr></thead><tbody><tr><td>システムプロンプト</td><td>基盤、固定</td></tr><tr><td>プロジェクト文脈</td><td><code class="rich-inline-code">CLAUDE.md</code></td></tr><tr><td>会話履歴</td><td>過去のやり取り</td></tr><tr><td>自動メモリ</td><td><code class="rich-inline-code">memory.md</code>(自動蓄積)</td></tr></tbody></table>
+<p>→ 詳しくは <a href="/articles/claude-code-04-context">第4回</a></p>
+<h3 id="③-サブエージェント">③ サブエージェント</h3>
+<p>専門特化したエージェントへの委譲。<code class="rich-inline-code">.claude/agents/</code> で定義します。<strong>「専門のチームを別働隊として送り込む」</strong> イメージですね。</p>
+<p>→ 詳しくは <a href="/articles/claude-code-06-subagents">第6回</a></p>
+<h3 id="④-フック-hooks-決定論的処理">④ フック(Hooks)— 決定論的処理</h3>
+<p><code class="rich-inline-code">settings.json</code> の <code class="rich-inline-code">hooks</code> セクションで定義。<strong>確実に実行される</strong> のが本質です。例えるなら <strong>自動ドアセンサー</strong> で、人(Claude)が忘れていても、センサー(フック)が反応して必ず動いてくれるんですよ。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-10-harness-design/2c343e9a-ch10-m3.png" alt="" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>イベント</th><th>タイミング</th><th>用途例</th></tr></thead><tbody><tr><td><code class="rich-inline-code">SessionStart</code></td><td>起動時</td><td>git status, ブランチ情報を注入</td></tr><tr><td><code class="rich-inline-code">UserPromptSubmit</code></td><td>プロンプト送信時</td><td>動的にコンテキスト追加</td></tr><tr><td><code class="rich-inline-code">PreToolUse</code></td><td>ツール実行前</td><td>危険コマンド阻止</td></tr><tr><td><code class="rich-inline-code">PostToolUse</code></td><td>ツール実行後</td><td>フォーマッタ・Lint</td></tr><tr><td><code class="rich-inline-code">Stop</code></td><td>1ターン終了時</td><td>テスト・通知</td></tr><tr><td><code class="rich-inline-code">PostCompact</code></td><td>圧縮後</td><td>重要情報の再注入</td></tr></tbody></table>
+<h4 id="実例-main-直接コミット禁止">実例：main 直接コミット禁止</h4>
+<pre data-lang="json" data-raw="%7B%0A%20%20%22hooks%22%3A%20%7B%0A%20%20%20%20%22PreToolUse%22%3A%20%5B%0A%20%20%20%20%20%20%7B%0A%20%20%20%20%20%20%20%20%22matcher%22%3A%20%22Bash%22%2C%0A%20%20%20%20%20%20%20%20%22command%22%3A%20%22~%2F.claude%2Fscripts%2Fprotect-main.sh%22%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%5D%0A%20%20%7D%0A%7D" data-raw-encoding="url"><code>{
+  &quot;hooks&quot;: {
+    &quot;PreToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Bash&quot;,
+        &quot;command&quot;: &quot;~/.claude/scripts/protect-main.sh&quot;
+      }
+    ]
+  }
+}</code></pre>
+<p><code class="rich-inline-code">protect-main.sh</code> の中で「<code class="rich-inline-code">git commit</code> かつ現在ブランチが main なら exit 1(エラー終了)」と書いておけば、Claude が守ろうが守るまいが <strong>強制的にブロック</strong> されます。</p>
+<blockquote>
+<p> <strong>ポイント</strong>：プロンプトでお願いするのは「お願いベース」、フックは「決定論的(必ずそうなる)」。<strong>絶対守りたいルールはフックで</strong> 守りましょう。お願いだけだと、たまにスルーされるんですよね…ご経験ある方も多いはず。</p>
+</blockquote>
+<h3 id="⑤-スキル-skills">⑤ スキル(Skills)</h3>
+<p>タスクに該当するときだけ読み込まれる <strong>オンデマンド知識(必要なときだけ取り出す参考書)</strong>。<strong>工具箱から必要な道具だけ取り出す</strong> ようなイメージで、最初から全部抱えると重いので、必要時だけ呼び出す仕組みです。</p>
+<p>→ 詳しくは <a href="/articles/claude-code-05-skills-and-commands">第5回</a></p>
+<h3 id="⑥-mcp-外部世界との橋">⑥ MCP — 外部世界との橋</h3>
+<p>第8回で出てきた、<strong>USB Type-C みたいな共通規格</strong> ですね。これでいろんな外部サービス(Slack、GitHub、データベースなど)とつながれるようになります。</p>
+<p>→ 詳しくは <a href="/articles/claude-code-08-mcp-tools">第8回</a></p>
+<h3 id="⑦-スラッシュコマンド">⑦ スラッシュコマンド</h3>
+<p><code class="rich-inline-code">/init</code> <code class="rich-inline-code">/clear</code> などの組み込みに加え、<code class="rich-inline-code">~/.claude/commands/&lt;name&gt;.md</code> で自作できます。<strong>よく使う段取りをショートカット化する</strong> ようなものですね。</p>
+<pre data-lang="markdown" data-raw="---%0Adescription%3A%20%E6%97%A5%E5%A0%B1%E3%82%92%E7%94%9F%E6%88%90%0Aargument-hint%3A%20%3Cdate%3E%0Aallowed-tools%3A%20Read%2C%20Bash%0A---%0A%0A%E7%9B%B4%E8%BF%91%E3%81%AE%20git%20log%20%E3%81%A8%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB%E5%A4%89%E6%9B%B4%E3%81%8B%E3%82%89%E6%97%A5%E5%A0%B1%E3%82%92%E4%BD%9C%E6%88%90%E3%81%97%E3%81%A6%E3%81%8F%E3%81%A0%E3%81%95%E3%81%84%E3%80%82%E6%97%A5%E4%BB%98%3A%20%241" data-raw-encoding="url"><code>---
+description: 日報を生成
+argument-hint: &lt;date&gt;
+allowed-tools: Read, Bash
+---
+
+直近の git log とファイル変更から日報を作成してください。日付: $1</code></pre>
+<p>呼び出しはこんな感じ：<code class="rich-inline-code">/daily-report 2026-04-26</code></p>
+<h3 id="⑧-設定-settings-全体制御">⑧ 設定(Settings)— 全体制御</h3>
+<p>3階層に分かれています。これがちょっとややこしいので、表で整理しておきますね。</p>
+<table class="rich-table"><thead><tr><th>ファイル</th><th>スコープ</th><th>主な内容</th></tr></thead><tbody><tr><td><code class="rich-inline-code">~/.claude/settings.json</code></td><td>グローバル</td><td>キーバインド・テーマ</td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.claude/settings.json</code></td><td>プロジェクト共有</td><td>フック・MCPサーバー</td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.claude/settings.local.json</code></td><td>個人(git ignore)</td><td>個人パーミッション</td></tr></tbody></table>
+<h4 id="主要セクション">主要セクション</h4>
+<pre data-lang="json" data-raw="%7B%0A%20%20%22permissions%22%3A%20%7B%0A%20%20%20%20%22allow%22%3A%20%5B%22Bash(npm%20test)%22%2C%20%22Bash(git%20status)%22%5D%2C%0A%20%20%20%20%22ask%22%3A%20%5B%22Bash(git%20push%3A*)%22%5D%2C%0A%20%20%20%20%22deny%22%3A%20%5B%22Read(.%2F.env)%22%2C%20%22Bash(rm%20-rf%3A*)%22%5D%0A%20%20%7D%2C%0A%20%20%22hooks%22%3A%20%7B%20...%20%7D%2C%0A%20%20%22env%22%3A%20%7B%0A%20%20%20%20%22DISABLE_TELEMETRY%22%3A%20%221%22%0A%20%20%7D%2C%0A%20%20%22cleanupPeriodDays%22%3A%20365%0A%7D" data-raw-encoding="url"><code>{
+  &quot;permissions&quot;: {
+    &quot;allow&quot;: [&quot;Bash(npm test)&quot;, &quot;Bash(git status)&quot;],
+    &quot;ask&quot;: [&quot;Bash(git push:*)&quot;],
+    &quot;deny&quot;: [&quot;Read(./.env)&quot;, &quot;Bash(rm -rf:*)&quot;]
+  },
+  &quot;hooks&quot;: { ... },
+  &quot;env&quot;: {
+    &quot;DISABLE_TELEMETRY&quot;: &quot;1&quot;
+  },
+  &quot;cleanupPeriodDays&quot;: 365
+}</code></pre>
+<p><code class="rich-inline-code">permissions</code> の <code class="rich-inline-code">allow</code>/<code class="rich-inline-code">ask</code>/<code class="rich-inline-code">deny</code>(許可/確認/拒否)は、<strong>家のセキュリティロック</strong> を思い浮かべてください。「玄関は開けっぱなし(allow)」「裏口はチャイム鳴らしてから開ける(ask)」「金庫は触らせない(deny)」みたいな感じです。</p>
+<hr>
+<h2 id="6-設定ファイルの優先順位">6. 設定ファイルの優先順位</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-10-harness-design/72908733-ch10-m4.png" alt="" width="1536" height="864">
+
+<p>下の階層ほど <strong>後から上書き</strong> される仕組みです(settings.json は project-local が優先)。</p>
+<p>ただし <strong><code class="rich-inline-code">CLAUDE.md</code></strong> だけは累積(user → project の順に追記される)で、上書きされません。<strong>会社の就業規則(全社) + 各部署のルール(部門) の両方が効く</strong> イメージですね。両方読まれます。</p>
+<hr>
+<h2 id="7-ハーネスエンジニアリングの2大トピック">7. ハーネスエンジニアリングの2大トピック</h2>
+<h3 id="a-良質安全な入出力を作る-コンテキスト系">A. 良質安全な入出力を作る(コンテキスト系)</h3>
+<table class="rich-table"><thead><tr><th>手段</th><th>役割</th></tr></thead><tbody><tr><td>フック</td><td>確実な前後処理</td></tr><tr><td>コンパクション(履歴を要約して圧縮する処理)</td><td>履歴圧縮</td></tr><tr><td>ブランチ</td><td>セッション複製</td></tr></tbody></table>
+<h3 id="b-安全な環境を作る-実行環境系">B. 安全な環境を作る(実行環境系)</h3>
+<table class="rich-table"><thead><tr><th>手段</th><th>役割</th></tr></thead><tbody><tr><td>標準サンドボックス(隔離された実験環境)</td><td>Anthropic製のサンドボックス機能</td></tr><tr><td>Docker サンドボックス</td><td>Devcontainer(開発用コンテナ。隔離された開発環境)での隔離(実用的)</td></tr><tr><td>パーミッション(権限制御)</td><td>ツール×引数の許可制御</td></tr></tbody></table>
+<h4 id="パーミッションの評価順">パーミッションの評価順</h4>
+<pre data-lang="text" data-raw="Deny%20%E2%86%92%20Ask%20%E2%86%92%20Allow" data-raw-encoding="url"><code>Deny → Ask → Allow</code></pre>
+<p>→ Deny(拒否)が最強です。<strong>やってほしくないことは Deny に書く</strong>。これが鉄則。</p>
+<h4 id="env-ファイルの誤解"><code class="rich-inline-code">.env</code> ファイルの誤解</h4>
+<blockquote>
+<p> よくある誤解：「<code class="rich-inline-code">.env</code> は危険な情報置き場だから読ませない」</p>
+<p> 正しい理解：「<code class="rich-inline-code">.env</code> は <strong>環境固有の値の置き場</strong>(設定値を1か所にまとめたファイル)。プログラムが読み込んで変数として使う。<strong>プログラム側はOK、Claudeは読まない</strong> という権限設計が定石」</p>
+</blockquote>
+<hr>
+<h2 id="8-ユーザーカスタマイズ領域-の全体像">8. 「ユーザーカスタマイズ領域」の全体像</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-10-harness-design/ec4736f6-ch10-m5.png" alt="" width="1536" height="864">
+
+<p>ファイルが置いてあるだけでは何も起きないんですよね。<strong>起動時に Claude Code が中身を読み取り、適切なタイミングで使う</strong> というところまで含めて1セットなんです。</p>
+<hr>
+<h2 id="9-ハーネス設計の進め方-実践フロー">9. ハーネス設計の進め方(実践フロー)</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-10-harness-design/5e0dea0b-ch10-m6.png" alt="" width="1536" height="864">
+
+<blockquote>
+<p><strong>小さく始めて、必要に応じて足す</strong>。最初から全部入りで作ると、複雑さに溺れます。実はね、「8要素全部使わなきゃ」と思って気合入れすぎる人ほど、途中で力尽きるんですよ。<strong>まず CLAUDE.md だけ、次にコマンド1つ</strong> くらいから始めて、効いてる手応えを感じながら積み上げていくのが正解です。</p>
+</blockquote>
+<hr>
+<h2 id="参考動画-ハーネスエンジニアリング基礎-数理の弾丸">参考動画：ハーネスエンジニアリング基礎（数理の弾丸）</h2>
+<p>本章で扱った「ハーネス」「2層モデル」「8つの構成要素」の理解を深めるなら、この動画が決定版。<strong>「コンテキスト80%超えで精度急落」「コンパクションは65〜70%が理想」</strong> といった本章の数値もここから引用しています。</p>
+<p> <a href="https://www.youtube.com/watch?v=hxCEABf0Nfc" target="_blank" rel="noopener noreferrer">Claude Codeハーネスエンジニアリング まず抑えるべき基礎知識（数理の弾丸）</a></p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/hxCEABf0Nfc" title="Claude Codeハーネスエンジニアリング まず抑えるべき基礎知識" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
+<hr>
+<h2 id="10-ふりかえり">10. ふりかえり</h2>
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th></tr></thead><tbody><tr><td></td><td>ハーネスの2層モデルを説明できる</td></tr><tr><td></td><td><code class="rich-inline-code">~/.claude/</code> の中身が分かる</td></tr><tr><td></td><td>8つの構成要素を列挙できる</td></tr><tr><td></td><td>フックの種類と用途を理解した</td></tr><tr><td></td><td><code class="rich-inline-code">settings.json</code> の3階層を理解した</td></tr><tr><td></td><td>パーミッションの Deny → Ask → Allow を理解した</td></tr><tr><td></td><td>ハーネス設計の段階的アプローチを把握した</td></tr></tbody></table>
+<hr>
+<h2 id="ふりかえり">ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-10-harness-design/0e43db5b-ch10-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章-構成要素の詳細">関連する章(構成要素の詳細)</h2>
+<p>ハーネスの8要素を、それぞれ深掘りした章にジャンプできます：</p>
+<ul><li><p><strong>② コンテキスト</strong>：<a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a></p>
+</li><li><p><strong>⑤ スキル / ⑦ スラッシュコマンド</strong>：<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; コマンド</a></p>
+</li><li><p><strong>③ サブエージェント</strong>：<a href="/articles/claude-code-06-subagents">第6回 サブエージェント</a></p>
+</li><li><p><strong>④ フック</strong>：<a href="/articles/claude-code-07-hooks">第7回 フック</a></p>
+</li><li><p><strong>⑥ MCP</strong>：<a href="/articles/claude-code-08-mcp-tools">第8回 MCP</a></p>
+</li><li><p><strong>設計時の判断軸</strong>：<a href="/articles/claude-code-09-prompt-quality">第9回 精度の高いアウトプット</a></p>
+</li><li><p><strong>どう組むか</strong>：<a href="/articles/claude-code-11-harness-patterns">第11回 設計パターン12選</a></p>
+</li><li><p><strong>実装の見本</strong>：<a href="/articles/claude-code-12-sample-harness">第12回 サンプルハーネス</a></p>
+</li><li><p><strong>コマンド・設定の参照</strong>：<a href="/articles/claude-code-a1-cheatsheet">付録 A. チートシート</a></p>
+</li></ul>
+<h2 id="次へ">次へ</h2>
+<p>→ <a href="/articles/claude-code-11-harness-patterns">第11回 設計パターン：12パターン</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅ 前へ</td><td><a href="/articles/claude-code-09-prompt-quality">第9回 精度の高いアウトプット</a></td></tr><tr><td>次へ</td><td><a href="/articles/claude-code-11-harness-patterns">第11回 設計パターン</a></td></tr><tr><td>目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

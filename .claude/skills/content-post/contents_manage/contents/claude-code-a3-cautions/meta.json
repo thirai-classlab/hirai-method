@@ -1,0 +1,52 @@
+{
+  "slug": "claude-code-a3-cautions",
+  "kind": "tech_article",
+  "title": "付録 C. 注意事項 — 包丁を握る前に知っておくべき予防マニュアル",
+  "current_version": 6,
+  "published_version": 6,
+  "published_at": null,
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-04-30T06:22:27.292Z",
+      "author": "format-from-cc研修",
+      "snapshot_taken": false,
+      "note": "v1 = cc研修/A3-cautions.md を contents_manage にコピーしてフォーマット"
+    },
+    {
+      "v": 2,
+      "created_at": "2026-04-30T06:47:23.402Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 付録 C. 注意事項 — 包丁を握る前に知っておくべき予防マニュアル)"
+    },
+    {
+      "v": 3,
+      "created_at": "2026-04-30T08:20:38.936Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】付録 C. 注意事項 — 包丁を握る前に知っておくべき予防マニュアル)"
+    },
+    {
+      "v": 4,
+      "created_at": "2026-04-30T10:30:30.273Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】付録 C. 注意事項 — 包丁を握る前に知っておくべき予防マニュアル)"
+    },
+    {
+      "v": 5,
+      "created_at": "2026-04-30T10:42:00.219Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】付録 C. 注意事項 — 包丁を握る前に知っておくべき予防マニュアル)"
+    },
+    {
+      "v": 6,
+      "created_at": "2026-04-30T15:42:36.712Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】付録 C. 注意事項 — 包丁を握る前に知っておくべき予防マニュアル)"
+    }
+  ]
+}

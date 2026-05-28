@@ -1,0 +1,558 @@
+<blockquote>
+<p>Claude Code（および MCP 互換 AI コーディングエージェント）の「文脈喪失」を解決するための 8 ツール横断比較。ジュニアエンジニア／テックリード／非エンジニアそれぞれが「どのツールを、いつ、なぜ採用するか」を判断できるレファレンス。</p>
+</blockquote>
+<h2 id="0-tl-dr">0. TL;DR</h2>
+<h3 id="一行サマリ">一行サマリ</h3>
+<table class="rich-table"><thead><tr><th>ツール</th><th>一行ポジション</th></tr></thead><tbody><tr><td><strong>CLAUDE.md（純正）</strong></td><td>Claude Code が起動時に階層的に読み込む素の Markdown。最小構成・最高互換。</td></tr><tr><td><strong>MCP Memory Server</strong></td><td>Anthropic 公式の知識グラフ。entity-relation-observation を JSONL に永続化。</td></tr><tr><td><strong>Beads (bd)</strong></td><td>Steve Yegge 製。DAG 型 issue tracker でエージェントに「長期 TODO 記憶」を与える。</td></tr><tr><td><strong>MemPalace</strong></td><td>verbatim（逐語）保存 + 宮殿メタファ索引。LongMemEval 96.6% R@5。</td></tr><tr><td><strong>Serena</strong></td><td>LSP ベースのシンボル記憶 + プロジェクト memory MD。コーディング特化。</td></tr><tr><td><strong>Letta（旧 MemGPT）</strong></td><td>自己編集メモリを持つ自律エージェント基盤。長期自律タスク向け。</td></tr><tr><td><strong>Mem0</strong></td><td>ベクトル＋知識グラフのデュアルストア。チャットボット向けの定番。</td></tr><tr><td><strong>OpenMemory MCP</strong></td><td>Mem0 製ローカル MCP。Claude / Cursor / Windsurf で記憶を共有。</td></tr></tbody></table>
+<h3 id="旧知識との差分-llm-訓練データで陳腐化しやすい論点">旧知識との差分（LLM 訓練データで陳腐化しやすい論点）</h3>
+<table class="rich-table"><thead><tr><th>論点</th><th>古い理解（よくある誤り）</th><th>2026-05 現在</th></tr></thead><tbody><tr><td>MemGPT</td><td>「MemGPT というフレームワーク」</td><td>MemGPT は研究パターン名。実装は <strong>Letta</strong> にリネーム済み</td></tr><tr><td>MCP Memory Server</td><td>「サードパーティの非公式実装」</td><td><strong>Anthropic 公式</strong>（modelcontextprotocol/servers）として GA</td></tr><tr><td>Beads</td><td>「単なる Markdown todo」</td><td><strong>Go 製 DAG issue tracker</strong>、Dolt バックエンド、18.7k stars</td></tr><tr><td>Mem0 graph 機能</td><td>「無料で全機能使える」</td><td>knowledge graph は <strong>$249/mo Pro tier 限定</strong></td></tr><tr><td>CLAUDE.md の長さ</td><td>「長いほど良い」</td><td>実用上限は <strong>80-120 行</strong>。150-200 instruction で性能劣化</td></tr><tr><td>Serena</td><td>「ただの MCP の 1 つ」</td><td>LSP 連携で<strong>シンボル単位</strong>の記憶／編集。Python 製</td></tr><tr><td>OpenMemory</td><td>「Mem0 とは別物」</td><td><strong>Mem0 製のローカル MCP ラッパ</strong>。エージェント横断記憶のローカル版</td></tr><tr><td>MemPalace</td><td>（ほぼ未知）</td><td><strong>2026 年新興</strong>。verbatim 保存で要約しない設計。29 MCP tools</td></tr></tbody></table>
+<h3 id="最大差別化点-要約">最大差別化点（要約）</h3>
+<ul><li><p><strong>「タスクの記憶」が欲しいなら Beads</strong> — DAG 依存とハッシュ ID で多エージェント並列 OK</p>
+</li><li><p><strong>「会話の記憶」が欲しいなら MemPalace / Mem0</strong> — 前者は逐語保存、後者は要約抽出</p>
+</li><li><p><strong>「コードの記憶」が欲しいなら Serena</strong> — LSP シンボル単位で参照／編集</p>
+</li><li><p><strong>「自律エージェント」を作るなら Letta</strong> — 自己編集メモリ + REST API</p>
+</li><li><p><strong>「ツール横断で共有」したいなら OpenMemory MCP</strong> — Claude / Cursor / Windsurf を繋ぐ</p>
+</li><li><p><strong>「最初の一歩」は CLAUDE.md + MCP Memory Server</strong> — 公式・無料・ベンダーロックインなし</p>
+</li></ul>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/claude-code-memory-management-tools-2026/970e9d0d-scene-01-context-loss.png" alt="文脈喪失を抱える素の LLM と、メモリレイヤを介して継続できる Claude の対比" width="1536" height="864">
+
+<hr>
+<h2 id="1-メモリ管理が必要な理由-理念とミッション">1. メモリ管理が必要な理由 — 理念とミッション</h2>
+<h3 id="1-1-ミッション-各ツール公式の表現">1.1 ミッション（各ツール公式の表現）</h3>
+<table class="rich-table"><thead><tr><th>ツール</th><th>公式の言葉</th></tr></thead><tbody><tr><td>CLAUDE.md</td><td>&quot;How Claude remembers your project&quot;</td></tr><tr><td>MCP Memory Server</td><td>&quot;Persistent memory using a local knowledge graph&quot;</td></tr><tr><td>Beads</td><td>&quot;A memory upgrade for your coding agent&quot;</td></tr><tr><td>MemPalace</td><td>&quot;The best-benchmarked open-source AI memory system. And it&#39;s free.&quot;</td></tr><tr><td>Serena</td><td>&quot;The IDE for your agent&quot;</td></tr><tr><td>Letta</td><td>&quot;Stateful agents with persistent memory&quot;</td></tr><tr><td>Mem0</td><td>&quot;The memory layer for personalized AI&quot;</td></tr><tr><td>OpenMemory MCP</td><td>&quot;Memory for your AI Tools&quot;</td></tr></tbody></table>
+<h3 id="1-2-哲学">1.2 哲学</h3>
+<table class="rich-table"><thead><tr><th>視点</th><th>設計思想</th></tr></thead><tbody><tr><td>ファイル派 (CLAUDE.md / Serena)</td><td>Markdown を真実源にして人間が読める形で保つ。バージョン管理が効く</td></tr><tr><td>グラフ派 (MCP Memory / Mem0 / Letta)</td><td>構造化された entity-relation を成長させる。検索が強い</td></tr><tr><td>逐語派 (MemPalace)</td><td>要約せず原文保存。圧縮で意味が失われる問題を避ける</td></tr><tr><td>タスク派 (Beads)</td><td>「覚えるべきは今やるべきこと」。長期 TODO こそ最重要な記憶</td></tr><tr><td>ホスト派 (OpenMemory MCP)</td><td>記憶はツールの外側に置き、複数エージェントから共有する</td></tr></tbody></table>
+<h3 id="1-3-なぜ存在するか">1.3 なぜ存在するか</h3>
+<pre data-lang="mermaid" data-raw="flowchart%20LR%0A%20%20%20%20subgraph%20%E5%BE%93%E6%9D%A5%5B%22%E7%B4%A0%E3%81%AE%20Claude%20%2F%20LLM%22%5D%0A%20%20%20%20%20%20A1%5B%E4%BC%9A%E8%A9%B1%E9%96%8B%E5%A7%8B%5D%20--%3E%20A2%5Bcontext%20window%5D%0A%20%20%20%20%20%20A2%20--%3E%20A3%5B%E3%82%BB%E3%83%83%E3%82%B7%E3%83%A7%E3%83%B3%E7%B5%82%E4%BA%86%5D%0A%20%20%20%20%20%20A3%20--%3E%20A4%5B%E5%85%A8%E3%81%A6%E5%BF%98%E5%8D%B4%5D%0A%20%20%20%20end%0A%20%20%20%20subgraph%20%E8%A7%A3%E6%B1%BA%5B%22%E3%83%A1%E3%83%A2%E3%83%AA%E7%AE%A1%E7%90%86%E3%83%84%E3%83%BC%E3%83%AB%E3%81%82%E3%82%8A%22%5D%0A%20%20%20%20%20%20B1%5B%E4%BC%9A%E8%A9%B1%E9%96%8B%E5%A7%8B%5D%20--%3E%20B2%5Bcontext%20window%5D%0A%20%20%20%20%20%20B2%20--%3E%20B3%5B%E6%B0%B8%E7%B6%9A%E5%B1%A4%E3%81%B8%E6%9B%B8%E3%81%8D%E5%87%BA%E3%81%97%5D%0A%20%20%20%20%20%20B3%20--%3E%20B4%5B%E3%82%BB%E3%83%83%E3%82%B7%E3%83%A7%E3%83%B3%E7%B5%82%E4%BA%86%5D%0A%20%20%20%20%20%20B4%20--%3E%20B5%5B%E6%AC%A1%E5%9B%9E%E8%B5%B7%E5%8B%95%5D%0A%20%20%20%20%20%20B5%20--%3E%20B6%5B%E9%96%A2%E9%80%A3%E3%81%A0%E3%81%91%E5%86%8D%E3%83%AD%E3%83%BC%E3%83%89%5D%0A%20%20%20%20%20%20B6%20--%3E%20B2%0A%20%20%20%20end%0A%20%20%20%20style%20%E5%BE%93%E6%9D%A5%20fill%3A%23fee%0A%20%20%20%20style%20%E8%A7%A3%E6%B1%BA%20fill%3A%23efe" data-raw-encoding="url"><code>flowchart LR
+    subgraph 従来[&quot;素の Claude / LLM&quot;]
+      A1[会話開始] --&gt; A2[context window]
+      A2 --&gt; A3[セッション終了]
+      A3 --&gt; A4[全て忘却]
+    end
+    subgraph 解決[&quot;メモリ管理ツールあり&quot;]
+      B1[会話開始] --&gt; B2[context window]
+      B2 --&gt; B3[永続層へ書き出し]
+      B3 --&gt; B4[セッション終了]
+      B4 --&gt; B5[次回起動]
+      B5 --&gt; B6[関連だけ再ロード]
+      B6 --&gt; B2
+    end
+    style 従来 fill:#fee
+    style 解決 fill:#efe</code></pre>
+<h3 id="1-4-エンジニア-および非エンジニア利用者-にとっての意味">1.4 エンジニア（および非エンジニア利用者）にとっての意味</h3>
+<table class="rich-table"><thead><tr><th>立場</th><th>メモリ管理が解決する具体的痛み</th></tr></thead><tbody><tr><td><strong>ジュニアエンジニア</strong></td><td>「先週相談したコーディング規約をまた説明しないといけない」「Claude Code が同じ間違いを繰り返す」を構造的に解決</td></tr><tr><td><strong>テックリード</strong></td><td>プロジェクト規約・アーキ判断・命名規則をチーム横断で共有資産化。新人 onboarding のコスト削減</td></tr><tr><td><strong>SRE / 運用</strong></td><td>インシデント対応の判断履歴を Claude に持たせる。同じトラブルで同じ調査をやり直さない</td></tr><tr><td><strong>AI / プロンプト設計</strong></td><td>&quot;few-shot をプロンプトに毎回貼る&quot; から &quot;長期記憶として参照される&quot; に格上げ</td></tr><tr><td><strong>PM・非エンジニア</strong></td><td>Claude Code で議事録・FAQ・顧客対応スクリプトを継続的に育てる。&quot;前回の私の好み&quot; を覚えてもらう</td></tr></tbody></table>
+<hr>
+<h2 id="2-全体マップ-1-枚絵">2. 全体マップ（1 枚絵）</h2>
+<h3 id="2-1-サービス全体俯瞰">2.1 サービス全体俯瞰</h3>
+<pre data-lang="mermaid" data-raw="Zmxvd2NoYXJ0IFRCCiAgICBVc2VyKFtDbGF1ZGUgQ29kZSAvIEN1cnNvciAvIFdpbmRzdXJmIGV0Yy5dKQoKICAgIHN1YmdyYXBoIEwxWyLjg5XjgqHjgqTjg6vlsaTvvIjkurrplpPjgYznm7TmjqXoqq3jgoDvvIkiXQogICAgICBDMVtDTEFVREUubWQg57SU5q2j6ZqO5bGkXQogICAgICBTMVtTZXJlbmEgcHJvamVjdCBtZW1vcmllc10KICAgIGVuZAoKICAgIHN1YmdyYXBoIEwyWyJNQ1Ag44K144O844OQ5bGk77yI44OE44O844Or57WM55Sx44Gn6Kqt44G/5pu444GN77yJIl0KICAgICAgTTFbTUNQIE1lbW9yeSBTZXJ2ZXI8YnIvPuefpeitmOOCsOODqeODlSBKU09OTF0KICAgICAgTVAxW01lbVBhbGFjZTxici8+dmVyYmF0aW0gKyDntKLlvJVdCiAgICAgIE9NMVtPcGVuTWVtb3J5IE1DUDxici8+44Ot44O844Kr44Or5qiq5pat6KiY5oa2XQogICAgICBTRTFbU2VyZW5hIE1DUDxici8+TFNQIOOCt+ODs+ODnOODq10KICAgIGVuZAoKICAgIHN1YmdyYXBoIEwzWyLjgr/jgrnjgq/vvI9EQUcg5bGkIl0KICAgICAgQkQxW0JlYWRzIGJkPGJyLz5naXQtYmFja2VkIGlzc3VlIERBR10KICAgIGVuZAoKICAgIHN1YmdyYXBoIEw0WyLjgqjjg7zjgrjjgqfjg7Pjg4joh6rouqvjgYznt6jpm4bjgZnjgovlsaQiXQogICAgICBMRTFbTGV0dGE8YnIvPnNlbGYtZWRpdGluZyBtZW1vcnldCiAgICAgIE1FMVtNZW0wPGJyLz52ZWN0b3IgKyBLRyBkdWFsIHN0b3JlXQogICAgZW5kCgogICAgVXNlciAtLT586LW35YuV5pmC6Ieq5YuV6Kqt6L68fCBMMQogICAgVXNlciAtLT58TUNQIOODl+ODreODiOOCs+ODq3wgTDIKICAgIFVzZXIgLS0+fGJkIENMSXwgTDMKICAgIFVzZXIgLS0+fFJFU1QgLyBTREt8IEw0CgogICAgT00xIC0u5qiq5pat5YWx5pyJLi0+IE0xCiAgICBPTTEgLS7mqKrmlq3lhbHmnIkuLT4gTUUxCiAgICBMNCAtLuWGheWMheOBmeOCi+WgtOWQiOOBguOCii4tPiBMMgoKICAgIHN0eWxlIEwxIGZpbGw6I2UzZjJmZAogICAgc3R5bGUgTDIgZmlsbDojZmZmM2UwCiAgICBzdHlsZSBMMyBmaWxsOiNmM2U1ZjUKICAgIHN0eWxlIEw0IGZpbGw6I2U4ZjVlOQ==" data-raw-encoding="base64"><code>flowchart TB
+    User([Claude Code / Cursor / Windsurf etc.])
+
+    subgraph L1[&quot;ファイル層（人間が直接読む）&quot;]
+      C1[CLAUDE.md 純正階層]
+      S1[Serena project memories]
+    end
+
+    subgraph L2[&quot;MCP サーバ層（ツール経由で読み書き）&quot;]
+      M1[MCP Memory Server&lt;br/&gt;知識グラフ JSONL]
+      MP1[MemPalace&lt;br/&gt;verbatim + 索引]
+      OM1[OpenMemory MCP&lt;br/&gt;ローカル横断記憶]
+      SE1[Serena MCP&lt;br/&gt;LSP シンボル]
+    end
+
+    subgraph L3[&quot;タスク／DAG 層&quot;]
+      BD1[Beads bd&lt;br/&gt;git-backed issue DAG]
+    end
+
+    subgraph L4[&quot;エージェント自身が編集する層&quot;]
+      LE1[Letta&lt;br/&gt;self-editing memory]
+      ME1[Mem0&lt;br/&gt;vector + KG dual store]
+    end
+
+    User --&gt;|起動時自動読込| L1
+    User --&gt;|MCP プロトコル| L2
+    User --&gt;|bd CLI| L3
+    User --&gt;|REST / SDK| L4
+
+    OM1 -.横断共有.-&gt; M1
+    OM1 -.横断共有.-&gt; ME1
+    L4 -.内包する場合あり.-&gt; L2
+
+    style L1 fill:#e3f2fd
+    style L2 fill:#fff3e0
+    style L3 fill:#f3e5f5
+    style L4 fill:#e8f5e9</code></pre>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/claude-code-memory-management-tools-2026/251c184f-scene-02-taxonomy.png" alt="ファイル層 / MCP サーバ層 / タスク DAG 層 / エージェント基盤層の 4 タイプ分類" width="1536" height="864">
+
+<h3 id="2-2-製品カテゴリ-mindmap">2.2 製品カテゴリ mindmap</h3>
+<pre data-lang="mermaid" data-raw="mindmap%0A%20%20root((%E3%83%A1%E3%83%A2%E3%83%AA%E7%AE%A1%E7%90%86))%0A%20%20%20%20%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB%E5%9E%8B%0A%20%20%20%20%20%20CLAUDE.md%20%E7%B4%94%E6%AD%A3%0A%20%20%20%20%20%20Serena%20project%20memories%0A%20%20%20%20%E3%82%BF%E3%82%B9%E3%82%AF%EF%BC%8FDAG%20%E5%9E%8B%0A%20%20%20%20%20%20Beads%20bd%0A%20%20%20%20MCP%20%E3%82%B5%E3%83%BC%E3%83%90%E5%9E%8B%0A%20%20%20%20%20%20MCP%20Memory%20Server%0A%20%20%20%20%20%20MemPalace%0A%20%20%20%20%20%20Serena%20MCP%0A%20%20%20%20%20%20OpenMemory%20MCP%0A%20%20%20%20%E3%82%A8%E3%83%BC%E3%82%B8%E3%82%A7%E3%83%B3%E3%83%88%E5%9F%BA%E7%9B%A4%E5%9E%8B%0A%20%20%20%20%20%20Letta%20self-editing%0A%20%20%20%20%20%20Mem0%20vector%2BKG%0A%20%20%20%20%E7%94%A8%E9%80%94%E5%88%A5%E6%9C%80%E9%81%A9%0A%20%20%20%20%20%20%E3%82%B3%E3%83%BC%E3%83%89%E3%83%99%E3%83%BC%E3%82%B9%E7%90%86%E8%A7%A3%20Serena%0A%20%20%20%20%20%20%E9%95%B7%E6%9C%9F%20TODO%20Beads%0A%20%20%20%20%20%20%E4%BC%9A%E8%A9%B1%E9%80%90%E8%AA%9E%20MemPalace%0A%20%20%20%20%20%20%E6%A8%AA%E6%96%AD%E5%85%B1%E6%9C%89%20OpenMemory%0A%20%20%20%20%20%20%E8%87%AA%E5%BE%8B%E3%82%A8%E3%83%BC%E3%82%B8%E3%82%A7%E3%83%B3%E3%83%88%20Letta" data-raw-encoding="url"><code>mindmap
+  root((メモリ管理))
+    ファイル型
+      CLAUDE.md 純正
+      Serena project memories
+    タスク／DAG 型
+      Beads bd
+    MCP サーバ型
+      MCP Memory Server
+      MemPalace
+      Serena MCP
+      OpenMemory MCP
+    エージェント基盤型
+      Letta self-editing
+      Mem0 vector+KG
+    用途別最適
+      コードベース理解 Serena
+      長期 TODO Beads
+      会話逐語 MemPalace
+      横断共有 OpenMemory
+      自律エージェント Letta</code></pre>
+<hr>
+<h2 id="3-比較軸の前提知識">3. 比較軸の前提知識</h2>
+<h3 id="3-1-比較軸概要表">3.1 比較軸概要表</h3>
+<table class="rich-table"><thead><tr><th>軸</th><th>値域</th><th>意味</th></tr></thead><tbody><tr><td><strong>永続性</strong></td><td>session / project / global / cross-tool</td><td>どこまでスコープが広がるか</td></tr><tr><td><strong>検索方式</strong></td><td>full-text / vector / knowledge-graph / symbolic / dag-traversal</td><td>取り出し方の主要メカニズム</td></tr><tr><td><strong>書き込み主体</strong></td><td>human-only / agent-self-editing / hybrid</td><td>誰がメモリを更新するか</td></tr><tr><td><strong>セットアップ難度</strong></td><td>none / low / med / high</td><td>導入の心理的コスト</td></tr><tr><td><strong>運用形態</strong></td><td>local / self-host / SaaS / hybrid</td><td>実行・データ保管場所</td></tr><tr><td><strong>ライセンス</strong></td><td>OSS / OSS+SaaS / proprietary</td><td>コードとビジネスモデル</td></tr></tbody></table>
+<h3 id="3-2-課金モデルの考え方">3.2 課金モデルの考え方</h3>
+<pre data-lang="mermaid" data-raw="gantt%0A%20%20%20%20title%20%E5%90%84%E3%83%84%E3%83%BC%E3%83%AB%E3%81%AE%E3%80%8C%E7%84%A1%E6%96%99%E3%81%A7%E4%BD%BF%E3%81%88%E3%82%8B%E7%AF%84%E5%9B%B2%E3%80%8D%0A%20%20%20%20dateFormat%20X%0A%20%20%20%20axisFormat%20%25s%0A%20%20%20%20section%20CLAUDE.md%0A%20%20%20%20%E5%AE%8C%E5%85%A8%E7%84%A1%E6%96%99%20%3A0%2C%20100%0A%20%20%20%20section%20MCP%20Memory%20Server%0A%20%20%20%20%E5%AE%8C%E5%85%A8%E7%84%A1%E6%96%99%20OSS%20%3A0%2C%20100%0A%20%20%20%20section%20Beads%0A%20%20%20%20%E5%AE%8C%E5%85%A8%E7%84%A1%E6%96%99%20OSS%20%3A0%2C%20100%0A%20%20%20%20section%20MemPalace%0A%20%20%20%20%E5%AE%8C%E5%85%A8%E7%84%A1%E6%96%99%20OSS%20%3A0%2C%20100%0A%20%20%20%20section%20Serena%0A%20%20%20%20%E5%AE%8C%E5%85%A8%E7%84%A1%E6%96%99%20OSS%20%3A0%2C%20100%0A%20%20%20%20section%20OpenMemory%0A%20%20%20%20%E5%AE%8C%E5%85%A8%E7%84%A1%E6%96%99%20OSS%20%3A0%2C%20100%0A%20%20%20%20section%20Letta%0A%20%20%20%20self-host%20%E7%84%A1%E6%96%99%20%3A0%2C%2070%0A%20%20%20%20Letta%20Cloud%20%3A70%2C%20100%0A%20%20%20%20section%20Mem0%0A%20%20%20%20OSS%20core%20%E7%84%A1%E6%96%99%20%3A0%2C%2050%0A%20%20%20%20Pro%20tier%20%E5%BF%85%E8%A6%81%20%3A50%2C%20100" data-raw-encoding="url"><code>gantt
+    title 各ツールの「無料で使える範囲」
+    dateFormat X
+    axisFormat %s
+    section CLAUDE.md
+    完全無料 :0, 100
+    section MCP Memory Server
+    完全無料 OSS :0, 100
+    section Beads
+    完全無料 OSS :0, 100
+    section MemPalace
+    完全無料 OSS :0, 100
+    section Serena
+    完全無料 OSS :0, 100
+    section OpenMemory
+    完全無料 OSS :0, 100
+    section Letta
+    self-host 無料 :0, 70
+    Letta Cloud :70, 100
+    section Mem0
+    OSS core 無料 :0, 50
+    Pro tier 必要 :50, 100</code></pre>
+<h3 id="3-3-本ドキュメント内の表記凡例">3.3 本ドキュメント内の表記凡例</h3>
+<table class="rich-table"><thead><tr><th>表記</th><th>意味</th></tr></thead><tbody><tr><td><code class="rich-inline-code">利用可</code></td><td>その機能・プランで標準的に使える</td></tr><tr><td><code class="rich-inline-code">制限あり</code></td><td>使えるが制約あり（要件・スコープ・容量など）</td></tr><tr><td><code class="rich-inline-code">不可</code></td><td>提供されていない</td></tr><tr><td><code class="rich-inline-code">従量課金</code></td><td>利用量に応じて課金される</td></tr><tr><td><code class="rich-inline-code">OSS</code></td><td>自前 host で完全無料</td></tr><tr><td><code class="rich-inline-code">SaaS</code></td><td>クラウド提供。料金体系あり</td></tr></tbody></table>
+<hr>
+<h2 id="4-機能カタログ">4. 機能カタログ</h2>
+<p>8 ツールそれぞれを 7 ブロック構造（🎯 / 👨‍💻 / 💳 / 🏢 / 🔥 / 🔍 / ⚠️）で記述する。</p>
+<h3 id="4-1-claude-md-claude-code-純正階層メモリ">4.1 CLAUDE.md（Claude Code 純正階層メモリ）</h3>
+<h4 id="4-1-1-階層メモリシステム">4.1.1 階層メモリシステム</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="flowchart%20TD%0A%20%20%20%20E%5BEnterprise%20Policy%5D%20--%3E%20P%5BProject%20CLAUDE.md%5D%0A%20%20%20%20P%20--%3E%20R%5BProject%20Rules%20.claude%2Frules%5D%0A%20%20%20%20R%20--%3E%20U%5B~%2F.claude%2FCLAUDE.md%20User%5D%0A%20%20%20%20U%20--%3E%20A%5BAuto%20memory%3Cbr%2F%3EClaude%20%E3%81%8C%E8%87%AA%E5%B7%B1%E8%BF%BD%E8%A8%98%5D%0A%20%20%20%20style%20E%20fill%3A%23ffebee%0A%20%20%20%20style%20A%20fill%3A%23e8f5e9" data-raw-encoding="url"><code>flowchart TD
+    E[Enterprise Policy] --&gt; P[Project CLAUDE.md]
+    P --&gt; R[Project Rules .claude/rules]
+    R --&gt; U[~/.claude/CLAUDE.md User]
+    U --&gt; A[Auto memory&lt;br/&gt;Claude が自己追記]
+    style E fill:#ffebee
+    style A fill:#e8f5e9</code></pre>
+<p>Claude Code がディレクトリツリーを遡って <code class="rich-inline-code">CLAUDE.md</code> を自動連結ロードする標準機構。後で読まれた指示の方が（同じ論点なら）強く効く。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>最も低コストでメモリを持たせる方法。設定不要・MCP 不要・追加ツール不要。<code class="rich-inline-code">~/.claude/CLAUDE.md</code> に書けば全プロジェクトに効き、リポジトリ直下に置けばそのプロジェクトだけに効く。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Claude Code 無料</th><th>Claude Pro</th><th>Claude Team / Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可（Enterprise Policy 層が追加）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: コーディング規約・命名規則・テスト方針を <code class="rich-inline-code">CLAUDE.md</code> に書いておけば毎回説明不要</p>
+</li><li><p><strong>テックリード</strong>: チーム共通の <code class="rich-inline-code">.claude/rules/</code> をリポジトリに commit してコードレビュー観点を統一</p>
+</li><li><p><strong>非エンジニア</strong>: 業務マニュアル・FAQ・社内用語集を <code class="rich-inline-code">~/.claude/CLAUDE.md</code> に書いて Claude Code を社内アシスタント化</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs MCP Memory Server: <strong>設定ゼロ</strong>。Git で diff が見える</p>
+</li><li><p>vs Mem0 / Letta: <strong>完全無料</strong>。クラウドアカウント不要</p>
+</li><li><p>vs Beads: タスクではなく<strong>規約・嗜好</strong>を記述するのに向く</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>実用上限は <strong>80-120 行</strong>（モデルが従える instruction 数 150-200 のうち、システムプロンプトで 50 使われる）</p>
+</li><li><p><code class="rich-inline-code">/memory</code> コマンドで現在ロード中のメモリを確認できる</p>
+</li><li><p>Auto memory 機能で Claude 自身が <code class="rich-inline-code">MEMORY.md</code> インデックスに追記する</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>長くすればするほど性能低下。<strong>冗長な内容は別ファイルに切り出し</strong></p>
+</li><li><p>機密情報を書くと履歴に残る。Secret は環境変数へ</p>
+</li><li><p>後で読まれた指示が勝つので、Enterprise → Project → User の順を意識して書く</p>
+</li></ul>
+<hr>
+<h3 id="4-2-mcp-memory-server-anthropic-公式-knowledge-graph">4.2 MCP Memory Server（Anthropic 公式 Knowledge Graph）</h3>
+<h4 id="4-2-1-知識グラフ永続化">4.2.1 知識グラフ永続化</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="flowchart%20LR%0A%20%20%20%20User%5B%E3%83%A6%E3%83%BC%E3%82%B6%E3%83%BC%E7%99%BA%E8%A8%80%5D%20--%3E%20Ent%5BEntity%20%E4%BD%9C%E6%88%90%5D%0A%20%20%20%20Ent%20--%3E%20Rel%5BRelation%20%E4%BD%9C%E6%88%90%5D%0A%20%20%20%20Rel%20--%3E%20Obs%5BObservation%20%E8%93%84%E7%A9%8D%5D%0A%20%20%20%20Obs%20--%3E%20JSONL%5B(memory.json%3Cbr%2F%3EJSONL%20%E3%83%AD%E3%83%BC%E3%82%AB%E3%83%AB)%5D%0A%20%20%20%20JSONL%20--%3E%20Query%5B%E6%AC%A1%E3%82%BB%E3%83%83%E3%82%B7%E3%83%A7%E3%83%B3%E3%81%A7%E6%A4%9C%E7%B4%A2%5D%0A%20%20%20%20style%20JSONL%20fill%3A%23fff3e0" data-raw-encoding="url"><code>flowchart LR
+    User[ユーザー発言] --&gt; Ent[Entity 作成]
+    Ent --&gt; Rel[Relation 作成]
+    Rel --&gt; Obs[Observation 蓄積]
+    Obs --&gt; JSONL[(memory.json&lt;br/&gt;JSONL ローカル)]
+    JSONL --&gt; Query[次セッションで検索]
+    style JSONL fill:#fff3e0</code></pre>
+<p>Entity（人・物・概念）と Relation（関係）と Observation（観察）の 3 概念だけで構成される最小知識グラフ。MCP 経由で 9 ツール提供。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「Claude にプロジェクトの登場人物・モジュール・依存関係を覚えさせたい」場合の標準解。公式・無料・ローカルファイル保存というベンダーロックインなしの組み合わせが強い。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>OSS self-host</th><th>クラウド版</th></tr></thead><tbody><tr><td>利用可（無料）</td><td>不可（提供なし、ローカル限定）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: 新規参画時のオンボーディングで「このリポジトリの主要モジュール」をグラフに登録</p>
+</li><li><p><strong>テックリード</strong>: アーキテクチャ判断の根拠（&quot;なぜマイクロサービス分割したか&quot;）を entity に observation として残す</p>
+</li><li><p><strong>非エンジニア</strong>: パートナー会社・契約条件・連絡窓口を entity 化して Claude に問い合わせ</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs Mem0: <strong>完全ローカル</strong>・SaaS 課金なし</p>
+</li><li><p>vs Letta: <strong>エージェント基盤不要</strong>。Claude Code の MCP に追加するだけ</p>
+</li><li><p>vs CLAUDE.md: <strong>検索可能な構造化データ</strong>として保持</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>9 ツール: <code class="rich-inline-code">create_entities</code> / <code class="rich-inline-code">create_relations</code> / <code class="rich-inline-code">add_observations</code> / <code class="rich-inline-code">delete_*</code> / <code class="rich-inline-code">read_graph</code> / <code class="rich-inline-code">search_nodes</code> / <code class="rich-inline-code">open_nodes</code> 等</p>
+</li><li><p><code class="rich-inline-code">memory.json</code> は JSONL なので <code class="rich-inline-code">git diff</code> でレビュー可能</p>
+</li><li><p>Memory Visualizer（mjherich/memory-visualizer）で GUI 閲覧</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>検索はキーワード／node 探索ベース。<strong>ベクトル検索ではない</strong>ので類似意味検索は弱い</p>
+</li><li><p>スキーマフリーなので運用ルールがないと無秩序になる</p>
+</li><li><p>マルチユーザ共有は想定されていない（基本ローカル）</p>
+</li></ul>
+<hr>
+<h3 id="4-3-beads-bd-git-backed-issue-dag">4.3 Beads (bd) — git-backed issue DAG</h3>
+<h4 id="4-3-1-タスク-dag-による長期記憶">4.3.1 タスク DAG による長期記憶</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="flowchart%20TD%0A%20%20%20%20bd1%5Bbd-a1b2%20%E8%A8%AD%E8%A8%88%5D%20--%3E%20bd2%5Bbd-c3d4%20%E5%AE%9F%E8%A3%85%5D%0A%20%20%20%20bd2%20--%3E%20bd3%5Bbd-e5f6%20%E3%83%86%E3%82%B9%E3%83%88%5D%0A%20%20%20%20bd1%20--%3E%20bd4%5Bbd-g7h8%20%E3%83%89%E3%82%AD%E3%83%A5%E3%83%A1%E3%83%B3%E3%83%88%5D%0A%20%20%20%20bd3%20--%3E%20bd5%5Bbd-i9j0%20%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4%5D%0A%20%20%20%20bd4%20--%3E%20bd5%0A%20%20%20%20style%20bd1%20fill%3A%23fff9c4%0A%20%20%20%20style%20bd5%20fill%3A%23c8e6c9" data-raw-encoding="url"><code>flowchart TD
+    bd1[bd-a1b2 設計] --&gt; bd2[bd-c3d4 実装]
+    bd2 --&gt; bd3[bd-e5f6 テスト]
+    bd1 --&gt; bd4[bd-g7h8 ドキュメント]
+    bd3 --&gt; bd5[bd-i9j0 デプロイ]
+    bd4 --&gt; bd5
+    style bd1 fill:#fff9c4
+    style bd5 fill:#c8e6c9</code></pre>
+<p>Steve Yegge 製。<strong>ハッシュ ID</strong> で多エージェント並列でも衝突しない DAG 型 issue tracker。git-backed JSONL + SQLite キャッシュ。閉じた古いタスクは自動的に &quot;memory decay&quot; で要約され context window を節約。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>長期タスク（数日〜数週間）を Claude に走らせるとき、Claude 自身が「次に何をすべきか」「これは何のためにやってるんだっけ」を見失う問題への構造的解。<code class="rich-inline-code">AGENTS.md</code> / <code class="rich-inline-code">CLAUDE.md</code> に <code class="rich-inline-code">bd</code> への参照を 1 行入れるだけで long-horizon planning が劇的に安定する。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>OSS / 個人</th><th>チーム利用</th><th>エンタープライズ</th></tr></thead><tbody><tr><td>利用可（無料）</td><td>利用可（git で共有）</td><td>利用可（自前 host のみ、SaaS なし）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: 巨大なリファクタタスクを Claude Code に任せる時に最適。途中で迷子にならない</p>
+</li><li><p><strong>テックリード</strong>: 複数エージェント並列開発時の競合回避（hash ID 設計）</p>
+</li><li><p><strong>非エンジニア</strong>: 「申込フォーム改修」のような長期 PJ で Claude に進捗管理を任せる</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs GitHub Issues: <strong>エージェントが直接読み書き</strong>できる粒度で設計</p>
+</li><li><p>vs CLAUDE.md: <strong>タスクの依存関係</strong>を構造として持つ</p>
+</li><li><p>vs Letta: <strong>コーディング特化</strong>で軽量、フレームワーク不要</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Go 製・92.9% Go コードベース</p>
+</li><li><p>Dolt（git-like DB）でマージ衝突解決を組み込み</p>
+</li><li><p>2026-03 時点で v0.59.0、18.7k stars</p>
+</li><li><p><code class="rich-inline-code">bd list ready</code> で「今すぐ着手できる」タスクのみ抽出（依存解決済み）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>学習コスト: <code class="rich-inline-code">bd</code> CLI に慣れる必要あり</p>
+</li><li><p>DAG 設計を雑にやると「依存だらけで進まない」状態になる</p>
+</li><li><p>純粋な「会話の記憶」用途には向かない</p>
+</li></ul>
+<hr>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/claude-code-memory-management-tools-2026/edc0150c-scene-03-axes.png" alt="コードの記憶 / 会話の記憶 / タスクの記憶 — 3 軸でツールを位置づける" width="1536" height="864">
+
+<h3 id="4-4-mempalace">4.4 MemPalace</h3>
+<h4 id="4-4-1-逐語保存-宮殿メタファ索引">4.4.1 逐語保存 + 宮殿メタファ索引</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="flowchart%20LR%0A%20%20%20%20Conv%5B%E4%BC%9A%E8%A9%B1%E5%8E%9F%E6%96%87%5D%20--%3E%20Verbatim%5Bverbatim%20%E4%BF%9D%E5%AD%98%3Cbr%2F%3E%E8%A6%81%E7%B4%84%E3%81%97%E3%81%AA%E3%81%84%5D%0A%20%20%20%20Verbatim%20--%3E%20Wing%5BWing%3A%20%E4%BA%BA%2F%E3%83%97%E3%83%AD%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%5D%0A%20%20%20%20Wing%20--%3E%20Room%5BRoom%3A%20%E3%83%88%E3%83%94%E3%83%83%E3%82%AF%5D%0A%20%20%20%20Room%20--%3E%20Drawer%5BDrawer%3A%20%E5%8E%9F%E6%96%87%E6%A0%BC%E7%B4%8D%5D%0A%20%20%20%20Drawer%20--%3E%20Search%5Bsemantic%20search%20%E3%81%A7%E5%8F%96%E3%82%8A%E5%87%BA%E3%81%97%5D%0A%20%20%20%20style%20Verbatim%20fill%3A%23fff3e0%0A%20%20%20%20style%20Search%20fill%3A%23e8f5e9" data-raw-encoding="url"><code>flowchart LR
+    Conv[会話原文] --&gt; Verbatim[verbatim 保存&lt;br/&gt;要約しない]
+    Verbatim --&gt; Wing[Wing: 人/プロジェクト]
+    Wing --&gt; Room[Room: トピック]
+    Room --&gt; Drawer[Drawer: 原文格納]
+    Drawer --&gt; Search[semantic search で取り出し]
+    style Verbatim fill:#fff3e0
+    style Search fill:#e8f5e9</code></pre>
+<p>会話履歴を<strong>そのまま</strong>保存し、semantic search で取り出す。要約・抽出・パラフレーズしない設計思想。記憶宮殿メタファで Wing→Room→Drawer の階層索引を持つ。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「Claude が以前何を提案したか・自分が何を言ったか」を<strong>原文のニュアンスごと</strong>保持したい場合の選択肢。要約による情報欠落を許容できないユースケース（議事録・契約相談・コードレビューコメント）に強い。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>OSS self-host</th><th>MemPalace Cloud</th></tr></thead><tbody><tr><td>利用可（完全無料）</td><td>利用可（OAuth MCP プラグイン経由）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: コードレビュー指摘の原文を残して同じ指摘を繰り返さない</p>
+</li><li><p><strong>テックリード</strong>: 設計会議のやり取り原文を保存。「なぜこの結論にしたか」を後から検索</p>
+</li><li><p><strong>非エンジニア</strong>: 顧客対応スクリプトを逐語保存。トーン・敬語表現を学習素材化</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs Mem0: <strong>要約しない</strong>。原文の文脈・トーンが保たれる</p>
+</li><li><p>vs MCP Memory Server: **semantic search（ベクトル）**で意味的に類似な過去発言を引ける</p>
+</li><li><p>vs Letta: <strong>ローカルファースト</strong>で API コール不要</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>LongMemEval ベンチで <strong>96.6% R@5（raw）</strong> という極めて高いリコール</p>
+</li><li><p>29 個の MCP tool: palace 読み書き、KG 操作、cross-wing 移動、drawer 管理、エージェント日記</p>
+</li><li><p>Claude Code フック 2 種: 定期保存・context 圧縮前保存</p>
+</li><li><p>インストール: <code class="rich-inline-code">uv tool install mempalace</code> または <code class="rich-inline-code">pipx install mempalace</code></p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>2026 年新興プロジェクト。<strong>運用実績は浅い</strong></p>
+</li><li><p>逐語保存ゆえに<strong>ストレージ膨張</strong>しやすい</p>
+</li><li><p>索引設計（Wing/Room）をサボると検索精度が落ちる</p>
+</li></ul>
+<hr>
+<h3 id="4-5-serena">4.5 Serena</h3>
+<h4 id="4-5-1-lsp-ベース-シンボル記憶">4.5.1 LSP ベース シンボル記憶</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="flowchart%20TD%0A%20%20%20%20Code%5B%E3%82%B3%E3%83%BC%E3%83%89%E3%83%99%E3%83%BC%E3%82%B9%5D%20--%3E%20LSP%5BLanguage%20Server%5D%0A%20%20%20%20LSP%20--%3E%20Sym%5B%E3%82%B7%E3%83%B3%E3%83%9C%E3%83%AB%E6%8A%BD%E5%87%BA%3Cbr%2F%3Efunction%2Fclass%2Fmethod%5D%0A%20%20%20%20Sym%20--%3E%20Index%5B%E3%82%B7%E3%83%B3%E3%83%9C%E3%83%AB%E7%B4%A2%E5%BC%95%5D%0A%20%20%20%20Index%20--%3E%20Mem%5BProject%20memories%20MD%5D%0A%20%20%20%20Mem%20--%3E%20Agent%5BClaude%20%2F%20Codex%20%2F%20Cursor%5D%0A%20%20%20%20Agent%20--%3E%7Cfind_symbol%3Cbr%2F%3Erename_symbol%7C%20LSP%0A%20%20%20%20style%20Sym%20fill%3A%23e1f5fe%0A%20%20%20%20style%20Mem%20fill%3A%23fff3e0" data-raw-encoding="url"><code>flowchart TD
+    Code[コードベース] --&gt; LSP[Language Server]
+    LSP --&gt; Sym[シンボル抽出&lt;br/&gt;function/class/method]
+    Sym --&gt; Index[シンボル索引]
+    Index --&gt; Mem[Project memories MD]
+    Mem --&gt; Agent[Claude / Codex / Cursor]
+    Agent --&gt;|find_symbol&lt;br/&gt;rename_symbol| LSP
+    style Sym fill:#e1f5fe
+    style Mem fill:#fff3e0</code></pre>
+<p>oraios 製。LSP（Language Server Protocol）を介してコードを<strong>シンボル単位</strong>で扱えるようにする MCP toolkit。<code class="rich-inline-code">find_symbol</code> / <code class="rich-inline-code">find_referencing_symbols</code> / <code class="rich-inline-code">rename_symbol</code> などの IDE 級操作を Claude に与える。プロジェクト固有 memory MD ファイルも持つ。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「Claude が grep ベースでコード探索して的外れな編集をする」「リファクタが安全に終わらない」問題に対する正攻法。シンボル単位で参照解析するので大規模 codebase で特に効く。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>OSS self-host</th></tr></thead><tbody><tr><td>利用可（無料）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: 大規模リポジトリ初参画時に Claude へコード理解を任せる</p>
+</li><li><p><strong>テックリード</strong>: 横断リファクタ（命名変更・API シグネチャ変更）の安全実行</p>
+</li><li><p><strong>非エンジニア</strong>: 該当なし（コーディング特化）</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs Mem0 / Letta: <strong>コード特化</strong>。会話記憶ではなく<strong>コード構造記憶</strong></p>
+</li><li><p>vs CLAUDE.md: 構造化された<strong>シンボル参照</strong>を持つ</p>
+</li><li><p>vs Beads: タスクではなく<strong>コード理解</strong>を覚える</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Python 製、PyPI で <code class="rich-inline-code">serena-agent</code></p>
+</li><li><p>2026-05-18 release</p>
+</li><li><p>プロジェクトごとの <code class="rich-inline-code">memories/</code> ディレクトリに <code class="rich-inline-code">.md</code> ファイルとして知見を蓄積</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>LSP が必要なので<strong>言語サポート依存</strong>（多言語対応は LSP 側次第）</p>
+</li><li><p>起動時にコードベースインデックス構築コストがある</p>
+</li><li><p>純粋な「会話記憶」用途には向かない</p>
+</li></ul>
+<hr>
+<h3 id="4-6-letta-旧-memgpt">4.6 Letta（旧 MemGPT）</h3>
+<h4 id="4-6-1-自己編集メモリエージェント基盤">4.6.1 自己編集メモリエージェント基盤</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="stateDiagram-v2%0A%20%20%20%20%5B*%5D%20--%3E%20Core%3A%20%E8%B5%B7%E5%8B%95%0A%20%20%20%20Core%20--%3E%20Working%3A%20%E3%83%84%E3%83%BC%E3%83%AB%E5%91%BC%E3%81%B3%E5%87%BA%E3%81%97%0A%20%20%20%20Working%20--%3E%20Archival%3A%20%E5%8F%A4%E3%81%84%E6%83%85%E5%A0%B1%E9%80%80%E9%81%BF%0A%20%20%20%20Archival%20--%3E%20Core%3A%20recall%20%E6%A4%9C%E7%B4%A2%0A%20%20%20%20Core%20--%3E%20SelfEdit%3A%20%E3%83%A1%E3%83%A2%E3%83%AA%E6%9B%B4%E6%96%B0%E3%83%84%E3%83%BC%E3%83%AB%0A%20%20%20%20SelfEdit%20--%3E%20Core%3A%20%E8%87%AA%E5%B7%B1%E6%94%B9%E5%A4%89%0A%20%20%20%20Core%20--%3E%20%5B*%5D%3A%20REST%20API%20%E3%83%AC%E3%82%B9%E3%83%9D%E3%83%B3%E3%82%B9%0A%20%20%20%20note%20right%20of%20SelfEdit%0A%20%20%20%20%20%20%E3%82%A8%E3%83%BC%E3%82%B8%E3%82%A7%E3%83%B3%E3%83%88%E3%81%8C%0A%20%20%20%20%20%20%E8%87%AA%E5%88%86%E3%81%A7%E3%83%A1%E3%83%A2%E3%83%AA%E3%82%92%E6%9B%B8%E3%81%8D%E6%8F%9B%E3%81%88%E3%82%8B%0A%20%20%20%20end%20note" data-raw-encoding="url"><code>stateDiagram-v2
+    [*] --&gt; Core: 起動
+    Core --&gt; Working: ツール呼び出し
+    Working --&gt; Archival: 古い情報退避
+    Archival --&gt; Core: recall 検索
+    Core --&gt; SelfEdit: メモリ更新ツール
+    SelfEdit --&gt; Core: 自己改変
+    Core --&gt; [*]: REST API レスポンス
+    note right of SelfEdit
+      エージェントが
+      自分でメモリを書き換える
+    end note</code></pre>
+<p>UC Berkeley 発の MemGPT 研究を製品化したエージェント基盤。<strong>自己編集メモリ</strong>（agent が自分でメモリを管理）と <strong>OS 風メモリ階層</strong>（core/working/archival）を持つ。REST API でエージェントを deploy できる。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「数日〜数週間自律稼働する Claude / GPT エージェント」を作りたいときの本命。CLAUDE.md や MCP Memory Server より重いが、エージェント自身が記憶を整理してくれる。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>OSS self-host</th><th>Letta Cloud</th></tr></thead><tbody><tr><td>利用可（無料）</td><td>従量課金（production 想定）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: 単体では重すぎる。学習リソースとして触る程度</p>
+</li><li><p><strong>テックリード</strong>: 社内向け自律エージェント（PR 自動レビュー、issue triage）の基盤として</p>
+</li><li><p><strong>非エンジニア</strong>: 業務の自動応答エージェント（FAQ 応答→エスカレ判断）</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs Mem0: <strong>自己編集メモリ</strong>でエージェント自律性が桁違い</p>
+</li><li><p>vs MCP Memory Server: <strong>エージェント runtime まで提供</strong></p>
+</li><li><p>vs Letta Cloud: <strong>self-host 完結</strong>できる OSS パス</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>MemGPT は研究パターン名、<strong>Letta</strong> が実装フレームワーク名</p>
+</li><li><p>OS 風: core memory（常時 context）/ working memory（最近）/ archival memory（長期・検索）</p>
+</li><li><p>Production 向け（REST API、agent runtime、developer tools）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p><strong>重い</strong>。CLAUDE.md 1 ファイルで済むタスクには過剰</p>
+</li><li><p>自己編集メモリゆえに「エージェントが自分で変なことを覚える」リスク</p>
+</li><li><p>Claude Code 単体で完結したい場合は不向き</p>
+</li></ul>
+<hr>
+<h3 id="4-7-mem0">4.7 Mem0</h3>
+<h4 id="4-7-1-ベクトル-知識グラフ-デュアルストア">4.7.1 ベクトル + 知識グラフ デュアルストア</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="flowchart%20LR%0A%20%20%20%20Msg%5B%E4%BC%9A%E8%A9%B1%E3%83%A1%E3%83%83%E3%82%BB%E3%83%BC%E3%82%B8%5D%20--%3E%20Extract%5Bfact%20%E6%8A%BD%E5%87%BA%20pipeline%5D%0A%20%20%20%20Extract%20--%3E%20Vec%5B(%E3%83%99%E3%82%AF%E3%83%88%E3%83%AB%20DB)%5D%0A%20%20%20%20Extract%20--%3E%20KG%5B(%E7%9F%A5%E8%AD%98%E3%82%B0%E3%83%A9%E3%83%95)%5D%0A%20%20%20%20Vec%20--%3E%20Search1%5B%E9%A1%9E%E4%BC%BC%E6%A4%9C%E7%B4%A2%5D%0A%20%20%20%20KG%20--%3E%20Search2%5B%E9%96%A2%E4%BF%82%E6%A4%9C%E7%B4%A2%5D%0A%20%20%20%20Search1%20--%3E%20Ret%5Bhybrid%20retrieval%5D%0A%20%20%20%20Search2%20--%3E%20Ret%0A%20%20%20%20style%20Vec%20fill%3A%23fff3e0%0A%20%20%20%20style%20KG%20fill%3A%23e1f5fe" data-raw-encoding="url"><code>flowchart LR
+    Msg[会話メッセージ] --&gt; Extract[fact 抽出 pipeline]
+    Extract --&gt; Vec[(ベクトル DB)]
+    Extract --&gt; KG[(知識グラフ)]
+    Vec --&gt; Search1[類似検索]
+    KG --&gt; Search2[関係検索]
+    Search1 --&gt; Ret[hybrid retrieval]
+    Search2 --&gt; Ret
+    style Vec fill:#fff3e0
+    style KG fill:#e1f5fe</code></pre>
+<p>会話メッセージから <strong>atomic な fact</strong> を抽出して保存。ベクトル DB（類似検索）と知識グラフ（関係検索）を併用。チャットボット用記憶層として最も普及。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「ユーザーの好み・履歴を覚える AI アシスタント」を作りたい場合の業界デフォルト。GitHub 48k stars、$24M Series A という採用実績の安心感。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>OSS core</th><th>Cloud Free</th><th>Cloud Pro</th></tr></thead><tbody><tr><td>利用可（無料）</td><td>制限あり（容量上限）</td><td>従量課金（$50-500/月目安、graph 機能は $249/月〜）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: 個人開発の試作で「ユーザー好みを覚えるチャットボット」を作る</p>
+</li><li><p><strong>テックリード</strong>: 社内向け AI アシスタントで「誰がどの案件担当」を覚えさせる</p>
+</li><li><p><strong>非エンジニア</strong>: 顧客プロフィール（過去契約・好み・連絡時間帯）を覚える接客 AI</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs MCP Memory Server: <strong>ベクトル類似検索</strong>が標準装備</p>
+</li><li><p>vs Letta: <strong>軽量</strong>で導入しやすい</p>
+</li><li><p>vs MemPalace: <strong>要約抽出して fact 化</strong>するので記憶が密</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>LongMemEval 49.0% （Zep 63.8% より低いが、軽量さで選ばれる）</p>
+</li><li><p>dual-store: vector + knowledge graph</p>
+</li><li><p>SDK: Python / TypeScript / REST</p>
+</li><li><p><strong>graph 機能は $249/mo Pro tier 以上</strong></p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p><strong>抽出が雑な fact を蓄積</strong>するとノイズになる</p>
+</li><li><p>Pro tier 必要な機能（graph）がある</p>
+</li><li><p>self-host だと運用責任が増す</p>
+</li></ul>
+<hr>
+<h3 id="4-8-openmemory-mcp">4.8 OpenMemory MCP</h3>
+<h4 id="4-8-1-ローカル横断記憶レイヤ">4.8.1 ローカル横断記憶レイヤ</h4>
+<p><strong>🎯 概要</strong></p>
+<pre data-lang="mermaid" data-raw="flowchart%20TB%0A%20%20%20%20subgraph%20Local%5B%22%E3%83%AD%E3%83%BC%E3%82%AB%E3%83%AB%E3%83%9E%E3%82%B7%E3%83%B3%22%5D%0A%20%20%20%20%20%20OM%5B(OpenMemory%3Cbr%2F%3E%E3%83%AD%E3%83%BC%E3%82%AB%E3%83%AB%20DB)%5D%0A%20%20%20%20%20%20Dash%5BDashboard%20GUI%5D%0A%20%20%20%20end%0A%20%20%20%20OM%20---%20Dash%0A%20%20%20%20CC%5BClaude%20Code%5D%20-.MCP.-%3E%20OM%0A%20%20%20%20CD%5BClaude%20Desktop%5D%20-.MCP.-%3E%20OM%0A%20%20%20%20CR%5BCursor%5D%20-.MCP.-%3E%20OM%0A%20%20%20%20WS%5BWindsurf%5D%20-.MCP.-%3E%20OM%0A%20%20%20%20style%20Local%20fill%3A%23e8f5e9" data-raw-encoding="url"><code>flowchart TB
+    subgraph Local[&quot;ローカルマシン&quot;]
+      OM[(OpenMemory&lt;br/&gt;ローカル DB)]
+      Dash[Dashboard GUI]
+    end
+    OM --- Dash
+    CC[Claude Code] -.MCP.-&gt; OM
+    CD[Claude Desktop] -.MCP.-&gt; OM
+    CR[Cursor] -.MCP.-&gt; OM
+    WS[Windsurf] -.MCP.-&gt; OM
+    style Local fill:#e8f5e9</code></pre>
+<p>Mem0 製のローカル MCP サーバ。<strong>複数の AI ツールから同一の記憶を共有</strong>する。データは完全ローカル保存。MCP 互換クライアントなら何でも繋がる。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「Cursor で要件定義 → Claude Code で実装 → Windsurf でデバッグ」のような複数ツール跨ぎワークフローで、毎回コンテキストを貼り直す手間を消す。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>OSS self-host</th></tr></thead><tbody><tr><td>利用可（完全無料・ローカル）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab. での活用</strong></p>
+<ul><li><p><strong>ジュニアエンジニア</strong>: 個人の学習メモを複数 AI ツール間で共有</p>
+</li><li><p><strong>テックリード</strong>: チーム標準として「全員 OpenMemory を入れる」運用にすればツール選択の自由を保ちつつ知識共有</p>
+</li><li><p><strong>非エンジニア</strong>: Claude Desktop で要件整理 → Cursor で開発依頼するワークフローで継続性確保</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>vs Mem0 SaaS: <strong>データがクラウドに行かない</strong></p>
+</li><li><p>vs MCP Memory Server: <strong>複数クライアント前提</strong>で設計</p>
+</li><li><p>vs CLAUDE.md: <strong>ツール横断</strong>で共有できる</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Mem0 オープンソース、Apache-2.0 系ライセンス</p>
+</li><li><p>Dashboard GUI で memory の閲覧・削除・アクセス制御</p>
+</li><li><p>MCP 標準準拠なので Cline、ChatGPT Desktop（対応次第）も繋がる</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>ローカル限定なので<strong>マシン跨ぎ共有は別途仕組み必要</strong>（同期ツール等）</p>
+</li><li><p>Mem0 の抽出ロジックを引き継ぐので fact 抽出品質に依存</p>
+</li></ul>
+<hr>
+<h2 id="5-機能-ツール-マトリクス">5. 機能 × ツール マトリクス</h2>
+<p>凡例: <code class="rich-inline-code">利用可</code> / <code class="rich-inline-code">制限あり</code> / <code class="rich-inline-code">不可</code> / <code class="rich-inline-code">OSS-only</code></p>
+<table class="rich-table"><thead><tr><th>軸</th><th>CLAUDE.md</th><th>MCP Memory</th><th>Beads</th><th>MemPalace</th><th>Serena</th><th>Letta</th><th>Mem0</th><th>OpenMemory</th></tr></thead><tbody><tr><td><strong>設定ゼロで使える</strong></td><td>利用可</td><td>制限あり（MCP 設定要）</td><td>制限あり（CLI 導入要）</td><td>制限あり（pipx 等）</td><td>制限あり（LSP 要）</td><td>不可（基盤構築要）</td><td>制限あり（SDK 要）</td><td>制限あり（MCP 設定要）</td></tr><tr><td><strong>完全ローカル動作</strong></td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可（self-host）</td><td>制限あり（OSS のみ）</td><td>利用可</td></tr><tr><td><strong>構造化検索（KG / シンボル）</strong></td><td>不可</td><td>利用可（KG）</td><td>利用可（DAG）</td><td>利用可（KG）</td><td>利用可（シンボル）</td><td>利用可</td><td>利用可（Pro tier）</td><td>利用可（Mem0 由来）</td></tr><tr><td><strong>意味検索（ベクトル）</strong></td><td>不可</td><td>不可</td><td>不可</td><td>利用可</td><td>制限あり</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td><strong>逐語（verbatim）保存</strong></td><td>利用可（手書き）</td><td>制限あり</td><td>制限あり</td><td>利用可</td><td>不可</td><td>不可</td><td>不可</td><td>不可</td></tr><tr><td><strong>タスク／TODO 管理</strong></td><td>制限あり</td><td>不可</td><td>利用可（コア機能）</td><td>制限あり</td><td>不可</td><td>制限あり</td><td>不可</td><td>不可</td></tr><tr><td><strong>自己編集メモリ</strong></td><td>制限あり（Auto memory）</td><td>制限あり（tool 呼び出し）</td><td>利用可（エージェント駆動）</td><td>利用可（hooks）</td><td>利用可（memory MD）</td><td>利用可（コア機能）</td><td>利用可</td><td>利用可</td></tr><tr><td><strong>ツール横断共有</strong></td><td>制限あり（手動）</td><td>制限あり</td><td>利用可（git 経由）</td><td>不可</td><td>制限あり</td><td>利用可（API）</td><td>利用可（SaaS）</td><td>利用可（設計目的）</td></tr><tr><td><strong>マルチエージェント並列</strong></td><td>不可</td><td>制限あり</td><td>利用可（hash ID）</td><td>制限あり</td><td>制限あり</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td><strong>公式 SaaS あり</strong></td><td>不可</td><td>不可</td><td>不可</td><td>利用可（Cloud）</td><td>不可</td><td>利用可（Letta Cloud）</td><td>利用可（Mem0 Cloud）</td><td>不可</td></tr><tr><td><strong>無料で本番運用可</strong></td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可（self-host）</td><td>制限あり（Pro 必要な機能あり）</td><td>利用可</td></tr></tbody></table>
+<hr>
+<h2 id="6-料金体系の詳細">6. 料金体系の詳細</h2>
+<h3 id="6-1-ツール別の含み枠と超過料金">6.1 ツール別の含み枠と超過料金</h3>
+<table class="rich-table"><thead><tr><th>ツール</th><th>無料枠</th><th>課金条件</th><th>月額目安</th></tr></thead><tbody><tr><td>CLAUDE.md</td><td>完全無料</td><td>なし</td><td>$0</td></tr><tr><td>MCP Memory Server</td><td>完全無料（OSS）</td><td>なし</td><td>$0</td></tr><tr><td>Beads</td><td>完全無料（OSS）</td><td>なし</td><td>$0</td></tr><tr><td>MemPalace OSS</td><td>完全無料</td><td>なし</td><td>$0</td></tr><tr><td>MemPalace Cloud</td><td>要確認</td><td>OAuth MCP 経由</td><td>要確認</td></tr><tr><td>Serena</td><td>完全無料（OSS）</td><td>なし</td><td>$0</td></tr><tr><td>Letta self-host</td><td>完全無料</td><td>LLM API コール代は別途</td><td>LLM 利用次第</td></tr><tr><td>Letta Cloud</td><td>不明</td><td>production 想定の従量課金</td><td>要見積もり</td></tr><tr><td>Mem0 OSS</td><td>完全無料</td><td>なし</td><td>$0</td></tr><tr><td>Mem0 Cloud</td><td>制限あり</td><td>容量・retrieval 量</td><td>$50-500（典型）、$249〜（graph 機能）</td></tr><tr><td>OpenMemory MCP</td><td>完全無料（OSS）</td><td>なし</td><td>$0</td></tr></tbody></table>
+<h3 id="6-2-競合との料金構造の違い">6.2 競合との料金構造の違い</h3>
+<pre data-lang="mermaid" data-raw="quadrantChart%0A%20%20%20%20title%20%E6%A9%9F%E8%83%BD%E3%83%AA%E3%83%83%E3%83%81%E3%81%95%20%C3%97%20%E3%83%99%E3%83%B3%E3%83%80%E3%83%BC%E3%83%AD%E3%83%83%E3%82%AF%E3%82%A4%E3%83%B3%0A%20%20%20%20x-axis%20%E3%82%B7%E3%83%B3%E3%83%97%E3%83%AB%20--%3E%20%E9%AB%98%E6%A9%9F%E8%83%BD%0A%20%20%20%20y-axis%20%E3%83%AD%E3%83%83%E3%82%AF%E3%82%A4%E3%83%B3%E3%81%AA%E3%81%97%20--%3E%20%E3%83%99%E3%83%B3%E3%83%80%E3%83%BC%E3%83%AD%E3%83%83%E3%82%AF%E3%82%A4%E3%83%B3%E3%81%82%E3%82%8A%0A%20%20%20%20quadrant-1%20%E9%AB%98%E6%A9%9F%E8%83%BD%20%2B%20%E3%83%AD%E3%83%83%E3%82%AF%E3%82%A4%E3%83%B3%E5%BC%B7%0A%20%20%20%20quadrant-2%20%E9%AB%98%E6%A9%9F%E8%83%BD%20%2B%20%E8%87%AA%E7%94%B1%0A%20%20%20%20quadrant-3%20%E3%82%B7%E3%83%B3%E3%83%97%E3%83%AB%20%2B%20%E8%87%AA%E7%94%B1%0A%20%20%20%20quadrant-4%20%E3%82%B7%E3%83%B3%E3%83%97%E3%83%AB%20%2B%20%E3%83%AD%E3%83%83%E3%82%AF%E3%82%A4%E3%83%B3%E5%BC%B7%0A%20%20%20%20CLAUDE.md%3A%20%5B0.15%2C%200.15%5D%0A%20%20%20%20MCP%20Memory%3A%20%5B0.35%2C%200.1%5D%0A%20%20%20%20Beads%3A%20%5B0.5%2C%200.15%5D%0A%20%20%20%20OpenMemory%3A%20%5B0.55%2C%200.2%5D%0A%20%20%20%20MemPalace%3A%20%5B0.65%2C%200.25%5D%0A%20%20%20%20Serena%3A%20%5B0.7%2C%200.2%5D%0A%20%20%20%20Letta%3A%20%5B0.85%2C%200.55%5D%0A%20%20%20%20Mem0%3A%20%5B0.8%2C%200.75%5D" data-raw-encoding="url"><code>quadrantChart
+    title 機能リッチさ × ベンダーロックイン
+    x-axis シンプル --&gt; 高機能
+    y-axis ロックインなし --&gt; ベンダーロックインあり
+    quadrant-1 高機能 + ロックイン強
+    quadrant-2 高機能 + 自由
+    quadrant-3 シンプル + 自由
+    quadrant-4 シンプル + ロックイン強
+    CLAUDE.md: [0.15, 0.15]
+    MCP Memory: [0.35, 0.1]
+    Beads: [0.5, 0.15]
+    OpenMemory: [0.55, 0.2]
+    MemPalace: [0.65, 0.25]
+    Serena: [0.7, 0.2]
+    Letta: [0.85, 0.55]
+    Mem0: [0.8, 0.75]</code></pre>
+<h3 id="6-3-コスト最適化の勘所">6.3 コスト最適化の勘所</h3>
+<pre data-lang="mermaid" data-raw="flowchart%20TD%0A%20%20%20%20Start%5B%E3%81%BE%E3%81%9A%E4%BD%95%E3%81%8C%E8%A6%81%E3%82%8B%3F%5D%20--%3E%20Q1%7B%E6%96%87%E8%84%88%E5%96%AA%E5%A4%B1%E3%81%AE%E9%A0%BB%E5%BA%A6%E3%81%AF%3F%7D%0A%20%20%20%20Q1%20--%3E%7C%E3%81%9F%E3%81%BE%E3%81%AB%7C%20Cheap%5BCLAUDE.md%20%E3%81%A0%E3%81%91%E3%81%A7%E5%8D%81%E5%88%86%5D%0A%20%20%20%20Q1%20--%3E%7C%E9%A0%BB%E7%B9%81%7C%20Q2%7B%E4%BD%95%E3%82%92%E8%A6%9A%E3%81%88%E3%81%9F%E3%81%84%3F%7D%0A%20%20%20%20Q2%20--%3E%7C%E8%A6%8F%E7%B4%84%E3%83%BB%E5%97%9C%E5%A5%BD%7C%20CC%5BCLAUDE.md%20%2B%20MCP%20Memory%5D%0A%20%20%20%20Q2%20--%3E%7C%E3%82%B3%E3%83%BC%E3%83%89%E6%A7%8B%E9%80%A0%7C%20Ser%5BSerena%5D%0A%20%20%20%20Q2%20--%3E%7C%E9%95%B7%E6%9C%9F%20TODO%7C%20Bd%5BBeads%5D%0A%20%20%20%20Q2%20--%3E%7C%E4%BC%9A%E8%A9%B1%E5%8E%9F%E6%96%87%7C%20MP%5BMemPalace%5D%0A%20%20%20%20Q2%20--%3E%7C%E3%83%A6%E3%83%BC%E3%82%B6%E3%83%BC%E5%A5%BD%E3%81%BF%7C%20Q3%7B%E3%83%84%E3%83%BC%E3%83%AB%E8%B7%A8%E3%81%8E%3F%7D%0A%20%20%20%20Q3%20--%3E%7C%E5%8D%98%E4%B8%80%E3%83%84%E3%83%BC%E3%83%AB%7C%20Mem%5BMem0%20OSS%5D%0A%20%20%20%20Q3%20--%3E%7C%E8%A4%87%E6%95%B0%E3%83%84%E3%83%BC%E3%83%AB%7C%20OM%5BOpenMemory%20MCP%5D%0A%20%20%20%20Q2%20--%3E%7C%E8%87%AA%E5%BE%8B%E3%82%A8%E3%83%BC%E3%82%B8%E3%82%A7%E3%83%B3%E3%83%88%7C%20Le%5BLetta%20self-host%5D%0A%20%20%20%20style%20Cheap%20fill%3A%23c8e6c9%0A%20%20%20%20style%20CC%20fill%3A%23c8e6c9" data-raw-encoding="url"><code>flowchart TD
+    Start[まず何が要る?] --&gt; Q1{文脈喪失の頻度は?}
+    Q1 --&gt;|たまに| Cheap[CLAUDE.md だけで十分]
+    Q1 --&gt;|頻繁| Q2{何を覚えたい?}
+    Q2 --&gt;|規約・嗜好| CC[CLAUDE.md + MCP Memory]
+    Q2 --&gt;|コード構造| Ser[Serena]
+    Q2 --&gt;|長期 TODO| Bd[Beads]
+    Q2 --&gt;|会話原文| MP[MemPalace]
+    Q2 --&gt;|ユーザー好み| Q3{ツール跨ぎ?}
+    Q3 --&gt;|単一ツール| Mem[Mem0 OSS]
+    Q3 --&gt;|複数ツール| OM[OpenMemory MCP]
+    Q2 --&gt;|自律エージェント| Le[Letta self-host]
+    style Cheap fill:#c8e6c9
+    style CC fill:#c8e6c9</code></pre>
+<hr>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/claude-code-memory-management-tools-2026/7fa742ad-scene-04-personas.png" alt="ジュニアエンジニア / テックリード / 非エンジニア — 3 つの立場とそれぞれに合うツール" width="1536" height="864">
+
+<h2 id="7-classlab-での活用ロードマップ">7. ClassLab. での活用ロードマップ</h2>
+<h3 id="7-1-短期-3ヶ月">7.1 短期（〜3ヶ月）</h3>
+<table class="rich-table"><thead><tr><th>立場</th><th>着手内容</th><th>推奨ツール</th></tr></thead><tbody><tr><td><strong>ジュニアエンジニア</strong></td><td>個人 <code class="rich-inline-code">~/.claude/CLAUDE.md</code> に学んだコーディング規約・命名規則を追記</td><td>CLAUDE.md（純正）</td></tr><tr><td><strong>ジュニアエンジニア</strong></td><td>単一リポジトリで Claude Code を使い倒す</td><td>CLAUDE.md + Serena</td></tr><tr><td><strong>テックリード</strong></td><td>チームリポジトリに <code class="rich-inline-code">.claude/rules/</code> を整備し commit</td><td>CLAUDE.md（プロジェクト層）</td></tr><tr><td><strong>テックリード</strong></td><td>長期リファクタ PJ で Beads を試験導入</td><td>Beads</td></tr><tr><td><strong>非エンジニア</strong></td><td>Claude Desktop / Claude Code で業務 FAQ を蓄積</td><td>CLAUDE.md + OpenMemory MCP</td></tr></tbody></table>
+<h3 id="7-2-中長期-3-12ヶ月">7.2 中長期（3〜12ヶ月）</h3>
+<table class="rich-table"><thead><tr><th>立場</th><th>着手内容</th><th>推奨ツール</th></tr></thead><tbody><tr><td><strong>ジュニアエンジニア</strong></td><td>個人横断記憶を Cursor / Claude Code 間で共有</td><td>OpenMemory MCP</td></tr><tr><td><strong>ジュニアエンジニア</strong></td><td>コードレビュー指摘の原文蓄積</td><td>MemPalace</td></tr><tr><td><strong>テックリード</strong></td><td>社内自律エージェント（PR 自動レビュー・issue triage）構築</td><td>Letta self-host</td></tr><tr><td><strong>テックリード</strong></td><td>アーキテクチャ判断履歴のグラフ化</td><td>MCP Memory Server</td></tr><tr><td><strong>非エンジニア</strong></td><td>顧客プロフィール記憶 AI を試作（個人情報取扱に注意）</td><td>Mem0 OSS（self-host）</td></tr><tr><td><strong>非エンジニア</strong></td><td>業務ワークフロー横断のメモ共有</td><td>OpenMemory MCP</td></tr></tbody></table>
+<h3 id="7-3-既存資産棚卸し">7.3 既存資産棚卸し</h3>
+<table class="rich-table"><thead><tr><th>既に稼働中</th><th>内容</th><th>拡張余地</th></tr></thead><tbody><tr><td>雑務ワークスペースの <code class="rich-inline-code">CLAUDE.md</code> + <code class="rich-inline-code">.claude/memory/</code></td><td>階層メモリ + Auto memory（feedback / project / reference 等）</td><td>Enterprise 層追加（会社ポリシー）、<code class="rich-inline-code">.claude/rules/</code> 共通化</td></tr><tr><td>Serena MCP</td><td>シンボル検索・編集の MCP として稼働中</td><td>各プロジェクトの memory MD を積極利用</td></tr></tbody></table>
+<hr>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/claude-code-memory-management-tools-2026/47f9ab42-scene-05-decision.png" alt="採用判断の分岐 — 案件特性に応じて最適なツールを選ぶ" width="1536" height="864">
+
+<h2 id="8-採用判断フロー">8. 採用判断フロー</h2>
+<h3 id="8-1-新規プロジェクトでの選択フロー">8.1 新規プロジェクトでの選択フロー</h3>
+<pre data-lang="mermaid" data-raw="Zmxvd2NoYXJ0IFRECiAgICBBW+aWsOimjyBQSiDjgacgQ2xhdWRlIENvZGUg44KS5L2/44GGXSAtLT4gQnsx44O25pyI5Lul5YaF44Gu5bCP6KaP5qihP30KICAgIEIgLS0+fFllc3wgQ1tDTEFVREUubWQg44Gu44G/44Gn6ZaL5aeLXQogICAgQiAtLT58Tm98IER744Kz44O844OJ55CG6Kej44GM5Li755uu55qEP30KICAgIEQgLS0+fFllc3wgRVtDTEFVREUubWQgKyBTZXJlbmFdCiAgICBEIC0tPnxOb3wgRnvplbfmnJ/jgr/jgrnjgq/oqIjnlLs/fQogICAgRiAtLT58WWVzfCBHWysgQmVhZHNdCiAgICBGIC0tPnxOb3wgSHvjg4Tjg7zjg6vmqKrmlq0g5b+F6KaBP30KICAgIEggLS0+fFllc3wgSVsrIE9wZW5NZW1vcnkgTUNQXQogICAgSCAtLT58Tm98IEp75qeL6YCg5YyW44GV44KM44Gf55+l6K2Y44GM6KaB44KLP30KICAgIEogLS0+fFllc3wgS1srIE1DUCBNZW1vcnkgU2VydmVyXQogICAgSiAtLT58Tm98IEx744Ko44O844K444Kn44Oz44OI6Ieq5b6L56i85YONP30KICAgIEwgLS0+fFllc3wgTVsrIExldHRhXQogICAgTCAtLT58Tm98IE575Y6f5paH44OL44Ol44Ki44Oz44K55L+d5oyBP30KICAgIE4gLS0+fFllc3wgT1srIE1lbVBhbGFjZV0KICAgIE4gLS0+fE5vfCBQWysgTWVtMF0KICAgIHN0eWxlIEMgZmlsbDojYzhlNmM5CiAgICBzdHlsZSBFIGZpbGw6I2M4ZTZjOQ==" data-raw-encoding="base64"><code>flowchart TD
+    A[新規 PJ で Claude Code を使う] --&gt; B{1ヶ月以内の小規模?}
+    B --&gt;|Yes| C[CLAUDE.md のみで開始]
+    B --&gt;|No| D{コード理解が主目的?}
+    D --&gt;|Yes| E[CLAUDE.md + Serena]
+    D --&gt;|No| F{長期タスク計画?}
+    F --&gt;|Yes| G[+ Beads]
+    F --&gt;|No| H{ツール横断 必要?}
+    H --&gt;|Yes| I[+ OpenMemory MCP]
+    H --&gt;|No| J{構造化された知識が要る?}
+    J --&gt;|Yes| K[+ MCP Memory Server]
+    J --&gt;|No| L{エージェント自律稼働?}
+    L --&gt;|Yes| M[+ Letta]
+    L --&gt;|No| N{原文ニュアンス保持?}
+    N --&gt;|Yes| O[+ MemPalace]
+    N --&gt;|No| P[+ Mem0]
+    style C fill:#c8e6c9
+    style E fill:#c8e6c9</code></pre>
+<h3 id="8-2-採用適性-quadrant-軸-セットアップ難度-classlab-即効性">8.2 採用適性 Quadrant（軸: セットアップ難度 × ClassLab. 即効性）</h3>
+<pre data-lang="mermaid" data-raw="quadrantChart%0A%20%20%20%20title%20%E3%82%BB%E3%83%83%E3%83%88%E3%82%A2%E3%83%83%E3%83%97%E9%9B%A3%E5%BA%A6%20%C3%97%20ClassLab.%20%E5%8D%B3%E5%8A%B9%E6%80%A7%0A%20%20%20%20x-axis%20%E9%AB%98%E9%9B%A3%E5%BA%A6%20--%3E%20%E4%BD%8E%E9%9B%A3%E5%BA%A6%0A%20%20%20%20y-axis%20%E5%8D%B3%E5%8A%B9%E6%80%A7%20%E4%BD%8E%20--%3E%20%E5%8D%B3%E5%8A%B9%E6%80%A7%20%E9%AB%98%0A%20%20%20%20quadrant-1%20%E3%81%A8%E3%82%8A%E3%81%82%E3%81%88%E3%81%9A%E5%85%A5%E3%82%8C%E3%82%8B%0A%20%20%20%20quadrant-2%20%E5%BE%8C%E5%9B%9E%E3%81%97%E3%81%A7%E3%82%88%E3%81%84%0A%20%20%20%20quadrant-3%20%E5%88%A5%E6%A1%88%E4%BB%B6%E3%81%A7%E6%A4%9C%E8%A8%8E%0A%20%20%20%20quadrant-4%20%E4%BD%99%E8%A3%95%E3%81%82%E3%82%8C%E3%81%B0%0A%20%20%20%20CLAUDE.md%3A%20%5B0.95%2C%200.95%5D%0A%20%20%20%20Serena%3A%20%5B0.7%2C%200.85%5D%0A%20%20%20%20OpenMemory%3A%20%5B0.6%2C%200.7%5D%0A%20%20%20%20Beads%3A%20%5B0.55%2C%200.65%5D%0A%20%20%20%20MCP%20Memory%3A%20%5B0.65%2C%200.55%5D%0A%20%20%20%20MemPalace%3A%20%5B0.5%2C%200.4%5D%0A%20%20%20%20Mem0%3A%20%5B0.35%2C%200.35%5D%0A%20%20%20%20Letta%3A%20%5B0.15%2C%200.3%5D" data-raw-encoding="url"><code>quadrantChart
+    title セットアップ難度 × ClassLab. 即効性
+    x-axis 高難度 --&gt; 低難度
+    y-axis 即効性 低 --&gt; 即効性 高
+    quadrant-1 とりあえず入れる
+    quadrant-2 後回しでよい
+    quadrant-3 別案件で検討
+    quadrant-4 余裕あれば
+    CLAUDE.md: [0.95, 0.95]
+    Serena: [0.7, 0.85]
+    OpenMemory: [0.6, 0.7]
+    Beads: [0.55, 0.65]
+    MCP Memory: [0.65, 0.55]
+    MemPalace: [0.5, 0.4]
+    Mem0: [0.35, 0.35]
+    Letta: [0.15, 0.3]</code></pre>
+<hr>
+<h2 id="9-公式リファレンス-sources">9. 公式リファレンス &amp; Sources</h2>
+<h3 id="公式ドキュメント-リポジトリ">公式ドキュメント / リポジトリ</h3>
+<ul><li><p><strong>CLAUDE.md（純正）</strong>: <a href="https://code.claude.com/docs/en/memory" target="_blank" rel="noopener noreferrer">https://code.claude.com/docs/en/memory</a></p>
+</li><li><p><strong>MCP Memory Server</strong>: <a href="https://github.com/modelcontextprotocol/servers/tree/main/src/memory" target="_blank" rel="noopener noreferrer">https://github.com/modelcontextprotocol/servers/tree/main/src/memory</a></p>
+</li><li><p><strong>Beads (bd)</strong>: <a href="https://github.com/steveyegge/beads" target="_blank" rel="noopener noreferrer">https://github.com/steveyegge/beads</a></p>
+</li><li><p><strong>MemPalace</strong>: <a href="https://github.com/mempalace/mempalace" target="_blank" rel="noopener noreferrer">https://github.com/mempalace/mempalace</a></p>
+</li><li><p><strong>Serena</strong>: <a href="https://github.com/oraios/serena" target="_blank" rel="noopener noreferrer">https://github.com/oraios/serena</a></p>
+</li><li><p><strong>Letta</strong>: <a href="https://docs.letta.com/concepts/letta/" target="_blank" rel="noopener noreferrer">https://docs.letta.com/concepts/letta/</a></p>
+</li><li><p><strong>Mem0</strong>: <a href="https://mem0.ai/" target="_blank" rel="noopener noreferrer">https://mem0.ai/</a></p>
+</li><li><p><strong>OpenMemory MCP</strong>: <a href="https://mem0.ai/blog/introducing-openmemory-mcp" target="_blank" rel="noopener noreferrer">https://mem0.ai/blog/introducing-openmemory-mcp</a></p>
+</li></ul>
+<h3 id="参照した-web-sources">参照した Web Sources</h3>
+<div class="link-card link-card--no-thumbnail" data-url="https://steve-yegge.medium.com/introducing-beads-a-coding-agent-memory-system-637d7d92514a"><a href="https://steve-yegge.medium.com/introducing-beads-a-coding-agent-memory-system-637d7d92514a" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Just a moment...</h3><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Fsteve-yegge.medium.com%2Ffavicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">steve-yegge.medium.com</span></div></div></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://bruton.ai/blog/ai-trends/beads-bd-missing-upgrade-your-ai-coding-agent-needs-2026"><a href="https://bruton.ai/blog/ai-trends/beads-bd-missing-upgrade-your-ai-coding-agent-needs-2026" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Beads (bd)— the Missing Upgrade Your AI Coding Agent Needs in 2026 | bruton.ai</h3><p class="link-card__description">If you've spent any time vibe-coding with tools like Claude Code, Cursor, Windsurf or other AI-first IDEs, you've probably hit the same wall over and over: your agent forgets everything the moment the session ends.You spend half the next interaction re-explaining the project state, untangling what was done yesterday, figuring out blockers, or rediscovering dependencies. It's the &quot;50 First Dates&quot; problem for LLMs—goldfish memory meets multi-hour workflows—and it kills momentum on anything bigger than a quick script.</p><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Fbruton.ai%2Fthemes%2Fcustom%2Fbruton_ai%2Ffavicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">bruton.ai</span></div></div></a></div>
+<div class="link-card" data-url="https://recca0120.github.io/en/2026/04/08/mempalace-ai-memory-system/"><a href="https://recca0120.github.io/en/2026/04/08/mempalace-ai-memory-system/" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">MemPalace: 170 Tokens to Recall Everything — A Long-Term Memory System for AI Agents</h3><p class="link-card__description">MemPalace is a local AI memory system using a memory palace architecture, AAAK 30x compression, 170-token startup, 96.6% LongMemEval accuracy, fully offline with MCP integration.</p><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Frecca0120.github.io%2Ffavicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">recca0120.github.io</span></div></div><img class="link-card__thumbnail" src="https://recca0120.github.io/2026/04/08/mempalace-ai-memory-system/featured.jpg" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://smartscope.blog/en/generative-ai/claude/serena-mcp-coding-agent/"><a href="https://smartscope.blog/en/generative-ai/claude/serena-mcp-coding-agent/" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Serena MCP: Free AI Coding Agent with Full Codebase Understanding (2026)</h3><p class="link-card__description">Serena MCP gives AI agents complete project context across 30+ languages. Works with Claude Code &amp; Codex. Open source, free, 5-min setup. v1.0 approaching.</p><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Fsmartscope.blog%2Fassets%2Fimages%2Ffavicon.png" alt="" width="16" height="16" /><span class="link-card__domain">smartscope.blog</span></div></div><img class="link-card__thumbnail" src="https://smartscope.blog/assets/images/ogp-default.jpg" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://medium.com/@bijit211987/the-complete-guide-to-claude-md-memory-rules-loading-and-cross-tool-compression-97cc12ed037b"><a href="https://medium.com/@bijit211987/the-complete-guide-to-claude-md-memory-rules-loading-and-cross-tool-compression-97cc12ed037b" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Just a moment...</h3><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Fmedium.com%2Ffavicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">medium.com</span></div></div></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://www.pulsemcp.com/servers/modelcontextprotocol-memory"><a href="https://www.pulsemcp.com/servers/modelcontextprotocol-memory" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Attention Required! | Cloudflare</h3><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Fwww.pulsemcp.com%2Ffavicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">www.pulsemcp.com</span></div></div></a></div>
+<div class="link-card" data-url="https://www.letta.com/blog/memgpt-and-letta"><a href="https://www.letta.com/blog/memgpt-and-letta" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">MemGPT is now part of Letta  | Letta</h3><p class="link-card__description">The MemGPT open source project is now part of Letta.</p><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Fcdn.prod.website-files.com%2F66b5f39db6c9510dc8cbe834%2F688b3c5508e06ccb3a7f90f3_fav.jpg" alt="" width="16" height="16" /><span class="link-card__domain">www.letta.com</span></div></div><img class="link-card__thumbnail" src="https://cdn.prod.website-files.com/66bb3d1f468f0f3848a20a84/67314a470f07af58bc65b179_letta_memgpt.webp" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://tokenmix.ai/blog/ai-agent-memory-mem0-vs-letta-vs-memgpt-2026"><a href="https://tokenmix.ai/blog/ai-agent-memory-mem0-vs-letta-vs-memgpt-2026" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Mem0 vs Letta vs MemGPT 2026: AI Agent Memory Layer Comparison - TokenMix Blog</h3><p class="link-card__description">Mem0 vs Letta vs MemGPT compared: architecture, lock-in cost, benchmark data. Pick the right memory layer for long-running LLM agents in 2026.</p><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Ftokenmix.ai%2Ffavicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">tokenmix.ai</span></div></div><img class="link-card__thumbnail" src="https://cdn.tokenmix.ai/tongyong.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://mem0.ai/blog/introducing-openmemory-mcp"><a href="https://mem0.ai/blog/introducing-openmemory-mcp" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Introducing OpenMemory MCP</h3><p class="link-card__description">OpenMemory MCP adds persistent, user-owned memory to Claude, Cursor, and any MCP-compatible client. Self-hostable. Free to get started. Install in under 5 minutes.</p><div class="link-card__meta"><img class="link-card__favicon" src="/api/favicon?url=https%3A%2F%2Fframerusercontent.com%2Fimages%2F2ys67ADJdvcyGmQnhp8vKWSq8.svg" alt="" width="16" height="16" /><span class="link-card__domain">mem0.ai</span></div></div><img class="link-card__thumbnail" src="https://framerusercontent.com/images/iDWAoDzGYVuqmEhBJsJ3twXnmcI.png?width=2496&amp;height=1248" alt="" loading="lazy" width="120" height="120" /></a></div>

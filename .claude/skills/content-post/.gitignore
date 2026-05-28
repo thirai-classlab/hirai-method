@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# postinstall で本リポから同期（Wave D3 で実装）
+content-templates/
+src/types/database.ts

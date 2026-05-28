@@ -1,0 +1,51 @@
+{
+  "slug": "vercel-ai-gateway-20265",
+  "kind": "knowledge",
+  "title": "vercel-ai-gateway-20265",
+  "current_version": 6,
+  "published_version": 6,
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-05-21T15:47:52.481Z",
+      "author": "snapshotBeforeUpdate (auto-seed)",
+      "snapshot_taken": true,
+      "note": "auto-seeded by snapshotBeforeUpdate — version management was not initialized"
+    },
+    {
+      "v": 2,
+      "created_at": "2026-05-21T15:48:59.177Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Vercel AI Gateway 画像生成モデル横断ガイド（2026年5月版）)"
+    },
+    {
+      "v": 3,
+      "created_at": "2026-05-21T15:56:36.633Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Vercel AI Gateway 画像生成モデル横断ガイド（2026年5月版）)"
+    },
+    {
+      "v": 4,
+      "created_at": "2026-05-21T16:24:29.711Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Vercel AI Gateway 画像生成モデル横断ガイド（2026年5月版）)"
+    },
+    {
+      "v": 5,
+      "created_at": "2026-05-21T17:51:34.233Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Vercel AI Gateway 画像生成モデル横断ガイド（2026年5月版）)"
+    },
+    {
+      "v": 6,
+      "created_at": "2026-05-21T18:05:06.862Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Vercel AI Gateway 画像生成モデル横断ガイド（2026年5月版）)"
+    }
+  ]
+}

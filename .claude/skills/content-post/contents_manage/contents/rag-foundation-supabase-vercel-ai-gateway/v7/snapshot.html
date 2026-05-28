@@ -1,0 +1,246 @@
+<p><strong>対象</strong>: 自社プロダクトに RAG（Retrieval-Augmented Generation）を載せたいが、ベクトル DB / 埋め込み API / 検索ロジックの選定で詰まっているエンジニア
+<strong>ゴール</strong>: Supabase + Vercel AI Gateway + AI SDK の <strong>3 点だけで RAG の最小実装を完成</strong> させ、その上で Hybrid Search にスケールできるようにする
+<strong>この記事の元実装</strong>: <a href="https://classlab-weekly-news.vercel.app" target="_blank" rel="noopener noreferrer">ClassLab Weekly News</a> の本番 RAG パイプライン</p>
+<blockquote>
+<p><strong>RAG の概念から押さえたい人へ:</strong> 「そもそも RAG って何？」「Fine-tuning や Long Context との違いは？」を整理した姉妹記事を先に読むのを推奨します → <a href="https://classlab-weekly-news.vercel.app/articles/rag-tech-explained-now" target="_blank" rel="noopener noreferrer">RAG という技術について今更解説する</a></p>
+</blockquote>
+<hr>
+<h2 id="0-やろうと思ったきっかけ-ローカル-rag-の限界">0. やろうと思ったきっかけ — ローカル RAG の限界</h2>
+<p>最初は <strong>個人の手元（ローカル）</strong> で RAG を組んでいました。VS Code の拡張やローカル LLM に手元の資料を食わせて検索させる、というアレです。<strong>個人の開発生産性は確かに上がる</strong>。コードの引用元を秒で持ってきてくれるし、ググる時間も減る。</p>
+<p>ただ、<strong>チームで AI を介して RAG を使う段になると、ローカル構成は破綻します</strong>。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/rag-foundation-supabase-vercel-ai-gateway/12ae2787-body-local-vs-cloud.png" alt="ローカル RAG（全 PC 同期が必要・マニュアル展開が大変・技術ハードル高）から、クラウド RAG（チームで共有・AI から利用可能・セットアップ 1 回）へ移行する図" width="1536" height="1024">
+
+<p>ローカル運用の主なハードル:</p>
+<ul><li><p><strong>全 PC で同じインデックスを同期する手間</strong> — 誰かが資料を更新した瞬間にズレる</p>
+</li><li><p><strong>マニュアル展開がだるい</strong> — 「これ入れてあのコマンド叩いて〜」を全員にやらせるのは現実的じゃない</p>
+</li><li><p><strong>技術ハードルが高い</strong> — エンジニアでない職種（営業・サポート）には到底配れない</p>
+</li><li><p><strong>AI 連携が個人の手元に閉じる</strong> — 社内 Slack ボットや業務ツールから叩けない</p>
+</li></ul>
+<p>「<strong>チームで使う</strong>」を満たすには、結局 <strong>RAG をクラウド側に置いて、誰もが API 1 本で叩ける状態</strong> にするしかない、というのが本記事の出発点です。</p>
+<hr>
+<h2 id="1-この記事のスコープ-作るのは-基盤-だけ">1. この記事のスコープ — 作るのは「基盤」だけ</h2>
+<p>最初に切り分けておきたいのが <strong>「RAG って何を作ればいいの？」</strong> です。RAG は単一のものではなく、最低 3 つの責務に分かれています。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/rag-foundation-supabase-vercel-ai-gateway/d28db175-body-scope.png" alt="RAG を構成する 3 つの責務（コンテンツ投入 API・自動ベクトル化される RAG 基盤・ベクトル検索 API）と、それらが揃えば Slack / CLI / 社内ツールなど任意のシステムから RAG を利用できることを示す図" width="1536" height="1024">
+
+<table class="rich-table"><thead><tr><th>#</th><th>責務</th><th>この記事</th><th>既存実装</th></tr></thead><tbody><tr><td>1</td><td><strong>コンテンツ投入 API</strong>（資料 → DB）</td><td>❌ 対象外</td><td>別スキルで実装済み</td></tr><tr><td>2</td><td><strong>RAG 基盤</strong>（自動ベクトル化 / 検索インフラ）</td><td>✅ <strong>本記事</strong></td><td>classlab-weekly-news 本番</td></tr><tr><td>3</td><td><strong>ベクトル検索 API</strong>（クエリ → 関連コンテンツ）</td><td>❌ 対象外</td><td>別スキルで実装済み</td></tr></tbody></table>
+<p><strong>本記事が作るのは「2. RAG 基盤」だけ</strong> です。「コンテンツを投入したら自動でベクトル化されて、検索できる状態になる」という <strong>下回り</strong> に集中します。</p>
+<p>なぜ基盤だけに絞るかというと、</p>
+<ul><li><p>投入 API と検索 API は <strong>業務要件によって形が変わる</strong>（CSV 一括 / Webhook / 管理画面手入力 / Slack スラッシュコマンド…）</p>
+</li><li><p>基盤さえ汎用に作っておけば、<strong>投入 API と検索 API を後から好きな形で生やせる</strong></p>
+</li><li><p><strong>「基盤 + 投入 + 検索」の 3 つが揃えば、Slack ボット・CLI・社内ツール・Chrome 拡張などあらゆるシステムから AI 経由で同じ RAG を呼べる</strong></p>
+</li></ul>
+<p>逆に言えば、3 点セットの中で <strong>基盤だけが「全システム共通」</strong> で、残り 2 点はそれぞれの用途ごとに何度でも実装することになる。だからまず基盤を最短で立てて、後段に投資できる体力を残しておく — これが今回の戦略です。</p>
+<hr>
+<h2 id="2-なぜ-supabase-vercel-ai-gateway-なのか">2. なぜ「Supabase + Vercel AI Gateway」なのか</h2>
+<p>RAG をゼロから組むときに迷う点はおおむね 3 つに集約されます。</p>
+<ol><li><p><strong>ベクトル DB を何にするか</strong>（Pinecone / Weaviate / Qdrant / pgvector / …）</p>
+</li><li><p><strong>埋め込み API のキー管理をどう一元化するか</strong>（OpenAI / Cohere / Voyage / …）</p>
+</li><li><p><strong>検索ロジックをどう作るか</strong>（純ベクトル / ハイブリッド / リランキング）</p>
+</li></ol>
+<p>この 3 つに対して、<strong>Supabase（pgvector + RLS + RPC）</strong> と <strong>Vercel AI Gateway（プロバイダ統合 + キー一元化）</strong> を組み合わせると、それぞれ「PostgreSQL の延長」「1 本のキー」で全部解ける。<strong>インフラを増やさず、既存の Next.js + Postgres スタックの中で完結する</strong> のが最大のメリットです。</p>
+<p>Vercel AI Gateway 自体については別ナレッジで詳しく書いています:</p>
+<p><a href="https://classlab-weekly-news.vercel.app/knowledge/vercel-ai-gateway-unified-access" target="_blank" rel="noopener noreferrer">Vercel AI Gateway とは — 1 本のキーで全 AI プロバイダを横断できる統一ゲートウェイ</a></p>
+<hr>
+<h2 id="1-全体アーキテクチャ">1. 全体アーキテクチャ</h2>
+<p>最小構成は次の 4 コンポーネントだけで成立します。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/rag-foundation-supabase-vercel-ai-gateway/d069c41b-body-architecture.png" alt="Supabase pgvector + content_embeddings テーブル / Vercel AI Gateway 経由の text-embedding-3-large / AI SDK の embed・embedMany / Next.js から呼ぶ search_similar RPC、の 4 コンポーネントが連携する RAG 基盤の全体構成図" width="1536" height="1024">
+
+<table class="rich-table"><thead><tr><th>層</th><th>採用技術</th><th>役割</th></tr></thead><tbody><tr><td>ベクトルストア</td><td><strong>Supabase pgvector(1024) + HNSW</strong></td><td>埋め込み保存と近似最近傍検索</td></tr><tr><td>埋め込み生成</td><td><strong>Vercel AI Gateway → openai/text-embedding-3-large</strong></td><td>テキスト → 1024 次元ベクトル</td></tr><tr><td>クライアント SDK</td><td><strong>AI SDK v6 の <code class="rich-inline-code">embed</code> / <code class="rich-inline-code">embedMany</code></strong></td><td>TS / Next.js から呼び出し</td></tr><tr><td>検索インターフェース</td><td><strong>Postgres RPC（search_similar / search_hybrid）</strong></td><td>DB 内で完結する検索ロジック</td></tr></tbody></table>
+<p>ポイントは <strong>「アプリ側ではベクトル計算を一切しない」</strong> こと。すべて DB の RPC に押し込み、アプリ側は <code class="rich-inline-code">supabase.rpc(&quot;search_similar&quot;, { query_embedding })</code> を呼ぶだけにする。これが最短で、かつ後から RLS / リランキング / Recency Boost を足せる構造です。</p>
+<hr>
+<h2 id="2-最短セットアップ-5-ステップ">2. 最短セットアップ（5 ステップ）</h2>
+<p>ここから写経で動くレベルまで落とした手順です。</p>
+<h3 id="step-1-supabase-で-pgvector-を有効化">Step 1. Supabase で pgvector を有効化</h3>
+<p>Supabase ダッシュボード → Database → Extensions で <code class="rich-inline-code">vector</code> と <code class="rich-inline-code">pg_trgm</code>（後の hybrid 検索で使う）を有効化。</p>
+<pre data-lang="sql"><code>CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;</code></pre>
+<h3 id="step-2-content-embeddings-テーブルを作る">Step 2. <code class="rich-inline-code">content_embeddings</code> テーブルを作る</h3>
+<p>実運用は <strong>「コンテンツ本体テーブル」と「embedding テーブル」を分ける</strong> のが扱いやすい。再生成・モデル切替・複数ベクトル並存（粒度違い）に効きます。</p>
+<pre data-lang="sql"><code>CREATE TABLE content_embeddings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_type TEXT NOT NULL CHECK (content_type IN ('issue','article','knowledge')),
+  content_id UUID NOT NULL,
+  embedding VECTOR(1024) NOT NULL,
+  model TEXT NOT NULL DEFAULT 'text-embedding-3-large',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (content_type, content_id, model)
+);
+
+-- HNSW インデックス（cosine 距離）
+CREATE INDEX idx_embeddings_vector ON content_embeddings
+  USING hnsw (embedding vector_cosine_ops);</code></pre>
+<blockquote>
+<p><strong>なぜ 1024 次元？</strong> OpenAI <code class="rich-inline-code">text-embedding-3-large</code> のデフォルト 3072 次元はストレージと検索コストが重い。AI SDK の <code class="rich-inline-code">providerOptions.openai.dimensions: 1024</code> で <strong>品質をほぼ落とさず ストレージ 1/3、レイテンシ 1/2</strong> にできる。実運用ではこちらが標準。</p>
+</blockquote>
+<h3 id="step-3-vercel-ai-gateway-を設定-oidc-認証を第一選択に">Step 3. Vercel AI Gateway を設定（OIDC 認証を第一選択に）</h3>
+<p><strong>本番は OIDC トークン自動発行を使うのが推奨</strong>。Vercel プロジェクトで AI Gateway を有効化すれば、デプロイ環境では <code class="rich-inline-code">VERCEL_OIDC_TOKEN</code> が自動注入されるので、<strong>API キーをコードや env に置かない</strong> 運用ができます（手動ローテ不要・漏洩リスク低）。</p>
+<p>ローカルは <code class="rich-inline-code">vercel env pull</code> で OIDC トークンを取り込むだけで、本番と同じコードパスを再現できます。</p>
+<pre data-lang="bash"><code># 本番: Vercel が VERCEL_OIDC_TOKEN を自動付与（何もしなくて良い）
+# ローカル:
+vercel link
+vercel env pull</code></pre>
+<p>長寿命キー運用が必要な場合（CI 外部 / オンプレ Worker など）に限り、<code class="rich-inline-code">AI_GATEWAY_API_KEY</code> を発行して使う。手動ローテが必要な点を理解した上で。</p>
+<p>これで OpenAI / Anthropic / Google / Cohere ほか <strong>どのプロバイダも <code class="rich-inline-code">provider/model</code> 形式の文字列だけで呼べる</strong> ようになる（詳細は <a href="https://classlab-weekly-news.vercel.app/knowledge/vercel-ai-gateway-unified-access" target="_blank" rel="noopener noreferrer">Vercel AI Gateway ナレッジ</a>）。</p>
+<h3 id="step-4-ai-sdk-で-embedding-を生成して-insert">Step 4. AI SDK で embedding を生成して INSERT</h3>
+<p><code class="rich-inline-code">ai</code> パッケージの <code class="rich-inline-code">embed</code> / <code class="rich-inline-code">embedMany</code> を使う。本番では <strong><code class="rich-inline-code">embedMany</code> でバッチ生成</strong> することで 10,000 件規模のリビルドが <strong>16 分 → 2 分</strong> まで縮みます。</p>
+<pre data-lang="ts"><code>// src/lib/embedding.ts
+import { embed, embedMany } from &quot;ai&quot;;
+
+const MODEL = &quot;openai/text-embedding-3-large&quot;;
+const DIMENSIONS = 1024;
+
+export async function generateEmbedding(text: string): Promise&lt;number[]&gt; {
+  const safe = sanitize(text);
+  if (!safe) throw new Error(&quot;empty input after sanitize&quot;);
+
+  const { embedding } = await embed({
+    model: MODEL,
+    value: safe,
+    providerOptions: {
+      openai: { dimensions: DIMENSIONS },
+    },
+  });
+  return embedding;
+}
+
+export async function generateEmbeddings(
+  texts: string[],
+): Promise&lt;(number[] | null)[]&gt; {
+  const valid: { idx: number; text: string }[] = [];
+  texts.forEach((t, idx) =&gt; {
+    const safe = sanitize(t);
+    if (safe) valid.push({ idx, text: safe });
+  });
+  if (valid.length === 0) return texts.map(() =&gt; null);
+
+  const { embeddings } = await embedMany({
+    model: MODEL,
+    values: valid.map((v) =&gt; v.text),
+    providerOptions: {
+      openai: { dimensions: DIMENSIONS },
+    },
+  });
+
+  // 入力順を維持（空入力位置は null）
+  const result: (number[] | null)[] = texts.map(() =&gt; null);
+  valid.forEach((v, i) =&gt; {
+    result[v.idx] = embeddings[i];
+  });
+  return result;
+}
+
+function sanitize(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null;
+  // text-embedding-3-large の上限 8192 tokens ≒ 6000 文字で truncate
+  return trimmed.length &gt; 6000 ? trimmed.slice(0, 6000) : trimmed;
+}</code></pre>
+<p>INSERT 側はシンプル:</p>
+<pre data-lang="ts"><code>const embedding = await generateEmbedding(article.body);
+
+await supabase.from(&quot;content_embeddings&quot;).upsert({
+  content_type: &quot;article&quot;,
+  content_id: article.id,
+  embedding,
+  model: &quot;text-embedding-3-large&quot;,
+}, { onConflict: &quot;content_type,content_id,model&quot; });</code></pre>
+<h3 id="step-5-検索-rpc-を-1-本だけ作る-純ベクトル検索">Step 5. 検索 RPC を 1 本だけ作る（純ベクトル検索）</h3>
+<p>「クエリ → ベクトル化 → 近傍検索」の最小実装は次の 1 本で完結します。</p>
+<pre data-lang="sql"><code>CREATE OR REPLACE FUNCTION search_similar(
+  query_embedding vector(1024),
+  match_count INTEGER DEFAULT 10,
+  filter_type TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  content_type TEXT,
+  content_id UUID,
+  similarity REAL
+)
+LANGUAGE SQL STABLE AS $$
+  SELECT
+    ce.id,
+    ce.content_type,
+    ce.content_id,
+    (1 - (ce.embedding &lt;=&gt; query_embedding))::REAL AS similarity
+  FROM content_embeddings ce
+  WHERE (filter_type IS NULL OR ce.content_type = filter_type)
+  ORDER BY ce.embedding &lt;=&gt; query_embedding
+  LIMIT match_count;
+$$;</code></pre>
+<p>アプリ側からの呼び出し:</p>
+<pre data-lang="ts"><code>const queryEmbedding = await generateEmbedding(userQuery);
+
+const { data } = await supabase.rpc(&quot;search_similar&quot;, {
+  query_embedding: queryEmbedding,
+  match_count: 10,
+  filter_type: &quot;knowledge&quot;,
+});</code></pre>
+<p><strong>ここまでで RAG の検索層は完成</strong>。あとは取得した <code class="rich-inline-code">content_id</code> で本体テーブルを JOIN し、LLM にプロンプトとして渡すだけ。</p>
+<hr>
+<h2 id="3-上級編-hybrid-search-full-text-trigram-semantic-を-rrf-で統合">3. 上級編 — Hybrid Search（Full-text + Trigram + Semantic を RRF で統合）</h2>
+<p>純ベクトル検索だけだと <strong>「キーワード一致を取りこぼす」「短い固有名詞に弱い」</strong> という弱点があります。実運用では 3 つの検索手法を <strong>Reciprocal Rank Fusion（RRF）</strong> で統合するのが定番。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/rag-foundation-supabase-vercel-ai-gateway/2f49b1cb-body-hybrid-search.png" alt="3 つの検索手法（全文検索 / Trigram 部分一致 / Semantic ベクトル検索）の結果を Reciprocal Rank Fusion で統合し、それぞれの順位の逆数に重みをかけて合算した最終ランクで返す Hybrid Search の流れ" width="1536" height="1024">
+
+<table class="rich-table"><thead><tr><th>手法</th><th>強み</th><th>弱み</th></tr></thead><tbody><tr><td>Full-text 検索 (<code class="rich-inline-code">tsvector</code>)</td><td>完全一致・形態素</td><td>表記ゆれに弱い</td></tr><tr><td>Trigram (<code class="rich-inline-code">pg_trgm</code>)</td><td>表記ゆれ・部分一致</td><td>意味は取れない</td></tr><tr><td>Semantic (<code class="rich-inline-code">pgvector</code>)</td><td>意味的類似</td><td>短いクエリに弱い</td></tr></tbody></table>
+<p>RRF の式は:</p>
+<pre data-lang="text"><code>final_rank(d) = Σ weight_i / (rrf_k + rank_i(d))</code></pre>
+<p>各手法で取った上位 N 件の順位の逆数に重みをかけて合算。<strong>重みとパラメータを env で動かせる</strong> ようにすると A/B テストが楽になります。</p>
+<pre data-lang="sql"><code>CREATE OR REPLACE FUNCTION search_hybrid(
+  query_text TEXT,
+  query_embedding vector(1024),
+  match_count INTEGER DEFAULT 20,
+  full_text_weight REAL DEFAULT 1.0,
+  trigram_weight REAL DEFAULT 0.5,
+  semantic_weight REAL DEFAULT 1.2,
+  rrf_k INTEGER DEFAULT 60
+) RETURNS TABLE (...) ...
+-- 全文 / trigram / semantic それぞれの CTE を組み、
+-- RRF で final_rank を計算して ORDER BY で返す</code></pre>
+<p>ClassLab Weekly News では、ここに <strong>Recency Boost（公開日からの減衰）</strong> と <strong>Sem Rank Min（低類似度の足切り）</strong> を加えた本番 RPC <code class="rich-inline-code">search_hybrid</code> を運用しています。それでも基本パターンは上記の通りで、最初は <code class="rich-inline-code">search_similar</code> だけで始め、必要になってから hybrid に拡張するのが最短ルートです。</p>
+<hr>
+<h2 id="4-プロダクションで詰まりやすい-5-点">4. プロダクションで詰まりやすい 5 点</h2>
+<p>ここまでのコードは「動く最小実装」ですが、本番投入時に <strong>黙って失敗する</strong> 罠があります。最初から組み込んでおくと事故が消えます。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/rag-foundation-supabase-vercel-ai-gateway/15f26d61-body-production-pitfalls.png" alt="プロダクションで詰まりやすい 5 つの罠（空文字除外 / バッチ生成 / HNSW チューニング / モックモード / OIDC 認証）の落とし穴アイコン一覧" width="1536" height="1024">
+
+<h3 id="4-1-空文字-空白だけの入力は事前に弾く">4-1. 空文字・空白だけの入力は事前に弾く</h3>
+<p><code class="rich-inline-code">text-embedding-3-large</code> は <strong>空文字 / 空白だけの入力で 400 を返します</strong>。バッチで混ざると全部失敗するので、<code class="rich-inline-code">embedMany</code> 前に必ず <code class="rich-inline-code">sanitize()</code> でフィルタ。空入力位置は <strong>null を返す API 設計</strong> にすると上流が壊れません（Step 4 のコード参照）。</p>
+<h3 id="4-2-大量再生成は必ず-embedmany">4-2. 大量再生成は必ず <code class="rich-inline-code">embedMany</code></h3>
+<p>逐次 <code class="rich-inline-code">embed()</code> だと 10,000 件で <strong>16 分</strong>、<code class="rich-inline-code">embedMany</code> だと <strong>2 分</strong>。キャッシュ層と組み合わせれば再生成の本数自体も減らせます。</p>
+<h3 id="4-3-hnsw-のリビルドタイミング">4-3. HNSW のリビルドタイミング</h3>
+<p><code class="rich-inline-code">CREATE INDEX ... USING hnsw</code> は大量 INSERT の <strong>後に張る</strong> か、INSERT 完了後に <code class="rich-inline-code">REINDEX</code> を打つほうが速い。途中で張ると挿入が遅くなります。次元変更（1536 → 1024 など）も先に index を <code class="rich-inline-code">DROP</code> してから <code class="rich-inline-code">ALTER COLUMN</code> する必要あり。</p>
+<h3 id="4-4-ローカル-ci-用のモックモード">4-4. ローカル / CI 用のモックモード</h3>
+<p>Supabase URL も AI Gateway キーもない環境（ユニットテスト / プレ PR CI）では <strong>決定論的なダミーベクトル</strong> を返すモック層を用意すると外部依存ゼロでテストできます。</p>
+<pre data-lang="ts"><code>function isMockEmbeddingMode(): boolean {
+  return (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL &amp;&amp;
+    !process.env.AI_GATEWAY_API_KEY &amp;&amp;
+    !process.env.VERCEL_OIDC_TOKEN
+  );
+}</code></pre>
+<p>入力テキストのハッシュからシードを作って <code class="rich-inline-code">1024</code> 次元の単位ベクトルを返せば、<strong>同じテキスト → 同じベクトル</strong> が保証され、検索テストが安定します。</p>
+<h3 id="4-5-oidc-認証は-vercel-上で勝手に動く">4-5. OIDC 認証は Vercel 上で勝手に動く</h3>
+<p>Vercel 上で動かす場合 <code class="rich-inline-code">AI_GATEWAY_API_KEY</code> を <strong>そもそも設定する必要がない</strong>。OIDC トークンが自動で付与されるので、本番でキー漏洩のリスクが消えます。ローカルだけ <code class="rich-inline-code">vercel env pull</code> で OIDC トークンを取得しておけば、開発と本番で同じコードパスが走ります。</p>
+<hr>
+<h2 id="5-まとめ-最短-rag-のチェックリスト">5. まとめ — 最短 RAG のチェックリスト</h2>
+<ul class="rich-checklist"><li data-checked="true"><p><strong>Supabase</strong>: <code class="rich-inline-code">vector</code> + <code class="rich-inline-code">pg_trgm</code> 拡張、<code class="rich-inline-code">content_embeddings(VECTOR(1024))</code> + HNSW インデックス</p>
+</li><li data-checked="true"><p><strong>Vercel AI Gateway</strong>: <code class="rich-inline-code">AI_GATEWAY_API_KEY</code>（または OIDC）、モデル文字列 <code class="rich-inline-code">openai/text-embedding-3-large</code></p>
+</li><li data-checked="true"><p><strong>AI SDK</strong>: <code class="rich-inline-code">embed</code> / <code class="rich-inline-code">embedMany</code>、<code class="rich-inline-code">providerOptions.openai.dimensions: 1024</code>、<code class="rich-inline-code">sanitize()</code> で空文字除外</p>
+</li><li data-checked="true"><p><strong>検索</strong>: まず <code class="rich-inline-code">search_similar</code> 1 本で開始、必要になってから RRF Hybrid に拡張</p>
+</li><li data-checked="true"><p><strong>モック層</strong>: env 未設定時は決定論的ダミーベクトルでテストを通す</p>
+</li></ul>
+<p>ここまでが <strong>「インフラを増やさず、Next.js + Postgres スタックの中で完結する RAG」</strong> の最小形です。Pinecone も Weaviate も Qdrant も追加しない。<strong>既存の Supabase に列を 1 つ足すだけ</strong> で立ち上がるのが、このスタックの一番強いところです。</p>
+<hr>
+<h2 id="関連記事">関連記事</h2>
+<ul><li><p><a href="https://classlab-weekly-news.vercel.app/articles/rag-tech-explained-now" target="_blank" rel="noopener noreferrer">RAG という技術について今更解説する — 検索 + 生成のハイブリッドが LLM のハルシネーションを潰す仕組み</a> — 本記事の前に読むと「なぜ RAG なのか」「Fine-tuning や Long Context との違い」が整理できる姉妹記事</p>
+</li><li><p><a href="https://classlab-weekly-news.vercel.app/knowledge/vercel-ai-gateway-unified-access" target="_blank" rel="noopener noreferrer">Vercel AI Gateway とは — 1 本のキーで全 AI プロバイダを横断できる統一ゲートウェイ</a> — 本記事の埋め込みも生成も同じゲートウェイで叩ける仕組み</p>
+</li></ul>
+<h2 id="sources">Sources</h2>
+<ul><li><p>元実装: <a href="https://classlab-weekly-news.vercel.app" target="_blank" rel="noopener noreferrer">ClassLab Weekly News</a></p>
+</li><li><p><a href="https://supabase.com/docs/guides/ai" target="_blank" rel="noopener noreferrer">Supabase pgvector ドキュメント</a></p>
+</li><li><p><a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer">Vercel AI Gateway ドキュメント</a></p>
+</li><li><p><a href="https://sdk.vercel.ai/docs/reference/ai-sdk-core/embed" target="_blank" rel="noopener noreferrer">AI SDK — embed / embedMany</a></p>
+</li><li><p><a href="https://platform.openai.com/docs/guides/embeddings" target="_blank" rel="noopener noreferrer">OpenAI text-embedding-3-large</a></p>
+</li><li><p><a href="https://www.microsoft.com/en-us/research/publication/reciprocal-rank-fusion-outperforms-condorcet-and-individual-rank-learning-methods/" target="_blank" rel="noopener noreferrer">Reciprocal Rank Fusion (RRF) - Microsoft Research</a></p>
+</li></ul>

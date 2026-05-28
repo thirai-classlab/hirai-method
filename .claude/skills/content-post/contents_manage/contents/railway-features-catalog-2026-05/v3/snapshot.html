@@ -1,0 +1,1196 @@
+<blockquote>
+<p>ClassLab. エンジニア向け Railway リファレンス。「なぜ存在するか → 何ができるか → 自社でどう使うか」を 1 本で完結させる。Heroku の DX を継承しつつ、Functions / Buckets / Metal / Magic Config など 2026 新機能でモダン PaaS の最前線に立つ Jake Cooper 率いるスタートアップ。</p>
+</blockquote>
+<hr>
+<blockquote>
+<p>「Push → URL」を最短化する agent-native の全部入りクラウド。Heroku の DX を継承しつつ、Functions / Buckets / Metal / Magic Config など 2026 新機能でモダン PaaS の最前線に立つ Jake Cooper 率いるスタートアップ。</p>
+</blockquote>
+<hr>
+<h2 id="0-tl-dr">0. TL;DR</h2>
+<h3 id="一行サマリ">一行サマリ</h3>
+<p>Railway は「ソースコードを push したら数秒で URL が返ってくる」体験を、フロントエンドから DB / Cron / Object Storage / 自社ハードウェアまで含めて 1 つの管理画面に集約した <strong>agent-native cloud</strong>。Vercel が「フロントエンドの Vercel」なら、Railway は「<strong>バックエンドの Vercel</strong>」のポジションを取りに来ている。</p>
+<h3 id="旧知識との差分-2025-2026-に-llm-訓練データから陳腐化しやすい論点">旧知識との差分（2025〜2026 に LLM 訓練データから陳腐化しやすい論点）</h3>
+<ul><li><p><strong>Series B $100M を 2026-01 に調達</strong>。Redpoint / a16z を中心にラウンドを実施。「agent-native cloud」を新ビジョンとして打ち出した。</p>
+</li><li><p><strong>プラン体系刷新</strong>: 旧 Developer/Team から <strong>Trial / Hobby ($5/mo) / Pro ($20/seat/mo) / Enterprise ($2,000/mo 〜)</strong> の 4 段に再編。</p>
+</li><li><p><strong>Railway Metal</strong>（beta）— 既存ハイパースケーラのコモディティ層から離脱し、<strong>Railway 自社設計の bare metal インフラ</strong> で 30〜50% コスト削減を目指す独自ハードウェア戦略。</p>
+</li><li><p><strong>Railway Functions</strong>（GA）— canvas 上で TypeScript を直接書いて <strong>GitHub repo 不要で sub-second deploy</strong>。cron / webhook / volume 対応。</p>
+</li><li><p><strong>Railpack</strong>（GA）— Nixpacks 後継の次世代ビルダー。<strong>ビルドサイズ 38〜77% 削減</strong>、Node/Python/Go/Ruby/Rust/Elixir/Deno/PHP-Laravel など多言語対応。</p>
+</li><li><p><strong>Buckets</strong>（GA, 2026）— S3 互換オブジェクトストレージが <strong>全プランで利用可能</strong>に。</p>
+</li><li><p><strong>Magic Config</strong> — Haiku ベースの LLM が <code class="rich-inline-code">railway.toml</code> 設定や Dockerfile を自動生成する AI 機能。</p>
+</li><li><p><strong>Enterprise Restricted Environments</strong> — 本番環境への変更を承認制にする MFA + Review フロー（SOC 2 / HIPAA 対応の一環）。</p>
+</li><li><p><strong>Amsterdam EU リージョン追加</strong>（2026-Q1）— 既存の US East / US West / Asia Southeast に EU が加わり、データレジデンシ要件にも対応開始。</p>
+</li><li><p><strong>Preview Environments</strong> が「PR ごとに DB を含む全スタックを丸ごと複製」する形に進化。ブランチ単位の完全な動作検証が可能に。</p>
+</li><li><p><strong>Railway CLI v4</strong> — Bun ベースに刷新、起動速度・cross-platform 配布の改善。</p>
+</li></ul>
+<h3 id="最大差別化点-競合-10-社との対比サマリ">最大差別化点（競合 10 社との対比サマリ）</h3>
+<ul><li><p><strong>Render</strong> に対しては「<strong>従量課金で scale-to-zero が効く / Functions / Magic Config / Metal</strong>」で勝つ。Render は逆に「月額固定の見積もりやすさ」が強み。</p>
+</li><li><p><strong>Fly.io</strong> に対しては「<strong>UI/UX と DB の自動プロビジョニング</strong>」で勝つ。Fly.io は逆に「<strong>35+ エッジリージョンと地理的分散</strong>」が強み。</p>
+</li><li><p><strong>Vercel</strong> に対しては「<strong>バックエンド・Worker・DB のフルスタック完結</strong>」で勝つ。Vercel はフロントエンド + AI SDK の体験で圧勝。</p>
+</li><li><p><strong>Heroku</strong> に対しては「<strong>価格・モダン UI・Functions・Metal</strong>」で勝つ。Heroku は逆に「Salesforce 連携と既存資産の継承」が強み。</p>
+</li><li><p><strong>AWS App Runner</strong> に対しては「<strong>学習コストの低さと UX</strong>」で勝つ。AWS は逆に「IAM / RDS / VPC など既存 AWS 資産との統合」が圧倒的。</p>
+</li><li><p><strong>Cloudflare Workers</strong> に対しては「<strong>フルコンテナ・任意 OSS DB の同居</strong>」で勝つ。Cloudflare は「edge / D1 / R2 / KV のグローバル分散」が強み。</p>
+</li><li><p><strong>Netlify</strong> に対しては「<strong>バックエンド完結 / Long-running worker</strong>」で勝つ。Netlify は静的サイト + Edge Functions に特化。</p>
+</li><li><p><strong>DigitalOcean App Platform</strong> に対しては「<strong>Preview Environment / Functions / Magic Config</strong>」で勝つ。DO は VPS / k8s と統合 SKU で勝つ。</p>
+</li><li><p><strong>Northflank</strong> に対しては「<strong>コミュニティと template 数 / DX 完成度</strong>」で勝つ。Northflank は <strong>multi-cluster k8s / job runner / BYOC</strong> で勝つ。</p>
+</li><li><p><strong>Coolify</strong>（OSS 自社ホスト）に対しては「<strong>マネージド運用 / SLA / DB 自動管理</strong>」で勝つ。Coolify は「コスト 0 + 完全自己管理」で勝つ。</p>
+</li></ul>
+<hr>
+<h2 id="1-railway-とは何か-理念とミッション">1. Railway とは何か — 理念とミッション</h2>
+<h3 id="1-1-ミッション">1.1 ミッション</h3>
+<p>公式表現（要旨）:</p>
+<blockquote>
+<p><em>&quot;Make infrastructure invisible, so software works with developers, not against them.&quot;</em> — インフラを見えなくし、ソフトウェアが開発者と戦うのではなく協働するようにする。</p>
+</blockquote>
+<p>Jake Cooper（前 Bloomberg / Uber）は社内インタビューで「<strong>activation energy to ship something to production should be near zero</strong>」（本番に何かを送り出すまでの活性化エネルギーをほぼゼロにしたい）と繰り返している。</p>
+<h3 id="1-2-哲学">1.2 哲学</h3>
+<table class="rich-table"><thead><tr><th>発言者</th><th>立場</th><th>哲学・要旨</th></tr></thead><tbody><tr><td>Jake Cooper（CEO / Founder）</td><td>Railway 創業者</td><td>&quot;Push code, get a URL, iterate. No Dockerfile, no Kubernetes manifests, no Ansible stacked on Ansible.&quot;</td></tr><tr><td>Jake Cooper</td><td>同上</td><td>&quot;If I get it wrong this time, I&#39;m gonna do it again. This is my life&#39;s mission.&quot; — 5 年以上同じビジョンで磨き込み続けている</td></tr><tr><td>Jake Cooper</td><td>同上</td><td>&quot;Agent-native cloud&quot; — エージェントがインフラをプロビジョン・運用することを前提に CLI / API / Functions を設計し直している</td></tr><tr><td>公式</td><td>プラットフォーム哲学</td><td>&quot;Remove friction from the entire software delivery process: deployment, databases, networking, observability, support, scaling, and now agent workflows.&quot;</td></tr><tr><td>公式</td><td>エンジニアリング哲学</td><td>&quot;<strong>A canvas, not a dashboard.</strong>&quot; — Project 単位のキャンバスで Service / DB / Volume を視覚的に配線する UX を重視</td></tr></tbody></table>
+<h3 id="1-3-なぜ存在するか">1.3 なぜ存在するか</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/2b5a2e1d-r01.png" alt="なぜ存在するか" width="1536" height="864">
+
+<p>「ハイパースケーラの素材」を組み立てる労力 → ゼロへ。Heroku 全盛期の体験を、<strong>コンテナと DB を分離せず canvas で配線できる UI</strong> + <strong>Functions で関数まで含めた agent-native API</strong> で 10 年ぶりに再構築している。</p>
+<h3 id="1-4-エンジニアにとっての意味">1.4 エンジニアにとっての意味</h3>
+<table class="rich-table"><thead><tr><th>立場</th><th>Railway をどう使うか</th></tr></thead><tbody><tr><td>フロントエンド</td><td>Vercel と並列で API/SSR サーバーをホスト。Preview Environment で UI と API を PR 単位に同期</td></tr><tr><td>バックエンド</td><td>API + Postgres + Redis + Worker + Cron を 1 つの Project に置き、Service 間は private network で接続</td></tr><tr><td>SRE / プラットフォーム</td><td>Metal beta / Volume / Healthcheck / Webhook / Audit Log で内製 PaaS 不要に。Restricted Environments で本番ガード</td></tr><tr><td>AI / ML エンジニア</td><td>Functions で LLM 呼び出し worker を瞬時に起動。Magic Config で Dockerfile を AI 生成。Bucket に成果物を保存</td></tr><tr><td>プロジェクトマネージャ</td><td>Project 単位の使用量ダッシュボードでコスト可視化、Hobby/Pro/Enterprise の seat 課金で予算管理</td></tr><tr><td>セキュリティ / コンプライアンス</td><td>SSO/SAML、Audit Log、Restricted Environments、Enterprise 限定の SOC 2 / HIPAA 対応</td></tr><tr><td>QA / テスト</td><td>Preview Environment で PR ごとに DB を含む全スタック複製、E2E をフル経路で実行可能</td></tr></tbody></table>
+<hr>
+<h2 id="2-全体マップ-1-枚絵">2. 全体マップ（1 枚絵）</h2>
+<h3 id="2-1-サービス全体俯瞰">2.1 サービス全体俯瞰</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/0e35032d-r02.png" alt="サービス全体俯瞰" width="1536" height="864">
+
+<h3 id="2-2-製品カテゴリ-mindmap">2.2 製品カテゴリ mindmap</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/2f9cf460-r03.png" alt="製品カテゴリ mindmap" width="1536" height="864">
+
+<hr>
+<h2 id="3-プラン体系の前提知識">3. プラン体系の前提知識</h2>
+<h3 id="3-0-課金単位の前提-workspace-project-seat-の階層-最重要">3.0 課金単位の前提 — workspace / project / seat の階層（最重要）</h3>
+<p><strong>Railway の課金は project 単位ではない。<code class="rich-inline-code">workspace</code> 単位 + Pro のみ seat 加算が乗る、というのが基本式</strong>。Heroku / Vercel から来ると勘違いしやすいポイントなので最初に押さえる。</p>
+<h4 id="階層構造">階層構造</h4>
+<pre data-lang="text" data-raw="Account%EF%BC%88%E3%83%AD%E3%82%B0%E3%82%A4%E3%83%B3%E3%83%A6%E3%83%BC%E3%82%B6%E3%83%BC%EF%BC%89%0A%E2%94%94%E2%94%80%E2%94%80%20Workspace%EF%BC%88%E8%AB%8B%E6%B1%82%E5%8D%98%E4%BD%8D%EF%BC%89%20%E2%86%90%20%E3%82%B5%E3%83%96%E3%82%B9%E3%82%AF%E6%96%99%E9%87%91%20%2B%20%E3%83%AA%E3%82%BD%E3%83%BC%E3%82%B9%20credit%20%E3%81%AF%E3%81%93%E3%81%93%E3%81%AB%E7%B4%90%E4%BB%98%E3%81%8F%0A%20%20%20%20%E2%94%9C%E2%94%80%E2%94%80%20Project%20A%EF%BC%88%E8%A4%87%E6%95%B0%20Service%20%2F%20DB%20%2F%20Volume%EF%BC%89%0A%20%20%20%20%E2%94%9C%E2%94%80%E2%94%80%20Project%20B%0A%20%20%20%20%E2%94%94%E2%94%80%E2%94%80%20Project%20C%20%20%20%E2%86%90%20%E5%90%8C%20workspace%20%E5%86%85%E3%81%AA%E3%82%89%E4%BD%95%E5%80%8B%E4%BD%9C%E3%81%A3%E3%81%A6%E3%82%82%20%E6%9C%88%E9%A1%8D%E5%9B%BA%E5%AE%9A%E8%B2%BB%E3%81%AF%E5%A2%97%E3%81%88%E3%81%AA%E3%81%84" data-raw-encoding="url"><code>Account（ログインユーザー）
+└── Workspace（請求単位） ← サブスク料金 + リソース credit はここに紐付く
+    ├── Project A（複数 Service / DB / Volume）
+    ├── Project B
+    └── Project C   ← 同 workspace 内なら何個作っても 月額固定費は増えない</code></pre>
+<ul><li><p>1 アカウントは <strong>複数 workspace に所属可能</strong>（個人 workspace + 会社 workspace など）</p>
+</li><li><p>1 workspace は <strong>任意個数の project を持てる</strong></p>
+</li><li><p>課金請求書は <strong>workspace ごとに 1 通発行</strong></p>
+</li></ul>
+<h4 id="課金式-プラン別">課金式（プラン別）</h4>
+<table class="rich-table"><thead><tr><th>プラン</th><th>月額（固定）</th><th>リソース credit</th><th>課金単位</th></tr></thead><tbody><tr><td><strong>Trial</strong></td><td>$0</td><td>$5 / 一回（30 日有効）</td><td>workspace（1 seat 固定）</td></tr><tr><td><strong>Hobby</strong></td><td><strong>$5 / workspace</strong></td><td>$5 / workspace</td><td>workspace（1 seat 固定、メンバー追加不可）</td></tr><tr><td><strong>Pro</strong></td><td><strong>$20 / seat / workspace</strong></td><td>$20 / seat / workspace（合算）</td><td><strong>workspace の seat 数 × $20</strong>（メンバー追加で月額増加）</td></tr><tr><td><strong>Enterprise</strong></td><td>契約額 / workspace</td><td>契約 credit</td><td>workspace 単位（契約条件次第）</td></tr></tbody></table>
+<p><strong>ポイント</strong>:</p>
+<ul><li><p>Project を増やしても <strong>月額固定費は変わらない</strong>（リソース使用量が増えるだけ）</p>
+</li><li><p>Pro で 3 人チームを workspace に追加 → 月額 $60、credit 合算で $60 分（= $20 × 3）の resource credit が workspace に入る</p>
+</li><li><p>workspace 内の <strong>全 project の resource 使用量が合算され</strong>、credit を超えた分が従量課金</p>
+</li><li><p>個人で複数 project を試したいだけなら <strong>Hobby 1 つで全部入れられる</strong>（追加 workspace 不要）</p>
+</li></ul>
+<h4 id="よくある誤解">よくある誤解</h4>
+<ul><li><p>❌「project ごとに月額が発生する」 → <strong>正</strong>: workspace 単位の課金。project は中身の論理グルーピング</p>
+</li><li><p>❌「Pro なら seat 課金は固定」 → <strong>正</strong>: seat 数 × $20。10 人なら $200/月</p>
+</li><li><p>❌「個人で複数 project = 複数 Hobby 契約が必要」 → <strong>正</strong>: 1 Hobby workspace に複数 project を相乗りで OK</p>
+</li><li><p>❌「Hobby にメンバー招待できる」 → <strong>正</strong>: Hobby は 1 seat 固定。チームを入れたいなら Pro に上げる</p>
+</li></ul>
+<h4 id="実例で見るコスト感">実例で見るコスト感</h4>
+<table class="rich-table"><thead><tr><th>利用パターン</th><th>必要な構成</th><th>月額固定</th><th>リソース credit</th></tr></thead><tbody><tr><td>個人で 5 つの趣味 project をまとめてホスト</td><td>Hobby × 1 workspace（project 5 個相乗り）</td><td>$5</td><td>$5 / workspace</td></tr><tr><td>3 人スタートアップで本番 + staging</td><td>Pro × 1 workspace × 3 seat（project 2 個）</td><td>$60</td><td>$60 / workspace</td></tr><tr><td>10 人受託会社で案件ごとに project</td><td>Pro × 1 workspace × 10 seat（project 多数）</td><td>$200</td><td>$200 / workspace</td></tr><tr><td>別事業を完全分離したい</td><td>Pro × 2 workspace（請求も別）</td><td>$20 ×（seat × workspace 数）</td><td>各 workspace ごと</td></tr></tbody></table>
+<h3 id="3-1-プラン概要表">3.1 プラン概要表</h3>
+<table class="rich-table"><thead><tr><th>観点</th><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>価格</td><td>$0（$5 一回限り credit / 30 日有効）</td><td>$5 / 月（$5 credit 込み）</td><td>$20 / seat / 月（$20 credit / seat 込み）</td><td>$2,000 / 月 〜（custom）</td></tr><tr><td>対象</td><td>お試し / 個人検証</td><td>個人開発 / 小規模 prod</td><td>チーム / 本番運用</td><td>大企業 / 規制業種</td></tr><tr><td>Pay-as-you-go 超過課金</td><td>不可（credit 切れで停止）</td><td>あり</td><td>あり</td><td>契約上限内で発生</td></tr><tr><td>Seat 数</td><td>1</td><td>1</td><td>無制限</td><td>無制限</td></tr><tr><td>サポート</td><td>コミュニティ</td><td>コミュニティ</td><td>チケット（営業日応答）</td><td>専任 CSM + SLA</td></tr><tr><td>Region</td><td>US East / US West / Asia SE / EU Amsterdam</td><td>同左</td><td>同左</td><td>+ 専用 region 相談可</td></tr><tr><td>Volume / Bucket</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>Preview Environments</td><td>利用可（数制限）</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>Restricted Environments</td><td>不可</td><td>不可</td><td>制限あり（Beta）</td><td>利用可</td></tr><tr><td>SSO/SAML</td><td>不可</td><td>不可</td><td>利用可（Pro+ Beta）</td><td>利用可</td></tr><tr><td>Audit Log</td><td>不可</td><td>不可</td><td>制限あり（直近 30 日）</td><td>利用可（無制限）</td></tr><tr><td>SOC 2 / HIPAA</td><td>不可</td><td>不可</td><td>不可</td><td>利用可</td></tr><tr><td>Railway Metal</td><td>不可</td><td>不可</td><td>不可（Beta 招待制）</td><td>利用可</td></tr></tbody></table>
+<h3 id="3-2-課金モデルの考え方">3.2 課金モデルの考え方</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/5d2e5bd6-r04.png" alt="課金モデルの考え方" width="1536" height="864">
+
+<p><strong>4 軸の単価感</strong>（2026-05 時点・Pro プラン基準・概算）:</p>
+<ul><li><p>vCPU: $20 / vCPU / 月（active CPU 課金 = 実際に CPU を使った時間のみ）</p>
+</li><li><p>RAM: $10 / GB / 月</p>
+</li><li><p>Egress: $0.10 / GB（最初の 100 GB / project / 月は無料）</p>
+</li><li><p>Volume: $0.25 / GB / 月</p>
+</li><li><p>Bucket: $0.023 / GB / 月（保管）+ リクエスト数課金</p>
+</li></ul>
+<p>Hobby/Pro/Enterprise はすべて <strong>含まれている credit（$5 / $20 / 契約額）を超過した分のみ Pay-as-you-go</strong>。</p>
+<h3 id="3-3-本ドキュメント内のプラン表記凡例">3.3 本ドキュメント内のプラン表記凡例</h3>
+<table class="rich-table"><thead><tr><th>表記</th><th>意味</th></tr></thead><tbody><tr><td>利用可</td><td>そのプランで標準提供、追加料金なし（含み枠内）</td></tr><tr><td>制限あり</td><td>利用可だが、上限・条件・Beta などの制約あり（補足テキスト併記）</td></tr><tr><td>不可</td><td>そのプランでは提供されない</td></tr><tr><td>従量課金</td><td>含み枠を超えた分は使用量に応じて課金</td></tr></tbody></table>
+<hr>
+<h2 id="4-機能カタログ">4. 機能カタログ</h2>
+<h3 id="4-1-デプロイ-ビルド層">4.1 デプロイ・ビルド層</h3>
+<h4 id="4-1-1-git-push-deploy-github-gitlab-連携">4.1.1 Git Push Deploy（GitHub / GitLab 連携）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/a039a547-r05.png" alt="Git Push Deploy" width="1536" height="864">
+
+<p>GitHub / GitLab リポジトリを接続すると、main / 指定ブランチへの push を webhook で受け、<strong>自動ビルド → 自動デプロイ → 自動 URL 発行</strong> までを 1 ステップで実行。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>Heroku 後継の最大価値。<code class="rich-inline-code">git push</code> で URL が出る体験を「特別な CI/CD 設定なし」で享受できる。PR ベースの Preview Environment（後述）と組み合わせると <strong>PR ごとに本物の URL</strong> が手に入る。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託開発の検証環境を案件 repo 直結で自動立ち上げ、お客様に共有</p>
+</li><li><p>中長期: 内製ツール（社内 dashboard / bot / batch）を GitHub 中心の運用に揃え、Vercel と棲み分け</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Heroku</strong> より速く・きれい・モダンな canvas UI</p>
+</li><li><p><strong>Render</strong> と機能はほぼ同等、こちらは <strong>monorepo の root path 指定がより柔軟</strong></p>
+</li><li><p><strong>Fly.io</strong> は CLI 中心（fly launch / deploy）、GUI 派には Railway が圧勝</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Root Directory / Watch Paths / Build Command / Start Command を Service 設定から override 可</p>
+</li><li><p>Auto Deploy on Push を OFF にして手動 promote も可能（Pro Environments の Production Branch とセットで）</p>
+</li><li><p>Branch 単位の environment 切替（PR → preview / main → production）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Monorepo で「ルート以外の package.json」を指定する場合は Root Directory を明示する</p>
+</li><li><p>Build Logs に env が露出する設定にしないこと（既定でマスクされているが Custom Build Command で漏らせる）</p>
+</li></ul>
+<hr>
+<h4 id="4-1-2-railpack-次世代ビルダー">4.1.2 Railpack（次世代ビルダー）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/d3e74658-r06.png" alt="Railpack" width="1536" height="864">
+
+<p>Nixpacks 後継として 2026 リリースされた次世代ビルダー。<strong>ビルドサイズ 38〜77% 削減</strong>、キャッシュ精度向上、Node / Python / Go / Ruby / Rust / Elixir / Deno / PHP-Laravel など多言語ネイティブ対応。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>Dockerfile を書かなくても言語ランタイムを自動検出して最小化された OCI image を生成。Cold start とコールドキャッシュ時のビルド時間が大きく短縮された。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: Node / Python の社内 worker を Dockerfile 不要で速くデプロイ</p>
+</li><li><p>中長期: PHP-Laravel 含めて Railpack で統一、内製テンプレに含める</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render</strong> の Buildpacks より圧倒的に高速 + 多言語対応</p>
+</li><li><p><strong>Fly.io</strong> は Buildpacks か Dockerfile 二択、Railpack のような自動最適化は無い</p>
+</li><li><p><strong>Heroku Buildpacks</strong> は安定だが進化が止まっており Railpack の世代が新しい</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p><code class="rich-inline-code">railway.toml</code> で builder 選択（<code class="rich-inline-code">railpack</code> / <code class="rich-inline-code">nixpacks</code> / <code class="rich-inline-code">dockerfile</code>）</p>
+</li><li><p>言語別バージョン pin（Node 20 LTS / Python 3.12 など）</p>
+</li><li><p>Build cache は project 単位、Volume とは別領域</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>言語自動検出が誤判定するケースは少数だが、その時は <code class="rich-inline-code">builder = &quot;dockerfile&quot;</code> で明示</p>
+</li><li><p>Railpack はまだ若いため、特殊な OS パッケージ依存は Dockerfile に逃げる方が確実</p>
+</li></ul>
+<hr>
+<h4 id="4-1-3-nixpacks-後方互換ビルダー">4.1.3 Nixpacks（後方互換ビルダー）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/1e6ad426-r07.png" alt="Nixpacks" width="1536" height="864">
+
+<p>Railpack 登場前の主力ビルダー。Nix ベースで再現性は高い。新規 Project は Railpack 既定だが、既存 Project や Nixpacks 固有の設定を持つコードベースは継続利用可。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「以前 Railway で動いていたが Railpack で謎の挙動」というケースの逃げ場所。<code class="rich-inline-code">nixpacks.toml</code> で細かい OS パッケージ指定がある場合は Railpack より楽。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: Railpack で挙動が怪しい既存 repo の fallback として</p>
+</li><li><p>中長期: 新規は Railpack に寄せ、Nixpacks は段階的に廃止</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Cloudflare Pages</strong> や <strong>Vercel</strong> の Buildpacks より OS パッケージ追加が柔軟</p>
+</li><li><p>ただし Railpack の登場で Nixpacks 単独の優位性は薄れている</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p><code class="rich-inline-code">nixpacks.toml</code> で <code class="rich-inline-code">[phases.setup]</code> / <code class="rich-inline-code">[start]</code> などフェーズ単位カスタマイズ</p>
+</li><li><p><code class="rich-inline-code">NIXPACKS_*</code> env で挙動制御</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>公式ドキュメントは Nixpacks → Railpack の移行を促す方向。中長期的には削減方向。</p>
+</li></ul>
+<hr>
+<h4 id="4-1-4-dockerfile-ビルド">4.1.4 Dockerfile ビルド</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/57fa9080-r08.png" alt="Dockerfile ビルド" width="1536" height="864">
+
+<p><code class="rich-inline-code">Dockerfile</code> を repo 直下（or 指定パス）に置けば、Railway は自動でそれを使ってビルド。フルコントロールが必要なときの逃げ道。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>特殊 OS、独自バイナリ同梱、multi-stage で artifact を細かく制御したい場合の標準。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: ライフライン業務の Python バッチで native binary（pdftotext 等）が必要な箱</p>
+</li><li><p>中長期: 監査要件で OS 由来 CVE 管理が必要なら Dockerfile 強制運用</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>任意 OSS DB やバイナリ込みで動く点は <strong>Vercel / Netlify / Cloudflare Workers</strong> と決定的に違う</p>
+</li><li><p><strong>Render / Fly.io</strong> も Dockerfile 可。差はビルド速度と canvas UX</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>BuildKit cache mount, <code class="rich-inline-code">--platform=linux/amd64</code> 強制、Multi-stage Build 推奨</p>
+</li><li><p><code class="rich-inline-code">railway.toml</code> の <code class="rich-inline-code">[build] builder = &quot;dockerfile&quot;</code> で明示可</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Dockerfile 経由は Railpack より遅くなることが多い。<strong>安易に Dockerfile 化しない</strong></p>
+</li><li><p>BuildKit cache を効かせないと再ビルドが毎回フルになる</p>
+</li></ul>
+<hr>
+<h4 id="4-1-5-functions-canvas-ts-デプロイ">4.1.5 Functions（canvas TS デプロイ）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/1526df5f-r09.png" alt="Functions" width="1536" height="864">
+
+<p>GitHub repo を作らずに、Railway canvas 上で TypeScript を直接書いて関数として deploy できる。<strong>sub-second deploy</strong>、cron / webhook 起動、Volume mount まで対応。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「LLM API を叩いて Slack に通知するだけの 30 行」を、repo 作成・CI 設定・Dockerfile なしで即起動できる。エージェント向けの「<strong>マイクロ自動化</strong>」基盤。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: ライフライン受注通知 Slack bot、Salesforce ↔ 内製 DB の細々した同期 job</p>
+</li><li><p>中長期: Claude / Copilot からの API 呼び出しを Functions に集約して agent 用エンドポイントを社内整備</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Vercel Functions</strong> はフロント repo に紐付くが、Railway Functions は <strong>独立した関数単体</strong> として canvas 配置できる</p>
+</li><li><p><strong>Cloudflare Workers</strong> は edge 分散が強み、Railway Functions は単一 region だが Volume mount で永続化が効く</p>
+</li><li><p><strong>Netlify Functions / DO Functions</strong> より起動速度・DX 双方で優位</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>TS のみ（v1）。Bun runtime ベース</p>
+</li><li><p>HTTP / Cron / Manual trigger</p>
+</li><li><p>同 project 内の Service / DB を private network 経由で参照可</p>
+</li><li><p>Volume mount で永続データ扱える</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>まだ若い機能、長時間 streaming やバイナリ実行は Service 側に寄せる</p>
+</li><li><p>言語が TS のみ → Python ワーカーは引き続き Service で運用</p>
+</li></ul>
+<hr>
+<h3 id="4-2-ランタイム-スケーリング層">4.2 ランタイム・スケーリング層</h3>
+<h4 id="4-2-1-service-汎用コンテナ">4.2.1 Service（汎用コンテナ）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/7c6405e7-r10.png" alt="Service" width="1536" height="864">
+
+<p>Railway の最小実行単位。OCI image を 1 つ受け取り、コンテナとして起動・公開・スケールする汎用ランタイム。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>API / Worker / Web フロント / 任意 OSS（n8n, Plausible, MinIO 等）すべての受け皿。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託案件の API（Node/Express, FastAPI 等）ホスト</p>
+</li><li><p>中長期: 業務システムのマイクロサービス分割を Service 単位で進める</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Web Service</strong> より起動速度と canvas 視認性が高い</p>
+</li><li><p><strong>Fly.io machines</strong> は CLI 必須、Railway は GUI/CLI 両対応</p>
+</li><li><p><strong>Cloudflare Workers</strong> はコンテナ非対応、Railway Service は任意 OSS が動く</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>CPU / Memory は Auto Scale も Manual も可</p>
+</li><li><p>Replicas で水平スケール、Public URL は自動で load balance</p>
+</li><li><p>Healthcheck path / interval を Service 設定で指定</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Multi-region デプロイは現状未対応（Project の region は 1 つ固定）</p>
+</li><li><p>Long-running stateful service は Volume を確実に attach すること</p>
+</li></ul>
+<hr>
+<h4 id="4-2-2-auto-scale-cpu-memory">4.2.2 Auto Scale（CPU / Memory）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/e2bd7e64-r11.png" alt="Auto Scale" width="1536" height="864">
+
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>トラフィックの波がある API / Worker で、手動チューニング不要に。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>制限あり（上限低）</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 月末集中のライフライン受付サーバーで上限のみ設定して自動拡縮</p>
+</li><li><p>中長期: 業務システムの夜間バッチ縮退、業務時間帯拡張を auto に</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render</strong> はインスタンスサイズの段階切替、Railway は連続的（より細かい）</p>
+</li><li><p><strong>Heroku</strong> の Performance Dyno より自動化されている</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Service ごとに最小 / 最大の vCPU・Memory を設定</p>
+</li><li><p>スパイクでは反応遅延あり、事前 warming も検討</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>設定上限を低くしすぎると OOM / CPU throttle、高すぎるとコスト暴騰</p>
+</li></ul>
+<hr>
+<h4 id="4-2-3-replicas-水平スケール">4.2.3 Replicas（水平スケール）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/e5c8133b-r12.png" alt="Replicas" width="1536" height="864">
+
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>同じ Service を N コピー起動し、Railway LB が round-robin で振り分け。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>不可</td><td>制限あり（少数）</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託案件の本番 API を最低 2 replica で冗長化</p>
+</li><li><p>中長期: ライフライン本番に SLA 提案する際の標準構成</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Standard</strong> は冗長 replica 対応、Hobby 互換性は Railway の方が緩い</p>
+</li><li><p><strong>Fly.io</strong> は machines の数を直接指定、Railway は Replica パラメータ 1 つで完結</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Stateless 前提。状態は DB / Volume / Bucket に寄せる</p>
+</li><li><p>Rolling deploy で順次切替</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>WebSocket sticky session が必要な構成は別途実装</p>
+</li><li><p>DB connection pool 数 = replicas × per-instance pool で爆発しやすい、PgBouncer 等を挟む</p>
+</li></ul>
+<hr>
+<h4 id="4-2-4-cron-jobs">4.2.4 Cron Jobs</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/9f47650e-r13.png" alt="Cron Jobs" width="1536" height="864">
+
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>Service / Function に対して cron 式で定期実行を仕掛ける。長時間バッチは Service、短時間は Function 側。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 業務 DB の日次集計、Salesforce 同期、レポート生成</p>
+</li><li><p>中長期: ライフライン日次精算バッチを cron + idempotent 設計で</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Heroku Scheduler</strong> は最小 10 分間隔、Railway は秒〜分単位の柔軟な cron</p>
+</li><li><p><strong>Vercel Cron</strong> は serverless、Railway は long-running も可</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>cron 式は標準 5 フィールド</p>
+</li><li><p>失敗時の retry / 上書き挙動は手動制御（idempotent 設計推奨）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>ロングランの cron は前回終了前に重複起動しないよう lock を実装</p>
+</li><li><p>TZ は UTC 既定、JST はオフセット計算が必要</p>
+</li></ul>
+<hr>
+<h4 id="4-2-5-railway-metal-自社ハードウェア-beta">4.2.5 Railway Metal（自社ハードウェア・Beta）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/cca9b9cb-r14.png" alt="Railway Metal" width="1536" height="864">
+
+<p>ハイパースケーラ（AWS/GCP）からの脱依存を進める Railway 独自のハードウェアスタック。<strong>30〜50% のコスト削減</strong> + 高 IOPS を狙う。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「同じワークロードがクラウド料金より大幅に安く動く」可能性を持つ将来の選択肢。今は Beta、Enterprise 限定。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>不可</td><td>不可</td><td>不可（招待制）</td><td>利用可（Beta）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 様子見、本番は AWS / Railway 標準 region</p>
+</li><li><p>中長期: 大規模 worker / DB で Metal 移行のコスト試算をする</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>他 PaaS（Render / Fly.io / Heroku）は自前データセンターを持たず AWS / GCP / Equinix 経由</p>
+</li><li><p><strong>Vercel</strong> も Edge は自前だが Compute は AWS 依存</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>AMD EPYC + NVMe local + 100Gbps NIC 構成（公式 blog より）</p>
+</li><li><p>Region は当面 US East のみ</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Beta、SLA 非公開</p>
+</li><li><p>物理障害時の挙動・移行手順がまだ枯れていない</p>
+</li></ul>
+<hr>
+<h3 id="4-3-データベース層">4.3 データベース層</h3>
+<h4 id="4-3-1-postgresql-1-click">4.3.1 PostgreSQL（1-click）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/98e9a056-r15.png" alt="PostgreSQL" width="1536" height="864">
+
+<p>canvas で「+ Add Postgres」を選ぶだけで、SSL 有効・私設ネットワーク内の PostgreSQL が起動し、<code class="rich-inline-code">DATABASE_URL</code> 環境変数が Service に自動注入される。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>Heroku Postgres / Render Postgres 相当の体験。pgAdmin / TablePlus 連携、Database View で SQL も叩ける。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 案件初期プロトの DB、社内ツール</p>
+</li><li><p>中長期: 中規模 SaaS の主 DB、定期 backup と Restricted Environments で本番ガード</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Postgres</strong> とほぼ同等 + 価格優位</p>
+</li><li><p><strong>Fly Postgres</strong> は安いが運用は自前色強い、Railway は完全マネージド</p>
+</li><li><p><strong>Heroku Postgres</strong> は安定だが価格高、Railway は半額程度</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>既定 Postgres 17 系、<code class="rich-inline-code">pg_dump</code> で backup 可、point-in-time restore は plan 依存</p>
+</li><li><p>pgvector 等の拡張は image を変えれば利用可</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Hobby はバックアップ手段が pg_dump 手動、自動 PITR は Pro 以上</p>
+</li><li><p>Volume 容量を最初から余裕持って取る（拡張は再起動が要）</p>
+</li></ul>
+<hr>
+<h4 id="4-3-2-mysql">4.3.2 MySQL</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/30baa8cb-r16.png" alt="MySQL" width="1536" height="864">
+
+<p>PostgreSQL と同じ 1-click 体験で MySQL を提供。レガシー連携や WordPress 系で有用。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>PHP-Laravel / WordPress / 既存 MySQL 資産がある案件で、Postgres に寄せられないケースの受け皿。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託で「MySQL 縛り」の案件のホスティング先</p>
+</li><li><p>中長期: 業務システムは Postgres を標準、MySQL は段階移行候補</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>PlanetScale</strong> ほどの vitess スケールは無いが、運用シンプル</p>
+</li><li><p><strong>Render</strong> MySQL より UI と料金が良い</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>既定 MySQL 8 系</p>
+</li><li><p>Volume backed、Backup は手動 / 自動 plan 依存</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Charset / Collation 設定はデフォルトで utf8mb4 を確認</p>
+</li><li><p>Hobby は backup が手薄</p>
+</li></ul>
+<hr>
+<h4 id="4-3-3-redis">4.3.3 Redis</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/69e1fbc8-r17.png" alt="Redis" width="1536" height="864">
+
+<p>セッション / キャッシュ / queue 用途の Redis を 1-click。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>BullMQ / Sidekiq / Rails cache / Next.js cache の裏側として使う標準構成。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: Bot / worker のレートリミットや短期キャッシュ</p>
+</li><li><p>中長期: Job queue 基盤として複数 Service で共用</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Upstash</strong> は serverless Redis で edge 強い、Railway は同一 region で低レイテンシ</p>
+</li><li><p><strong>Render Redis</strong> とほぼ同等、価格優位</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>既定 Redis 7 系</p>
+</li><li><p>Persistence は AOF / RDB 切替可</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Hobby は永続化ストレージが小、本番では Volume サイズを明示</p>
+</li><li><p>TLS は private network 内なら不要だが、外部公開時は要設定</p>
+</li></ul>
+<hr>
+<h4 id="4-3-4-mongodb">4.3.4 MongoDB</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/e5cf61f2-r18.png" alt="MongoDB" width="1536" height="864">
+
+<p>ドキュメント DB の代表として MongoDB を 1-click 提供。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>スキーマレスが向く案件（ログ・イベント・ユーザー生成データ）の主 DB。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: ログ集約や A/B 結果保存</p>
+</li><li><p>中長期: MongoDB Atlas との二択になりがち。コスト次第で Railway 選択</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>MongoDB Atlas</strong> はフルマネージドの本家、運用は楽だが高価</p>
+</li><li><p>Railway は安く済むが backup / sharding は基本機能のみ</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>既定 MongoDB 7 系</p>
+</li><li><p>Replica Set は基本構成、sharding は手動</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>大規模・analytics 用途は Atlas を選んだ方がよいケースが多い</p>
+</li><li><p>Backup は plan 依存</p>
+</li></ul>
+<hr>
+<h4 id="4-3-5-custom-db-docker-image">4.3.5 Custom DB（Docker Image）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/e1183a96-r19.png" alt="Custom DB" width="1536" height="864">
+
+<p>公式テンプレ以外の DB（ClickHouse / SurrealDB / Cassandra / Qdrant / Weaviate 等）も Docker image を指定すれば動く。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「Postgres / MySQL / Redis / Mongo では足りない」場合の救済策。Vector DB 等の AI 用途で重要。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 検証用 vector DB（Qdrant / Weaviate）</p>
+</li><li><p>中長期: ライフライン分析用 ClickHouse、ナレッジ検索用 vector DB</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render / Fly.io</strong> も Docker image で同等可、Railway の差は canvas の見通しの良さ</p>
+</li><li><p><strong>マネージド対応の Postgres/MySQL/Redis/Mongo と同じ canvas に並ぶ</strong> ので統合運用がしやすい</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Template Marketplace に主要 OSS DB のレシピが揃う</p>
+</li><li><p>Volume mount で永続化、private network で接続</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>マネージドではない（backup / failover / メジャーバージョン UP は自己責任）</p>
+</li><li><p>本番運用は専用マネージド DB（Atlas / Aiven / etc）も比較検討</p>
+</li></ul>
+<hr>
+<h3 id="4-4-ストレージ-ネットワーク層">4.4 ストレージ・ネットワーク層</h3>
+<h4 id="4-4-1-volumes-永続ボリューム">4.4.1 Volumes（永続ボリューム）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/22c7582a-r20.png" alt="Volumes" width="1536" height="864">
+
+<p>Service にマウントできる永続ボリューム。コンテナが再起動しても残る。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>DB の data dir、アップロードファイル、ローカルキャッシュなどの保管先。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: PDF 生成 worker の作業ディスク</p>
+</li><li><p>中長期: 内製 Docker DB の data 永続化</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Fly.io Volume</strong> とほぼ同等、Railway は GUI で attach できる点が楽</p>
+</li><li><p><strong>Render Disk</strong> より柔軟な size 変更</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Size は後から拡張可（縮小は不可）</p>
+</li><li><p>Snapshot は plan 依存</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Volume は 1 Service 1 Volume が基本、複数マウントは制限あり</p>
+</li><li><p>Replica で水平スケールする Service との相性は悪い（state を持つため）</p>
+</li></ul>
+<hr>
+<h4 id="4-4-2-buckets-s3-互換オブジェクトストレージ-ga">4.4.2 Buckets（S3 互換オブジェクトストレージ・GA）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/293fb1ec-r21.png" alt="Buckets" width="1536" height="864">
+
+<p>2026 GA。S3 互換 API を持つオブジェクトストレージ。<strong>全プランで利用可能</strong>。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>ファイルアップロード、画像、generated artifact、log archive の標準保管先。<code class="rich-inline-code">aws-sdk</code> / <code class="rich-inline-code">@aws-sdk/client-s3</code> がそのまま使える。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託案件のユーザーアップロード画像保管</p>
+</li><li><p>中長期: ライフライン書類スキャン保管、AI 出力 artifact</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Cloudflare R2</strong> は egress 無料が強み、Railway は同一 region 内アクセスが高速・安価</p>
+</li><li><p><strong>AWS S3</strong> より UI が canvas 統合で楽、IAM 設定不要</p>
+</li><li><p><strong>DO Spaces / Backblaze B2</strong> より統合運用しやすい</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>S3 SDK 互換（endpoint / accessKey / secretKey を Bucket から取得）</p>
+</li><li><p>同 project の Service から private network 経由でアクセス可</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>多 region 同期は未対応（単一 region 保管）</p>
+</li><li><p>大量 small object の listing コストは事前確認</p>
+</li></ul>
+<hr>
+<h4 id="4-4-3-private-network">4.4.3 Private Network</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/d15b13f3-r22.png" alt="Private Network" width="1536" height="864">
+
+<p>同 Project 内の Service / DB / Bucket は自動で private network に join され、<code class="rich-inline-code">&lt;service&gt;.railway.internal</code> で互いに名前解決できる。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>API → DB → cache の社内通信は public 露出ゼロで、レイテンシも最小。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: API ↔ Postgres を private で繋ぐ標準構成</p>
+</li><li><p>中長期: 業務システム複数 Service 構成での内部通信</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Private Service</strong> より自動化が進む</p>
+</li><li><p><strong>Fly.io 6PN</strong> とコンセプト類似、Railway は GUI で見やすい</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>DNS suffix: <code class="rich-inline-code">*.railway.internal</code></p>
+</li><li><p>IPv6 で内部解決、Public は IPv4</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Cross-project の private network は未対応</p>
+</li><li><p>DNS キャッシュで停止時の挙動に注意</p>
+</li></ul>
+<hr>
+<h4 id="4-4-4-custom-domain-tls-自動">4.4.4 Custom Domain + TLS 自動</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/62b3a3e4-r23.png" alt="Custom Domain + TLS 自動" width="1536" height="864">
+
+<p><code class="rich-inline-code">*.up.railway.app</code> の標準 URL に加え、独自ドメインを CNAME で割り当て可。<strong>Let&#39;s Encrypt 自動更新の TLS 証明書</strong> つき。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p><code class="rich-inline-code">api.example.com</code> などプロダクション URL を即時 HTTPS で公開できる。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 案件サブドメインを各 Service にマップ</p>
+</li><li><p>中長期: classlab.co.jp 配下サブドメインを安全に発行</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Heroku</strong> より速い証明書発行</p>
+</li><li><p><strong>Vercel</strong> と同等の DX</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Apex ドメインは ALIAS / A レコード対応の DNS が必要</p>
+</li><li><p>Wildcard 証明書は Pro+ 想定</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>DNS propagation 待ちを考慮</p>
+</li><li><p>既存 CDN（Cloudflare 等）を挟む場合の TLS 経路設計に注意</p>
+</li></ul>
+<hr>
+<h4 id="4-4-5-edge-cdn">4.4.5 Edge / CDN</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/07b3788b-r24.png" alt="Edge / CDN" width="1536" height="864">
+
+<p>静的アセットや GET レスポンスを Railway Edge にキャッシュ。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>API レスポンスや画像配信を加速。<code class="rich-inline-code">Cache-Control</code> ヘッダを正しく設定して活用。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>制限あり</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 画像・JS/CSS bundle のキャッシュ</p>
+</li><li><p>中長期: 重い計算系 API の short TTL キャッシュ</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Cloudflare</strong> や <strong>Vercel Edge</strong> ほどグローバル PoP は多くない（Railway は限定的）</p>
+</li><li><p>ただし Service と同 region で integrated に動く</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>HTTP cache 標準ヘッダ準拠</p>
+</li><li><p>Purge は手動 or API</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>グローバル分散が必要なら Cloudflare 等を前段に置く構成も検討</p>
+</li><li><p>認証必須 API のキャッシュは事故源、明示的に no-cache</p>
+</li></ul>
+<hr>
+<h3 id="4-5-環境-コラボレーション層">4.5 環境・コラボレーション層</h3>
+<h4 id="4-5-1-environments-production-staging-custom">4.5.1 Environments（Production / Staging / Custom）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/202d6e24-r25.png" alt="Environments" width="1536" height="864">
+
+<p>Project 内に複数の環境（Production / Staging / 任意名）を持てる。<strong>各環境ごとに独立した Service / DB / Volume / 環境変数</strong> を持つ。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「本番だけ別 DB / 別 API キー」を環境変数の上書きだけで実現。複数案件で標準構成にできる。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託案件で「お客様デモ env」を追加</p>
+</li><li><p>中長期: 業務システムで本番 / staging / sandbox の 3 環境固定運用</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Vercel</strong> Environments 相当だが、DB ごと分離できる点で完成度高い</p>
+</li><li><p><strong>Render</strong> より柔軟（数の上限が緩い）</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>環境間の env / DB をテンプレ化して複製可</p>
+</li><li><p>Branch deploy と組み合わせ可</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>環境数が増えると課金も増える、不要 env はこまめに削除</p>
+</li><li><p>環境名の typo に注意（一度切ると追従しにくい）</p>
+</li></ul>
+<hr>
+<h4 id="4-5-2-preview-environments-pr-全スタックコピー">4.5.2 Preview Environments（PR 全スタックコピー）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/34919da4-r26.png" alt="Preview Environments" width="1536" height="864">
+
+<p>PR を開くと <strong>Service / DB / Volume を含む環境一式が複製</strong> され、一意な URL が PR コメントに自動投稿される。merge or close で自動破棄。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>「PR をレビューする際に、本物の DB と本物の API でレビュアーが触れる」体験。<strong>Railway の最大級の差別化要素</strong>。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>制限あり（数少）</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託案件で「PR 単位でお客様レビュー URL を出す」運用</p>
+</li><li><p>中長期: ライフライン業務システムで仕様変更 PR ごとに完全動作確認</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Vercel Preview</strong> はフロント・API レベル、Railway は DB ごと複製で本物のフルスタック</p>
+</li><li><p><strong>Render Preview Environment</strong> とコンセプト類似、Railway の方が UI 完成度高</p>
+</li><li><p><strong>Fly.io</strong> は手動構成、Railway は自動</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>DB シード（seed.sql / migration）を実行する hook を仕込める</p>
+</li><li><p>本番データを base にした copy も可（個人情報マスキングは要設計）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>本番 DB を直接コピーすると個人情報拡散リスク。マスキング seed を使う</p>
+</li><li><p>数が増えるとコスト増、不要 PR の preview は自動破棄設定</p>
+</li></ul>
+<hr>
+<h4 id="4-5-3-restricted-environments-enterprise">4.5.3 Restricted Environments（Enterprise）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/5df6a521-r27.png" alt="Restricted Environments" width="1536" height="864">
+
+<p>本番環境への変更を <strong>MFA + 承認制</strong> に固定する Enterprise 機能。SOC 2 / HIPAA 対応の核。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>監査要件が厳しい案件で「だれが・いつ・なぜ本番を変えたか」を強制記録できる。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>不可</td><td>不可</td><td>制限あり（Beta）</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 様子見</p>
+</li><li><p>中長期: ライフライン業務システム本番に SOC 2 を提案する際の標準オプション</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Heroku Shield</strong>、<strong>AWS Control Tower</strong> 級のガード機構を、シンプル UX で提供</p>
+</li><li><p><strong>Render / Fly.io</strong> にはほぼ同等機能なし</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>承認者数・MFA 種別・review TTL を設定可</p>
+</li><li><p>Audit Log と連動</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Beta 中の Pro 提供は機能上限あり</p>
+</li><li><p>承認者の体制設計が必須（一人だけだと自己承認）</p>
+</li></ul>
+<hr>
+<h4 id="4-5-4-variables-secrets-管理">4.5.4 Variables / Secrets 管理</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/1a95deb0-r28.png" alt="Variables / Secrets 管理" width="1536" height="864">
+
+<p>env / secret を canvas で設定、Service にビルド/起動時に注入。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p><code class="rich-inline-code">DATABASE_URL</code> 等の DB 接続文字列、API キー、OAuth Secret の正規保管先。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: API キー類の Project ごと管理</p>
+</li><li><p>中長期: 環境間で異なる Secret を Restricted Environments で保護</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Vercel</strong> の env と類似、UI は Railway の方が canvas 配線で直感的</p>
+</li><li><p><strong>AWS SSM Parameter Store / Secrets Manager</strong> ほど高機能ではないが PaaS 用途には十分</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Variable Reference: 別 Service の env を参照する記法</p>
+</li><li><p>Shared Variables: project 全体で共有</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Build 時 env と Runtime env の区別を意識</p>
+</li><li><p>Logs に env を echo しない（漏洩源）</p>
+</li></ul>
+<hr>
+<h4 id="4-5-5-magic-config-ai-設定生成">4.5.5 Magic Config（AI 設定生成）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/09ca0610-r29.png" alt="Magic Config" width="1536" height="864">
+
+<p>Repo を Railway に接続すると、AI が <code class="rich-inline-code">railway.toml</code> / Dockerfile / 環境変数の雛形を <strong>自動提案</strong>。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>新規 repo を持ってきたときの初期設定を AI に任せて 10 分→1 分。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託案件の初期セットアップ短縮</p>
+</li><li><p>中長期: 案件テンプレと組み合わせて 1 クリック準備</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>競合 PaaS でほぼ唯一の「AI ネイティブ初期設定」機能</p>
+</li><li><p><strong>Vercel</strong> の auto framework detect の上位版</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>提案は必ず承認制（自動適用しない）</p>
+</li><li><p>多言語 / 複数 entry point の monorepo もサポート</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>AI 提案は完璧ではない、レビュー前提</p>
+</li><li><p>セキュリティ的な落とし穴（root 実行など）はユーザー側でガード</p>
+</li></ul>
+<hr>
+<h3 id="4-6-観測性-運用層">4.6 観測性・運用層</h3>
+<h4 id="4-6-1-logs-リアルタイム">4.6.1 Logs（リアルタイム）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/32d7e2e5-r30.png" alt="Logs" width="1536" height="864">
+
+<p><code class="rich-inline-code">stdout</code> / <code class="rich-inline-code">stderr</code> を canvas / CLI でリアルタイム閲覧。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>デバッグ初手、本番障害切り分けの基本ツール。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 案件初期のデバッグ</p>
+</li><li><p>中長期: Sentry / Datadog 連携の前段として活用</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Logs</strong> / <strong>Heroku Logs</strong> とほぼ同等</p>
+</li><li><p>検索 UI が canvas 統合で速い</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Filter / Search が UI で可、CLI でも <code class="rich-inline-code">railway logs --filter</code></p>
+</li><li><p>保持期間は plan 依存（Hobby 短、Pro 長）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>長期保管・全文検索は外部（Datadog / Better Stack）連携必須</p>
+</li><li><p>個人情報を log に流さないこと</p>
+</li></ul>
+<hr>
+<h4 id="4-6-2-metrics-cpu-memory-network">4.6.2 Metrics（CPU / Memory / Network）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/1f56db5b-r31.png" alt="Metrics" width="1536" height="864">
+
+<p>CPU / Memory / Disk / Network 等の基本メトリクスを canvas にグラフ表示。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>スケール設計や OOM 検知の基礎データ。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 月末ピークの可視化</p>
+</li><li><p>中長期: SLI / SLO 策定の元データ</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Metrics</strong> とほぼ同等</p>
+</li><li><p>Prometheus / Datadog 連携は別途</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>集約粒度 / 保持期間は plan 依存</p>
+</li><li><p>外部監視には Webhook + 自前 export</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Application 内部メトリクス（事業 KPI）は別途仕込む</p>
+</li><li><p>単一 Service の値で全体を判断しない</p>
+</li></ul>
+<hr>
+<h4 id="4-6-3-webhooks-deploy-event">4.6.3 Webhooks（Deploy Event）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/f3eb2535-r32.png" alt="Webhooks" width="1536" height="864">
+
+<p>deploy / build 完了 / 失敗イベントを任意 URL に POST。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>Slack 通知、内製 dashboard 連携、CI チェーンの起点。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: deploy 通知を Slack へ</p>
+</li><li><p>中長期: deploy 完了で QA E2E を起動する pipeline</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Vercel Deploy Hook</strong> / <strong>Render Deploy Hook</strong> とほぼ同等</p>
+</li><li><p>即時 + 多イベント対応で柔軟性高</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>payload は JSON、署名検証可</p>
+</li><li><p>リトライポリシは公式 doc 参照</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>受け側がダウンしているとイベント欠落の可能性、idempotent 設計に</p>
+</li><li><p>secret token を確実に検証</p>
+</li></ul>
+<hr>
+<h4 id="4-6-4-healthchecks">4.6.4 Healthchecks</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/822ef93a-r33.png" alt="Healthchecks" width="1536" height="864">
+
+<p>Service の health endpoint を Railway が定期 GET、失敗時は自動再起動。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>zero-downtime deploy + 不健全 instance 自動排除。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 標準 <code class="rich-inline-code">/health</code> を全 Service で実装</p>
+</li><li><p>中長期: DB / 外部依存も含めた deep healthcheck</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Health Check</strong> とほぼ同等</p>
+</li><li><p>Replica と組み合わせて自動 LB 出し入れ</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Path / interval / timeout / 失敗閾値を Service 設定で</p>
+</li><li><p>Restart policy も連動</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>/health が DB アクセスを含むと連鎖障害源、軽量に保つ</p>
+</li><li><p>起動時 grace period を確保</p>
+</li></ul>
+<hr>
+<h3 id="4-7-セキュリティ-コンプライアンス層">4.7 セキュリティ・コンプライアンス層</h3>
+<h4 id="4-7-1-sso-saml">4.7.1 SSO / SAML</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/5991c4cf-r34.png" alt="SSO / SAML" width="1536" height="864">
+
+<p>Google Workspace / Okta / Entra ID 等の SAML IdP と統合し、Railway team workspace への入退を一元管理。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>オフボーディング自動化、最小権限維持の基盤。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>不可</td><td>不可</td><td>利用可（Beta）</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 様子見、Pro Beta で評価</p>
+</li><li><p>中長期: ライフライン本番管理権限を SAML で統制</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>GitHub Enterprise</strong> / <strong>Vercel Enterprise</strong> 級の SSO を Pro Beta から利用可</p>
+</li><li><p><strong>Render</strong> は Enterprise 限定、Railway の方が早期 Pro 提供</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>IdP メタデータ XML / SAML Response 設定</p>
+</li><li><p>SCIM 連携は今後 Enterprise で予定</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>SCIM はまだ限定、ユーザー手動追加が残る</p>
+</li><li><p>緊急 break-glass account 設計を別途</p>
+</li></ul>
+<hr>
+<h4 id="4-7-2-audit-log">4.7.2 Audit Log</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/1aa7203c-r35.png" alt="Audit Log" width="1536" height="864">
+
+<p>誰が・いつ・何を変更したかを記録、検索・エクスポート可。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>監査対応、インシデント時の原因追跡。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>不可</td><td>不可</td><td>制限あり（直近 30 日）</td><td>利用可（無制限）</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: Pro Audit を有効化</p>
+</li><li><p>中長期: Enterprise で全量保管、SIEM 連携</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render</strong> / <strong>Fly.io</strong> 同等機能あり、Railway は UI 統合度が高い</p>
+</li><li><p><strong>AWS CloudTrail</strong> よりライト</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>CSV / JSON export</p>
+</li><li><p>Webhook で外部 SIEM ストリーミング（Enterprise）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>30 日上限を超える保管は Enterprise 必須</p>
+</li><li><p>個人情報を含むイベントの取り扱い注意</p>
+</li></ul>
+<hr>
+<h4 id="4-7-3-soc-2-hipaa">4.7.3 SOC 2 / HIPAA</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/c0abe0ab-r36.png" alt="SOC 2 / HIPAA" width="1536" height="864">
+
+<p>Restricted Environments + Audit Log + 暗号化を組み合わせた監査対応。Enterprise 限定で BAA / 監査レポート提供。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>医療・金融・公共系案件で必須。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>不可</td><td>不可</td><td>不可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 該当案件なら Enterprise 検討</p>
+</li><li><p>中長期: ライフライン延長として医療系 SaaS の受託で活用可能性</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Heroku Shield</strong> や <strong>AWS</strong> に並ぶ Compliance offering</p>
+</li><li><p>Railway は新しいが、Enterprise tier で本格対応進む</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>BAA 締結プロセス、Audit レポート（SOC 2 Type II）取得</p>
+</li><li><p>Restricted Env と Audit Log セット運用</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>契約・法務確認必須</p>
+</li><li><p>自社運用ポリシも更新が必要</p>
+</li></ul>
+<hr>
+<h4 id="4-7-4-ip-allowlist">4.7.4 IP Allowlist</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/480f611d-r37.png" alt="IP Allowlist" width="1536" height="864">
+
+<p>特定 IP / CIDR からのみ Service へのアクセスを許可。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>社内ツール、社内 VPN 経由のみアクセス可、外部からの侵入を物理的にブロック。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>不可</td><td>不可</td><td>制限あり</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 社内 dashboard を社内 IP のみに</p>
+</li><li><p>中長期: ライフライン管理画面を VPN 限定に</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>AWS Security Group</strong> / <strong>Cloudflare Access</strong> ほど高機能ではないが PaaS としては標準</p>
+</li><li><p><strong>Render</strong> にも類似機能</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>CIDR 範囲指定、複数許可可</p>
+</li><li><p>API endpoint 単位の制御は別途 application 層で</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>VPN ゲートウェイの IP が変わる場合の運用追従</p>
+</li><li><p>IP では認証にならない、必ず auth と組み合わせ</p>
+</li></ul>
+<hr>
+<h3 id="4-8-api-cli-拡張層">4.8 API / CLI / 拡張層</h3>
+<h4 id="4-8-1-railway-cli-v4">4.8.1 Railway CLI v4</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/0de07ba0-r38.png" alt="Railway CLI v4" width="1536" height="864">
+
+<p><code class="rich-inline-code">railway</code> CLI。Bun ベースに刷新（v4）。<code class="rich-inline-code">railway up</code>（deploy）/ <code class="rich-inline-code">railway run</code>（環境変数を引き継いでローカル実行）/ <code class="rich-inline-code">railway logs</code> / <code class="rich-inline-code">railway shell</code> / <code class="rich-inline-code">railway link</code> 等。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>ローカル開発 → Railway へ scaffold、env 引き継ぎ、CI から deploy など。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: CI から <code class="rich-inline-code">railway up</code> で deploy</p>
+</li><li><p>中長期: 内製スクリプトに組み込み、定型 deploy を自動化</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Vercel CLI</strong> / <strong>Render CLI</strong> より統合度が高い（DB / Service / Volume すべて操作可）</p>
+</li><li><p><strong>Fly.io CLI</strong>（flyctl）は強力だが複雑、Railway は学習コスト低</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p><code class="rich-inline-code">railway run npm test</code> でローカル env を Railway secret で実行</p>
+</li><li><p><code class="rich-inline-code">railway shell</code> で本番コンテナに入って即時調査</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p><code class="rich-inline-code">railway shell</code> は本番への作用に注意（read-only 運用が無難）</p>
+</li><li><p>認証 token の取り扱い</p>
+</li></ul>
+<hr>
+<h4 id="4-8-2-public-graphql-api">4.8.2 Public GraphQL API</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/63e085e2-r39.png" alt="Public GraphQL API" width="1536" height="864">
+
+<p>Railway の全機能を GraphQL で叩ける Public API。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>社内 dashboard 連携、CI 統合、Terraform 代替の独自スクリプト。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: deploy 状況を社内 chatbot で照会</p>
+</li><li><p>中長期: 案件 lifecycle 管理を Railway API で自動化</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>競合 PaaS で GraphQL Public API を持つのは少数</p>
+</li><li><p><strong>Vercel</strong> は REST、Railway は GraphQL で query 効率が良い</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Endpoint: <code class="rich-inline-code">https://backboard.railway.com/graphql/v2</code></p>
+</li><li><p>Authentication: API token（Project / User）</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Rate Limit あり</p>
+</li><li><p>destructive mutation は確認 step 推奨</p>
+</li></ul>
+<hr>
+<h4 id="4-8-3-template-marketplace">4.8.3 Template Marketplace</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/904040ed-r40.png" alt="Template Marketplace" width="1536" height="864">
+
+<p>OSS スタック / SaaS 風アプリの 1-click deploy テンプレ集。MinIO / Plausible / Ghost / n8n / Strapi / Supabase OSS 等。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>新規 OSS 評価を最短化。社内 PoC・採用判断の前段で活用。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: OSS 評価 PoC（n8n, Plausible, ...）</p>
+</li><li><p>中長期: 内製テンプレを社内 marketplace 化（private template）</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Render Template Library</strong> より数・更新頻度ともに優位</p>
+</li><li><p><strong>Cloudflare</strong> にも一部あるが Railway のフルスタック性で勝つ</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Public template は GitHub オープン、PR で改善可</p>
+</li><li><p>Private template で社内共有可</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>Template の品質はまちまち、本番採用前に内部レビュー</p>
+</li><li><p>後継メンテが止まっているものに注意</p>
+</li></ul>
+<hr>
+<h4 id="4-8-4-github-app">4.8.4 GitHub App</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/e1d8a11b-r41.png" alt="GitHub App" width="1536" height="864">
+
+<p>Railway が公式提供する GitHub App。push / PR / status check を双方向連携。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>PR レビューに Railway preview の URL と status を自動表示、GitHub UI から離れず確認可。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 受託案件 repo に標準導入</p>
+</li><li><p>中長期: GitHub 中心の社内開発標準フローに組み込む</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p><strong>Vercel GitHub App</strong> と類似 DX</p>
+</li><li><p>Railway は DB を含む preview の status まで返してくれる</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>Install 時に repo permission を最小化</p>
+</li><li><p>branch protection の必須 status に Railway を追加可</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>App permission の付与範囲、organization 単位の見直し</p>
+</li></ul>
+<hr>
+<h4 id="4-8-5-terraform-provider-community">4.8.5 Terraform Provider（community）</h4>
+<p><strong>🎯 概要</strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/51d9df29-r42.png" alt="Terraform Provider" width="1536" height="864">
+
+<p>community メンテの Terraform Provider。Project / Service / Env / Volume を IaC で記述。</p>
+<p><strong>👨‍💻 エンジニアへの関係</strong></p>
+<p>複数 project の標準構成を再現可能にする。AWS Terraform と同じ感覚で Railway を IaC 管理。</p>
+<p><strong>💳 利用可能プラン</strong></p>
+<table class="rich-table"><thead><tr><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<p><strong>🏢 ClassLab.での活用</strong></p>
+<ul><li><p>短期: 案件初期に terraform で雛形展開</p>
+</li><li><p>中長期: 社内テンプレを IaC 化、deploy 標準化</p>
+</li></ul>
+<p><strong>🔥 差別化点</strong></p>
+<ul><li><p>公式ではない（community）ため挙動の安定性は要確認</p>
+</li><li><p><strong>Vercel</strong> や <strong>Render</strong> にも community Terraform Provider あり、機能網羅率は同等程度</p>
+</li></ul>
+<p><strong>🔍 深掘り</strong></p>
+<ul><li><p>リソース: project / service / variable / volume / custom_domain 等</p>
+</li><li><p>Authentication: API token</p>
+</li></ul>
+<p><strong>⚠️ 注意点</strong></p>
+<ul><li><p>公式サポートではない（Railway 公式 issue 対応はベストエフォート）</p>
+</li><li><p>Schema drift / TF state 管理は通常通り注意</p>
+</li></ul>
+<hr>
+<h2 id="5-プラン早見表-全機能-プラン-マトリクス">5. プラン早見表（全機能 × プラン マトリクス）</h2>
+<table class="rich-table"><thead><tr><th>カテゴリ</th><th>機能</th><th>Trial</th><th>Hobby</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody><tr><td>デプロイ</td><td>Git Push Deploy</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>デプロイ</td><td>Railpack</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>デプロイ</td><td>Nixpacks</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>デプロイ</td><td>Dockerfile</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>デプロイ</td><td>Functions</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ランタイム</td><td>Service</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ランタイム</td><td>Auto Scale</td><td>制限あり (上限低)</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ランタイム</td><td>Replicas</td><td>不可</td><td>制限あり (少数)</td><td>利用可</td><td>利用可</td></tr><tr><td>ランタイム</td><td>Cron Jobs</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ランタイム</td><td>Railway Metal</td><td>不可</td><td>不可</td><td>不可（招待）</td><td>利用可（Beta）</td></tr><tr><td>DB</td><td>PostgreSQL</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>DB</td><td>MySQL</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>DB</td><td>Redis</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>DB</td><td>MongoDB</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>DB</td><td>Custom DB (Docker)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ストレージ</td><td>Volumes</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ストレージ</td><td>Buckets (S3 互換)</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ネットワーク</td><td>Private Network</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ネットワーク</td><td>Custom Domain + TLS</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>ネットワーク</td><td>Edge / CDN</td><td>制限あり</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>環境</td><td>Environments</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>環境</td><td>Preview Environments</td><td>制限あり (数少)</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>環境</td><td>Restricted Env</td><td>不可</td><td>不可</td><td>制限あり (Beta)</td><td>利用可</td></tr><tr><td>環境</td><td>Variables/Secrets</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>環境</td><td>Magic Config</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>観測性</td><td>Logs</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>観測性</td><td>Metrics</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>観測性</td><td>Webhooks</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>観測性</td><td>Healthchecks</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>セキュリティ</td><td>SSO/SAML</td><td>不可</td><td>不可</td><td>利用可 (Beta)</td><td>利用可</td></tr><tr><td>セキュリティ</td><td>Audit Log</td><td>不可</td><td>不可</td><td>制限あり (30 日)</td><td>利用可 (無制限)</td></tr><tr><td>セキュリティ</td><td>SOC 2 / HIPAA</td><td>不可</td><td>不可</td><td>不可</td><td>利用可</td></tr><tr><td>セキュリティ</td><td>IP Allowlist</td><td>不可</td><td>不可</td><td>制限あり</td><td>利用可</td></tr><tr><td>API/拡張</td><td>Railway CLI v4</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>API/拡張</td><td>Public GraphQL API</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>API/拡張</td><td>Template Marketplace</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>API/拡張</td><td>GitHub App</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr><tr><td>API/拡張</td><td>Terraform Provider</td><td>利用可</td><td>利用可</td><td>利用可</td><td>利用可</td></tr></tbody></table>
+<hr>
+<h2 id="6-料金体系の詳細">6. 料金体系の詳細</h2>
+<h3 id="6-1-プラン別の含み枠と超過料金">6.1 プラン別の含み枠と超過料金</h3>
+<table class="rich-table"><thead><tr><th>プラン</th><th>月額</th><th>含まれる credit</th><th>超過時 vCPU</th><th>超過時 RAM</th><th>超過時 Egress</th><th>Volume</th><th>Bucket</th></tr></thead><tbody><tr><td>Trial</td><td>$0</td><td>$5 / 一回</td><td>不可（credit 切れで停止）</td><td>同左</td><td>同左</td><td>含み枠内</td><td>含み枠内</td></tr><tr><td>Hobby</td><td>$5</td><td>$5</td><td>$20 / vCPU・月</td><td>$10 / GB・月</td><td>$0.10 / GB（100 GB 無料）</td><td>$0.25 / GB・月</td><td>$0.023 / GB・月</td></tr><tr><td>Pro</td><td>$20 / seat</td><td>$20 / seat</td><td>同上</td><td>同上</td><td>同上</td><td>同上</td><td>同上</td></tr><tr><td>Enterprise</td><td>$2,000 〜 / 月</td><td>契約額</td><td>カスタム</td><td>カスタム</td><td>カスタム</td><td>カスタム</td><td>カスタム</td></tr></tbody></table>
+<blockquote>
+<p><strong>Active CPU 課金</strong>: 実際に CPU を使っている時間のみ課金。アイドル時は CPU 0 円、メモリ確保分のみ。</p>
+</blockquote>
+<h3 id="6-2-競合との料金構造の違い">6.2 競合との料金構造の違い</h3>
+<table class="rich-table"><thead><tr><th>プラットフォーム</th><th>料金モデル</th><th>月額固定</th><th>従量</th><th>含み枠</th><th>強み</th><th>弱み</th></tr></thead><tbody><tr><td>Railway</td><td>月額 + 従量</td><td>あり</td><td>あり</td><td>$5 / $20 / 契約額</td><td>scale-to-zero と include 枠</td><td>グローバル分散弱い</td></tr><tr><td>Render</td><td>月額固定</td><td>あり</td><td>一部</td><td>プランごとに instance 数</td><td>コスト見積りやすい</td><td>scale-to-zero は限定</td></tr><tr><td>Fly.io</td><td>従量のみ</td><td>なし</td><td>あり</td><td>$5 / 月 free 枠</td><td>リージョン分散 / 安い</td><td>学習コスト</td></tr><tr><td>Vercel</td><td>プラン + 従量</td><td>あり</td><td>あり</td><td>プランごと</td><td>フロントエンド体験</td><td>バックエンドは高くつく</td></tr><tr><td>Heroku</td><td>Dyno 月額</td><td>あり</td><td>なし</td><td>Dyno 数</td><td>安定</td><td>高価 / レガシー</td></tr><tr><td>AWS App Runner</td><td>従量のみ</td><td>なし</td><td>あり</td><td>なし</td><td>AWS 資産統合</td><td>学習コスト高</td></tr><tr><td>Cloudflare Workers</td><td>リクエスト数 + 時間</td><td>あり (low)</td><td>あり</td><td>100k req/日 free</td><td>edge 分散 / egress 無料</td><td>コンテナ不可</td></tr><tr><td>Netlify</td><td>プラン + 従量</td><td>あり</td><td>あり</td><td>プランごと</td><td>静的 + Edge</td><td>バック弱い</td></tr><tr><td>DO App Platform</td><td>インスタンス月額</td><td>あり</td><td>あり</td><td>プランごと</td><td>DO 全体統合</td><td>UX が古い</td></tr><tr><td>Northflank</td><td>プラン + 従量</td><td>あり</td><td>あり</td><td>プランごと</td><td>k8s / job runner</td><td>コミュニティ小</td></tr><tr><td>Coolify (OSS 自社ホスト)</td><td>サーバ実費</td><td>なし</td><td>なし</td><td>なし</td><td>完全自己管理</td><td>運用は自分</td></tr></tbody></table>
+<h3 id="6-3-コスト最適化の勘所">6.3 コスト最適化の勘所</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/c481dda3-r43.png" alt="Terraform Provider" width="1536" height="864">
+
+<p><strong>実務的なコスト下げ方トップ 5</strong>:</p>
+<ol><li><p><strong>Active CPU 課金を理解する</strong>: idle 時は CPU 課金されないので、API が常時 0〜10% で動くなら過剰スケールを避ける</p>
+</li><li><p><strong>Egress &gt; 100 GB は CDN を前段に</strong>: Cloudflare 等を挟む / 画像は Bucket + signed URL</p>
+</li><li><p><strong>不要 Preview Environments を自動破棄</strong>: PR close で必ず破棄、長期 stale は monthly cron で削除</p>
+</li><li><p><strong>Volume のサイズ過剰を避ける</strong>: 拡張は容易、縮小は不可なので初期は控えめに</p>
+</li><li><p><strong>Hobby → Pro の損益分岐</strong>: 月 $20 を超える資源を使う見込みなら Pro 化（credit が seat ごとに $20 入る）</p>
+</li></ol>
+<hr>
+<h2 id="7-classlab-での活用ロードマップ-汎用例">7. ClassLab. での活用ロードマップ（汎用例）</h2>
+<h3 id="7-1-短期-3ヶ月-の活用候補">7.1 短期（〜3ヶ月）の活用候補</h3>
+<table class="rich-table"><thead><tr><th>用途</th><th>業務領域</th><th>Railway 構成</th><th>既存代替</th><th>効果</th></tr></thead><tbody><tr><td>受託案件の検証環境</td><td>受託開発</td><td>Service + Postgres + Preview Environments</td><td>Vercel + Render 個別</td><td>PR 単位 URL でレビュー高速化</td></tr><tr><td>社内ツール（dashboard / bot）</td><td>共通基盤</td><td>Service + Postgres + Redis</td><td>AWS EC2 + RDS</td><td>運用工数大幅減</td></tr><tr><td>AI worker（Slack bot / 通知 bot）</td><td>AI ハイブリッド</td><td>Functions / Service</td><td>AWS Lambda</td><td>repo 不要・即時 deploy</td></tr><tr><td>OSS 評価 PoC</td><td>共通基盤</td><td>Template Marketplace</td><td>自前 docker-compose</td><td>評価開始まで 5 分</td></tr><tr><td>ライフライン受注通知 bot</td><td>ライフライン事業</td><td>Function + Slack</td><td>Zapier</td><td>内製化、コスト最適化</td></tr></tbody></table>
+<h3 id="7-2-中長期-3-12ヶ月-の活用候補">7.2 中長期（3〜12ヶ月）の活用候補</h3>
+<table class="rich-table"><thead><tr><th>用途</th><th>業務領域</th><th>Railway 構成</th><th>移行候補</th><th>効果</th></tr></thead><tbody><tr><td>ライフライン staging</td><td>ライフライン事業</td><td>複数 Environments + Bucket</td><td>AWS staging</td><td>コスト削減・速度向上</td></tr><tr><td>業務システムマイクロサービス分割</td><td>業務システム</td><td>複数 Service + private network</td><td>モノリス</td><td>段階移行・独立 deploy</td></tr><tr><td>案件テンプレ IaC 化</td><td>受託開発</td><td>Terraform + Template</td><td>手動セットアップ</td><td>案件初期工数 50% 減</td></tr><tr><td>AI agent API ゲートウェイ</td><td>AI ハイブリッド</td><td>Functions + Magic Config</td><td>個別実装</td><td>統一窓口 / 再利用</td></tr><tr><td>監査要件あり案件</td><td>規制業種受託</td><td>Restricted Env + Audit Log + SSO</td><td>AWS Control Tower</td><td>Enterprise 契約で対応</td></tr></tbody></table>
+<h3 id="7-3-既存資産棚卸し-推奨アクション">7.3 既存資産棚卸し（推奨アクション）</h3>
+<ul><li><p><strong>Vercel 上の API routes</strong> → 長時間処理を要するものは Railway Service へ移行検討（Vercel Function の制約回避）</p>
+</li><li><p><strong>AWS EC2 上の社内 worker</strong> → Railway Service + cron / Functions に置き換え検討</p>
+</li><li><p><strong>AWS RDS（小規模）</strong> → Railway Postgres へ移行検討（コスト / 運用工数比較）</p>
+</li><li><p><strong>個別ホスティング先（受託案件で散在）</strong> → Railway 標準テンプレに集約検討</p>
+</li><li><p><strong>Docker Compose 開発環境</strong> → Railway Template でメンバー間共有可</p>
+</li></ul>
+<hr>
+<h2 id="8-採用判断フロー">8. 採用判断フロー</h2>
+<h3 id="8-1-新規プロジェクトでの選択フロー">8.1 新規プロジェクトでの選択フロー</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/78e5c1b8-r44.png" alt="Terraform Provider" width="1536" height="864">
+
+<h3 id="8-2-採用適性-quadrant">8.2 採用適性 Quadrant</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/railway-features-catalog-2026-05/3077622d-r45.png" alt="Terraform Provider" width="1536" height="864">
+
+<p><strong>ClassLab. 視点での中長期目標位置</strong>: 受託 / 業務システムは Railway Pro 〜 Enterprise を活用、ライフライン本番でコンプラ要件が立ち上がれば Railway Enterprise + Restricted Environments + Audit Log、または並走で AWS。AI ハイブリッド系は Railway Functions に集約。</p>
+<hr>
+<h2 id="9-公式リファレンス-sources">9. 公式リファレンス &amp; Sources</h2>
+<h3 id="9-1-公式ドキュメント-top-level">9.1 公式ドキュメント（Top-level）</h3>
+<ul><li><p><a href="https://railway.com/features" target="_blank" rel="noopener noreferrer">Railway 公式 features</a></p>
+</li><li><p><a href="https://docs.railway.com/" target="_blank" rel="noopener noreferrer">Railway Docs ホーム</a></p>
+</li><li><p><a href="https://docs.railway.com/overview/the-basics" target="_blank" rel="noopener noreferrer">The Basics</a></p>
+</li><li><p><a href="https://railway.com/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></p>
+</li><li><p><a href="https://docs.railway.com/pricing/plans" target="_blank" rel="noopener noreferrer">Pricing Plans Docs</a></p>
+</li></ul>
+<h3 id="9-2-機能別ドキュメント">9.2 機能別ドキュメント</h3>
+<ul><li><p><a href="https://docs.railway.com/platform/railway-metal" target="_blank" rel="noopener noreferrer">Railway Metal</a></p>
+</li><li><p><a href="https://docs.railway.com/databases" target="_blank" rel="noopener noreferrer">Databases — Overview</a></p>
+</li><li><p><a href="https://docs.railway.com/databases/postgresql" target="_blank" rel="noopener noreferrer">PostgreSQL</a></p>
+</li><li><p><a href="https://docs.railway.com/databases/mysql" target="_blank" rel="noopener noreferrer">MySQL</a></p>
+</li><li><p><a href="https://docs.railway.com/databases/redis" target="_blank" rel="noopener noreferrer">Redis</a></p>
+</li><li><p><a href="https://docs.railway.com/databases/database-view" target="_blank" rel="noopener noreferrer">Database View</a></p>
+</li><li><p><a href="https://docs.railway.com/databases/build-a-database-service" target="_blank" rel="noopener noreferrer">Build a Database Service (Custom DB)</a></p>
+</li><li><p><a href="https://railway.com/deploy/openwa-w-postgres-redis-and-minio" target="_blank" rel="noopener noreferrer">Template Marketplace 例: OpenWA (Postgres+Redis+MinIO)</a></p>
+</li></ul>
+<h3 id="9-3-参照した-web-sources">9.3 参照した Web Sources</h3>
+<ul><li><p><a href="https://www.redpoint.com/content-hub/video/railway-series-a/" target="_blank" rel="noopener noreferrer">Railway Series A — Redpoint Ventures</a></p>
+</li><li><p><a href="https://finance.yahoo.com/news/railway-raises-100-million-series-140100124.html" target="_blank" rel="noopener noreferrer">Railway Raises $100M Series B (2026-01) — Yahoo Finance</a></p>
+</li><li><p><a href="https://siliconangle.com/2026/01/22/intelligent-cloud-infrastructure-startup-railway-gets-100m-simplify-application-deployment/" target="_blank" rel="noopener noreferrer">Railway $100M Series B 詳細 — SiliconANGLE</a></p>
+</li><li><p><a href="https://www.latent.space/p/railway" target="_blank" rel="noopener noreferrer">Railway: The Agent-Native Cloud — Jake Cooper (Latent Space)</a></p>
+</li><li><p><a href="https://www.startuphub.ai/ai-news/technology/2026/jake-cooper-on-railway-s-agent-native-cloud" target="_blank" rel="noopener noreferrer">Jake Cooper on Railway&#39;s &quot;Agent-Native Cloud&quot; — StartupHub.ai</a></p>
+</li><li><p><a href="https://www.thespl.it/p/solving-the-hardest-problems-in-dev" target="_blank" rel="noopener noreferrer">Solving the Hardest Problems in Dev Tools — Jake Cooper</a></p>
+</li><li><p><a href="https://scribehow.com/page/Railway_Review_2026_The_Cloud_Deployment_Platform_Developers_Are_Quietly_Switching_To__MWY5FbWoSFO2qF55Vz9bgQ" target="_blank" rel="noopener noreferrer">Railway Review 2026 — Scribe</a></p>
+</li><li><p><a href="https://www.srvrlss.io/provider/railway/" target="_blank" rel="noopener noreferrer">Railway Review 2026 — srvrlss.io</a></p>
+</li><li><p><a href="https://blog.reviewaitool.com/2026/04/08/railway-app-review-2026/" target="_blank" rel="noopener noreferrer">Railway.app Review 2026 — ReviewAITool Blog</a></p>
+</li><li><p><a href="https://www.g2.com/products/railway/reviews" target="_blank" rel="noopener noreferrer">Railway Reviews 2026 — G2</a></p>
+</li><li><p><a href="https://www.saaspricepulse.com/tools/railway" target="_blank" rel="noopener noreferrer">Railway Free Tier 2026 — saaspricepulse</a></p>
+</li><li><p><a href="https://thesoftwarescout.com/railway-pricing-2026-plans-costs-is-it-worth-it/" target="_blank" rel="noopener noreferrer">Railway Pricing 2026 — thesoftwarescout</a></p>
+</li><li><p><a href="https://costbench.com/software/developer-tools/railway/" target="_blank" rel="noopener noreferrer">Railway Pricing 2026 — costbench</a></p>
+</li><li><p><a href="https://northflank.com/blog/railway-vs-render" target="_blank" rel="noopener noreferrer">Railway vs Render 比較 — Northflank Blog</a></p>
+</li><li><p><a href="https://devtoolpicks.com/blog/railway-vs-render-vs-fly-io-solo-developers-2026" target="_blank" rel="noopener noreferrer">Railway vs Render vs Fly.io for Solo Developers — devtoolpicks</a></p>
+</li><li><p><a href="https://www.saaspricepulse.com/compare/railway-vs-flyio-vs-render" target="_blank" rel="noopener noreferrer">Railway vs Fly.io 2026 — saaspricepulse</a></p>
+</li><li><p><a href="https://thesoftwarescout.com/heroku-vs-railway-vs-render-vs-fly-io-2026-which-platform-should-you-deploy-on/" target="_blank" rel="noopener noreferrer">Heroku vs Railway vs Render vs Fly.io — thesoftwarescout</a></p>
+</li><li><p><a href="https://www.devtoolreviews.com/reviews/fly-io-vs-railway-vs-render-vs-coolify-2026" target="_blank" rel="noopener noreferrer">Fly.io vs Railway vs Render vs Coolify: 2026 — devtoolreviews</a></p>
+</li><li><p><a href="https://ritza.co/articles/gen-articles/render-vs-heroku-vs-vercel-vs-railway-vs-fly-io-vs-aws/" target="_blank" rel="noopener noreferrer">Render vs Heroku vs Vercel vs Railway vs Fly.io vs AWS — Ritza</a></p>
+</li><li><p><a href="https://blog.boltops.com/2025/05/01/heroku-vs-render-vs-vercel-vs-fly-io-vs-railway-meet-blossom-an-alternative/" target="_blank" rel="noopener noreferrer">Heroku vs Render vs Vercel vs Fly.io vs Railway — BoltOps</a></p>
+</li><li><p><a href="https://releasebot.io/updates/railway" target="_blank" rel="noopener noreferrer">Railway Release Notes — Releasebot</a></p>
+</li><li><p><a href="https://station.railway.com/feedback/introducing-railway-metal-beta-920458ce" target="_blank" rel="noopener noreferrer">Introducing Railway Metal Beta — Railway Help Station</a></p>
+</li><li><p><a href="https://outplane.com/blog/railway-alternative" target="_blank" rel="noopener noreferrer">Best Railway Alternative — Out Plane</a></p>
+</li></ul>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>レコード保存時の実行順</title>
+<link rel="stylesheet" href="sketchnote.css">
+<style>
+  html, body { width: 3072px; height: 1728px; overflow: visible; margin: 0; }
+  body { width: 3072px; height: 1728px; }
+  .canvas { width: 3072px !important; height: 1728px !important; padding: 80px 120px !important; overflow: visible !important; box-sizing: border-box; }
+
+  .head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 50px; gap: 40px;
+  }
+  .head-left { max-width: 2000px; }
+  .head .title { font-size: 96px; line-height: 1.18; margin-bottom: 14px; }
+  .head .subtitle { font-size: 40px; }
+
+  .badge-tilt {
+    background: var(--yellow-bg);
+    border: 4px solid var(--yellow);
+    border-radius: 32px 38px 30px 36px;
+    padding: 22px 36px;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 36px;
+    color: #8a6a00;
+    box-shadow: 6px 6px 0 #c89000;
+    transform: rotate(-3deg);
+    text-align: center;
+    line-height: 1.25;
+    flex-shrink: 0;
+    margin-top: 30px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1700px 1fr;
+    gap: 80px;
+    align-items: flex-start;
+  }
+
+  /* 左: 縦の5ステップ */
+  .pipeline {
+    display: flex; flex-direction: column; align-items: stretch;
+    gap: 16px;
+  }
+  .step {
+    border: 5px solid var(--ink);
+    border-radius: 28px 32px 26px 30px;
+    padding: 24px 36px;
+    box-shadow: 8px 8px 0 var(--ink);
+    background: white;
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 30px;
+    align-items: center;
+    position: relative;
+  }
+  .step .num {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 70px; font-weight: 700;
+    width: 120px; height: 120px;
+    border: 5px dashed currentColor;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: white;
+  }
+  .step .body { display: flex; flex-direction: column; gap: 4px; }
+  .step .stepname {
+    font-family: 'Klee One', sans-serif;
+    font-size: 28px; font-weight: 600;
+    color: #777; letter-spacing: 0.04em;
+  }
+  .step .lbl {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 56px; font-weight: 700; line-height: 1.18;
+  }
+  .step .desc {
+    font-size: 30px; color: var(--ink); margin-top: 4px;
+  }
+  .step .icon { font-size: 56px; margin-right: 8px; vertical-align: -4px; }
+
+  .step.req { background: #fff8d8; border-color: #d49a1a; box-shadow: 8px 8px 0 #d49a1a; color: #b07c00; }
+  .step.req .lbl { color: #b07c00; }
+  .step.bsf { background: var(--purple-bg); border-color: var(--purple); box-shadow: 8px 8px 0 var(--purple); color: #6e3f96; }
+  .step.bsf .lbl { color: #6e3f96; }
+  .step.val { background: var(--pink-bg); border-color: var(--pink); box-shadow: 8px 8px 0 var(--pink); color: #c84777; }
+  .step.val .lbl { color: #c84777; }
+  .step.fk  { background: var(--orange-bg); border-color: var(--orange); box-shadow: 8px 8px 0 var(--orange); color: #c5651a; }
+  .step.fk  .lbl { color: #c5651a; }
+  .step.req0 { background: #f0f0f0; border-color: #555; color: #333; box-shadow: 8px 8px 0 #555; }
+  .step.req0 .lbl { color: #333; }
+
+  .arrow-down {
+    text-align: center; font-size: 56px; line-height: 1;
+    color: var(--ink); margin: -2px 0;
+  }
+
+  /* 右: 注釈ノート + STEP5 */
+  .right-col { display: flex; flex-direction: column; gap: 30px; }
+  .notes-title {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 36px;
+    color: var(--blue);
+    margin-bottom: 4px;
+    border-bottom: 3px dashed var(--blue);
+    padding-bottom: 6px;
+  }
+  .notes {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .note {
+    background: #fffce8;
+    border: 3px solid var(--ink);
+    border-radius: 22px 26px 20px 24px;
+    padding: 14px 22px;
+    font-family: 'Klee One', sans-serif;
+    font-size: 28px;
+    box-shadow: 4px 4px 0 var(--ink);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .note .nidx {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 30px; color: var(--blue); font-weight: 700;
+    min-width: 60px;
+  }
+
+  .step5 {
+    background: #b6e3d2;
+    border: 5px solid #2d8a72;
+    border-radius: 28px 32px 26px 30px;
+    padding: 44px 32px 28px;
+    box-shadow: 8px 8px 0 #2d8a72;
+    display: flex; flex-direction: column; gap: 8px;
+    position: relative;
+    margin-top: 22px;
+  }
+  .step5 .badge5 {
+    position: absolute;
+    top: -26px; left: 24px;
+    background: #2d8a72;
+    color: white;
+    font-family: 'Yusei Magic', sans-serif;
+    padding: 10px 24px;
+    border-radius: 22px;
+    font-size: 28px;
+    border: 3px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+  .step5 .lbl {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 38px; color: #1a5e4a; font-weight: 700;
+    margin-top: 2px; line-height: 1.2;
+  }
+  .step5 ul { list-style: none; padding: 0; margin-top: 6px; }
+  .step5 ul li {
+    font-size: 26px; padding: 4px 0;
+    position: relative; padding-left: 30px;
+    line-height: 1.4;
+  }
+  .step5 ul li::before {
+    content: '✦'; position: absolute; left: 0; top: 4px;
+    color: var(--mint); font-size: 24px;
+  }
+
+  .corner-note {
+    background: #fffce8;
+    border: 2.5px dashed #aaa;
+    border-radius: 18px;
+    padding: 14px 18px;
+    font-family: 'Klee One', sans-serif;
+    color: #555; font-size: 22px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="head">
+    <div class="head-left">
+      <div class="title"><span class="star-mark">✦</span>データ保存時の実行順</div>
+      <div class="subtitle">どの制御がいつ効くかで「拒否」と「補正」を使い分ける</div>
+    </div>
+    <div class="badge-tilt">上から順に<br>処理される！</div>
+  </div>
+
+  <div class="layout">
+    <!-- 左: パイプライン -->
+    <div class="pipeline">
+      <div class="step req0">
+        <div class="num">①</div>
+        <div class="body">
+          <div class="stepname">START</div>
+          <div class="lbl"><span class="icon">📨</span>データ保存リクエスト</div>
+          <div class="desc">UI / API / Apex から発火</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="step req">
+        <div class="num">②</div>
+        <div class="body">
+          <div class="stepname">STEP 1</div>
+          <div class="lbl"><span class="icon">📋</span>必須(レイアウト)</div>
+          <div class="desc">UI入力時の必須項目チェック</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="step bsf">
+        <div class="num">③</div>
+        <div class="body">
+          <div class="stepname">STEP 2</div>
+          <div class="lbl"><span class="icon">🛠️</span>保存前フロー</div>
+          <div class="desc">値の書き換え(補正)が可能</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="step val">
+        <div class="num">④</div>
+        <div class="body">
+          <div class="stepname">STEP 3</div>
+          <div class="lbl"><span class="icon">🛡️</span>入力規則</div>
+          <div class="desc">条件違反は「拒否」のみ(補正不可)</div>
+        </div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="step fk">
+        <div class="num">⑤</div>
+        <div class="body">
+          <div class="stepname">STEP 4</div>
+          <div class="lbl"><span class="icon">🔗</span>主従関係(FK制約)</div>
+          <div class="desc">親なしのレコードは拒否</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右: 注釈ノート + STEP5 -->
+    <div class="right-col">
+      <div>
+        <div class="notes-title">★ 役割の整理</div>
+        <div class="notes">
+          <div class="note"><span class="nidx">(1)</span>必須チェック</div>
+          <div class="note"><span class="nidx">(2)</span>値補正</div>
+          <div class="note"><span class="nidx">(3)</span>検証</div>
+          <div class="note"><span class="nidx">(4)</span>後処理(コミット後)</div>
+        </div>
+      </div>
+
+      <div class="step5">
+        <div class="badge5">STEP 5 / 後処理</div>
+        <div class="lbl">保存後フロー /<br>積み上げ集計</div>
+        <ul>
+          <li>他レコードの更新</li>
+          <li>集計の再計算</li>
+          <li>DBコミット後の連鎖処理</li>
+        </ul>
+      </div>
+
+      <div class="corner-note">※ 拒否系: 入力規則 / 主従関係<br>※ 補正系: 保存前フロー</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

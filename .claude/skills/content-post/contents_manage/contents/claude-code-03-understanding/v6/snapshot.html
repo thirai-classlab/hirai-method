@@ -1,0 +1,119 @@
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>AIエージェントの正体（LLM + Memory + Tools）を理解する</p>
+</li><li><p>Claude Code の <strong>5つのサーフェス</strong>（CLI / IDE / GitHub / Web / Desktop）を使い分けできる</p>
+</li><li><p>Opus / Sonnet / Haiku のモデル選びができる</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約45分</strong></p>
+<hr>
+<h2 id="1-aiエージェントの正体">1. AIエージェントの正体</h2>
+<blockquote>
+<p>AIエージェント = <strong>LLM</strong> + <strong>Memory</strong> + <strong>Tools</strong></p>
+</blockquote>
+<p>これは Anthropic 公式・コミュニティで広く合意されている定義です。<strong>3つのパーツが揃って初めて「自分で動ける助手」になる</strong> という話。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-03-understanding/3dbfdd78-ch03-m1.png" alt="" width="1536" height="864">
+
+<h3 id="3要素の役割">3要素の役割</h3>
+<p>人間にたとえると、こういう構造です。</p>
+<table class="rich-table"><thead><tr><th>要素</th><th>役割（人間で言うと）</th><th>Claude Code での実装</th></tr></thead><tbody><tr><td><strong>LLM</strong></td><td>考える脳みそ</td><td>Claude Opus 4.7 / Sonnet 4.6 / Haiku 4.5</td></tr><tr><td><strong>Memory</strong></td><td>記憶・メモ帳</td><td><code class="rich-inline-code">CLAUDE.md</code> / 会話履歴 / 自動メモリ</td></tr><tr><td><strong>Tools</strong></td><td>手足・道具箱</td><td><code class="rich-inline-code">Read</code> <code class="rich-inline-code">Write</code> <code class="rich-inline-code">Edit</code> <code class="rich-inline-code">Bash</code> <code class="rich-inline-code">Grep</code> <code class="rich-inline-code">Glob</code> <code class="rich-inline-code">Task</code> <code class="rich-inline-code">WebFetch</code> <code class="rich-inline-code">WebSearch</code> <code class="rich-inline-code">TodoWrite</code></td></tr></tbody></table>
+<p><strong>脳みそだけあっても、メモも道具もなければ何もできない。</strong> この 3 点セットで初めて「自律的に動くアシスタント」が成立します。</p>
+<h3 id="コンテキストウィンドウという-体力ゲージ">コンテキストウィンドウという「体力ゲージ」</h3>
+<p>LLM が一度に処理できる情報量には上限があります。これが <strong>コンテキストウィンドウ</strong>（一度に取り込める文字数の枠）。<strong>RPG の HP（体力ゲージ）と同じイメージ</strong> です。</p>
+<table class="rich-table"><thead><tr><th>モデル</th><th>コンテキスト長</th></tr></thead><tbody><tr><td>Claude Opus 4.7</td><td>200K トークン（≒15万文字相当の日本語）</td></tr><tr><td>Claude Sonnet 4.6</td><td>200K（一部 1M）</td></tr><tr><td>Claude Haiku 4.5</td><td>200K</td></tr></tbody></table>
+<blockquote>
+<p> <strong>トークン</strong>（token）= AIが文字を数える単位。日本語1文字でだいたい1〜2トークン消費します。</p>
+</blockquote>
+<p>エージェントが長く動くと、<strong>この体力ゲージがじわじわ減って</strong> いきます。減ると注意力が落ちて、精度も下がる。だから「いかにコンテキストを節約するか」が腕の見せ所なんです（→ <a href="/articles/claude-code-04-context">第4回</a>）。</p>
+<hr>
+<h2 id="2-claude-code-の-5つのサーフェス">2. Claude Code の 5つのサーフェス</h2>
+<p>Claude Code は <strong>5つの場所</strong> から使えます。<strong>裏側のエンジン（Claude Code 本体）は同じ</strong> で、CLAUDE.md・設定・MCP は全サーフェスで共有されます。<strong>「同じ社員が、本社・支店・出張先・スマホからログインしてる」イメージ</strong> です。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-03-understanding/ed78a4b4-ch03-m2.png" alt="" width="1536" height="864">
+
+<h3 id="各サーフェスの使いどころ">各サーフェスの使いどころ</h3>
+<table class="rich-table"><thead><tr><th>サーフェス</th><th>強み</th><th>おすすめ用途</th></tr></thead><tbody><tr><td><strong>CLI</strong>（ターミナル）</td><td>全機能フル / 速い / 自動化向き</td><td><strong>メイン</strong>。日常開発・スクリプト連携</td></tr><tr><td><strong>VS Code / JetBrains</strong></td><td>差分（変更前後の比較）が見やすい / @メンション便利</td><td>コードの視覚的レビュー / 大規模変更の確認</td></tr><tr><td><strong>Web</strong>（claude.ai/code）</td><td>どこからでもアクセス / セッション持ち運び</td><td>出先・スマホ / 長時間タスク</td></tr><tr><td><strong>Desktop App</strong></td><td>視覚的に複数セッション並行 / Routines（定期実行）</td><td>並行作業 / スケジュール実行</td></tr><tr><td><strong>GitHub Actions</strong>（GitHub上の自動実行機能）</td><td>PRレビュー自動化 / Issue起票から実装まで</td><td>CI/CD（自動ビルド・テスト・デプロイ） / チーム運用</td></tr></tbody></table>
+<blockquote>
+<p> <strong>動画でのおすすめ</strong>：「CLI（ターミナル版）を中心に、必要に応じて VS Code 拡張を併用、外出先は GitHub アプリ版」が王道。<strong>全部使う必要はなくて、CLI だけで 8 割は事足ります。</strong></p>
+</blockquote>
+<h3 id="サーフェス間の橋渡し">サーフェス間の橋渡し</h3>
+<p>「Webで始めた作業を手元のCLIに持ってきたい」みたいなときの引っ越し用コマンドです。</p>
+<ul><li><p><code class="rich-inline-code">claude --teleport</code> — Webで始めたタスクをローカルCLIに持ち込む</p>
+</li><li><p><code class="rich-inline-code">/desktop</code> — CLIセッションをデスクトップアプリに引き継ぐ</p>
+</li><li><p><code class="rich-inline-code">/remote-control</code> — スマホからローカルセッションを操作（Pro/Max限定）</p>
+</li><li><p><code class="rich-inline-code">/dispatch</code> — Slackやメッセンジャーから依頼を投げる</p>
+</li></ul>
+<hr>
+<h2 id="3-モデル選び-opus-sonnet-haiku">3. モデル選び：Opus / Sonnet / Haiku</h2>
+<p>3つのモデルは、<strong>シェフのランクみたいな関係</strong> です。</p>
+<ul><li><p><strong>Opus</strong> = 三ツ星シェフ。深く考える、すごい料理を作る、ただし時間とお金がかかる</p>
+</li><li><p><strong>Sonnet</strong> = ベテラン料理人。万能、日常使いの相棒</p>
+</li><li><p><strong>Haiku</strong> = 早出しの料理人。回転寿司の握り手、速くて安い</p>
+</li></ul>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-03-understanding/71e061e8-ch03-m3.png" alt="" width="1536" height="864">
+
+<h3 id="一覧表">一覧表</h3>
+<table class="rich-table"><thead><tr><th>モデル</th><th>知能</th><th>速度</th><th>コスト</th><th>主な用途</th></tr></thead><tbody><tr><td><strong>Opus 4.7</strong></td><td></td><td></td><td>高い</td><td>設計 / 複雑なリファクタリング（書き直し） / 難バグ</td></tr><tr><td><strong>Sonnet 4.6</strong></td><td></td><td></td><td>中</td><td>日常開発のメイン</td></tr><tr><td><strong>Haiku 4.5</strong></td><td></td><td></td><td>安い</td><td>サブエージェントのワーカー（裏方担当） / 並列処理</td></tr></tbody></table>
+<blockquote>
+<p> <strong>ありがちな勘違い</strong>：「全部 Opus でやればいいじゃん」と思いがちなんですが、<strong>お財布が悲鳴をあげます</strong>。日常作業は Sonnet、難所だけ Opus、雑用は Haiku、というのが定石。</p>
+</blockquote>
+<h3 id="切り替え方">切り替え方</h3>
+<pre data-lang="claude-code" data-raw="%3Cprompt%3E%2Fmodel%3C%2Fprompt%3E" data-raw-encoding="url"><code><div class="claude-line claude-line--prompt"><span class="claude-prompt-mark">❯</span><span class="claude-prompt-text">/model</span></div></code></pre>
+<p>→ 対話で切り替えメニューが出ます。または起動時に <code class="rich-inline-code">claude --model opus</code> のように指定。</p>
+<h3 id="opus-が-言うことを聞きやすい-理由">Opus が「言うことを聞きやすい」理由</h3>
+<p>動画 <a href="https://www.youtube.com/watch?v=hxCEABf0Nfc" target="_blank" rel="noopener noreferrer">hxCEABf0Nfc</a> でも触れられている通り、Claude モデルは <strong>指示追従性（指示通りに動く度合い）とハルシネーション（自信満々で嘘をつく現象）の少なさ</strong> で評価が高いんです。</p>
+<ul><li><p>「やめて」と言ったらやめる</p>
+</li><li><p>「このライブラリを使え」と言ったら使う</p>
+</li><li><p>知らないことを <strong>知ったかぶりしない</strong></p>
+</li></ul>
+<p>これがコード生成では決定的に効きます。<strong>「優秀だけど勝手に仕様変えてくる新人」と「言われた通りに作ってくれる安定派」、後者のほうが現場で生き残る</strong>、あの感覚です。</p>
+<hr>
+<h2 id="4-思考モードと深さ調整">4. 思考モードと深さ調整</h2>
+<p>LLM はトークンを <strong>追加で消費</strong> することで、より深く考えられます。<strong>「ちょっと長考してから喋ってもらう」</strong> ようなイメージです。これを Claude Code で制御するのが「思考モード」。</p>
+<table class="rich-table"><thead><tr><th>モード</th><th>コマンド</th><th>思考量</th></tr></thead><tbody><tr><td>通常</td><td>（何もしない）</td><td>標準</td></tr><tr><td>Think</td><td><code class="rich-inline-code">think</code> を含める</td><td>中</td></tr><tr><td>Hard</td><td><code class="rich-inline-code">think hard</code> を含める</td><td>多</td></tr><tr><td>Harder</td><td><code class="rich-inline-code">think harder</code></td><td>より多</td></tr><tr><td><strong>UltraThink</strong></td><td><code class="rich-inline-code">ultrathink</code></td><td>最大（じっくりモード）</td></tr><tr><td><code class="rich-inline-code">/effort low/mid/high/xhigh/max</code></td><td>コマンド</td><td>数値で制御</td></tr></tbody></table>
+<h3 id="plan-mode-計画だけ立てるモード">Plan Mode（計画だけ立てるモード）</h3>
+<pre data-lang="text" data-raw="Shift%2BTab%20%E3%82%92%202%E5%9B%9E%E6%8A%BC%E3%81%99%0A%23%20%E3%81%BE%E3%81%9F%E3%81%AF%0A%2Fplan" data-raw-encoding="url"><code>Shift+Tab を 2回押す
+# または
+/plan</code></pre>
+<p>→ <strong>コード変更を一切せず</strong> に計画を立てるモード。<strong>「設計図だけ先に見せて」と頼む</strong> イメージです。設計・段取りが大事なときに使います。</p>
+<h3 id="ultraplan-クラウドプラン">UltraPlan（クラウドプラン）</h3>
+<pre data-lang="claude-code" data-raw="%3Cprompt%3E%2Fultraplan%3C%2Fprompt%3E" data-raw-encoding="url"><code><div class="claude-line claude-line--prompt"><span class="claude-prompt-mark">❯</span><span class="claude-prompt-text">/ultraplan</span></div></code></pre>
+<p>→ クラウド側で計画を立てて、ブラウザで確認できる新機能（v2.1.91+）。<strong>長時間の検討を別枠で投げておく</strong> ような使い方に向きます。</p>
+<hr>
+<h2 id="5-claude-code-が-長く動ける-仕組み">5. Claude Code が <strong>長く動ける</strong> 仕組み</h2>
+<p>エージェントを長く動かすには、<strong>コンテキスト（体力ゲージ）を節約しながら、必要な情報だけ取り込む</strong> 工夫が必要です。Claude Code は次の3つでこれを実現しています。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-03-understanding/a1a7cf11-ch03-m4.png" alt="" width="1536" height="864">
+
+<p>それぞれ：</p>
+<ul><li><p><strong>Skills</strong>（スキル：必要なときだけ読む専門知識ファイル）：<a href="/articles/claude-code-05-skills-and-commands">第5回</a></p>
+</li><li><p><strong>Subagents</strong>（サブエージェント：別働隊として動く専門部隊）：<a href="/articles/claude-code-06-subagents">第6回</a></p>
+</li><li><p><strong>Hooks</strong>（フック：特定タイミングで必ず動く自動処理）：<a href="/articles/claude-code-07-hooks">第7回</a></p>
+</li></ul>
+<p>詳しくは各章で。<strong>この3つが「長く戦える秘訣」</strong> です。</p>
+<hr>
+<h2 id="6-ハーネスは-2層-で考える">6. ハーネスは「2層」で考える</h2>
+<p>これが本資料の <strong>キーコンセプト</strong> です。<strong>ここを押さえるか押さえないかで、Claude Code の使いこなしレベルが大きく変わります</strong>。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-03-understanding/9e359bc2-ch03-m5.png" alt="" width="1536" height="864">
+
+<p>「<strong>ハーネスエンジニアリング</strong>」（Claude Code 用の足場を組む技術）と呼ばれているものの実体は、ほとんどがこの <strong>②カスタマイズ領域の設計</strong> です。基盤を理解した上で、自分のプロジェクトに合うようにカスタマイズしていく、というだけ。</p>
+<p>詳細は <a href="/articles/claude-code-10-harness-design">第10回</a>。</p>
+<hr>
+<h2 id="7-ギターアンプのアナロジー">7. ギターアンプのアナロジー</h2>
+<p>ハーネスの2層モデルは <strong>ギターアンプ</strong> に似ています。これすごくしっくり来る例えなので、紹介しておきます。</p>
+<table class="rich-table"><thead><tr><th>ギターアンプ</th><th>Claude Code</th></tr></thead><tbody><tr><td>アンプ本体（音を出す回路）</td><td>① 基盤（Anthropicが作った部分）</td></tr><tr><td>イコライザー / ゲイン / リバーブのつまみ</td><td>② カスタマイズ領域（自分が触る部分）</td></tr><tr><td>良い音が出るかは <strong>使い手の腕次第</strong></td><td>良い結果が出るかは <strong>設計次第</strong></td></tr><tr><td>ベストな設定はジャンルや曲で変わる</td><td>ベストな設定はプロジェクト・チームで変わる</td></tr></tbody></table>
+<p>つまり Claude Code には <strong>「これが正解」というベストプラクティスはない</strong> んです。あるのは <strong>手段（=構成要素）と、それを自分の課題に当てはめる判断</strong> だけ。<strong>だから面白い</strong>、とも言えます。</p>
+<hr>
+<h2 id="8-ふりかえり">8. ふりかえり</h2>
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th></tr></thead><tbody><tr><td></td><td>AIエージェント = LLM + Memory + Tools と説明できる</td></tr><tr><td></td><td>コンテキストウィンドウが「体力ゲージ」だと理解した</td></tr><tr><td></td><td>5サーフェス（CLI/IDE/Web/Desktop/GitHub）の使い分けが分かる</td></tr><tr><td></td><td>Opus/Sonnet/Haiku のどれを使うか自分なりに決めた</td></tr><tr><td></td><td><code class="rich-inline-code">/plan</code> <code class="rich-inline-code">/effort</code> <code class="rich-inline-code">ultrathink</code> の使い分けが分かる</td></tr><tr><td></td><td>ハーネスの2層モデルを説明できる</td></tr></tbody></table>
+<hr>
+<h2 id="ふりかえり">ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-03-understanding/acfce180-ch03-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章">関連する章</h2>
+<ul><li><p><strong>次の段階</strong>：<a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a> — メモリの仕組みを深掘り</p>
+</li><li><p><strong>2層モデルの実装詳細</strong>：<a href="/articles/claude-code-10-harness-design">第10回 ハーネス設計</a></p>
+</li><li><p><strong>モデル切替コマンド</strong>：<a href="/articles/claude-code-a1-cheatsheet">付録 A. チートシート §モデル</a></p>
+</li><li><p><strong>役職に合わせた進路</strong>：<a href="/articles/claude-code-14-role-based-paths">第14回 役職別 学習パス</a></p>
+</li></ul>
+<h2 id="次へ">次へ</h2>
+<p>→ <a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅ 前へ</td><td><a href="/articles/claude-code-02-first-session">第2回 はじめてのセッション</a></td></tr><tr><td>次へ</td><td><a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a></td></tr><tr><td>目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

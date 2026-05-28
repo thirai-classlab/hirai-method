@@ -1,0 +1,73 @@
+{
+  "slug": "claude-code-complete-guide",
+  "kind": "tech_article",
+  "title": "Claude Code 完全学習ガイド — 全14回 + 付録 A・B・C",
+  "current_version": 9,
+  "published_version": 9,
+  "published_at": null,
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-04-30T06:31:36.193Z",
+      "author": "format-from-cc研修",
+      "snapshot_taken": false,
+      "note": "v1 = cc研修/INDEX.md を contents_manage にコピーしてフォーマット"
+    },
+    {
+      "v": 2,
+      "created_at": "2026-04-30T06:36:55.606Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Claude Code 完全学習ガイド — 全14回 + 付録 A・B・C)"
+    },
+    {
+      "v": 3,
+      "created_at": "2026-04-30T06:47:26.918Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Claude Code 完全学習ガイド — 全14回 + 付録 A・B・C)"
+    },
+    {
+      "v": 4,
+      "created_at": "2026-04-30T06:50:03.540Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Claude Code 完全学習ガイド — 全18記事の目次（基礎+応用）)"
+    },
+    {
+      "v": 5,
+      "created_at": "2026-04-30T07:10:19.005Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Claude Code 完全学習ガイド — 全18記事の目次（基礎+応用）)"
+    },
+    {
+      "v": 6,
+      "created_at": "2026-04-30T07:18:18.741Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Claude Code 完全学習ガイド — 全18記事の目次（基礎+応用）)"
+    },
+    {
+      "v": 7,
+      "created_at": "2026-04-30T08:12:28.653Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: Claude Code 完全学習ガイド — 全17記事の目次（基礎+応用）)"
+    },
+    {
+      "v": 8,
+      "created_at": "2026-04-30T08:20:45.595Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】Claude Code 完全学習ガイド — 全17記事の目次（基礎+応用）)"
+    },
+    {
+      "v": 9,
+      "created_at": "2026-04-30T10:30:36.549Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】Claude Code 完全学習ガイド — 全17記事の目次（基礎+応用）)"
+    }
+  ]
+}

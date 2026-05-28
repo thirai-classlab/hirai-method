@@ -1,0 +1,31 @@
+{
+  "slug": "claude-code-07-hooks",
+  "kind": "tech_article",
+  "title": "第7回 フック（Hooks）— 校門の警備員に絶対ルールを守らせる",
+  "current_version": 3,
+  "published_version": 3,
+  "published_at": null,
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-04-30T06:22:27.101Z",
+      "author": "format-from-cc研修",
+      "snapshot_taken": false,
+      "note": "v1 = cc研修/07-hooks.md を contents_manage にコピーしてフォーマット"
+    },
+    {
+      "v": 2,
+      "created_at": "2026-04-30T06:46:35.087Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 第7回 フック（Hooks）— 校門の警備員に絶対ルールを守らせる)"
+    },
+    {
+      "v": 3,
+      "created_at": "2026-04-30T08:19:14.179Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 【claudeCode基礎学習】第7回 フック（Hooks）— 校門の警備員に絶対ルールを守らせる)"
+    }
+  ]
+}

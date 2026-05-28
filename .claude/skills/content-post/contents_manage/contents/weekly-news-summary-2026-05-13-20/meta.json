@@ -1,0 +1,72 @@
+{
+  "slug": "weekly-news-summary-2026-05-13-20",
+  "kind": "weekly_issue",
+  "title": "weekly-news-summary-2026-05-13-20",
+  "current_version": 9,
+  "published_version": 9,
+  "versions": [
+    {
+      "v": 1,
+      "created_at": "2026-05-20T04:14:56.196Z",
+      "author": "snapshotBeforeUpdate (auto-seed)",
+      "snapshot_taken": true,
+      "note": "auto-seeded by snapshotBeforeUpdate — version management was not initialized"
+    },
+    {
+      "v": 2,
+      "created_at": "2026-05-20T04:17:42.886Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    },
+    {
+      "v": 3,
+      "created_at": "2026-05-20T04:21:29.896Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    },
+    {
+      "v": 4,
+      "created_at": "2026-05-20T04:36:34.867Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    },
+    {
+      "v": 5,
+      "created_at": "2026-05-20T04:40:39.300Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    },
+    {
+      "v": 6,
+      "created_at": "2026-05-20T05:14:40.858Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    },
+    {
+      "v": 7,
+      "created_at": "2026-05-20T05:28:56.947Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    },
+    {
+      "v": 8,
+      "created_at": "2026-05-20T05:34:48.073Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    },
+    {
+      "v": 9,
+      "created_at": "2026-05-20T06:28:38.461Z",
+      "author": "post.ts --update",
+      "snapshot_taken": true,
+      "note": "auto-created by post.ts --update (title: 週間ニュースまとめ（2026年5月13日〜5月20日）)"
+    }
+  ]
+}

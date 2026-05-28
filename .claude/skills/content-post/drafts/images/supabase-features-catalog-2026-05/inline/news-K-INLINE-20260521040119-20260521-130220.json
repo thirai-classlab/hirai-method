@@ -1,0 +1,55 @@
+{
+  "generatedAt": "2026-05-21T04:02:20.206Z",
+  "model": "openai/gpt-image-2",
+  "prompt": "CRITICAL SAFETY ZONES — Generate at 1536x1024 canvas. After post-processing the TOP 80 pixels and BOTTOM 80 pixels WILL BE CROPPED OFF. Therefore: (1) Title banner — the FULL character glyph height (from top of letter to baseline) MUST fit ENTIRELY between vertical pixels 160..280. Title MUST NOT touch the top 160 pixels at all. (2) Left/right margins — ALL text labels (Japanese or English), arrows, and key sprites MUST be at least 120 pixels away from the LEFT edge AND at least 120 pixels away from the RIGHT edge. No text glyph or arrow tip touches the canvas left/right edge. (3) Top 80 px = atmospheric sky only (no text, no logos, no key subject). (4) Bottom 80 px = atmospheric floor only (no text, no logos, no key subject). (5) All critical content stays within vertical pixels 80..944.\n\nAn isometric 2.5D composition showing a sage-green \"Postgres Schema\" tile on the left with two diverging arrows—one peach-colored labeled \"introspect\" flowing to a lavender \"PostgREST\" module in the center-left, and one musty-blue labeled \"introspect\" flowing to a dusty-blue \"pg_graphql\" module in the center-right—with the PostgREST tile then projecting a horizontal mustard-yellow arrow labeled \"HTTP\" rightward to a soft-peach \"Auto REST API\" endpoint tile, while the pg_graphql tile simultaneously projects a pale-lavender arrow labeled \"HTTP\" rightward to a pale-mint \"GraphQL Endpoint\" tile positioned at the far right, creating a symmetrical fork-and-converge structure with all nodes rendered as isometric rectangular blocks with subtle shadow depth. — rendered as an Isometric 2.5D vector infographic in premium Stripe/Vercel marketing illustration style. 1536x864 horizontal canvas. Ivory beige background with subtle dotted grid, soft drop shadows. Multi-pastel palette: pale sage green primary, soft peach, lavender, mustard yellow, dusty blue (NO red — use warm coral; NO fluorescent colors). The central composition dominates the canvas — no large side panels, only 1-2 small attached labels at most. Place a bold Japanese title top-left in Noto Sans JP Bold dark charcoal: 'Auto-generated APIs — REST + GraphQL'. CRITICAL TITLE PLACEMENT: title baseline no higher than y=180, with at least 140 pixels of clear margin from the top edge. Directly below the title, a compact vertical stack of 1 medium Japanese section-headline lines in dark charcoal: 'Auto-generated APIs — REST + GraphQL'. Japanese typography only — English allowed only for proper nouns and product names. NEVER place focal text in the top 130 px or bottom 130 px. Clean, premium, sophisticated. (Aspect / safe-zone constraints are enforced by the gen.mjs --aspect 16:9 preset.)",
+  "aspect": "16:9",
+  "size": "1536x1024",
+  "finalSize": "1536x864",
+  "n": 1,
+  "files": [],
+  "response": {
+    "error": {
+      "message": "Failed to process successful response",
+      "type": "AI_APICallError",
+      "param": {
+        "error": "Failed to process successful response",
+        "statusCode": 200,
+        "name": "AI_APICallError",
+        "message": "Failed to process successful response",
+        "isRetryable": false,
+        "type": "AI_APICallError"
+      }
+    },
+    "providerMetadata": {
+      "gateway": {
+        "routing": {
+          "originalModelId": "openai/gpt-image-2",
+          "resolvedProvider": "openai",
+          "fallbacksAvailable": [],
+          "canonicalSlug": "openai/gpt-image-2",
+          "modelAttemptCount": 1,
+          "modelAttempts": [
+            {
+              "canonicalSlug": "openai/gpt-image-2",
+              "success": false,
+              "providerAttemptCount": 1,
+              "providerAttempts": [
+                {
+                  "provider": "openai",
+                  "credentialType": "system",
+                  "success": false,
+                  "error": "Failed to process successful response",
+                  "startTime": 1779336080160,
+                  "endTime": 1779336139607,
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "totalProviderAttemptCount": 1
+        },
+        "generationId": "gen_01KS4B3TRKASG5S95JHRYY0J98"
+      }
+    }
+  }
+}

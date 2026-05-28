@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>重複管理 構成要素</title>
+<link rel="stylesheet" href="sketchnote.css">
+<style>
+  body { width: 1536px; height: 1024px; }
+  .canvas { width: 1536px; height: 1024px; padding: 50px 70px; overflow: hidden; }
+
+  .h-title {
+    font-family: 'Yusei Magic', 'Klee One', sans-serif;
+    font-weight: 700;
+    font-size: 52px;
+    color: #2d2a26;
+    margin-bottom: 4px;
+  }
+  .h-title .star-mark { color: #f4c430; margin-right: 8px; font-size: 36px; }
+  .h-sub {
+    font-family: 'Klee One', sans-serif;
+    font-size: 22px;
+    color: #666;
+    margin-bottom: 30px;
+  }
+
+  .top {
+    display: flex;
+    justify-content: center;
+    margin-top: 14px;
+  }
+  .root-box {
+    width: 560px;
+    border-radius: 26px 30px 24px 32px;
+    border: 5px solid #f4c430;
+    background: #fff3b0;
+    box-shadow: 8px 8px 0 #c89000;
+    padding: 22px 28px 26px;
+    text-align: center;
+    transform: rotate(-1deg);
+  }
+  .root-icon { font-size: 56px; line-height: 1; }
+  .root-title {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 38px;
+    font-weight: 700;
+    color: #8a6a00;
+    margin-top: 4px;
+  }
+  .root-en {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 18px;
+    color: #555;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+  }
+  .root-desc {
+    font-family: 'Klee One', sans-serif;
+    font-size: 16px;
+    color: #333;
+    margin-top: 12px;
+    line-height: 1.55;
+    background: #ffffff;
+    border: 2.5px dashed #8a6a00;
+    border-radius: 16px;
+    padding: 10px 16px;
+  }
+
+  .branches {
+    display: flex;
+    justify-content: center;
+    gap: 80px;
+    margin-top: 30px;
+    position: relative;
+  }
+  .branch-arrow {
+    position: absolute;
+    top: -28px;
+    font-size: 44px;
+    color: #2d2a26;
+    line-height: 1;
+    font-weight: 700;
+  }
+  .branch-arrow.left  { left: 28%; transform: rotate(-30deg); }
+  .branch-arrow.right { right: 28%; transform: rotate(30deg); }
+
+  .child {
+    width: 540px;
+    border-radius: 24px 28px 22px 30px;
+    border: 5px solid #2d2a26;
+    background: #ffffff;
+    box-shadow: 6px 6px 0 #2d2a26;
+    padding: 18px 22px 22px;
+  }
+  .child.match  { background: #d6e8f7; border-color: #4a90d9; box-shadow: 6px 6px 0 #4a90d9; }
+  .child.action { background: #ffe1c4; border-color: #f08e3a; box-shadow: 6px 6px 0 #f08e3a; }
+
+  .child-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .child-icon { font-size: 42px; }
+  .child-title {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .child-title .en {
+    display: block;
+    font-size: 14px;
+    color: #555;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+  .child.match  .child-title { color: #2670ba; }
+  .child.action .child-title { color: #c8651e; }
+  .child-tag {
+    margin-left: auto;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 15px;
+    background: #ffffff;
+    border: 2.5px dashed currentColor;
+    border-radius: 14px;
+    padding: 4px 12px;
+  }
+  .child.match  .child-tag { color: #2670ba; }
+  .child.action .child-tag { color: #c8651e; }
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #ffffff;
+    border: 3px solid #4a90d9;
+    border-radius: 14px;
+    padding: 9px 14px;
+    margin-bottom: 8px;
+    font-size: 18px;
+  }
+  .field-row .lbl {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 14px;
+    background: #d6e8f7;
+    color: #2670ba;
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-weight: 700;
+  }
+  .field-row .val {
+    font-weight: 600;
+    color: #2d2a26;
+  }
+
+  .action-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #ffffff;
+    border: 3px solid #f08e3a;
+    border-radius: 14px;
+    padding: 9px 14px;
+    margin-bottom: 8px;
+    font-size: 19px;
+    font-weight: 600;
+  }
+  .action-row .em { font-size: 28px; }
+  .action-row.block  { color: #c43030; border-color: #c43030; }
+  .action-row.allow  { color: #b07c00; border-color: #f4c430; background: #fff3b0; }
+  .action-row .desc {
+    margin-left: auto;
+    font-size: 14px;
+    color: #555;
+    font-weight: 400;
+  }
+
+  .mini-label {
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 15px;
+    color: #555;
+    margin-bottom: 6px;
+  }
+
+  .badge {
+    position: absolute;
+    top: 50px; right: 80px;
+    background: #ffe5ee;
+    border: 3px solid #ff6b9d;
+    border-radius: 50%;
+    width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Yusei Magic', sans-serif;
+    font-size: 18px;
+    color: #d04777;
+    box-shadow: 4px 4px 0 #ff6b9d;
+    transform: rotate(8deg);
+    text-align: center;
+    line-height: 1.2;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="h-title"><span class="star-mark">✦</span>重複管理（Duplicate Management）の構成</div>
+  <div class="h-sub">重複ルールが「一致ルール」と「アクション」の 2 つを束ねるマスター設定</div>
+
+  <div class="badge">2部品で<br>制御！</div>
+
+  <div class="top">
+    <div class="root-box">
+      <div class="root-icon">📑</div>
+      <div class="root-title">重複ルール</div>
+      <div class="root-en">Duplicate Rule</div>
+      <div class="root-desc">重複を検出し、Matching Rule と Action をまとめて適用するマスター設定</div>
+    </div>
+  </div>
+
+  <div class="branches">
+    <div class="branch-arrow left">↙</div>
+    <div class="branch-arrow right">↘</div>
+
+    <div class="child match">
+      <div class="child-head">
+        <div class="child-icon">🔍</div>
+        <div class="child-title">一致ルール<span class="en">Matching Rule（照合条件）</span></div>
+        <div class="child-tag">何を重複と見なすか</div>
+      </div>
+      <div class="mini-label">例：法人取引先を Name + 郵便番号で照合</div>
+      <div class="field-row"><span class="lbl">Match Field 1</span><span class="val">Name</span></div>
+      <div class="field-row"><span class="lbl">Match Field 2</span><span class="val">BillingPostalCode</span></div>
+    </div>
+
+    <div class="child action">
+      <div class="child-head">
+        <div class="child-icon">⚙️</div>
+        <div class="child-title">アクション<span class="en">Action（一致時の挙動）</span></div>
+        <div class="child-tag">どう動くか</div>
+      </div>
+      <div class="mini-label">例：重複が見つかったときの動作を選択</div>
+      <div class="action-row block"><span class="em">🚫</span>拒否（ブロック）<span class="desc">保存させない</span></div>
+      <div class="action-row allow"><span class="em">⚠️</span>警告とともに許可<span class="desc">確認の上で保存可</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

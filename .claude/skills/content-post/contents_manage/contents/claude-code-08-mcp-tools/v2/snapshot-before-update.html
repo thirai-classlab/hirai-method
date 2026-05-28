@@ -1,0 +1,166 @@
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-08-mcp-tools/3af9f1e6-ch08-hero.png" alt="" width="1536" height="864">
+
+<blockquote>
+<p><strong>この章のゴール</strong></p>
+<ul><li><p>MCP（Model Context Protocol = AIと外部サービスをつなぐ共通規格）が <strong>何のための仕組み</strong> かを理解する</p>
+</li><li><p><code class="rich-inline-code">.mcp.json</code>（設定ファイル）を書いて MCPサーバーを追加できる</p>
+</li><li><p>入れすぎると遅くなる理由が分かる</p>
+</li><li><p>厳選した推奨MCPサーバーを知る</p>
+</li></ul>
+</blockquote>
+<p><strong>所要時間：約60分</strong></p>
+<hr>
+<h2 id="1-mcp-は-usb-type-c-の発想">1. MCP は「USB Type-C」の発想</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-08-mcp-tools/e3dfaf31-ch08-m1.png" alt="" width="1536" height="864">
+
+<p>MCP（Model Context Protocol）は <strong>AIエージェントと外部ツールを繋ぐ共通規格</strong>。例えるなら <strong>USB Type-C</strong> です。昔はサービスごとに「専用ケーブル」が必要だったのが、Type-C 1本で何でも繋がる、あの便利さ。</p>
+<p>Anthropic が2024年に提唱し、2026年現在は OpenAI / Google など他社AIツールも対応する <strong>業界標準</strong> になりつつあります。</p>
+<hr>
+<h2 id="2-mcp-がない時代と-ある時代">2. MCP がない時代と、ある時代</h2>
+<table class="rich-table"><thead><tr><th></th><th>MCP がない時代</th><th>MCP のある時代</th></tr></thead><tbody><tr><td>ツール追加</td><td>各ツール用のクライアント（接続プログラム）を自作</td><td><code class="rich-inline-code">.mcp.json</code> に1行追加</td></tr><tr><td>認証</td><td>個別実装</td><td>標準化された OAuth（許可式ログインの仕組み） / トークン</td></tr><tr><td>エラー処理</td><td>バラバラ</td><td>プロトコル定義済み</td></tr><tr><td>移植性</td><td>ツールごとに作り直し</td><td>別のAIエージェントでも使える</td></tr></tbody></table>
+<p>つまり MCP は <strong>「車輪の再発明（同じものを何度も作る無駄）をやめよう」</strong> という標準化の動き。<strong>みんなで同じケーブル使えば、メーカーごとに変換アダプタ買わなくて済むよね</strong>、というやつです。</p>
+<hr>
+<h2 id="3-mcp-サーバーの仕組み">3. MCP サーバーの仕組み</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-08-mcp-tools/557759f4-ch08-m2.png" alt="" width="1536" height="864">
+
+<ul><li><p>MCPサーバーは <strong>別プロセス</strong>（独立して動くプログラム）で動く</p>
+</li><li><p>Claude Code はサーバーが提供する <strong>ツール定義</strong> を読み込んで使う</p>
+</li><li><p>標準入出力（stdio = プログラム同士の対話用パイプ）か HTTP/SSE で通信</p>
+</li></ul>
+<p><strong>「Claude Code 本体は窓口、MCPサーバーは外部サービスの担当営業」</strong> みたいな分業です。</p>
+<hr>
+<h2 id="4-設定ファイル-mcp-json">4. 設定ファイル：<code class="rich-inline-code">.mcp.json</code></h2>
+<p>プロジェクトルート（一番上の階層）に <code class="rich-inline-code">.mcp.json</code> を置きます（チーム共有用）。個人用は <code class="rich-inline-code">~/.claude.json</code> で設定。</p>
+<h3 id="4-1-例-github-と-context7-を繋ぐ">4-1. 例：GitHub と Context7 を繋ぐ</h3>
+<pre data-lang="json"><code>{
+  &quot;mcpServers&quot;: {
+    &quot;github&quot;: {
+      &quot;command&quot;: &quot;npx&quot;,
+      &quot;args&quot;: [&quot;-y&quot;, &quot;@modelcontextprotocol/server-github&quot;],
+      &quot;env&quot;: {
+        &quot;GITHUB_PERSONAL_ACCESS_TOKEN&quot;: &quot;${GITHUB_TOKEN}&quot;
+      }
+    },
+    &quot;context7&quot;: {
+      &quot;command&quot;: &quot;npx&quot;,
+      &quot;args&quot;: [&quot;-y&quot;, &quot;@upstash/context7-mcp&quot;]
+    }
+  }
+}</code></pre>
+<h3 id="4-2-cli-で追加する">4-2. CLI で追加する</h3>
+<pre data-lang="bash"><code># サーバー追加（環境変数も同時に）
+claude mcp add github npx -- -y @modelcontextprotocol/server-github
+
+# 環境変数を指定
+claude mcp add github -e GITHUB_TOKEN=ghp_xxx -- npx -y @modelcontextprotocol/server-github
+
+# 一覧
+claude mcp list
+
+# 削除
+claude mcp remove github</code></pre>
+<h3 id="4-3-接続の確認">4-3. 接続の確認</h3>
+<p>セッション内で：</p>
+<pre><code>/mcp</code></pre>
+<p>→ 接続中のサーバー、利用可能なツール一覧、接続状態（✅ Connected / ❌ Failed）が表示されます。<strong>「ちゃんと刺さってる？」のチェックボタン</strong> ですね。</p>
+<hr>
+<h2 id="5-mcp-は-入れすぎ厳禁">5. ⚠️ MCP は「入れすぎ厳禁」</h2>
+<p>これは初心者が一番ハマるポイント。<strong>カバンに必要ないものまで詰めると、肝心のものが見つからなくなる</strong> あの状態です。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-08-mcp-tools/7657f16b-ch08-m3.png" alt="" width="1536" height="864">
+
+<h3 id="なぜ">なぜ？</h3>
+<ul><li><p>MCPサーバーの <strong>ツール定義（名前・説明・パラメータ）</strong> が起動時にコンテキストへ全部展開される</p>
+</li><li><p>たくさんツールがあると LLM が <strong>どれを使うか迷い</strong>、誤選択（違う道具を選んでしまう）が増える</p>
+</li><li><p>コンテキスト消費 → 注意力低下 → 精度低下</p>
+</li></ul>
+<h3 id="動画より">動画より：</h3>
+<blockquote>
+<p>ほとんどのタスクでは少数のツールしか必要としないのに、いろんなツールがあると選別に無駄な労力を使ってしまって精度が落ちる。
+（まさやん, FfABuQiDw8Q）</p>
+</blockquote>
+<h3 id="解決策-漸進的ツール拡張パターン">解決策：漸進的ツール拡張パターン</h3>
+<p>詳しくは <a href="/articles/claude-code-11-harness-patterns">第11回 - パターン#8</a>。<strong>最初は標準ツールだけ → 必要になったら追加</strong> が鉄則。<strong>「料理する分だけ食材を買う」</strong> スタイルでいきましょう。</p>
+<hr>
+<h2 id="6-厳選おすすめmcpサーバー-2026年4月時点">6. 厳選おすすめMCPサーバー（2026年4月時点）</h2>
+<p>「これだけは入れる価値ある」というラインアップ。<strong>全部入れる必要はないですよ。気になったやつから 1〜2 個試すぐらいで十分</strong> です。</p>
+<h3 id="6-1-chrome-devtools-mcp-最優先">6-1. Chrome DevTools MCP（最優先）</h3>
+<pre data-lang="bash"><code>claude mcp add chrome-devtools npx -- -y chrome-devtools-mcp</code></pre>
+<ul><li><p>ブラウザ操作 / Web解析 / フロントエンドデバッグ</p>
+</li><li><p>動画でも「<strong>絶対おすすめ</strong>」と推奨</p>
+</li></ul>
+<h3 id="6-2-context7-ライブラリドキュメント">6-2. Context7（ライブラリドキュメント）</h3>
+<pre data-lang="bash"><code>claude mcp add context7 npx -- -y @upstash/context7-mcp</code></pre>
+<ul><li><p>ライブラリの <strong>最新ドキュメント</strong> をリアルタイム取得</p>
+</li><li><p>「React の useEffect の使い方」のような質問で training cutoff（学習データの締切日。古い情報しか持っていない問題）を超えられる</p>
+</li></ul>
+<h3 id="6-3-github">6-3. GitHub</h3>
+<pre data-lang="bash"><code>claude mcp add github npx -- -y @modelcontextprotocol/server-github</code></pre>
+<ul><li><p>Issue（課題チケット） / PR（プルリクエスト = コードの変更提案）の取得・作成・コメント</p>
+</li><li><p>リポジトリ検索・ファイル取得</p>
+</li></ul>
+<h3 id="6-4-vercel-mcp">6-4. Vercel MCP</h3>
+<pre data-lang="bash"><code>claude mcp add vercel npx -- -y @vercel/mcp</code></pre>
+<ul><li><p>デプロイ管理・ログ確認・環境変数操作</p>
+</li></ul>
+<h3 id="6-5-supabase-postgresql">6-5. Supabase / PostgreSQL</h3>
+<pre data-lang="bash"><code>claude mcp add postgres npx -- -y @modelcontextprotocol/server-postgres -- &quot;postgresql://...&quot;</code></pre>
+<ul><li><p>DBスキーマ（データベースの構造）の読み取り・クエリ実行（<strong>読み取り専用にすべき。書き込み権限は事故の元</strong>）</p>
+</li></ul>
+<h3 id="6-6-slack">6-6. Slack</h3>
+<pre data-lang="bash"><code>claude mcp add slack npx -- -y @modelcontextprotocol/server-slack</code></pre>
+<ul><li><p>メッセージ送信・スレッド要約</p>
+</li></ul>
+<hr>
+<h2 id="7-mcp-vs-skills-vs-slash-commands-使い分け">7. MCP vs Skills vs Slash Commands：使い分け</h2>
+<p>混同しやすいので整理。<strong>「外部の道具」「内部の知識」「定型の手順」をそれぞれ別の引き出しに入れる感覚</strong> です。</p>
+<table class="rich-table"><thead><tr><th>機能</th><th>何のための仕組み</th><th>起動</th><th>例</th></tr></thead><tbody><tr><td><strong>MCP</strong></td><td>外部サービスへの接続</td><td>Claudeが必要時に呼ぶ</td><td>GitHub Issue取得</td></tr><tr><td><strong>Skills</strong></td><td>専門知識の段階的開示</td><td>Claudeが必要時に読む</td><td>議事録フォーマット</td></tr><tr><td><strong>Slash Commands</strong>（スラッシュコマンド）</td><td>定型プロンプト</td><td>ユーザーが手動で呼ぶ</td><td><code class="rich-inline-code">/daily-report</code></td></tr><tr><td><strong>Plugins</strong>（プラグイン）</td><td>上記をパッケージ化</td><td>インストール</td><td>dx@ykdojo</td></tr></tbody></table>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-08-mcp-tools/65fe02e9-ch08-m4.png" alt="" width="1536" height="864">
+
+<hr>
+<h2 id="8-実践-3分で-mcp-を追加してみる">8. 実践：3分で MCP を追加してみる</h2>
+<p>📝 <strong>ハンズオン</strong>：Context7 を追加して動作確認</p>
+<pre data-lang="bash"><code># 追加
+claude mcp add context7 npx -- -y @upstash/context7-mcp
+
+# 起動
+claude
+
+# 接続確認
+/mcp
+# context7: ✅ Connected と表示されればOK
+
+# 試す
+React 19 の Server Actions の使い方を context7 で調べて</code></pre>
+<p>→ 最新の React ドキュメントから情報を取得して回答してくれます。<strong>最新情報が手元のAIから出てくるの、地味に感動します</strong>。</p>
+<hr>
+<h2 id="9-セキュリティの注意">9. セキュリティの注意</h2>
+<p>MCPサーバーは <strong>任意のコードを実行できる</strong> ので、信頼できないものは入れない。<strong>家の合鍵を渡す相手は選ぶ</strong> あれと同じです。</p>
+<ul><li><p>✅ Anthropic 公式 / Vercel公式 / GitHub公式 / Upstash 公式</p>
+</li><li><p>✅ 大手企業のオフィシャル</p>
+</li><li><p>⚠️ 個人開発のものは <strong>コードを読んでから</strong></p>
+</li><li><p>❌ 中身が分からないバイナリ（実行ファイル）は入れない</p>
+</li></ul>
+<p>また、<code class="rich-inline-code">.mcp.json</code> に <strong>APIキーを直書きしない</strong>：</p>
+<pre data-lang="json"><code>{
+  &quot;env&quot;: {
+    &quot;API_KEY&quot;: &quot;${MY_API_KEY}&quot;
+  }
+}</code></pre>
+<p>→ 環境変数（OS側に保存される設定値）経由で。<code class="rich-inline-code">.env</code>（環境変数ファイル）は <code class="rich-inline-code">.gitignore</code>（Gitで無視するファイルリスト）済み前提。<strong>APIキーを直書きしてGitHubに上げるのは、家の鍵をTシャツにプリントして街を歩くようなもの</strong> なので、絶対やめましょう。</p>
+<hr>
+<h2 id="10-ふりかえり">10. ふりかえり</h2>
+<table class="rich-table"><thead><tr><th></th><th>チェック項目</th></tr></thead><tbody><tr><td>☐</td><td>MCP の概念（共通プロトコル）を説明できる</td></tr><tr><td>☐</td><td><code class="rich-inline-code">.mcp.json</code> の書き方が分かる</td></tr><tr><td>☐</td><td><code class="rich-inline-code">claude mcp add/list/remove</code> を使える</td></tr><tr><td>☐</td><td>入れすぎると精度が落ちる理由を理解した</td></tr><tr><td>☐</td><td>MCP / Skills / Slash Commands の違いが分かる</td></tr><tr><td>☐</td><td>おすすめの最低限セット（Chrome DevTools / Context7）を試した</td></tr></tbody></table>
+<hr>
+<h2 id="ふりかえり">✅ ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-08-mcp-tools/99e0af3f-ch08-outro.png" alt="" width="1536" height="864">
+
+<h2 id="関連する章">📚 関連する章</h2>
+<ul><li><p>🔗 <strong>本章の対比</strong>：<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a> — MCP / Skills / Commands の使い分け</p>
+</li><li><p>🔗 <strong>コンテキスト圧迫対策</strong>：<a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a> — <code class="rich-inline-code">/context</code> で消費を確認</p>
+</li><li><p>🔗 <strong>権限制御</strong>：<a href="/articles/claude-code-07-hooks">第7回 フック</a> — MCP経由の危険操作をブロック</p>
+</li><li><p>🔗 <strong>設計パターン</strong>：<a href="/articles/claude-code-11-harness-patterns">第11回 設計パターン</a> — #8 漸進的ツール拡張</p>
+</li><li><p>🔗 <strong>接続失敗時</strong>：<a href="/articles/claude-code-a2-troubleshooting#8-mcp-関連">付録 B. トラブルシューティング</a> — <code class="rich-inline-code">/mcp</code>で接続確認</p>
+</li></ul>
+<h2 id="次へ">🎬 次へ</h2>
+<p>→ <a href="/articles/claude-code-09-prompt-quality">第9回 精度の高いアウトプットを引き出す</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅️ 前へ</td><td><a href="/articles/claude-code-07-hooks">第7回 フック</a></td></tr><tr><td>➡️ 次へ</td><td><a href="/articles/claude-code-09-prompt-quality">第9回 精度の高いアウトプット</a></td></tr><tr><td>🏠 目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>

@@ -1,0 +1,435 @@
+<p>Vercel AI Gateway 経由でアクセスできる画像生成モデルは、2026年5月時点で BFL FLUX 系、OpenAI gpt-image 系、Google Nano Banana 系、ByteDance Seedream 系、Recraft、xAI Grok など多岐にわたる。本ガイドではエンドポイント構造、モデル特性、用途別の選定基準、実装アーキテクチャを整理する。</p>
+<h2 id="1-エンドポイント二系統の整理">1. エンドポイント二系統の整理</h2>
+<p>AI Gateway は画像生成に <strong>2 つのエンドポイント</strong> を持つ。スキル <code class="rich-inline-code">ai-image-gen-pro</code> の実装方針はこの分岐を理解することから始まる。</p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/eada979e-01-endpoints.png" alt="AI Gateway 画像生成のエンドポイント二系統と主要モデルマップ" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>エンドポイント</th><th>レスポンス形式</th><th>主な用途</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/v1/images/generations</code> (image-only)</td><td><code class="rich-inline-code">data[].b64_json</code> または <code class="rich-inline-code">data[].url</code></td><td>純粋な text-to-image、image-to-image</td></tr><tr><td><code class="rich-inline-code">/v1/chat/completions</code> (multimodal)</td><td><code class="rich-inline-code">choices[].message.images[]</code> または tool result</td><td>対話的編集、reasoning 付き生成、文章+画像</td></tr></tbody></table>
+<hr>
+<h2 id="2-モデル一覧-2026年5月時点">2. モデル一覧（2026年5月時点）</h2>
+<h3 id="2-1-image-only-モデル-テキスト-画像専用">2.1 image-only モデル（テキスト→画像専用）</h3>
+<table class="rich-table"><thead><tr><th>Provider</th><th>Model ID</th><th>価格</th><th>入力画像</th><th>アスペクト/サイズ</th><th>特徴・主用途</th></tr></thead><tbody><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td>~$0.05/img</td><td><strong>multi-ref 最大 9 MP</strong></td><td>多様、最大 4 MP</td><td><strong>価格性能比トップ</strong>、汎用第一候補。10 秒以下生成、品質バランス最強</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-2-max</code></td><td>TBD</td><td>編集対応</td><td>多様、4 MP</td><td>プロ向け production-ready 最高品質、印刷物にも耐える</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-2-flex</code></td><td>TBD</td><td><strong>multi-ref 最大 10 枚 / 14 MP</strong></td><td>カスタマイズ可</td><td><strong>infographics / typography 特化</strong>、UI モック・図解・複雑構成タイポ</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-2-klein-4b</code></td><td>TBD</td><td>編集統合</td><td>標準</td><td>4B 軽量、高速ラフ案出し</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-2-klein-9b</code></td><td>TBD</td><td>編集統合</td><td>標準</td><td><strong>&lt;1 秒生成</strong>、ムードボード・プロンプト探索専用</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-kontext-max</code></td><td>$0.08/img</td><td>単一参照</td><td>標準</td><td><strong>キャラ一貫性編集の絶対王者</strong>、6 連続編集後も cosine 0.92+</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-kontext-pro</code></td><td>$0.04/img</td><td>単一参照</td><td>標準</td><td>Kontext Max と同系、価格半額。画質はほぼ同等</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-pro-1.0-fill</code></td><td>$0.05/img</td><td><strong>画像+mask 必須（inpaint）</strong></td><td>標準</td><td><strong>inpainting 専用</strong>、部分修正・オブジェクト除去</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-pro-1.1</code></td><td>$0.04/img</td><td>なし（T2I 専用）</td><td>標準</td><td>T2I の標準、~2 秒生成</td></tr><tr><td>BFL</td><td><code class="rich-inline-code">bfl/flux-pro-1.1-ultra</code></td><td>$0.06/img</td><td>なし</td><td>4 MP</td><td><strong>4 MP 出力</strong>、印刷物・大判ポスターの本命</td></tr><tr><td>OpenAI</td><td><code class="rich-inline-code">openai/gpt-image-1</code></td><td>input $5/M、output $40/M</td><td>あり（multimodal native）</td><td>1024² 系</td><td>gpt-image 系のオリジナル、透過 PNG 対応</td></tr><tr><td>OpenAI</td><td><code class="rich-inline-code">openai/gpt-image-1-mini</code></td><td>input $2/M、output $8/M</td><td>あり</td><td>1024² 系</td><td><strong>最も安い OpenAI 系</strong>、プロト用</td></tr><tr><td>OpenAI</td><td><code class="rich-inline-code">openai/gpt-image-1.5</code></td><td>input $5/M、output $32/M</td><td>あり</td><td>1536×1024 まで</td><td>gpt-image-2 の廉価版、<strong>透過 PNG 必要なときの残し</strong>、テキスト 90-95%</td></tr><tr><td>OpenAI</td><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>input $5/M、output $30/M</td><td><strong>あり、input_fidelity=high 固定</strong></td><td><strong>4096×4096、16:9 ネイティブ対応</strong></td><td><strong>日本語タイポ 99%+</strong>、Thinking mode でレイアウト計画、迷ったら第一候補</td></tr><tr><td>ByteDance</td><td><code class="rich-inline-code">bytedance/seedream-4.0</code></td><td>$0.03/img</td><td>text/single/multi-image</td><td>標準</td><td>汎用 T+I 入力、コスパ重視</td></tr><tr><td>ByteDance</td><td><code class="rich-inline-code">bytedance/seedream-4.5</code></td><td>$0.04/img</td><td><strong>multi-image 強化</strong></td><td>4K 対応、<strong>最低 2K 必須</strong></td><td><strong>人物フォトリアル 9.4/10</strong>、毛穴・キャッチライト・歯。EC 商品写真の本命</td></tr><tr><td>ByteDance</td><td><code class="rich-inline-code">bytedance/seedream-5.0-lite</code></td><td>$0.035/img</td><td>参照画像 + Web検索</td><td>標準、<strong>最低 2K</strong></td><td>4.5 比 <strong>2-3× 高速</strong>、Web 検索統合で時事性のある画像生成</td></tr><tr><td>Recraft</td><td><code class="rich-inline-code">recraft/recraft-v4.1-pro</code></td><td>$0.25/img（vector $0.30）</td><td>なし</td><td>1024²</td><td><strong>SVG ベクター直接出力</strong>、ロゴ・アイコンの本命、レイヤー構造保持</td></tr><tr><td>Recraft</td><td><code class="rich-inline-code">recraft/recraft-v4.1</code></td><td>$0.04/img（vector $0.08）</td><td>なし</td><td>1024²</td><td>コスパ良いベクター、推奨デフォルト</td></tr><tr><td>Recraft</td><td><code class="rich-inline-code">recraft/recraft-v4.1-utility-pro</code></td><td>$0.25/img</td><td>なし</td><td>1024²</td><td>フラットライティング、シンプル UI 制御シーン特化</td></tr><tr><td>Recraft</td><td><code class="rich-inline-code">recraft/recraft-v4-pro</code></td><td>$0.25/img</td><td>なし</td><td>1024²</td><td>前世代 Pro、Mode 安定性で v4.1-pro より好まれるケースあり</td></tr><tr><td>Recraft</td><td><code class="rich-inline-code">recraft/recraft-v4</code></td><td>$0.04/img</td><td>なし</td><td>1024²</td><td>前世代基本、v4.1 と性能差小</td></tr><tr><td>Recraft</td><td><code class="rich-inline-code">recraft/recraft-v3</code></td><td>$0.04/img</td><td>なし</td><td>1024²</td><td><strong>テキスト位置指定可（唯一）</strong>、ER 図・ラベル多用に強い</td></tr><tr><td>Recraft</td><td><code class="rich-inline-code">recraft/recraft-v2</code></td><td>$0.022/img</td><td>なし</td><td>1024²</td><td>最安 Recraft、軽量プロト用</td></tr><tr><td>xAI</td><td><code class="rich-inline-code">xai/grok-imagine-image</code></td><td>$0.02/img</td><td>なし</td><td>aspectRatio 指定（size 不可）</td><td><strong>$0.02 で最安、多言語テキスト編集</strong>。size 不可、aspectRatio のみ</td></tr><tr><td>Prodia</td><td><code class="rich-inline-code">prodia/flux-fast-schnell</code></td><td>~$0.001/img</td><td>なし</td><td>標準（高速専用）</td><td><strong>190ms 超高速</strong>、大量バッチ・UI モック用</td></tr></tbody></table>
+<h3 id="2-2-multimodal-llm-chat-completions-経由で画像出力">2.2 Multimodal LLM（chat-completions 経由で画像出力）</h3>
+<table class="rich-table"><thead><tr><th>Provider</th><th>Model ID</th><th>価格</th><th>入力画像上限</th><th>解像度</th><th>特徴・主用途</th></tr></thead><tbody><tr><td>Google</td><td><code class="rich-inline-code">google/gemini-3-pro-image</code>（Nano Banana Pro）</td><td>$0.1344/img（1K/2K）、$0.24（4K）</td><td><strong>最大 14 枚、7 MB/枚</strong></td><td>1K、2K、4K</td><td><strong>日本語 85%</strong>、多ターン編集に強い、studio-level controls、14 枚 multi-ref で LLM ベース統合</td></tr><tr><td>Google</td><td><code class="rich-inline-code">google/gemini-3.1-flash-image-preview</code>（Nano Banana 2）</td><td>TBD</td><td>14 枚</td><td>標準〜2K</td><td>Nano Banana 2、Pro 比で <strong>高速版</strong>（~3 秒）、preview ステータス</td></tr><tr><td>Google</td><td><code class="rich-inline-code">google/gemini-2.5-flash-image</code>（Nano Banana 旧）</td><td>$0.039/img</td><td>多枚</td><td>標準</td><td>旧世代だが <strong>$0.039 で最安の Gemini</strong>、汎用 multimodal 用</td></tr><tr><td>OpenAI</td><td><code class="rich-inline-code">openai/gpt-5.4</code> 等 + <code class="rich-inline-code">image_generation</code> tool</td><td>tool 経由で gpt-image-* 課金</td><td>tool 経由</td><td>gpt-image-2 仕様</td><td>GPT-5.x の <strong>agentic 文脈で画像生成</strong>、reasoning + 画像出力をワンショット</td></tr></tbody></table>
+<hr>
+<h2 id="3-特徴ベンチマーク-用途別">3. 特徴ベンチマーク（用途別）</h2>
+<h3 id="3-1-日本語タイポグラフィ得意度">3.1 日本語タイポグラフィ得意度</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/d489ad54-02-ranking-japanese.png" alt="日本語タイポグラフィ精度ランキング 棒グラフ" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>ランク</th><th>モデル</th><th>根拠</th></tr></thead><tbody><tr><td>1</td><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>内部テスト 99%+、CJK/RTL 明確サポート、Thinking mode でレイアウト計画</td></tr><tr><td>2</td><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>日本語（漢字+ひらがな+カタカナ）85%、複雑構成可</td></tr><tr><td>3</td><td><code class="rich-inline-code">bfl/flux-2-flex</code></td><td>タイポ・インフォグラフィック特化、複雑テキストで Pro 超え</td></tr><tr><td>4</td><td><code class="rich-inline-code">openai/gpt-image-1.5</code></td><td>テキスト 90-95%、非ラテンも改善</td></tr><tr><td>5</td><td><code class="rich-inline-code">recraft/recraft-v4.1</code></td><td>多言語短文/中文の位置制御可（v3 は唯一テキスト位置指定可）</td></tr></tbody></table>
+<h3 id="3-2-人物画-フォトリアル">3.2 人物画・フォトリアル</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/11f77297-03-ranking-photoreal.png" alt="人物画・フォトリアル精度ランキング 棒グラフ" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>ランク</th><th>モデル</th><th>特徴</th></tr></thead><tbody><tr><td>1</td><td><code class="rich-inline-code">bytedance/seedream-4.5</code></td><td><strong>close-up realism 9.4/10</strong>、自然な毛穴・キャッチライト・歯、Flux Pro / Midjourney v6.1 超え</td></tr><tr><td>2</td><td><code class="rich-inline-code">bytedance/seedream-5.0-lite</code></td><td>4.5 比で 2-3× 高速だがスキンテクスチャは 4.5 が上</td></tr><tr><td>3</td><td><code class="rich-inline-code">bfl/flux-2-max</code></td><td>プロ向け最高品質、production-ready</td></tr><tr><td>4</td><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td>価格性能比トップ、10 秒以下生成</td></tr><tr><td>5</td><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>黄色被り解消、リアル写真らしさ</td></tr><tr><td>6</td><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>スタジオ品質、studio-level controls</td></tr></tbody></table>
+<h3 id="3-3-キャラクター一貫性-character-consistency">3.3 キャラクター一貫性（character consistency）</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/2f9a8e97-04-ranking-character.png" alt="キャラクター一貫性ランキング cosine類似度スコア" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>ランク</th><th>モデル</th><th>スコア</th></tr></thead><tbody><tr><td>1</td><td><code class="rich-inline-code">bfl/flux-kontext-max</code></td><td><strong>6 連続編集後も cosine 類似度 0.92+</strong>（競合は 0.80 まで低下）</td></tr><tr><td>2</td><td><code class="rich-inline-code">bfl/flux-kontext-pro</code></td><td>Kontext Max と同系、価格半額</td></tr><tr><td>3</td><td><code class="rich-inline-code">bytedance/seedream-4.5</code></td><td>multi-image での顔の一貫性が安定</td></tr><tr><td>4</td><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>多ターン編集に強い</td></tr><tr><td>5</td><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td>multi-ref 最大 9 MP でレファレンス保持</td></tr></tbody></table>
+<h3 id="3-4-イラスト-ベクター-ロゴ">3.4 イラスト・ベクター・ロゴ</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/06d39c11-05-ranking-vector.png" alt="イラスト・ベクター・ロゴ生成ランキング 棒グラフ" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>ランク</th><th>モデル</th><th>特徴</th></tr></thead><tbody><tr><td>1</td><td><code class="rich-inline-code">recraft/recraft-v4.1-pro</code></td><td><strong>SVG ベクター直接出力</strong>、レイヤー構造保持、ロゴ・アイコン用</td></tr><tr><td>2</td><td><code class="rich-inline-code">recraft/recraft-v4.1-utility-pro</code></td><td>フラットライティング、シンプル制御シーン</td></tr><tr><td>3</td><td><code class="rich-inline-code">recraft/recraft-v4.1</code></td><td>コスパ良好なイラスト生成</td></tr><tr><td>4</td><td><code class="rich-inline-code">bfl/flux-2-flex</code></td><td>UI モックアップ、インフォグラフィック</td></tr><tr><td>5</td><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>多様な編集スタイル</td></tr></tbody></table>
+<h3 id="3-5-multi-reference-画像入力対応">3.5 multi-reference 画像入力対応</h3>
+<table class="rich-table"><thead><tr><th>モデル</th><th>上限</th><th>用途</th></tr></thead><tbody><tr><td><code class="rich-inline-code">bfl/flux-2-flex</code></td><td><strong>最大 10 枚 / 合計 14 MP</strong></td><td>最強の multi-ref。タイポ + 参照画像合成</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td><strong>最大 9 MP 合計</strong></td><td>標準的な multi-ref ワークフロー</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-max</code></td><td>編集対応</td><td>プロ品質の multi-ref</td></tr><tr><td><code class="rich-inline-code">bytedance/seedream-4.5</code></td><td>multi-image 強化</td><td>キャラ一貫性 + 構図合成</td></tr><tr><td><code class="rich-inline-code">bytedance/seedream-4.0</code></td><td>複数枚対応</td><td>text + single/multi image</td></tr><tr><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td><strong>最大 14 枚 / 7 MB/枚</strong></td><td>LLM ベースで対話的に統合</td></tr><tr><td><code class="rich-inline-code">google/gemini-3.1-flash-image-preview</code></td><td>14 枚</td><td>高速 multi-image</td></tr><tr><td><code class="rich-inline-code">bfl/flux-kontext-max/pro</code></td><td>単一参照のみ</td><td>キャラ一貫性編集</td></tr><tr><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>単一参照（input_fidelity=high）</td><td>高忠実度編集</td></tr><tr><td><code class="rich-inline-code">bfl/flux-pro-1.0-fill</code></td><td>画像 + mask</td><td>inpainting 専用</td></tr></tbody></table>
+<hr>
+<h3 id="3-6-実出力比較-同じお題を-2-モデルで生成">3.6 実出力比較（同じお題を 2 モデルで生成）</h3>
+<p>ランキング表だけでは「何がどう違うか」は伝わりにくい。同一プロンプトを A（特徴で勝るとされるモデル）と B（比較対象）で実際に生成し、出力差を 12 カテゴリ並べる。各カテゴリで「強み根拠」「画像で見るべき違い」「実務選定の判断軸」を 3 段で解説する。</p>
+<blockquote>
+<p>注: Google Nano Banana 系（<code class="rich-inline-code">google/gemini-*-image</code>）は <code class="rich-inline-code">/v1/images/generations</code> 経由では呼べない（<code class="rich-inline-code">chat-completions</code> 専用）。本比較では B 側を <code class="rich-inline-code">gpt-image-2</code> / <code class="rich-inline-code">flux-2-flex</code> / <code class="rich-inline-code">flux-pro-1.1-ultra</code> / <code class="rich-inline-code">recraft-v4.1</code> などに差し替えている。<code class="rich-inline-code">gemini-3-pro-image</code> の出力を見るには AI SDK v6 の <code class="rich-inline-code">generateText</code> + <code class="rich-inline-code">messages</code> 経由で呼ぶ必要がある（§4.4 参照）。</p>
+</blockquote>
+<h3 id="3-6-1-日本語タイポ精度-openai-gpt-image-2-vs-bfl-flux-2-pro">3.6.1 日本語タイポ精度 — <code class="rich-inline-code">openai/gpt-image-2</code> vs <code class="rich-inline-code">bfl/flux-2-pro</code></h3>
+<p>お題プロンプト: 「店頭 A 型看板ポスター、白背景に大きな日本語キャッチコピー『春の新生活応援セール 全品 30%OFF』、その下に小さく『3 月 31 日まで』、Noto Sans JP Bold、暖色アクセント」</p>
+<p><strong>A: <code class="rich-inline-code">openai/gpt-image-2</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/d72a5a06-c01-a-gpt-image-2.png" alt="A: openai/gpt-image-2" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">bfl/flux-2-pro</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/ad624ffd-c01-b-flux-2-pro.png" alt="B: bfl/flux-2-pro" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: gpt-image-2 は CJK 文字を学習段階で明示サポートし、内部テストで日本語含む 99%+ の精度を公表。Thinking mode 相当の前計画でレイアウトを決めてからレンダリングするため、漢字の偏旁・濁点・促音のような細部が崩れにくい。flux-2-pro は英語タイポは強いが、日本語の特定文字（「応」「援」など画数の多い漢字）でグリフが崩れる事例が多い。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: 「援」「応」「品」など画数の多い漢字、「%」「OFF」など英数混在、「3 月 31 日」の数字 + 単位の組み合わせを拡大して見る。flux 側は漢字の偏旁が一部潰れる、または別字に置換されるケースが見える。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: 日本語キャッチコピー入りの広告バナー / SNS サムネ / 印刷物プレビューは <strong>gpt-image-2 一択</strong>。flux-2-pro を使う場合は OCR でテキストを後段で差し替えるパイプラインが現実的。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-2-人物クローズアップ-フォトリアル-bytedance-seedream-4-5-vs-openai-gpt-image-2">3.6.2 人物クローズアップ・フォトリアル — <code class="rich-inline-code">bytedance/seedream-4.5</code> vs <code class="rich-inline-code">openai/gpt-image-2</code></h3>
+<p>お題プロンプト: 「窓辺で本を読む 20 代女性のポートレート、午後の自然光、close-up、毛穴・キャッチライト・歯のディテール、shallow depth of field」</p>
+<p><strong>A: <code class="rich-inline-code">bytedance/seedream-4.5</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/1092a214-c02-a-seedream-4.5.png" alt="A: bytedance/seedream-4.5" width="2560" height="1440">
+
+<p><strong>B: <code class="rich-inline-code">openai/gpt-image-2</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/71a396b3-c02-b-gpt-image-2.png" alt="B: openai/gpt-image-2" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: seedream-4.5 は close-up realism ベンチで 9.4/10、Flux Pro / Midjourney v6.1 を上回るスコア。毛穴・産毛・歯のエッジ・瞳のキャッチライトといった「ミクロな質感」の学習サンプルが多い。gpt-image-2 は黄被りが改善されたが、肌は「整いすぎる」傾向で、リアル写真感では一歩譲る。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: 鼻先や頬の <strong>毛穴の不均一性</strong>、唇のハイライト、髪 1 本 1 本の解像感、瞳のリングライト。seedream 側は皮膚のミクロテクスチャが粒子レベルで再現される。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: 化粧品 / 美容 / アパレル EC の人物画は <strong>seedream-4.5</strong>。広告クリエイティブで「肌キレイすぎ」が許容される場合や、人物 + 日本語タイポ複合なら gpt-image-2。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-3-キャラ一貫性-t2i-単発-2-シーン同一人物-bfl-flux-2-pro-vs-openai-gpt-image-2">3.6.3 キャラ一貫性（T2I 単発・2 シーン同一人物） — <code class="rich-inline-code">bfl/flux-2-pro</code> vs <code class="rich-inline-code">openai/gpt-image-2</code></h3>
+<blockquote>
+<p>注: 本来「キャラ一貫性」は <code class="rich-inline-code">flux-kontext-max</code> の連続編集（image-to-image）で評価する特徴。本比較では <code class="rich-inline-code">/v1/images/generations</code> で 2 シーンを 1 枚に描く T2I 単発タスクとして実施したため、Kontext 系の真価（6 連続編集後も cosine 0.92+）は別途参照画像入りで検証してほしい。</p>
+</blockquote>
+<p>お題プロンプト: 「横長 2 シーン構成、左半分は雪の夜の街角に立つ黒髪ショート + 赤マフラー + ベージュコートの少女、右半分は同じ少女がカフェのカウンターで湯気のマグカップを持つ。表情と顔立ちは完全に同じ」</p>
+<p><strong>A: <code class="rich-inline-code">bfl/flux-2-pro</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/f2811e03-c03-a-flux-2-pro.png" alt="A: bfl/flux-2-pro" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">openai/gpt-image-2</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/c01f5af0-c03-b-gpt-image-2.png" alt="B: openai/gpt-image-2" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: flux-2-pro は multi-ref 最大 9 MP のレファレンス保持機構が単発生成内でも効き、「同一画像内の 2 シーン」では構図的に顔の特徴ベクトルを共有しやすい。gpt-image-2 はストーリー性 / 構図のロジックは強いが、左右で別キャラを描き分ける誘惑が出やすい。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: 左右の <strong>顔立ち（目の間隔、鼻の形、輪郭）</strong>、<strong>髪型（前髪・揉み上げ）</strong>、<strong>マフラーの色味・編み目</strong>。flux 側はキャラの「同一性」、gpt 側は「シーンの説得力」を優先する傾向。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: シリーズ漫画 / コミック / VTuber 立ち絵バリエは <strong>flux-kontext-max（image2image）一択</strong>。本記事の T2I 単発比較は参考程度に、本番では Kontext 系で参照画像 + 編集プロンプトを使うこと。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-4-ロゴ-ベクター-recraft-recraft-v3-vs-bfl-flux-2-flex">3.6.4 ロゴ・ベクター — <code class="rich-inline-code">recraft/recraft-v3</code> vs <code class="rich-inline-code">bfl/flux-2-flex</code></h3>
+<blockquote>
+<p>注: <code class="rich-inline-code">recraft-v4.1-pro</code> と <code class="rich-inline-code">recraft-v4-pro</code> は本検証中（2026-05-22）に AI Gateway 経由で <code class="rich-inline-code">400 Bad Request</code> を返したため、テキスト位置指定が可能な <code class="rich-inline-code">recraft-v3</code> に差し替えた。recraft 系は API ゲートウェイ仕様変更が頻繁、最新の動作モデルは事前に <code class="rich-inline-code">models</code> コマンドで確認すること。</p>
+</blockquote>
+<p>お題プロンプト: 「ミニマルな SaaS ロゴ『Lumen』、青系グラデ、フラットベクター、明快な幾何形、白背景、SVG クリーンな輪郭」</p>
+<p><strong>A: <code class="rich-inline-code">recraft/recraft-v3</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/e1ed6a5c-c04-a-recraft-v3.png" alt="A: recraft/recraft-v3" width="1024" height="1024">
+
+<p><strong>B: <code class="rich-inline-code">bfl/flux-2-flex</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/7ff68462-c04-b-flux-2-flex.png" alt="B: bfl/flux-2-flex" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: recraft 系は学習データの大半がベクター / ロゴ / アイコンで、輪郭がアンチエイリアス前提のクリーンなパスとして出る。<code class="rich-inline-code">recraft-v4.1-pro</code> は <code class="rich-inline-code">+$0.05</code> で <strong>SVG 直接出力</strong>（ラスタライズ前のパス情報）も取得できる。flux-2-flex は infographics 寄りで、ロゴでは細部のラスタライズ感（境界のノイズ）が残る。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: ロゴアイコンの <strong>輪郭線の鋭利さ</strong>、文字 <code class="rich-inline-code">Lumen</code> の <strong>カーニングと字面の整い</strong>、グラデの <strong>バンディング</strong>。recraft 側は SVG 由来のクリーンエッジが見える。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: ブランドロゴ / アプリアイコン / プリント用ベクターは <strong>recraft-v4.1-pro（SVG オプション付き）</strong>。ヒーローのワンタイム挿絵やマーケサイトのアイキャッチなら flux-2-flex も十分使える。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-5-インフォグラフィック-クラウド-3-層図-bfl-flux-2-flex-vs-openai-gpt-image-2">3.6.5 インフォグラフィック（クラウド 3 層図） — <code class="rich-inline-code">bfl/flux-2-flex</code> vs <code class="rich-inline-code">openai/gpt-image-2</code></h3>
+<p>お題プロンプト: 「CDN / Edge → Functions → Database の 3 層を角丸ボックスで表現、各層にアイコン、矢印で接続、淡いブルーとセージグリーン、英字＋日本語ラベル」</p>
+<p><strong>A: <code class="rich-inline-code">bfl/flux-2-flex</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/9b827577-c05-a-flux-2-flex.png" alt="A: bfl/flux-2-flex" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">openai/gpt-image-2</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/3ee8ba24-c05-b-gpt-image-2.png" alt="B: openai/gpt-image-2" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: flux-2-flex は infographics / typography 特化チューニングで、複数ボックス + ラベル + 矢印の「構造を保ったまま再現する」能力が高い。gpt-image-2 はラベル文字は綺麗だが、層数や矢印方向を入れ替えるなど <strong>構造のドリフト</strong> が出ることがある。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: <strong>3 層が上下に正しく並ぶか</strong>、<strong>矢印の向き</strong>、<strong>ラベル位置とボックスの対応</strong>。flux 側は構造の忠実性、gpt 側はラベルテキストの読みやすさで勝る。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: テックブログのアーキ図 / プレゼン資料 / READMEのバナー図は <strong>flux-2-flex</strong>。プレゼン資料で日本語の細かい説明文を入れたければ gpt-image-2、または Mermaid 等のコードベース図を AI に通さず使う。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-6-高速プロトタイピング-bfl-flux-2-klein-9b-vs-bfl-flux-pro-1-1-ultra">3.6.6 高速プロトタイピング — <code class="rich-inline-code">bfl/flux-2-klein-9b</code> vs <code class="rich-inline-code">bfl/flux-pro-1.1-ultra</code></h3>
+<p>お題プロンプト: 「ファンタジー風の小さな焚き火、夕暮れの山中、橙赤の炎と紫の空、シルエットの木々」</p>
+<p><strong>A: <code class="rich-inline-code">bfl/flux-2-klein-9b（高速・低品質）</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/a3882695-c06-a-flux-2-klein-9b.png" alt="A: bfl/flux-2-klein-9b（高速・低品質）" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">bfl/flux-pro-1.1-ultra（4 MP・高品質）</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/1f3c3f0d-c06-b-flux-pro-1.1-ultra.png" alt="B: bfl/flux-pro-1.1-ultra（4 MP・高品質）" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: flux-2-klein-9b は <strong>1 秒未満</strong>で生成完了、ラフカンプ / ムードボード / プロンプト探索に最適。flux-pro-1.1-ultra は 4 MP 出力（最大 2048×2048 相当）で印刷物にも使えるディテール。同じ「絵柄の方向性確認」目的でも、用途が全く違う。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: 細部の <strong>解像感（薪の質感、葉のシルエット、炎のエッジ）</strong>、<strong>色の階調の滑らかさ</strong>、<strong>全体のコンセプト完成度</strong>。klein は粗いがコンセプトは伝わる、ultra は印刷品質。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: 「20 案出して 1 案選ぶ」プロト段階は <strong>flux-2-klein-9b</strong> で 1 案 $0.001-0.005、最終納品 1 枚は <strong>flux-pro-1.1-ultra</strong> に切り替えるパイプラインがコスト最適。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-7-4k-高解像度-風景パノラマ-openai-gpt-image-2-vs-bfl-flux-pro-1-1-ultra">3.6.7 4K 高解像度・風景パノラマ — <code class="rich-inline-code">openai/gpt-image-2</code> vs <code class="rich-inline-code">bfl/flux-pro-1.1-ultra</code></h3>
+<blockquote>
+<p>注: 本来は <code class="rich-inline-code">gemini-3-pro-image</code>（4K 対応の最高位）との比較だったが、image-only API 非対応のため <code class="rich-inline-code">flux-pro-1.1-ultra</code>（4 MP）に差し替え。</p>
+</blockquote>
+<p>お題プロンプト: 「富士山と満開の桜並木を俯瞰した風景パノラマ、4K 想定の超細密ディテール、葉と花びらが個別判別できる解像感」</p>
+<p><strong>A: <code class="rich-inline-code">openai/gpt-image-2（4096² 対応）</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/b460d760-c07-a-gpt-image-2.png" alt="A: openai/gpt-image-2（4096² 対応）" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">bfl/flux-pro-1.1-ultra（4 MP・2K 16:9 ネイティブ）</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/daa656a3-c07-b-flux-pro-1.1-ultra.png" alt="B: bfl/flux-pro-1.1-ultra（4 MP・2K 16:9 ネイティブ）" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: gpt-image-2 はネイティブ 4096×4096、16:9（3840×2160）が公式サポート。遠景の小オブジェクトまで解像感を保つ。flux-pro-1.1-ultra は 4 MP（例: 2752×1456 等）で、印刷物用の解像度には十分だが gpt-image-2 ほどの「画素密度」はない。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: <strong>遠景の村の家・田畑のディテール</strong>、<strong>桜の花びら 1 枚 1 枚</strong>、<strong>雪冠の凹凸</strong>。等倍で見ると gpt 側の方が「拡大しても破綻しない」。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: A2 ポスター / イベント大判印刷 / Web の Retina ヒーロー画像は <strong>gpt-image-2 4K モード</strong>。SNS / 通常解像度の Web 用なら flux-pro-1.1-ultra で十分（コストが約半額）。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-8-浮世絵-日本画スタイル-openai-gpt-image-2-vs-bfl-flux-2-pro">3.6.8 浮世絵・日本画スタイル — <code class="rich-inline-code">openai/gpt-image-2</code> vs <code class="rich-inline-code">bfl/flux-2-pro</code></h3>
+<p>お題プロンプト: 「葛飾北斎風の浮世絵、大波と漁船、富士山遠景、藍・白・墨の伝統色、版画の輪郭線、和紙の質感」</p>
+<p><strong>A: <code class="rich-inline-code">openai/gpt-image-2</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/b541e219-c08-a-gpt-image-2.png" alt="A: openai/gpt-image-2" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">bfl/flux-2-pro</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/2799d821-c08-b-flux-2-pro.png" alt="B: bfl/flux-2-pro" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: gpt-image-2 は「神奈川沖浪裏」を含む浮世絵作品の典型構図・色彩・線質を強く学習している。スタイル指示語（&quot;ukiyo-e&quot;、&quot;wood-block print&quot;）への追従性が高い。flux-2-pro はテクスチャは豊富だが、版画特有の「平面的な色面 + 輪郭線」よりも陰影付きの絵画的表現に流れがち。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: <strong>波の白い泡の様式化</strong>、<strong>輪郭線の太さと均一性</strong>、<strong>色数の制限（伝統的に 3〜5 色）</strong>、<strong>和紙の繊維感</strong>。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: 和テイストのアートワーク / インバウンド観光素材 / 文化財紹介ビジュアルは <strong>gpt-image-2</strong>。flux-2-pro は「日本画 × 現代風」のミックスや、独自の絵画解釈を求めるアートディレクションで活きる。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-9-商品写真-物撮り-bytedance-seedream-4-5-vs-openai-gpt-image-2">3.6.9 商品写真・物撮り — <code class="rich-inline-code">bytedance/seedream-4.5</code> vs <code class="rich-inline-code">openai/gpt-image-2</code></h3>
+<p>お題プロンプト: 「黒磁器のコーヒーカップ、湯気が立つホットコーヒー、白背景スタジオ、ハイライトと影、上から斜め 45 度」</p>
+<p><strong>A: <code class="rich-inline-code">bytedance/seedream-4.5</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/757715b2-c09-a-seedream-4.5.png" alt="A: bytedance/seedream-4.5" width="2560" height="1440">
+
+<p><strong>B: <code class="rich-inline-code">openai/gpt-image-2</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/ee321225-c09-b-gpt-image-2.png" alt="B: openai/gpt-image-2" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: 3.6.2 と同じく seedream-4.5 のフォトリアル系学習が物撮りでも効く。<strong>素材の質感（磁器の艶 / 液体の表面張力 / 蒸気の透明感）</strong> の再現が一段上。gpt-image-2 はライティングと構図はプロ級だが、液体表面のミクロな揺らぎは整いすぎ。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: <strong>カップの曲面の光の反射の歪み</strong>、<strong>コーヒー表面のクレマの粒度</strong>、<strong>湯気の透過と背景のボケ方</strong>。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: EC の商品撮影代替（バリエ撮影が高コストな少量在庫品など）は <strong>seedream-4.5</strong>。広告のシズル感が欲しい場合は seedream で生成 → Photoshop でディテール追加が王道。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-10-アニメ-イラスト風-bfl-flux-2-pro-vs-recraft-recraft-v4-1">3.6.10 アニメ・イラスト風 — <code class="rich-inline-code">bfl/flux-2-pro</code> vs <code class="rich-inline-code">recraft/recraft-v4.1</code></h3>
+<blockquote>
+<p>注: 本来は <code class="rich-inline-code">gemini-3-pro-image</code> との比較だったが、image-only API 非対応のため <code class="rich-inline-code">recraft-v4.1</code> に差し替え。</p>
+</blockquote>
+<p>お題プロンプト: 「アニメ風の図書館の少女、本棚に囲まれた机で本を読む、繊細な線画 + 淡い水彩風、ジブリ風の温かみ」</p>
+<p><strong>A: <code class="rich-inline-code">bfl/flux-2-pro</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/c4b5c2df-c10-a-flux-2-pro.png" alt="A: bfl/flux-2-pro" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">recraft/recraft-v4.1</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/d77c1ff3-c10-b-recraft-v4.1.png" alt="B: recraft/recraft-v4.1" width="1024" height="1024">
+
+<ul><li><p><strong>強み根拠</strong>: flux-2-pro は anime / illustration スタイル指示への追従性が高く、線の繊細さ（特に髪の毛・睫毛）が安定する。recraft-v4.1 はデザインフラットな塗りに寄せやすく、ジブリ風よりも教科書・絵本イラストに近い表現。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: <strong>線画の細さ・抑揚</strong>、<strong>塗りのグラデーション（水彩風 vs フラット）</strong>、<strong>斜光の質感</strong>。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: アニメ / 漫画 / ライトノベル系の挿絵は <strong>flux-2-pro</strong>。フラットイラスト・教育コンテンツ・パワポ用イラストは <strong>recraft-v4.1</strong>。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-11-多ラベル-er-図-recraft-recraft-v3-vs-bfl-flux-2-flex">3.6.11 多ラベル ER 図 — <code class="rich-inline-code">recraft/recraft-v3</code> vs <code class="rich-inline-code">bfl/flux-2-flex</code></h3>
+<p>お題プロンプト: 「データベース ER 図、5 テーブル（users / orders / products / categories / payments）、各テーブル 3-5 フィールド、外部キー矢印、FK/PK 注釈」</p>
+<p><strong>A: <code class="rich-inline-code">recraft/recraft-v3</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/a7b353a6-c11-a-recraft-v3.png" alt="A: recraft/recraft-v3" width="1024" height="1024">
+
+<p><strong>B: <code class="rich-inline-code">bfl/flux-2-flex</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/71c4c742-c11-b-flux-2-flex.png" alt="B: bfl/flux-2-flex" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: recraft-v3 は <strong>テキスト位置を明示的に指定可能</strong>な唯一系統で、ラベルが多数並ぶ図解で文字が崩れずに整列する。flux-2-flex はインフォグラフィック特化だが、「同種のラベル文字列が大量に並ぶ」ケースでは位置がズレる / 隣接ラベルが合体する事故が出やすい。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: <strong>各テーブルのフィールド名の判読性</strong>、<strong>矢印の起点 / 終点の正確性</strong>、<strong>FK/PK 注釈の位置</strong>。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: 技術ドキュメントの ER 図 / フロー図 / シーケンス図は <strong>本来は Mermaid / PlantUML / Excalidraw でコードベース管理が正解</strong>。AI 生成は「ラフ案」または「読者向け装飾図」までに留め、構造の正確性は人手レビュー必須。</p>
+</li></ul>
+<hr>
+<h3 id="3-6-12-多言語混在バナー-cjk-ラテン-openai-gpt-image-2-vs-bfl-flux-2-flex">3.6.12 多言語混在バナー（CJK + ラテン） — <code class="rich-inline-code">openai/gpt-image-2</code> vs <code class="rich-inline-code">bfl/flux-2-flex</code></h3>
+<blockquote>
+<p>注: 本来は <code class="rich-inline-code">gemini-3-pro-image</code> との比較だったが、image-only API 非対応のため <code class="rich-inline-code">flux-2-flex</code> に差し替え（記事ランキング 3 位の代替）。</p>
+</blockquote>
+<p>お題プロンプト: 「イベントバナー、日本語 + 英字混在『東京 AI Summit 2026 / Tokyo AI Summit 2026』、日付・場所も日英併記、青と白のグラデ」</p>
+<p><strong>A: <code class="rich-inline-code">openai/gpt-image-2</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/e9af5d52-c12-a-gpt-image-2.png" alt="A: openai/gpt-image-2" width="1536" height="864">
+
+<p><strong>B: <code class="rich-inline-code">bfl/flux-2-flex</code></strong></p>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/65d5a187-c12-b-flux-2-flex.png" alt="B: bfl/flux-2-flex" width="1536" height="864">
+
+<ul><li><p><strong>強み根拠</strong>: gpt-image-2 は CJK + ラテンの<strong>混在レイアウト</strong>を学習しており、両言語の <strong>フォントサイズバランス・行間・余白</strong> を統一して描ける。flux-2-flex はタイポ強いが、CJK と英字を「別パスで」描く傾向があり、混在時に行揃え / バランスがずれる。</p>
+</li><li><p><strong>画像で見るべき違い</strong>: <strong>日本語と英字の行揃え</strong>、<strong>フォントのウェイトの統一感</strong>、<strong>数字 <code class="rich-inline-code">2026</code> のグリフ</strong>、<strong>スラッシュ <code class="rich-inline-code">/</code> の文字幅</strong>。</p>
+</li><li><p><strong>実務選定の判断軸</strong>: インバウンド向け広告 / 国際カンファレンス / 多言語 EC バナーは <strong>gpt-image-2</strong>。日本語のみ → 日本語タイポ ✕ gpt-image-2 が依然ベスト。</p>
+</li></ul>
+<hr>
+<h2 id="4-api-パラメータ仕様">4. API パラメータ仕様</h2>
+<h3 id="4-1-image-only-エンドポイントの共通仕様">4.1 image-only エンドポイントの共通仕様</h3>
+<pre data-lang="bash" data-raw="POST%20https%3A%2F%2Fai-gateway.vercel.sh%2Fv1%2Fimages%2Fgenerations" data-raw-encoding="url"><code>POST https://ai-gateway.vercel.sh/v1/images/generations</code></pre>
+<pre data-lang="json" data-raw="%7B%0A%20%20%22model%22%3A%20%22bfl%2Fflux-2-pro%22%2C%0A%20%20%22prompt%22%3A%20%22...%22%2C%0A%20%20%22n%22%3A%201%2C%0A%20%20%22size%22%3A%20%221024x1024%22%2C%0A%20%20%22response_format%22%3A%20%22b64_json%22%2C%0A%20%20%22providerOptions%22%3A%20%7B%0A%20%20%20%20%22blackForestLabs%22%3A%20%7B%0A%20%20%20%20%20%20%22outputFormat%22%3A%20%22jpeg%22%2C%0A%20%20%20%20%20%20%22safetyTolerance%22%3A%202%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D" data-raw-encoding="url"><code>{
+  &quot;model&quot;: &quot;bfl/flux-2-pro&quot;,
+  &quot;prompt&quot;: &quot;...&quot;,
+  &quot;n&quot;: 1,
+  &quot;size&quot;: &quot;1024x1024&quot;,
+  &quot;response_format&quot;: &quot;b64_json&quot;,
+  &quot;providerOptions&quot;: {
+    &quot;blackForestLabs&quot;: {
+      &quot;outputFormat&quot;: &quot;jpeg&quot;,
+      &quot;safetyTolerance&quot;: 2
+    }
+  }
+}</code></pre>
+<h3 id="4-2-プロバイダ別-provideroptions">4.2 プロバイダ別 <code class="rich-inline-code">providerOptions</code></h3>
+<table class="rich-table"><thead><tr><th>Provider</th><th>キー</th><th>パラメータ例</th></tr></thead><tbody><tr><td>Black Forest Labs</td><td><code class="rich-inline-code">blackForestLabs</code></td><td><code class="rich-inline-code">outputFormat</code>（jpeg/png）、<code class="rich-inline-code">safetyTolerance</code>（0-6）</td></tr><tr><td>Google Vertex（Imagen）</td><td><code class="rich-inline-code">googleVertex</code></td><td><code class="rich-inline-code">aspectRatio</code>（&#39;1:1&#39; 等）、<code class="rich-inline-code">safetyFilterLevel</code>（&#39;block_some&#39; 等）</td></tr><tr><td>OpenAI</td><td>（top-level）</td><td><code class="rich-inline-code">quality</code>、<code class="rich-inline-code">style</code>、<code class="rich-inline-code">background</code></td></tr><tr><td>xAI</td><td>（size 不可）</td><td><code class="rich-inline-code">aspectRatio</code> 必須</td></tr></tbody></table>
+<h3 id="4-3-multimodal-chat-completions-経由の画像入出力">4.3 multimodal（chat-completions）経由の画像入出力</h3>
+<pre data-lang="json" data-raw="%7B%0A%20%20%22model%22%3A%20%22google%2Fgemini-3-pro-image%22%2C%0A%20%20%22modalities%22%3A%20%5B%22text%22%2C%20%22image%22%5D%2C%0A%20%20%22messages%22%3A%20%5B%7B%0A%20%20%20%20%22role%22%3A%20%22user%22%2C%0A%20%20%20%20%22content%22%3A%20%5B%0A%20%20%20%20%20%20%7B%20%22type%22%3A%20%22text%22%2C%20%22text%22%3A%20%22%E6%AC%A1%E3%81%AE%E5%8F%82%E7%85%A7%E7%94%BB%E5%83%8F%E3%82%92%2016%3A9%20%E3%81%AB%E5%90%88%E6%88%90%E3%81%97%E3%81%A6...%22%20%7D%2C%0A%20%20%20%20%20%20%7B%20%22type%22%3A%20%22image_url%22%2C%20%22image_url%22%3A%20%7B%20%22url%22%3A%20%22data%3Aimage%2Fpng%3Bbase64%2C...%22%20%7D%20%7D%2C%0A%20%20%20%20%20%20%7B%20%22type%22%3A%20%22image_url%22%2C%20%22image_url%22%3A%20%7B%20%22url%22%3A%20%22data%3Aimage%2Fpng%3Bbase64%2C...%22%20%7D%20%7D%0A%20%20%20%20%5D%0A%20%20%7D%5D%0A%7D" data-raw-encoding="url"><code>{
+  &quot;model&quot;: &quot;google/gemini-3-pro-image&quot;,
+  &quot;modalities&quot;: [&quot;text&quot;, &quot;image&quot;],
+  &quot;messages&quot;: [{
+    &quot;role&quot;: &quot;user&quot;,
+    &quot;content&quot;: [
+      { &quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;次の参照画像を 16:9 に合成して...&quot; },
+      { &quot;type&quot;: &quot;image_url&quot;, &quot;image_url&quot;: { &quot;url&quot;: &quot;data:image/png;base64,...&quot; } },
+      { &quot;type&quot;: &quot;image_url&quot;, &quot;image_url&quot;: { &quot;url&quot;: &quot;data:image/png;base64,...&quot; } }
+    ]
+  }]
+}</code></pre>
+<p>レスポンスは <code class="rich-inline-code">choices[0].message.images[].image_url.url</code> に data: URI 形式で返る。</p>
+<h3 id="4-4-ai-sdk-v6-経由-推奨インターフェース">4.4 AI SDK v6 経由（推奨インターフェース）</h3>
+<pre data-lang="typescript" data-raw="Ly8gaW1hZ2Utb25seSDjg6Ljg4fjg6sKaW1wb3J0IHsgZXhwZXJpbWVudGFsX2dlbmVyYXRlSW1hZ2UgYXMgZ2VuZXJhdGVJbWFnZSB9IGZyb20gJ2FpJzsKY29uc3QgeyBpbWFnZXMgfSA9IGF3YWl0IGdlbmVyYXRlSW1hZ2UoewogIG1vZGVsOiAnYmZsL2ZsdXgtMi1wcm8nLAogIHByb21wdDogJy4uLicsCiAgbjogMiwKICBhc3BlY3RSYXRpbzogJzE2OjknLAp9KTsKCi8vIG11bHRpbW9kYWwgTExN77yITmFubyBCYW5hbmEg57O777yJCmltcG9ydCB7IGdlbmVyYXRlVGV4dCB9IGZyb20gJ2FpJzsKY29uc3QgcmVzdWx0ID0gYXdhaXQgZ2VuZXJhdGVUZXh0KHsKICBtb2RlbDogJ2dvb2dsZS9nZW1pbmktMy1wcm8taW1hZ2UnLAogIG1lc3NhZ2VzOiBbewogICAgcm9sZTogJ3VzZXInLAogICAgY29udGVudDogWwogICAgICB7IHR5cGU6ICd0ZXh0JywgdGV4dDogJy4uLicgfSwKICAgICAgeyB0eXBlOiAnaW1hZ2UnLCBpbWFnZTogaW1hZ2VCdWZmZXIxIH0sCiAgICAgIHsgdHlwZTogJ2ltYWdlJywgaW1hZ2U6IGltYWdlQnVmZmVyMiB9LAogICAgXSwKICB9XSwKfSk7CmNvbnN0IGltYWdlRmlsZXMgPSByZXN1bHQuZmlsZXMuZmlsdGVyKGYgPT4gZi5tZWRpYVR5cGU/LnN0YXJ0c1dpdGgoJ2ltYWdlLycpKTs=" data-raw-encoding="base64"><code>// image-only モデル
+import { experimental_generateImage as generateImage } from 'ai';
+const { images } = await generateImage({
+  model: 'bfl/flux-2-pro',
+  prompt: '...',
+  n: 2,
+  aspectRatio: '16:9',
+});
+
+// multimodal LLM（Nano Banana 系）
+import { generateText } from 'ai';
+const result = await generateText({
+  model: 'google/gemini-3-pro-image',
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'text', text: '...' },
+      { type: 'image', image: imageBuffer1 },
+      { type: 'image', image: imageBuffer2 },
+    ],
+  }],
+});
+const imageFiles = result.files.filter(f =&gt; f.mediaType?.startsWith('image/'));</code></pre>
+<hr>
+<h2 id="5-ユースケース-モデル選定マトリクス">5. ユースケース → モデル選定マトリクス</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/6b1b213b-06-usecase-flow.png" alt="ユースケース → 推奨モデル 判定フロー" width="1536" height="864">
+
+<h3 id="詳細マトリクス">詳細マトリクス</h3>
+<table class="rich-table"><thead><tr><th>ユースケース</th><th>1 位</th><th>2 位</th><th>3 位</th><th>備考</th></tr></thead><tbody><tr><td>日本語タイポ広告</td><td><code class="rich-inline-code">gpt-image-2</code></td><td><code class="rich-inline-code">gemini-3-pro-image</code></td><td><code class="rich-inline-code">flux-2-flex</code></td><td>4096² + 16:9 ネイティブ</td></tr><tr><td>日本語サムネ（SNS）</td><td><code class="rich-inline-code">gemini-3-pro-image</code></td><td><code class="rich-inline-code">gpt-image-2</code></td><td><code class="rich-inline-code">flux-2-pro</code> + プロンプト工夫</td><td>Nano Banana Pro の日本語 85%</td></tr><tr><td>商品写真・人物</td><td><code class="rich-inline-code">seedream-4.5</code></td><td><code class="rich-inline-code">flux-2-max</code></td><td><code class="rich-inline-code">gpt-image-2</code></td><td>毛穴・スキン</td></tr><tr><td>キャラ立ち絵連続</td><td><code class="rich-inline-code">flux-kontext-max</code></td><td><code class="rich-inline-code">seedream-4.5</code></td><td><code class="rich-inline-code">gemini-3-pro-image</code></td><td>6 連続編集で 0.92+</td></tr><tr><td>ロゴ・アイコン（SVG）</td><td><code class="rich-inline-code">recraft-v4.1-pro</code></td><td><code class="rich-inline-code">recraft-v4.1</code></td><td><code class="rich-inline-code">flux-2-flex</code></td><td>recraft はベクター直出力</td></tr><tr><td>インフォグラフィック</td><td><code class="rich-inline-code">flux-2-flex</code></td><td><code class="rich-inline-code">gemini-3-pro-image</code></td><td><code class="rich-inline-code">gpt-image-2</code></td><td>Flex は infographics 特化</td></tr><tr><td>multi-ref ムードボード</td><td><code class="rich-inline-code">flux-2-flex</code></td><td><code class="rich-inline-code">gemini-3-pro-image</code></td><td><code class="rich-inline-code">flux-2-pro</code></td><td>Flex 10 枚/14MP</td></tr><tr><td>inpainting（部分修正）</td><td><code class="rich-inline-code">flux-pro-1.0-fill</code></td><td><code class="rich-inline-code">flux-kontext-max</code></td><td><code class="rich-inline-code">gpt-image-2</code>（edit）</td><td>Fill はマスク必須</td></tr><tr><td>高速プロトタイピング</td><td><code class="rich-inline-code">flux-2-klein-9b</code></td><td><code class="rich-inline-code">flux-pro-1.1</code></td><td><code class="rich-inline-code">gemini-3.1-flash-image-preview</code></td><td>1 秒未満</td></tr><tr><td>4K 出力</td><td><code class="rich-inline-code">gpt-image-2</code>（4096²）</td><td><code class="rich-inline-code">gemini-3-pro-image</code>（4K）</td><td><code class="rich-inline-code">flux-pro-1.1-ultra</code>（4MP）</td><td></td></tr><tr><td>ukiyo-e / 日本画風</td><td><code class="rich-inline-code">gpt-image-2</code></td><td><code class="rich-inline-code">seedream-4.5</code></td><td><code class="rich-inline-code">flux-2-pro</code></td><td>プロンプト精度依存</td></tr></tbody></table>
+<h2 id="6-モデル選定の実務ガイド-コスト-速度-制約">6. モデル選定の実務ガイド（コスト・速度・制約）</h2>
+<p>ベンチマーク順位だけでは「現場で何を選ぶか」は決まらない。本章では月次予算 / レイテンシ / プロバイダ制約という 3 軸を 1 枚ずつ整理し、最後にチェックリスト形式で選定フローをまとめる。</p>
+<h3 id="6-1-1000-枚生成時の総コスト比較-d1">6.1 1000 枚生成時の総コスト比較（D1）</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/8f82cb14-d1-cost-1000.png" alt="1000 枚生成時の総コスト ランキング棒グラフ" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>ランク</th><th>モデル</th><th>1 枚単価</th><th>1000 枚総額</th><th>価格根拠</th></tr></thead><tbody><tr><td>1</td><td><code class="rich-inline-code">prodia/flux-fast-schnell</code></td><td>~$0.001</td><td>$1〜</td><td>プロト・大量バッチ向け</td></tr><tr><td>2</td><td><code class="rich-inline-code">xai/grok-imagine-image</code></td><td>$0.02</td><td>$20</td><td>aspectRatio 指定のみ・サイズ不可</td></tr><tr><td>3</td><td><code class="rich-inline-code">openai/gpt-image-1-mini</code></td><td>$0.03</td><td>$30</td><td>gpt-image-1 系の軽量版</td></tr><tr><td>4</td><td><code class="rich-inline-code">bytedance/seedream-5.0-lite</code></td><td>$0.035</td><td>$35</td><td>4.5 比 2-3× 高速</td></tr><tr><td>5</td><td><code class="rich-inline-code">google/gemini-2.5-flash-image</code></td><td>$0.039</td><td>$39</td><td>Nano Banana 旧、chat-completions 経由</td></tr><tr><td>5</td><td><code class="rich-inline-code">bytedance/seedream-4.5</code></td><td>$0.04</td><td>$40</td><td>人物リアル最高水準</td></tr><tr><td>5</td><td><code class="rich-inline-code">bfl/flux-kontext-pro</code></td><td>$0.04</td><td>$40</td><td>キャラ一貫性編集</td></tr><tr><td>5</td><td><code class="rich-inline-code">recraft/recraft-v4.1</code></td><td>$0.04</td><td>$40</td><td>ベクター・コスパ良</td></tr><tr><td>9</td><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td>~$0.05</td><td>~$50</td><td>価格性能比トップ</td></tr><tr><td>10</td><td><code class="rich-inline-code">bfl/flux-pro-1.1-ultra</code></td><td>$0.06</td><td>$60</td><td>4 MP 出力</td></tr><tr><td>11</td><td><code class="rich-inline-code">bfl/flux-kontext-max</code></td><td>$0.08</td><td>$80</td><td>キャラ一貫性最高位</td></tr><tr><td>12</td><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>~$0.10</td><td>~$100</td><td>日本語タイポ・4K</td></tr><tr><td>13</td><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>$0.1344 (1K/2K), $0.24 (4K)</td><td>$134〜$240</td><td>Nano Banana Pro</td></tr><tr><td>14</td><td><code class="rich-inline-code">recraft/recraft-v4.1-pro</code></td><td>$0.25 (vector $0.30)</td><td>$250〜$300</td><td>SVG 直接出力</td></tr></tbody></table>
+<blockquote>
+<p><strong>注意</strong>: <code class="rich-inline-code">openai/gpt-image-*</code> は input/output token 単価制（input $5/M、output $30-40/M）。1 枚あたりの実費はプロンプト長と出力品質設定で揺れる。上表は典型ケースの近似。</p>
+</blockquote>
+<h3 id="6-2-品質-コスト-4-象限散布図-d2">6.2 品質 × コスト 4 象限散布図（D2）</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/3bcdeb88-d2-quality-cost-scatter.png" alt="品質 × コスト 4象限プロット 散布図" width="1536" height="864">
+
+<p>象限の読み方:</p>
+<ul><li><p><strong>左上「コスパ最強」ゾーン</strong> — <code class="rich-inline-code">xai/grok-imagine-image</code> / <code class="rich-inline-code">seedream-5.0-lite</code> / <code class="rich-inline-code">gemini-2.5-flash-image</code>。$50/月以下で品質 8.0-8.7 を得たいときの第一候補。</p>
+</li><li><p><strong>中央上「バランス型」ゾーン</strong> — <code class="rich-inline-code">seedream-4.5</code> / <code class="rich-inline-code">flux-2-pro</code> / <code class="rich-inline-code">flux-kontext-pro</code> / <code class="rich-inline-code">gpt-image-1.5</code>。$40-$60 帯で品質 8.5-9.4、本記事の <strong>標準推奨ゾーン</strong>。</p>
+</li><li><p><strong>右上「最高品質」ゾーン</strong> — <code class="rich-inline-code">gpt-image-2</code> / <code class="rich-inline-code">gemini-3-pro-image</code> / <code class="rich-inline-code">recraft-v4.1-pro</code> / <code class="rich-inline-code">flux-kontext-max</code>。$80-$250 だが用途特化（日本語 / SVG / 編集）で代替不可な強みを持つ。</p>
+</li><li><p><strong>左下「ドラフト用」ゾーン</strong> — <code class="rich-inline-code">prodia/flux-fast-schnell</code>。$1 で 1000 枚、プロンプト探索専用。</p>
+</li></ul>
+<h3 id="6-3-用途-予算-推奨モデル-マトリクス-d3">6.3 用途 × 予算 推奨モデル マトリクス（D3）</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/d4c4d3d6-d3-budget-matrix.png" alt="用途 × 予算 推奨モデル マトリクス" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>月次予算</th><th>日本語タイポ</th><th>人物・商品写真</th><th>ロゴ・SVG</th><th>インフォグラフィック</th><th>キャラ一貫性編集</th></tr></thead><tbody><tr><td><strong>低（〜$30/月）</strong></td><td><code class="rich-inline-code">gpt-image-1.5</code></td><td><code class="rich-inline-code">seedream-5.0-lite</code></td><td><code class="rich-inline-code">recraft-v4.1</code></td><td><code class="rich-inline-code">flux-2-flex</code></td><td><code class="rich-inline-code">flux-kontext-pro</code></td></tr><tr><td><strong>中（$30〜$100/月）</strong></td><td><code class="rich-inline-code">gpt-image-2</code></td><td><code class="rich-inline-code">seedream-4.5</code></td><td><code class="rich-inline-code">recraft-v4.1</code></td><td><code class="rich-inline-code">flux-2-flex</code></td><td><code class="rich-inline-code">flux-kontext-pro</code></td></tr><tr><td><strong>高（$100超/月）</strong></td><td><code class="rich-inline-code">gpt-image-2</code> + Thinking</td><td><code class="rich-inline-code">seedream-4.5</code> + 後処理</td><td><code class="rich-inline-code">recraft-v4.1-pro</code> (SVG)</td><td><code class="rich-inline-code">flux-2-flex</code> / <code class="rich-inline-code">gpt-image-2</code></td><td><code class="rich-inline-code">flux-kontext-max</code></td></tr></tbody></table>
+<blockquote>
+<p>想定: 月 100 枚程度の運用。バッチ生成（&gt;500 枚/月）では Provider 別の Volume 割引交渉も視野に入る。</p>
+</blockquote>
+<h3 id="6-4-100-枚運用-シナリオ別-月額試算-d4">6.4 「100 枚運用」シナリオ別 月額試算（D4）</h3>
+<p>実務で多い 5 シナリオを月 100 枚で試算した。社内コスト承認の根拠資料としてそのまま流用可能。</p>
+<table class="rich-table"><thead><tr><th>シナリオ</th><th>推奨モデル</th><th>1 枚単価</th><th>100 枚月額</th><th>注釈</th></tr></thead><tbody><tr><td>日本語 SNS サムネ（Twitter/X）</td><td><code class="rich-inline-code">gpt-image-2</code></td><td>$0.08</td><td><strong>$8</strong></td><td>1024² で十分、Thinking off</td></tr><tr><td>日本語広告バナー（印刷 4K）</td><td><code class="rich-inline-code">gpt-image-2</code>（4K）</td><td>$0.15</td><td><strong>$15</strong></td><td>4096² 出力で 1.5-2× 課金</td></tr><tr><td>人物商品写真（EC バリエ撮影代替）</td><td><code class="rich-inline-code">seedream-4.5</code></td><td>$0.04</td><td><strong>$4</strong></td><td>2K 必須・letterbox は後処理</td></tr><tr><td>ロゴ・アイコン納品（SVG）</td><td><code class="rich-inline-code">recraft-v4.1-pro</code> (vector)</td><td>$0.30</td><td><strong>$30</strong></td><td>SVG パス + PNG 同時納品</td></tr><tr><td>シリーズキャラ立ち絵（6 ターン編集）</td><td><code class="rich-inline-code">flux-kontext-max</code></td><td>$0.08 × 6</td><td><strong>$48</strong></td><td>1 キャラ × 6 シーン編集</td></tr><tr><td>インフォグラフィック（ブログ図解）</td><td><code class="rich-inline-code">flux-2-flex</code></td><td>~$0.04</td><td><strong>$4</strong></td><td>テックブログ 1 記事 1 図</td></tr></tbody></table>
+<blockquote>
+<p>ROI 目安: 外注デザイナーで同等品質を発注した場合、SNS サムネ 100 枚で $200-$500、ロゴ 1 件で $300-$2000。<strong>月 $50 のクラウド画像生成予算で、デザイン外注の 1-2 案件分が内製化</strong> できる計算になる。</p>
+</blockquote>
+<h3 id="6-5-モデル制約-早見表-d5">6.5 モデル制約 早見表（D5）</h3>
+<p>API 仕様の差分は実装段階で必ずハマる。以下を <code class="rich-inline-code">models.json</code> 形式で持っておくと CLI ラッパで自動分岐できる。</p>
+<table class="rich-table"><thead><tr><th>モデル</th><th>最小解像度</th><th>最大解像度</th><th>アスペクト指定</th><th>透過 PNG</th><th>SVG 出力</th><th>API</th></tr></thead><tbody><tr><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>1024²</td><td>4096²</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">openai/gpt-image-1.5</code></td><td>1024²</td><td>1536×1024</td><td>size 指定</td><td>✅</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">openai/gpt-image-1</code> / <code class="rich-inline-code">-mini</code></td><td>1024²</td><td>1024²</td><td>size 指定</td><td>✅</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td>標準</td><td>4 MP</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-max</code></td><td>標準</td><td>4 MP</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-flex</code></td><td>標準</td><td>カスタム</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-klein-*</code></td><td>標準</td><td>標準</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bfl/flux-kontext-max/pro</code></td><td>標準</td><td>標準</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only（image2image）</td></tr><tr><td><code class="rich-inline-code">bfl/flux-pro-1.1</code></td><td>標準</td><td>標準</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bfl/flux-pro-1.1-ultra</code></td><td>標準</td><td>4 MP</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bfl/flux-pro-1.0-fill</code></td><td>標準</td><td>標準</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only（要 mask）</td></tr><tr><td><code class="rich-inline-code">bytedance/seedream-4.0</code> / <code class="rich-inline-code">4.5</code></td><td><strong>2K（≥3,686,400 px）</strong></td><td>4K</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">bytedance/seedream-5.0-lite</code></td><td><strong>2K</strong></td><td>標準</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">recraft/recraft-v4.1-pro</code></td><td>1024²</td><td>1024² 系</td><td>size 指定</td><td>❌</td><td><strong>✅</strong></td><td>image-only（仕様変動あり）</td></tr><tr><td><code class="rich-inline-code">recraft/recraft-v4.1</code> / <code class="rich-inline-code">v4</code> / <code class="rich-inline-code">v3</code></td><td>1024²</td><td>1024² 系</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">recraft/recraft-v2</code></td><td>1024²</td><td>1024²</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">xai/grok-imagine-image</code></td><td>—</td><td>—</td><td><strong>aspectRatio のみ</strong></td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">prodia/flux-fast-schnell</code></td><td>標準</td><td>標準</td><td>size 指定</td><td>❌</td><td>❌</td><td>image-only</td></tr><tr><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>1K</td><td><strong>4K</strong></td><td>内部</td><td>❌</td><td>❌</td><td><strong>chat-completions 専用</strong></td></tr><tr><td><code class="rich-inline-code">google/gemini-3.1-flash-image-preview</code></td><td>1K</td><td>2K</td><td>内部</td><td>❌</td><td>❌</td><td><strong>chat-completions 専用</strong></td></tr><tr><td><code class="rich-inline-code">google/gemini-2.5-flash-image</code></td><td>標準</td><td>標準</td><td>内部</td><td>❌</td><td>❌</td><td><strong>chat-completions 専用</strong></td></tr></tbody></table>
+<h3 id="6-6-ハマりやすい失敗パターン-d6">6.6 ハマりやすい失敗パターン（D6）</h3>
+<p>本記事の比較画像 24 枚を生成する過程で実際に踏んだ落とし穴。次に同じ穴に落ちる時間を省く目的でメモする。</p>
+<ol><li><p><strong><code class="rich-inline-code">Seedream-4.5</code> / <code class="rich-inline-code">4.0</code> で <code class="rich-inline-code">size=1536x1024</code> → <code class="rich-inline-code">400 size must be at least 3686400 pixels</code></strong> — Seedream 系は <strong>最低 3,686,400 px（= 2K 16:9 = 2560×1440）必須</strong>。1536×1024 = 1,572,864 px はピクセル数不足で弾かれる。<code class="rich-inline-code">--size 2560x1440</code> または <code class="rich-inline-code">--size 2048x1840</code> 以上を指定する。</p>
+</li><li><p><strong><code class="rich-inline-code">google/gemini-3-pro-image</code> で <code class="rich-inline-code">/v1/images/generations</code> → <code class="rich-inline-code">400 Model is a language model, not an image model</code></strong> — Nano Banana 系は <strong><code class="rich-inline-code">chat-completions</code> 専用</strong>。<code class="rich-inline-code">generateText({ model: 'google/gemini-3-pro-image', messages: [...] })</code> で呼び、レスポンスの <code class="rich-inline-code">result.files</code> から image を取り出す。<code class="rich-inline-code">experimental_generateImage</code> では呼べない。</p>
+</li><li><p><strong><code class="rich-inline-code">recraft/recraft-v4.1-pro</code> で <code class="rich-inline-code">400 Bad Request</code>（詳細メッセージなし）</strong> — recraft 系は AI Gateway 経由で <strong>仕様変動が頻繁</strong>。本検証中（2026-05-22）に <code class="rich-inline-code">v4.1-pro</code> / <code class="rich-inline-code">v4-pro</code> がいずれも 400 を返した。<code class="rich-inline-code">recraft/recraft-v3</code> までフォールバックすると通った。本番ワークフローでは <strong>モデル可用性のヘルスチェック</strong> を毎日叩いておくと事故を防げる。</p>
+</li><li><p><strong><code class="rich-inline-code">xai/grok-imagine-image</code> で <code class="rich-inline-code">size=1536x1024</code> → エラー</strong> — xAI は <strong><code class="rich-inline-code">size</code> パラメータを受け付けない</strong>、<code class="rich-inline-code">aspectRatio: '16:9'</code> を <code class="rich-inline-code">providerOptions</code> に渡す。</p>
+</li><li><p><strong><code class="rich-inline-code">bfl/flux-*</code> の <code class="rich-inline-code">safety_tolerance</code> 範囲がモデル毎に違う</strong> — <code class="rich-inline-code">flux-2-*</code> は 1-5、<code class="rich-inline-code">flux-kontext-*</code> / <code class="rich-inline-code">flux-pro-1.*</code> は 0-6。範囲外を渡すと 400。モデル毎にバリデーション必要。</p>
+</li><li><p><strong><code class="rich-inline-code">gpt-image-2</code> で <code class="rich-inline-code">input_fidelity=high</code> 固定</strong> → 編集コストが 2-3× ベースラインに跳ねる。透過 PNG が必要な編集タスクなら <code class="rich-inline-code">gpt-image-1.5</code> を残すべき。</p>
+</li><li><p><strong>multi-ref 画像の渡し方がプロバイダごとに違う</strong> — <code class="rich-inline-code">image[]</code>（Seedream）、<code class="rich-inline-code">image_prompts[]</code>（BFL）、<code class="rich-inline-code">image</code>（OpenAI 単一）、<code class="rich-inline-code">messages[].content[]</code> の <code class="rich-inline-code">type: image_url</code>（Gemini）と統一されていない。<strong>統一ラッパを 1 枚作っておく</strong> のが先。</p>
+</li></ol>
+<h3 id="6-7-エンドポイント別-sdk-呼び分けサンプル-d7">6.7 エンドポイント別 SDK 呼び分けサンプル（D7）</h3>
+<p>AI SDK v6 で image-only と multimodal を 1 ファイルでハンドルする最小例。</p>
+<pre data-lang="typescript" data-raw="Ly8g57Wx5LiA44Op44OD44OROiDjg6Ljg4fjg6sgSUQg44KS6KaL44Gm5YiG5bKQCmltcG9ydCB7CiAgZXhwZXJpbWVudGFsX2dlbmVyYXRlSW1hZ2UgYXMgZ2VuZXJhdGVJbWFnZSwKICBnZW5lcmF0ZVRleHQsCn0gZnJvbSAnYWknOwoKY29uc3QgTVVMVElNT0RBTF9NT0RFTFMgPSBuZXcgU2V0KFsKICAnZ29vZ2xlL2dlbWluaS0zLXByby1pbWFnZScsCiAgJ2dvb2dsZS9nZW1pbmktMy4xLWZsYXNoLWltYWdlLXByZXZpZXcnLAogICdnb29nbGUvZ2VtaW5pLTIuNS1mbGFzaC1pbWFnZScsCl0pOwoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGdlbmVyYXRlT25lKG9wdHM6IHsKICBtb2RlbDogc3RyaW5nOwogIHByb21wdDogc3RyaW5nOwogIHJlZnM/OiBCdWZmZXJbXTsgLy8g5Y+C54Wn55S75YOPCiAgYXNwZWN0UmF0aW8/OiBzdHJpbmc7Cn0pIHsKICBjb25zdCB7IG1vZGVsLCBwcm9tcHQsIHJlZnMgPSBbXSwgYXNwZWN0UmF0aW8gPSAnMTY6OScgfSA9IG9wdHM7CgogIGlmIChNVUxUSU1PREFMX01PREVMUy5oYXMobW9kZWwpKSB7CiAgICAvLyBjaGF0LWNvbXBsZXRpb25zIOe1jOeUse+8iE5hbm8gQmFuYW5hIOezu++8iQogICAgY29uc3QgcmVzdWx0ID0gYXdhaXQgZ2VuZXJhdGVUZXh0KHsKICAgICAgbW9kZWwsCiAgICAgIG1lc3NhZ2VzOiBbewogICAgICAgIHJvbGU6ICd1c2VyJywKICAgICAgICBjb250ZW50OiBbCiAgICAgICAgICB7IHR5cGU6ICd0ZXh0JywgdGV4dDogcHJvbXB0IH0sCiAgICAgICAgICAuLi5yZWZzLm1hcCgoaW1hZ2UpID0+ICh7IHR5cGU6ICdpbWFnZScgYXMgY29uc3QsIGltYWdlIH0pKSwKICAgICAgICBdLAogICAgICB9XSwKICAgIH0pOwogICAgY29uc3QgZmlsZXMgPSByZXN1bHQuZmlsZXMuZmlsdGVyKChmKSA9PiBmLm1lZGlhVHlwZT8uc3RhcnRzV2l0aCgnaW1hZ2UvJykpOwogICAgcmV0dXJuIGZpbGVzWzBdLnVpbnQ4QXJyYXk7CiAgfQoKICAvLyBpbWFnZS1vbmx5IOe1jOeUse+8iEZMVVggLyBncHQtaW1hZ2UgLyBTZWVkcmVhbSAvIFJlY3JhZnQgLyB4QUnvvIkKICBjb25zdCB7IGltYWdlcyB9ID0gYXdhaXQgZ2VuZXJhdGVJbWFnZSh7CiAgICBtb2RlbCwKICAgIHByb21wdCwKICAgIG46IDEsCiAgICBhc3BlY3RSYXRpbywKICAgIHByb3ZpZGVyT3B0aW9uczogbW9kZWwuc3RhcnRzV2l0aCgnYmZsLycpCiAgICAgID8geyBibGFja0ZvcmVzdExhYnM6IHsgb3V0cHV0Rm9ybWF0OiAnanBlZycsIHNhZmV0eVRvbGVyYW5jZTogMiB9IH0KICAgICAgOiBtb2RlbC5zdGFydHNXaXRoKCd4YWkvJykKICAgICAgPyB7IHhhaTogeyBhc3BlY3RSYXRpbyB9IH0KICAgICAgOiB1bmRlZmluZWQsCiAgfSk7CiAgcmV0dXJuIGltYWdlc1swXS51aW50OEFycmF5Owp9" data-raw-encoding="base64"><code>// 統一ラッパ: モデル ID を見て分岐
+import {
+  experimental_generateImage as generateImage,
+  generateText,
+} from 'ai';
+
+const MULTIMODAL_MODELS = new Set([
+  'google/gemini-3-pro-image',
+  'google/gemini-3.1-flash-image-preview',
+  'google/gemini-2.5-flash-image',
+]);
+
+export async function generateOne(opts: {
+  model: string;
+  prompt: string;
+  refs?: Buffer[]; // 参照画像
+  aspectRatio?: string;
+}) {
+  const { model, prompt, refs = [], aspectRatio = '16:9' } = opts;
+
+  if (MULTIMODAL_MODELS.has(model)) {
+    // chat-completions 経由（Nano Banana 系）
+    const result = await generateText({
+      model,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          ...refs.map((image) =&gt; ({ type: 'image' as const, image })),
+        ],
+      }],
+    });
+    const files = result.files.filter((f) =&gt; f.mediaType?.startsWith('image/'));
+    return files[0].uint8Array;
+  }
+
+  // image-only 経由（FLUX / gpt-image / Seedream / Recraft / xAI）
+  const { images } = await generateImage({
+    model,
+    prompt,
+    n: 1,
+    aspectRatio,
+    providerOptions: model.startsWith('bfl/')
+      ? { blackForestLabs: { outputFormat: 'jpeg', safetyTolerance: 2 } }
+      : model.startsWith('xai/')
+      ? { xai: { aspectRatio } }
+      : undefined,
+  });
+  return images[0].uint8Array;
+}</code></pre>
+<h3 id="6-8-モデル選定-5-ステップ-チェックリスト-d8">6.8 モデル選定 5 ステップ チェックリスト（D8）</h3>
+<p>新規画像生成パイプラインを設計するとき、上から順に確認すれば 30 分でモデルが決まる。</p>
+<ol><li><p><strong>生成物の主用途は何か？</strong> — 日本語タイポ / 人物 / ロゴ / インフォグラ / キャラ連続 / プロトのいずれか → §3.6 の該当ペアを参照。</p>
+</li><li><p><strong>月次バジェットの上限は？</strong> — $30 以下なら §7.3 の「低」列、$30-$100 なら「中」列、それ以上は「高」列。</p>
+</li><li><p><strong>特殊要件はあるか？</strong> — 透過 PNG が必要 → <code class="rich-inline-code">gpt-image-1.5</code>、SVG パス必要 → <code class="rich-inline-code">recraft-v4.1-pro</code>、4K 必要 → <code class="rich-inline-code">gpt-image-2</code> / <code class="rich-inline-code">gemini-3-pro-image</code> / <code class="rich-inline-code">flux-pro-1.1-ultra</code>。</p>
+</li><li><p><strong>API 制約を許容できるか？</strong> — Gemini を使うなら chat-completions パスの実装が必要、xAI を使うなら <code class="rich-inline-code">size</code> 不可、Seedream を使うなら最低 2K 出力。</p>
+</li><li><p><strong>失敗時のフォールバック先は？</strong> — 同カテゴリの 2 位 / 3 位を <code class="rich-inline-code">failover</code> 配列に入れておき、404/400/429 で自動切り替え（AI SDK v6 / AI Gateway の <code class="rich-inline-code">failover</code> 機能を使う）。</p>
+</li></ol>
+<h3 id="6-9-生成速度-レイテンシ-ランキング-d9">6.9 生成速度（レイテンシ）ランキング（D9）</h3>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/knowledge/vercel-ai-gateway-20265/5787dce4-d9-latency-ranking.png" alt="生成速度ランキング 1 枚あたり概算秒数 棒グラフ" width="1536" height="864">
+
+<table class="rich-table"><thead><tr><th>ランク</th><th>モデル</th><th>1 枚生成時間</th><th>用途</th></tr></thead><tbody><tr><td>1</td><td><code class="rich-inline-code">prodia/flux-fast-schnell</code></td><td>~190ms</td><td>大量プロト、UI モック</td></tr><tr><td>2</td><td><code class="rich-inline-code">bfl/flux-2-klein-9b</code></td><td>&lt;1 秒</td><td>案出し、ムードボード</td></tr><tr><td>3</td><td><code class="rich-inline-code">bfl/flux-pro-1.1</code></td><td>~2 秒</td><td>T2I の標準</td></tr><tr><td>4</td><td><code class="rich-inline-code">google/gemini-3.1-flash-image-preview</code></td><td>~3 秒</td><td>multimodal の高速版</td></tr><tr><td>5</td><td><code class="rich-inline-code">bytedance/seedream-5.0-lite</code></td><td>~3 秒</td><td>リアル画像の高速版</td></tr><tr><td>6</td><td><code class="rich-inline-code">bytedance/seedream-4.5</code></td><td>~6 秒</td><td>フォトリアル本番</td></tr><tr><td>7</td><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td>~8 秒</td><td>価格性能比のトップ</td></tr><tr><td>8</td><td><code class="rich-inline-code">bfl/flux-pro-1.1-ultra</code></td><td>~10 秒</td><td>4 MP 印刷品質</td></tr><tr><td>9</td><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>~12 秒</td><td>4K + multimodal</td></tr><tr><td>10</td><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>~15 秒</td><td>日本語タイポ・4K</td></tr><tr><td>11</td><td><code class="rich-inline-code">recraft/recraft-v4.1-pro</code></td><td>~20 秒</td><td>SVG ベクター</td></tr></tbody></table>
+<blockquote>
+<p>インタラクティブ UI（ユーザーが結果を待つ）では 5 秒以下が限界。10 秒を超える場合はストリーミング進捗表示か、<code class="rich-inline-code">generateImage</code> を bg job に出して webhook で完了通知する設計が必要。</p>
+</blockquote>
+<h3 id="6-10-各モデル-強み-1-行サマリ-テーブル-d10">6.10 各モデル「強み 1 行サマリ」テーブル（D10）</h3>
+<table class="rich-table"><thead><tr><th>モデル</th><th>1 行サマリ</th></tr></thead><tbody><tr><td><code class="rich-inline-code">openai/gpt-image-2</code></td><td>日本語タイポ 99%、4K 16:9 ネイティブ、迷ったら第一候補</td></tr><tr><td><code class="rich-inline-code">openai/gpt-image-1.5</code></td><td>gpt-image-2 の廉価版、透過 PNG 必要なときの残し</td></tr><tr><td><code class="rich-inline-code">openai/gpt-image-1-mini</code></td><td>最も安い OpenAI 系、プロト用</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-pro</code></td><td>$0.05/枚で品質バランス最強、価格性能比トップ</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-max</code></td><td>プロ向け production-ready、印刷物にも耐える</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-flex</code></td><td>infographics / typography 特化、multi-ref 10 枚/14 MP</td></tr><tr><td><code class="rich-inline-code">bfl/flux-2-klein-9b</code></td><td>&lt;1 秒生成、プロト・ムードボード専用</td></tr><tr><td><code class="rich-inline-code">bfl/flux-kontext-max</code></td><td>キャラ一貫性編集の絶対王者、6 連続編集で cosine 0.92+</td></tr><tr><td><code class="rich-inline-code">bfl/flux-kontext-pro</code></td><td>Kontext Max の価格半額版、画質は同等</td></tr><tr><td><code class="rich-inline-code">bfl/flux-pro-1.0-fill</code></td><td>inpainting 専用、画像 + mask で部分修正</td></tr><tr><td><code class="rich-inline-code">bfl/flux-pro-1.1</code></td><td>$0.04 T2I、高速</td></tr><tr><td><code class="rich-inline-code">bfl/flux-pro-1.1-ultra</code></td><td>4 MP 出力、印刷物の本命</td></tr><tr><td><code class="rich-inline-code">bytedance/seedream-4.5</code></td><td>人物フォトリアル 9.4/10、毛穴・キャッチライト・歯</td></tr><tr><td><code class="rich-inline-code">bytedance/seedream-5.0-lite</code></td><td>4.5 比 2-3× 高速、参照画像 + Web 検索</td></tr><tr><td><code class="rich-inline-code">bytedance/seedream-4.0</code></td><td>text + single/multi-image、汎用</td></tr><tr><td><code class="rich-inline-code">recraft/recraft-v4.1-pro</code></td><td>SVG ベクター直接出力、ロゴ・アイコンの本命</td></tr><tr><td><code class="rich-inline-code">recraft/recraft-v4.1</code></td><td>コスパ良いベクター、推奨デフォルト</td></tr><tr><td><code class="rich-inline-code">recraft/recraft-v3</code></td><td>テキスト位置指定可、ER 図・ラベル多用に強い</td></tr><tr><td><code class="rich-inline-code">google/gemini-3-pro-image</code></td><td>Nano Banana Pro、日本語 85% + 4K、chat-completions 専用</td></tr><tr><td><code class="rich-inline-code">google/gemini-3.1-flash-image-preview</code></td><td>Nano Banana 2、高速版</td></tr><tr><td><code class="rich-inline-code">google/gemini-2.5-flash-image</code></td><td>Nano Banana 旧、$0.039 で安価</td></tr><tr><td><code class="rich-inline-code">xai/grok-imagine-image</code></td><td>$0.02/枚、aspectRatio のみ、size 不可</td></tr><tr><td><code class="rich-inline-code">prodia/flux-fast-schnell</code></td><td>$0.001/枚、190ms、大量バッチ</td></tr></tbody></table>
+<hr>
+<h2 id="7-参考リンク">7. 参考リンク</h2>
+<h3 id="公式">公式</h3>
+<div class="link-card link-card--no-thumbnail" data-url="https://vercel.com/docs/ai-gateway/capabilities/image-generation"><a href="https://vercel.com/docs/ai-gateway/capabilities/image-generation" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Image Generation</h3><p class="link-card__description">Generate and edit images using AI models through Vercel AI Gateway with support for multiple providers and modalities.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://assets.vercel.com/image/upload/q_auto/front/favicon/vercel/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">vercel.com</span></div></div></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://vercel.com/docs/ai-gateway/capabilities/image-generation/openai"><a href="https://vercel.com/docs/ai-gateway/capabilities/image-generation/openai" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Image Generation with Chat Completions API</h3><p class="link-card__description">Generate and edit images using AI models through Vercel AI Gateway with the Chat Completions API.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://assets.vercel.com/image/upload/q_auto/front/favicon/vercel/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">vercel.com</span></div></div></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://vercel.com/docs/ai-gateway/capabilities/image-generation/ai-sdk"><a href="https://vercel.com/docs/ai-gateway/capabilities/image-generation/ai-sdk" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Image Generation with AI SDK</h3><p class="link-card__description">Generate and edit images using AI models through Vercel AI Gateway with the AI SDK.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://assets.vercel.com/image/upload/q_auto/front/favicon/vercel/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">vercel.com</span></div></div></a></div>
+<div class="link-card" data-url="https://docs.bfl.ml/flux_2/flux2_overview"><a href="https://docs.bfl.ml/flux_2/flux2_overview" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Overview - Black Forest Labs</h3><p class="link-card__description">FLUX.2 model family overview — from sub-second generation to highest quality, with multi-reference editing, color control, and up to 4MP output.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://docs.bfl.ml/mintlify-assets/_mintlify/favicons/bfl/qSW9OJZxslZOxxB1/_generated/favicon/favicon-16x16.png" alt="" width="16" height="16" /><span class="link-card__domain">docs.bfl.ml</span></div></div><img class="link-card__thumbnail" src="https://bfl.mintlify.app/mintlify-assets/_next/image?url=%2F_mintlify%2Fapi%2Fog%3Fdivision%3DFLUX.2%26title%3DOverview%26description%3DFLUX.2%2Bmodel%2Bfamily%2Boverview%2B%25E2%2580%2594%2Bfrom%2Bsub-second%2Bgeneration%2Bto%2Bhighest%2Bquality%252C%2Bwith%2Bmulti-reference%2Bediting%252C%2Bcolor%2Bcontrol%252C%2Band%2Bup%2Bto%2B4MP%2Boutput.%26logoLight%3Dhttps%253A%252F%252Fmintcdn.com%252Fbfl%252FOQ5B17YmedKOM4zs%252Flogo%252Flogo_light.png%253Ffit%253Dmax%2526auto%253Dformat%2526n%253DOQ5B17YmedKOM4zs%2526q%253D85%2526s%253Da11f73fac1ef9254cffa5eb412269198%26logoDark%3Dhttps%253A%252F%252Fmintcdn.com%252Fbfl%252FOQ5B17YmedKOM4zs%252Flogo%252Flogo_dark.png%253Ffit%253Dmax%2526auto%253Dformat%2526n%253DOQ5B17YmedKOM4zs%2526q%253D85%2526s%253Dd933d5452b84db18fc87cd6321e33d08%26primaryColor%3D%2523486A58%26lightColor%3D%2523F6F1E7%26darkColor%3D%252313251D%26backgroundLight%3D%2523f3f1e6%26backgroundDark%3D%252307130e%26background%3Dhttps%253A%252F%252Fcdn.sanity.io%252Fimages%252F2gpum2i6%252Fproduction%252F7a2a3a2a8d594db99b03a24b413a3f59da2f7e9e-2401x1284.jpg&amp;w=1200&amp;q=100" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://bfl.ai/models/flux-2"><a href="https://bfl.ai/models/flux-2" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">FLUX.2 - Next Generation Image Generation | Black Forest Labs</h3><p class="link-card__description">FLUX.2 is the next generation of FLUX image generation from Black Forest Labs. State-of-the-art quality, speed, and controllability for AI image generation.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://bfl.ai/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">bfl.ai</span></div></div></a></div>
+<div class="link-card" data-url="https://deepmind.google/models/gemini-image/pro/"><a href="https://deepmind.google/models/gemini-image/pro/" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Nano Banana Pro</h3><p class="link-card__description">Create and edit images with Nano Banana Pro, for studio-quality levels of precision and control.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://storage.googleapis.com/gdm-deepmind-com-prod-public/icons/google_deepmind_32dp.ico" alt="" width="16" height="16" /><span class="link-card__domain">deepmind.google</span></div></div><img class="link-card__thumbnail" src="https://lh3.googleusercontent.com/BXMwr6ZfwNouxLs_qi-YO4_CGMaesz5w5EAy_bDDaM5cypJFEOANFjLxOn4-SImeYRfDZrsrTRsaBzlDXN5h3mHv2if-BxAzVP8_kn_40FXaDflu=w1200-h630-n-nu-rw" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://ai.google.dev/gemini-api/docs/gemini-3"><a href="https://ai.google.dev/gemini-api/docs/gemini-3" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Gemini generateContent API  |  Google AI for Developers</h3><p class="link-card__description">Learn about the new features of Gemini 3 in the Gemini API.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://www.gstatic.com/devrel-devsite/prod/vb08cbdb02acf7f66ad9727ddfba9d81df8806422eb5dd63dba194c9c8c7997f7/googledevai/images/favicon-new.png" alt="" width="16" height="16" /><span class="link-card__domain">ai.google.dev</span></div></div><img class="link-card__thumbnail" src="https://ai.google.dev/static/site-assets/images/share-gemini-api-2.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://www.recraft.ai/blog/recraft-v4-1-more-beautiful-by-nature"><a href="https://www.recraft.ai/blog/recraft-v4-1-more-beautiful-by-nature" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Recraft V4.1 Release: More Beautiful by Nature</h3><p class="link-card__description">Recraft V4.1 is here: more realistic and quieter photorealism, sharper illustration, aesthetic output. Now in V4.1, V4.1 Vector, and V4.1 Utility.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://cdn.prod.website-files.com/655727fe69827d9a402de12c/6a0dc7be29c096604397f081_sign%20rounding%2032x32.png" alt="" width="16" height="16" /><span class="link-card__domain">www.recraft.ai</span></div></div></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://www.byteplus.com/en/product/Seedream"><a href="https://www.byteplus.com/en/product/Seedream" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Seedream 5.0 Lite Official API | Start for free</h3><p class="link-card__description">ByteDance Seedream 5.0Lite: New High-Aesthetic Image Generation Model with stronger spatial understanding, richer world knowledge, superior aesthetics, higher consistency, and smarter instruction following for precise visual creation.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://sf-bpcms.bytepluscdn.com/obj/byteplus-public-aiso/portal/assets/favicon.png" alt="" width="16" height="16" /><span class="link-card__domain">www.byteplus.com</span></div></div></a></div>
+<h3 id="ベンチマーク-解説">ベンチマーク / 解説</h3>
+<div class="link-card" data-url="https://www.fotomanyagi.com/en/blog/flux-2-models-guide"><a href="https://www.fotomanyagi.com/en/blog/flux-2-models-guide" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Flux 2 Models Complete Guide: Max, Pro, Flex, and Klein Compared</h3><p class="link-card__description">A comprehensive guide to all Flux 2 models. Learn when to use Max, Pro, Flex, or Klein for optimal results in your AI image generation projects.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://www.fotomanyagi.com/icon.png?72e65a52b2043a74" alt="" width="16" height="16" /><span class="link-card__domain">www.fotomanyagi.com</span></div></div><img class="link-card__thumbnail" src="https://fotomanyagi.com/blog/flux-models.webp" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://picsart.com/blog/flux-models-comparison/"><a href="https://picsart.com/blog/flux-models-comparison/" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Every FLUX.2 Model Compared: Specs, Pricing, and Use Cases</h3><p class="link-card__description">Compare all FLUX.2 AI models - Klein, Pro, Flex, Max, and Dev. Pricing, speed, features, and a decision guide to pick the right one.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://cdnblog.picsart.com/2024/11/Size180x180-150x150.png" alt="" width="16" height="16" /><span class="link-card__domain">picsart.com</span></div></div></a></div>
+<div class="link-card link-card--no-thumbnail" data-url="https://arxiv.org/html/2506.15742v2"><a href="https://arxiv.org/html/2506.15742v2" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">FLUX.1 Kontext: Flow Matching for In-Context Image Generation and Editing in Latent Space</h3><div class="link-card__meta"><img class="link-card__favicon" src="https://arxiv.org/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">arxiv.org</span></div></div></a></div>
+<div class="link-card" data-url="https://help.apiyi.com/en/gpt-image-2-vs-gpt-image-1-5-upgrade-8-features-en.html"><a href="https://help.apiyi.com/en/gpt-image-2-vs-gpt-image-1-5-upgrade-8-features-en.html" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">GPT-image-2 vs GPT-image-1.5: A Comprehensive Analysis of 8 Major Upgrades: What Has OpenAI Improved in Its Next-Generation Image Model? - Apiyi.com Blog</h3><p class="link-card__description">title: &quot;gpt-image-2 vs gpt-image-1.5: A Deep Dive into 8 Key Upgrades&quot; description: &quot;Based on leaked LM Arena data, we analyze the 8 major upgrades in gpt-image-2, including text rendering, 4K output, and speed improvements.&quot; tags: [AI, OpenAI, gpt-image-2, image generation, tech analysis] Author's Note: Based on leaked information from LM Arena's gray-box testing, this is</p><div class="link-card__meta"><img class="link-card__favicon" src="https://help.apiyi.com/wp-content/uploads/2024/07/API-KEY-512-150x150.png" alt="" width="16" height="16" /><span class="link-card__domain">help.apiyi.com</span></div></div><img class="link-card__thumbnail" src="https://help.apiyi.com/wp-content/uploads/2025/02/cropped-apiyi-logo-250207.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card link-card--fallback" data-url="https://z-image.ai/blog/seedream-4-5-benchmark"><a href="https://z-image.ai/blog/seedream-4-5-benchmark" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">https://z-image.ai/blog/seedream-4-5-benchmark</h3><div class="link-card__meta"><span class="link-card__domain">z-image.ai</span></div></div></a></div>
+<div class="link-card" data-url="https://www.aifreeapi.com/en/posts/nano-banana-pro-capabilities"><a href="https://www.aifreeapi.com/en/posts/nano-banana-pro-capabilities" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Nano Banana Pro Complete Guide: Text Accuracy, 4K, Aspect Ratios, Multi-Image &amp; Consistency in 2025</h3><p class="link-card__description">Nano Banana Pro delivers five breakthrough capabilities for AI image generation: text rendering with 94% accuracy across multiple languages, native 4K resolution output (4096×4096 pixels), flexible aspect ratio control from 1:1 to 16:9, multi-image composition supporting up to 14 input images, and character consistency maintaining up to 5 identities across unlimited generations.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://www.aifreeapi.com/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">www.aifreeapi.com</span></div></div><img class="link-card__thumbnail" src="https://www.aifreeapi.com/posts/en/nano-banana-pro-capabilities/img/cover.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://www.renderforest.com/blog/seedream-4-5-ai-images-launch-renderforest"><a href="https://www.renderforest.com/blog/seedream-4-5-ai-images-launch-renderforest" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Introducing Seedream 4.5: Cinematic-Grade Visuals for Every Creator</h3><p class="link-card__description">Discover Seedream 4.5 - Renderforest’s upgraded AI model delivering cinematic lighting, 4K detail, stronger consistency, and sharper text for pro-grade visuals.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://www.renderforest.com/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">www.renderforest.com</span></div></div><img class="link-card__thumbnail" src="https://cdn.renderforest.com/website/blog-media/693040d38d96d693040d38d96e.png" alt="" loading="lazy" width="120" height="120" /></a></div>
+<div class="link-card" data-url="https://llm-stats.com/leaderboards/best-ai-for-image-generation"><a href="https://llm-stats.com/leaderboards/best-ai-for-image-generation" target="_blank" rel="noopener noreferrer"><div class="link-card__body"><h3 class="link-card__title">Best AI Image Generator (May 2026) — Top AI Image Generation Models Ranked by Humans</h3><p class="link-card__description">Find the best AI image generator. Compare top text-to-image and image editing models — ranked by blind human votes in the LLM Stats Image Arena, with live arena scores, per-image pricing, and side-by-side examples from Flux, Imagen, GPT-Image, Midjourney, Recraft, and more.</p><div class="link-card__meta"><img class="link-card__favicon" src="https://llm-stats.com/favicon.ico" alt="" width="16" height="16" /><span class="link-card__domain">llm-stats.com</span></div></div><img class="link-card__thumbnail" src="https://llm-stats.com/api/og/category/text-to-image" alt="" loading="lazy" width="120" height="120" /></a></div>
+<hr>
+<h2 id="8-モデル-id-クイックリファレンス">8. モデル ID クイックリファレンス</h2>
+<pre data-lang="text" data-raw="%23%20%E6%97%A5%E6%9C%AC%E8%AA%9E%E3%82%BF%E3%82%A4%E3%83%9D%0Aopenai%2Fgpt-image-2%0Agoogle%2Fgemini-3-pro-image%0Abfl%2Fflux-2-flex%0A%0A%23%20%E4%BA%BA%E7%89%A9%E3%83%BB%E3%83%95%E3%82%A9%E3%83%88%E3%83%AA%E3%82%A2%E3%83%AB%0Abytedance%2Fseedream-4.5%0Abfl%2Fflux-2-max%0A%0A%23%20%E3%82%AD%E3%83%A3%E3%83%A9%E4%B8%80%E8%B2%AB%E6%80%A7%E7%B7%A8%E9%9B%86%0Abfl%2Fflux-kontext-max%0Abfl%2Fflux-kontext-pro%0A%0A%23%20multi-ref%EF%BC%8810%20%E6%9E%9A%E3%80%9C%EF%BC%89%0Abfl%2Fflux-2-flex%0Agoogle%2Fgemini-3-pro-image%0A%0A%23%20%E3%83%AD%E3%82%B4%E3%83%BBSVG%0Arecraft%2Frecraft-v4.1-pro%0Arecraft%2Frecraft-v4.1%0A%0A%23%20inpaint%0Abfl%2Fflux-pro-1.0-fill%0A%0A%23%20%E9%AB%98%E9%80%9F%0Abfl%2Fflux-2-klein-9b%0Abfl%2Fflux-pro-1.1%0Aprodia%2Fflux-fast-schnell" data-raw-encoding="url"><code># 日本語タイポ
+openai/gpt-image-2
+google/gemini-3-pro-image
+bfl/flux-2-flex
+
+# 人物・フォトリアル
+bytedance/seedream-4.5
+bfl/flux-2-max
+
+# キャラ一貫性編集
+bfl/flux-kontext-max
+bfl/flux-kontext-pro
+
+# multi-ref（10 枚〜）
+bfl/flux-2-flex
+google/gemini-3-pro-image
+
+# ロゴ・SVG
+recraft/recraft-v4.1-pro
+recraft/recraft-v4.1
+
+# inpaint
+bfl/flux-pro-1.0-fill
+
+# 高速
+bfl/flux-2-klein-9b
+bfl/flux-pro-1.1
+prodia/flux-fast-schnell</code></pre>

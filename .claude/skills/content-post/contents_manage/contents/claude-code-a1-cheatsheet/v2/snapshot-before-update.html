@@ -1,0 +1,235 @@
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-a1-cheatsheet/fda9a42d-A1-hero.png" alt="" width="1536" height="864">
+
+<blockquote>
+<p><strong>このページの位置づけ</strong>
+全章の <strong>横断リファレンス</strong>。困ったときの早見表（カンペ）として、コピペで使えるようフラットに並べてあります。
+印刷して机に貼っておくと地味に便利。</p>
+</blockquote>
+<blockquote>
+<p>📅 <strong>対応バージョン</strong>：Claude Code v2.1.x（2026年4月時点）
+出典：Anthropic 公式ドキュメント / <a href="https://github.com/FlorianBruniaux/claude-code-ultimate-guide" target="_blank" rel="noopener noreferrer">FlorianBruniaux Cheatsheet</a> / <a href="https://github.com/ykdojo/claude-code-tips" target="_blank" rel="noopener noreferrer">ykdojo/claude-code-tips</a></p>
+</blockquote>
+<p><strong>全部覚える必要はありません。</strong> 「あれ、なんだっけ？」と思ったときに、ここに戻ってくれば OK です。</p>
+<hr>
+<h2 id="起動オプション-cli">🚀 起動オプション（CLI）</h2>
+<p>ターミナルで <code class="rich-inline-code">claude</code> コマンドの後ろにつけるフラグ（起動オプション）の一覧です。よく使うやつから順に並べました。</p>
+<h3 id="基本">基本</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">claude</code></td><td>インタラクティブセッション開始</td></tr><tr><td><code class="rich-inline-code">claude &quot;&lt;prompt&gt;&quot;</code></td><td>プロンプトを与えて起動</td></tr><tr><td><code class="rich-inline-code">claude -p &quot;&lt;prompt&gt;&quot;</code></td><td>出力モード（パイプ向き）</td></tr><tr><td><code class="rich-inline-code">claude --version</code></td><td>バージョン表示</td></tr><tr><td><code class="rich-inline-code">claude --help</code></td><td>ヘルプ</td></tr></tbody></table>
+<h3 id="セッション管理">セッション管理</h3>
+<p>「昨日の続きから」をやりたいときの定番。<code class="rich-inline-code">-c</code> だけ覚えておけば9割なんとかなります。</p>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">claude -c</code></td><td><strong>直前のセッションを再開</strong></td></tr><tr><td><code class="rich-inline-code">claude -r</code></td><td>セッション一覧から選んで再開</td></tr><tr><td><code class="rich-inline-code">claude -r &lt;session-id&gt;</code></td><td>ID指定で再開</td></tr><tr><td><code class="rich-inline-code">claude --resume</code></td><td><code class="rich-inline-code">-r</code> と同じ</td></tr><tr><td><code class="rich-inline-code">claude --teleport</code></td><td>Web/モバイルで開始したセッションを引き継ぐ</td></tr><tr><td><code class="rich-inline-code">claude --fork-session</code></td><td>セッションを分岐</td></tr></tbody></table>
+<h3 id="モデル-思考量">モデル / 思考量</h3>
+<p>どのモデル（Opus / Sonnet / Haiku）で起動するかの指定です。</p>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">claude --model opus</code></td><td>Opus で起動</td></tr><tr><td><code class="rich-inline-code">claude --model sonnet</code></td><td>Sonnet で起動</td></tr><tr><td><code class="rich-inline-code">claude --model haiku</code></td><td>Haiku で起動</td></tr><tr><td><code class="rich-inline-code">claude --model opusplan</code></td><td>Plan = Opus / Exec = 別</td></tr><tr><td><code class="rich-inline-code">claude --effort max</code></td><td>最大思考モード</td></tr></tbody></table>
+<h3 id="モード切替">モード切替</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">claude --plan</code></td><td>プランモードで起動</td></tr><tr><td><code class="rich-inline-code">claude --auto-edit</code></td><td>編集自動承認</td></tr><tr><td><code class="rich-inline-code">claude --dangerously-skip-permissions</code></td><td>⚠️ 全権限スキップ（サンドボックス専用）</td></tr></tbody></table>
+<blockquote>
+<p>⚠️ <code class="rich-inline-code">--dangerously-skip-permissions</code> は名前の通り危険なやつなので、<strong>Docker などのサンドボックス環境以外では絶対に使わない</strong> でください。</p>
+</blockquote>
+<h3 id="スクリプト連携-パイプ">スクリプト連携（パイプ）</h3>
+<p><code class="rich-inline-code">-p</code> をつけると、他のコマンドの結果を Claude に流し込めます。CI や自動化でよく使うパターン。</p>
+<pre data-lang="bash"><code># ファイル内容を渡す
+cat error.log | claude -p &quot;このログを分析&quot;
+
+# CIでの自動レビュー
+git diff main --name-only | claude -p &quot;変更ファイルをセキュリティ観点でレビュー&quot;
+
+# tail と組み合わせる
+tail -200 app.log | claude -p &quot;Slackで通知すべき異常があれば教えて&quot;</code></pre>
+<h3 id="出力フォーマット">出力フォーマット</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">claude -p --output-format json</code></td><td>JSON出力</td></tr><tr><td><code class="rich-inline-code">claude -p --output-format text</code></td><td>テキスト</td></tr><tr><td><code class="rich-inline-code">claude -p --output-format markdown</code></td><td>Markdown</td></tr></tbody></table>
+<hr>
+<h2 id="セッション内-スラッシュコマンド">🎯 セッション内 スラッシュコマンド</h2>
+<p>セッション中に <code class="rich-inline-code">/</code> から始めて打つコマンドの一覧。<strong>全部覚える必要はゼロ</strong>、必要になったときに調べて使えば十分です。</p>
+<h3 id="基本操作">基本操作</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/help</code></td><td>ヘルプ</td></tr><tr><td><code class="rich-inline-code">/clear</code></td><td>履歴リセット</td></tr><tr><td><code class="rich-inline-code">/exit</code></td><td>終了</td></tr><tr><td><code class="rich-inline-code">/init</code></td><td>CLAUDE.md 初期化</td></tr><tr><td><code class="rich-inline-code">/status</code></td><td>セッション状態</td></tr><tr><td><code class="rich-inline-code">/cost</code></td><td>コスト確認</td></tr></tbody></table>
+<h3 id="コンテキスト管理">コンテキスト管理</h3>
+<p>会話が長くなって重くなってきたとき用。</p>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/context</code></td><td>コンテキスト構成可視化</td></tr><tr><td><code class="rich-inline-code">/compact</code></td><td>履歴圧縮</td></tr><tr><td><code class="rich-inline-code">/branch</code></td><td>セッション分岐</td></tr><tr><td><code class="rich-inline-code">/recap</code></td><td>休憩明けに要約を表示（v2.1.108+）</td></tr></tbody></table>
+<h3 id="モデル-モード">モデル / モード</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/model</code></td><td>モデル切替（sonnet/opus/opusplan）</td></tr><tr><td><code class="rich-inline-code">/plan</code></td><td>プランモード（変更しない）</td></tr><tr><td><code class="rich-inline-code">/execute</code></td><td>プランモード解除</td></tr><tr><td><code class="rich-inline-code">/ultraplan</code></td><td>クラウドで計画策定（v2.1.91+）</td></tr><tr><td><code class="rich-inline-code">/effort [low|mid|high|xhigh|max]</code></td><td>思考量制御（v2.1.111+）</td></tr><tr><td><code class="rich-inline-code">/fast</code></td><td>高速モード（2.5×速・6×コスト）</td></tr><tr><td><code class="rich-inline-code">/voice</code></td><td>音声入力ON/OFF</td></tr></tbody></table>
+<h3 id="設定-管理">設定 / 管理</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/config</code></td><td>設定変更</td></tr><tr><td><code class="rich-inline-code">/permissions</code></td><td>権限管理</td></tr><tr><td><code class="rich-inline-code">/memory</code></td><td>メモリ確認</td></tr><tr><td><code class="rich-inline-code">/mcp</code></td><td>MCP接続状態</td></tr><tr><td><code class="rich-inline-code">/agents</code></td><td>サブエージェント一覧</td></tr><tr><td><code class="rich-inline-code">/skills</code></td><td>スキル一覧</td></tr><tr><td><code class="rich-inline-code">/hooks</code></td><td>フック一覧</td></tr></tbody></table>
+<h3 id="サブエージェント-タスク">サブエージェント / タスク</h3>
+<p>並行処理系のコマンド。1人で複数の作業を回したいときに。</p>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/agents</code></td><td>サブエージェント定義</td></tr><tr><td><code class="rich-inline-code">/tasks</code></td><td>バックグラウンドタスク一覧</td></tr><tr><td><code class="rich-inline-code">/loop [interval] &lt;prompt&gt;</code></td><td>ループ実行（v2.1.71+）</td></tr><tr><td><code class="rich-inline-code">/batch &lt;prompt&gt;</code></td><td>並列ワークツリーで一括実行</td></tr><tr><td><code class="rich-inline-code">/btw &lt;question&gt;</code></td><td>一時的に脇道質問（履歴汚染なし）</td></tr><tr><td><code class="rich-inline-code">/aside</code></td><td>サイドクエスチョン</td></tr></tbody></table>
+<h3 id="リモート-モバイル">リモート / モバイル</h3>
+<p>外出先からスマホで操作したい人向け。</p>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/remote-control</code></td><td>スマホから操作（Pro/Max）</td></tr><tr><td><code class="rich-inline-code">/rc</code></td><td><code class="rich-inline-code">/remote-control</code> のエイリアス</td></tr><tr><td><code class="rich-inline-code">/mobile</code></td><td>モバイルアプリDLリンク</td></tr><tr><td><code class="rich-inline-code">/dispatch</code></td><td>チャネル経由でタスク受信</td></tr><tr><td><code class="rich-inline-code">/teleport</code></td><td>Web/モバイルセッションを引き継ぎ</td></tr><tr><td><code class="rich-inline-code">/desktop</code></td><td>デスクトップアプリへ移管</td></tr><tr><td><code class="rich-inline-code">/schedule</code></td><td>スケジュール実行（クラウド）</td></tr></tbody></table>
+<h3 id="出力-ユーティリティ">出力 / ユーティリティ</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/copy</code></td><td>最後の応答をクリップボードへ</td></tr><tr><td><code class="rich-inline-code">/rename &lt;name&gt;</code></td><td>セッション名変更</td></tr><tr><td><code class="rich-inline-code">/stats</code></td><td>利用統計</td></tr><tr><td><code class="rich-inline-code">/insights</code></td><td>分析・最適化レポート</td></tr><tr><td><code class="rich-inline-code">/simplify</code></td><td>過剰実装の検出と修正</td></tr><tr><td><code class="rich-inline-code">/debug</code></td><td>系統的デバッグ</td></tr><tr><td><code class="rich-inline-code">/tui [fullscreen]</code></td><td>TUI表示切替（v2.1.110+）</td></tr><tr><td><code class="rich-inline-code">/focus</code></td><td>フォーカスビュー</td></tr></tbody></table>
+<h3 id="学習-ガイド">学習 / ガイド</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/powerup</code></td><td>インタラクティブレッスン</td></tr><tr><td><code class="rich-inline-code">/release-notes</code></td><td>リリースノート確認</td></tr></tbody></table>
+<h3 id="git-github-連携">Git / GitHub 連携</h3>
+<table class="rich-table"><thead><tr><th>コマンド</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">/install-github-app</code></td><td>GitHub アプリ連携</td></tr><tr><td><code class="rich-inline-code">/pr-comments</code></td><td>PRコメント取得</td></tr><tr><td><code class="rich-inline-code">/review</code></td><td>PR レビュー</td></tr></tbody></table>
+<hr>
+<h2 id="キーボードショートカット">⌨️ キーボードショートカット</h2>
+<p>ショートカットキー（特定のキーの組み合わせで動作する機能）の早見表。<strong><code class="rich-inline-code">Esc × 2</code>（巻き戻し）と <code class="rich-inline-code">Shift+Tab</code>（モード切替）の2つだけは覚える価値あり</strong> です。</p>
+<h3 id="グローバル">グローバル</h3>
+<table class="rich-table"><thead><tr><th>ショートカット</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">Shift+Tab</code></td><td>パーミッションモード循環</td></tr><tr><td><code class="rich-inline-code">Esc × 2</code></td><td>巻き戻し</td></tr><tr><td><code class="rich-inline-code">Ctrl+C</code></td><td>中断</td></tr><tr><td><code class="rich-inline-code">Ctrl+C × 2</code></td><td>強制終了</td></tr><tr><td><code class="rich-inline-code">Ctrl+D</code></td><td>終了</td></tr><tr><td><code class="rich-inline-code">Ctrl+L</code></td><td>画面クリア（履歴保持）</td></tr><tr><td><code class="rich-inline-code">Ctrl+R</code></td><td>コマンド履歴検索</td></tr><tr><td><code class="rich-inline-code">Tab</code></td><td>自動補完</td></tr><tr><td><code class="rich-inline-code">Shift+Enter</code></td><td>改行</td></tr><tr><td><code class="rich-inline-code">Ctrl+B</code></td><td>バックグラウンドタスク</td></tr><tr><td><code class="rich-inline-code">Ctrl+F × 2</code></td><td>バックグラウンドエージェント全停止</td></tr><tr><td><code class="rich-inline-code">Alt+T</code></td><td>思考モードON/OFF</td></tr><tr><td><code class="rich-inline-code">Ctrl+O</code></td><td>思考プロセス可視化</td></tr><tr><td><code class="rich-inline-code">Space</code> (長押し)</td><td>音声入力（<code class="rich-inline-code">/voice</code> 有効時）</td></tr></tbody></table>
+<h3 id="入力ボックス内">入力ボックス内</h3>
+<p>メッセージを書いてる最中の編集ショートカット。慣れると指がだいぶ楽になります。</p>
+<table class="rich-table"><thead><tr><th>ショートカット</th><th>動作</th></tr></thead><tbody><tr><td><code class="rich-inline-code">Ctrl+A</code></td><td>行頭へ</td></tr><tr><td><code class="rich-inline-code">Ctrl+E</code></td><td>行末へ</td></tr><tr><td><code class="rich-inline-code">Option+←/→</code></td><td>単語単位移動</td></tr><tr><td><code class="rich-inline-code">Ctrl+W</code></td><td>直前の単語削除</td></tr><tr><td><code class="rich-inline-code">Ctrl+U</code></td><td>カーソルから行頭まで削除</td></tr><tr><td><code class="rich-inline-code">Ctrl+K</code></td><td>カーソルから行末まで削除</td></tr><tr><td><code class="rich-inline-code">Ctrl+G</code></td><td>外部エディタで編集</td></tr><tr><td><code class="rich-inline-code">\+Enter</code></td><td>改行入力</td></tr></tbody></table>
+<h3 id="ide-連携-vs-code-jetbrains">IDE 連携（VS Code / JetBrains）</h3>
+<table class="rich-table"><thead><tr><th>IDE</th><th>プラグイン起動</th></tr></thead><tbody><tr><td>VS Code</td><td><code class="rich-inline-code">Alt+K</code></td></tr><tr><td>JetBrains</td><td><code class="rich-inline-code">Cmd+Option+K</code></td></tr></tbody></table>
+<hr>
+<h2 id="入力中の便利記法">📝 入力中の便利記法</h2>
+<p>メッセージの中で使える特別な記法。<code class="rich-inline-code">@</code> で始めるとファイル指定、<code class="rich-inline-code">!</code> で始めるとシェル実行、というルール。</p>
+<table class="rich-table"><thead><tr><th>記法</th><th>意味</th><th>例</th></tr></thead><tbody><tr><td><code class="rich-inline-code">@path/to/file.ts</code></td><td>ファイルを文脈に取り込む</td><td><code class="rich-inline-code">@src/auth.ts のバグを直して</code></td></tr><tr><td><code class="rich-inline-code">@agent-name</code></td><td>サブエージェント呼び出し</td><td><code class="rich-inline-code">@reviewer を実行</code></td></tr><tr><td><code class="rich-inline-code">!shell-command</code></td><td>シェル実行</td><td><code class="rich-inline-code">!git status</code></td></tr><tr><td><code class="rich-inline-code">$1</code>, <code class="rich-inline-code">$2</code>, <code class="rich-inline-code">$ARGUMENTS</code></td><td>スラッシュコマンド内引数</td><td>カスタムコマンドで使用</td></tr></tbody></table>
+<hr>
+<h2 id="パーミッション">🔐 パーミッション</h2>
+<p>パーミッション（権限の厳しさ）の設定方法。<code class="rich-inline-code">settings.json</code> に書いておくと、毎回確認されるストレスが減ります。</p>
+<h3 id="評価順">評価順</h3>
+<pre><code>Deny → Ask → Allow</code></pre>
+<blockquote>
+<p>上から順にチェックされます。Deny に書いたものは絶対ブロック、Ask は確認、Allow は自動許可。<strong>「禁止」が一番強い</strong> と覚えておけば OK。</p>
+</blockquote>
+<h3 id="settings-json-での書き方">settings.json での書き方</h3>
+<pre data-lang="json"><code>{
+  &quot;permissions&quot;: {
+    &quot;allow&quot;: [
+      &quot;Bash(npm test)&quot;,
+      &quot;Bash(npm run *)&quot;,
+      &quot;Bash(git status)&quot;,
+      &quot;Read(*)&quot;,
+      &quot;Edit(src/**)&quot;
+    ],
+    &quot;ask&quot;: [
+      &quot;Bash(git push:*)&quot;,
+      &quot;Bash(npm install:*)&quot;
+    ],
+    &quot;deny&quot;: [
+      &quot;Read(./.env)&quot;,
+      &quot;Read(./.env.*)&quot;,
+      &quot;Read(./secrets/**)&quot;,
+      &quot;Bash(rm -rf:*)&quot;,
+      &quot;Bash(sudo:*)&quot;,
+      &quot;Bash(git push --force:*)&quot;
+    ]
+  }
+}</code></pre>
+<h3 id="よくあるパターン">よくあるパターン</h3>
+<table class="rich-table"><thead><tr><th>パターン</th><th>説明</th></tr></thead><tbody><tr><td><code class="rich-inline-code">Bash(git status)</code></td><td><code class="rich-inline-code">git status</code> 完全一致</td></tr><tr><td><code class="rich-inline-code">Bash(git status:*)</code></td><td><code class="rich-inline-code">git status</code> で始まるすべて</td></tr><tr><td><code class="rich-inline-code">Read(./src/**)</code></td><td><code class="rich-inline-code">src/</code> 以下の全ファイル読み込み</td></tr><tr><td><code class="rich-inline-code">Read(./.env*)</code></td><td><code class="rich-inline-code">.env</code> で始まるファイル全部</td></tr></tbody></table>
+<hr>
+<h2 id="設定ファイルの場所">🎨 設定ファイルの場所</h2>
+<p>「あの設定どこに書くんだっけ？」と迷いがちなので、置き場所一覧です。</p>
+<table class="rich-table"><thead><tr><th>ファイル</th><th>スコープ</th><th>主な内容</th></tr></thead><tbody><tr><td><code class="rich-inline-code">~/.claude/settings.json</code></td><td>グローバル</td><td>キーバインド・テーマ・グローバル権限</td></tr><tr><td><code class="rich-inline-code">~/.claude/CLAUDE.md</code></td><td>グローバル指示</td><td>全プロジェクト共通の指示</td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.claude/settings.json</code></td><td>プロジェクト共有</td><td>チームで共有したいフック・MCP</td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.claude/settings.local.json</code></td><td>プロジェクト個人</td><td>git-ignore推奨</td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/CLAUDE.md</code></td><td>プロジェクト指示</td><td>プロジェクト固有の指示</td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.mcp.json</code></td><td>MCP設定</td><td>プロジェクトのMCPサーバー</td></tr><tr><td><code class="rich-inline-code">~/.claude/skills/</code></td><td>グローバルスキル</td><td></td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.claude/skills/</code></td><td>プロジェクトスキル</td><td></td></tr><tr><td><code class="rich-inline-code">~/.claude/agents/</code></td><td>グローバルエージェント</td><td></td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.claude/agents/</code></td><td>プロジェクトエージェント</td><td></td></tr><tr><td><code class="rich-inline-code">~/.claude/commands/</code></td><td>グローバルコマンド</td><td></td></tr><tr><td><code class="rich-inline-code">&lt;project&gt;/.claude/commands/</code></td><td>プロジェクトコマンド</td><td></td></tr><tr><td><code class="rich-inline-code">~/.claude/projects/</code></td><td>セッション履歴</td><td></td></tr></tbody></table>
+<hr>
+<h2 id="環境変数">🌐 環境変数</h2>
+<p>環境変数（OSが持っている設定値）で挙動を変えられるやつ一覧。</p>
+<table class="rich-table"><thead><tr><th>変数</th><th>効果</th></tr></thead><tbody><tr><td><code class="rich-inline-code">ANTHROPIC_API_KEY</code></td><td>API キー</td></tr><tr><td><code class="rich-inline-code">CLAUDE_AUTO_COMPACT_PERCENTAGE_OVERRIDE</code></td><td>自動圧縮の閾値 (0-100)</td></tr><tr><td><code class="rich-inline-code">DISABLE_AUTOUPDATER</code></td><td>自動更新を無効化（システムプロンプト削減）</td></tr><tr><td><code class="rich-inline-code">DISABLE_TELEMETRY</code></td><td>テレメトリ無効化</td></tr><tr><td><code class="rich-inline-code">MAX_THINKING_TOKENS</code></td><td>思考トークン上限</td></tr><tr><td><code class="rich-inline-code">ENABLE_LSP_TOOL</code></td><td>LSPツール有効化</td></tr><tr><td><code class="rich-inline-code">ANTHROPIC_BEDROCK</code></td><td>AWS Bedrock 使用</td></tr><tr><td><code class="rich-inline-code">ANTHROPIC_VERTEX</code></td><td>Google Vertex AI 使用</td></tr><tr><td><code class="rich-inline-code">CLAUDE_CODE_USE_BEDROCK</code></td><td>Bedrock 経由</td></tr></tbody></table>
+<hr>
+<h2 id="mcp管理">🔧 MCP管理</h2>
+<p>MCP（外部ツールとの接続規格）サーバーを追加・削除するときのコマンド。</p>
+<pre data-lang="bash"><code># 追加
+claude mcp add &lt;name&gt; &lt;command&gt; [-- &lt;args&gt;]
+
+# 環境変数付きで追加
+claude mcp add github -e GITHUB_TOKEN=ghp_xxx -- npx -y @modelcontextprotocol/server-github
+
+# 一覧
+claude mcp list
+
+# 削除
+claude mcp remove &lt;name&gt;
+
+# 接続確認
+/mcp</code></pre>
+<hr>
+<h2 id="プラグイン管理">🎁 プラグイン管理</h2>
+<p>プラグイン（拡張機能パック）の操作コマンド。</p>
+<pre data-lang="bash"><code># マーケットプレイス追加
+claude plugin marketplace add &lt;owner/repo&gt;
+
+# プラグインインストール
+claude plugin install &lt;plugin-name&gt;
+
+# 一覧
+claude plugin list
+
+# 削除
+claude plugin remove &lt;plugin-name&gt;</code></pre>
+<p>人気マーケットプレイス例：</p>
+<ul><li><p><code class="rich-inline-code">ykdojo/claude-code-tips</code> — dx@ykdojo</p>
+</li><li><p><code class="rich-inline-code">anthropics/claude-skills</code> — 公式</p>
+</li></ul>
+<hr>
+<h2 id="skills-sh-cli">📦 skills.sh CLI</h2>
+<p>スキル（Claude に「こういうときはこうやって」と教える小さい指示集）を npm 経由で管理するツール。</p>
+<pre data-lang="bash"><code># 検索
+npx skills find &lt;keyword&gt;
+
+# インストール
+npx skills add &lt;owner/repo@skill&gt; [-g] [-y]
+
+# 一覧
+npx skills list
+
+# 更新確認
+npx skills check
+
+# 全更新
+npx skills update
+
+# 自作スキル初期化
+npx skills init &lt;skill-name&gt;</code></pre>
+<hr>
+<h2 id="思考トリガーワード-プロンプト内で使う">💬 思考トリガーワード（プロンプト内で使う）</h2>
+<p>プロンプト本文に書くだけで、Claude の思考量（じっくり考えるか/サクッと答えるか）を変えられる魔法の単語。</p>
+<table class="rich-table"><thead><tr><th>ワード</th><th>思考量</th></tr></thead><tbody><tr><td>（何もなし）</td><td>標準</td></tr><tr><td><code class="rich-inline-code">think</code></td><td>中</td></tr><tr><td><code class="rich-inline-code">think hard</code></td><td>多</td></tr><tr><td><code class="rich-inline-code">think harder</code></td><td>より多</td></tr><tr><td><code class="rich-inline-code">ultrathink</code></td><td>最大</td></tr></tbody></table>
+<p>例：</p>
+<pre><code>このアーキテクチャの問題点を ultrathink で分析してください</code></pre>
+<hr>
+<h2 id="ホットなtipsダイジェスト">🔥 ホットなTipsダイジェスト</h2>
+<p>知ってると地味にうれしい小ネタ集。</p>
+<h3 id="一言で覚える系">一言で覚える系</h3>
+<pre data-lang="bash"><code># 過去会話を grep
+grep -l -i &quot;keyword&quot; ~/.claude/projects/*/*.jsonl
+
+# 直前のClaude応答をクリップボードへ
+/copy
+
+# 急いで戻したい
+Esc Esc
+
+# 5分おきにデプロイチェック
+/loop 5m check the deploy
+
+# サンドボックスで全権限
+docker run -it -v $(pwd):/work node:22 claude --dangerously-skip-permissions</code></pre>
+<h3 id="claude-md-育成系">CLAUDE.md 育成系</h3>
+<ul><li><p>3ヶ月に1回 <code class="rich-inline-code">/dx:review-claudemd</code></p>
+</li><li><p>詳細は <code class="rich-inline-code">docs/</code> に外出し → CLAUDE.md は薄く</p>
+</li><li><p>固有名詞・ライブラリ名で具体化</p>
+</li></ul>
+<h3 id="コンテキスト節約系">コンテキスト節約系</h3>
+<ul><li><p><code class="rich-inline-code">CLAUDE_AUTO_COMPACT_PERCENTAGE_OVERRIDE=65</code> で早めにコンパクト</p>
+</li><li><p><code class="rich-inline-code">DISABLE_AUTOUPDATER=1</code> でシステムプロンプト50%削減</p>
+</li><li><p>不要MCPは外す → <code class="rich-inline-code">/mcp</code> で確認</p>
+</li></ul>
+<hr>
+<h2 id="出典">📚 出典</h2>
+<ul><li><p>公式: <a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener noreferrer">https://code.claude.com/docs/en/overview</a></p>
+</li><li><p>CLI Reference: <a href="https://code.claude.com/docs/en/cli-reference" target="_blank" rel="noopener noreferrer">https://code.claude.com/docs/en/cli-reference</a></p>
+</li><li><p>CHANGELOG: <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md</a></p>
+</li><li><p>FlorianBruniaux Cheatsheet: <a href="https://github.com/FlorianBruniaux/claude-code-ultimate-guide" target="_blank" rel="noopener noreferrer">https://github.com/FlorianBruniaux/claude-code-ultimate-guide</a></p>
+</li><li><p>ykdojo Tips: <a href="https://github.com/ykdojo/claude-code-tips" target="_blank" rel="noopener noreferrer">https://github.com/ykdojo/claude-code-tips</a></p>
+</li></ul>
+<hr>
+<h2 id="ふりかえり">✅ ふりかえり</h2>
+<img src="https://d2f75plg0t6qwk.cloudfront.net/tech_article/claude-code-a1-cheatsheet/35c1b221-A1-outro.png" alt="" width="1536" height="864">
+
+<p>繰り返しになりますが、<strong>全部覚える必要は本当にありません</strong>。よく使うのは結局 10 個くらい。残りは「あったな、確かここに」と思い出せれば十分です。困ったらこのページに戻ってきてください。</p>
+<h2 id="関連する章-コマンドの背景を学ぶ">📚 関連する章（コマンドの背景を学ぶ）</h2>
+<ul><li><p>🔗 <strong><code class="rich-inline-code">/context</code> <code class="rich-inline-code">/compact</code> <code class="rich-inline-code">/branch</code> の意味</strong>：<a href="/articles/claude-code-04-context">第4回 コンテキスト管理</a></p>
+</li><li><p>🔗 <strong><code class="rich-inline-code">/init</code> の中身</strong>：<a href="/articles/claude-code-04-context">第4回 コンテキスト管理 §3 CLAUDE.md</a></p>
+</li><li><p>🔗 <strong>スラッシュコマンド自作</strong>：<a href="/articles/claude-code-05-skills-and-commands">第5回 スキル &amp; スラッシュコマンド</a></p>
+</li><li><p>🔗 <strong><code class="rich-inline-code">/agents</code> の意味</strong>：<a href="/articles/claude-code-06-subagents">第6回 サブエージェント</a></p>
+</li><li><p>🔗 <strong><code class="rich-inline-code">/hooks</code> の意味</strong>：<a href="/articles/claude-code-07-hooks">第7回 フック</a></p>
+</li><li><p>🔗 <strong><code class="rich-inline-code">/mcp</code> の意味</strong>：<a href="/articles/claude-code-08-mcp-tools">第8回 MCP</a></p>
+</li><li><p>🔗 <strong><code class="rich-inline-code">/effort</code> <code class="rich-inline-code">/plan</code> <code class="rich-inline-code">/ultraplan</code></strong>：<a href="/articles/claude-code-09-prompt-quality">第9回 精度の高いアウトプット</a></p>
+</li><li><p>🔗 <strong>応用Tips</strong>：<a href="/articles/claude-code-13-tips-techniques">第13回 実践Tips集</a></p>
+</li></ul>
+<h2 id="次へ">🎬 次へ</h2>
+<p>→ <a href="/articles/claude-code-a2-troubleshooting">付録 B. トラブルシューティング</a></p>
+<table class="rich-table"><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>⬅️ 前へ</td><td><a href="/articles/claude-code-14-role-based-paths">第14回 役職別 学習パス</a></td></tr><tr><td>➡️ 次へ</td><td><a href="/articles/claude-code-a2-troubleshooting">付録 B. トラブルシューティング</a></td></tr><tr><td>🏠 目次</td><td><a href="./README.md">README.md</a></td></tr></tbody></table>
