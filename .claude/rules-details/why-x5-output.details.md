@@ -5,7 +5,7 @@ related: why-x5-output.md
 
 # 「何のために何をやるのか」1 行出力ルール — 詳細版 (Layer B)
 
-> Layer A: [`why-x5-output.md`](./why-x5-output.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`why-x5-output.md`](../rules/why-x5-output.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 本 file は Layer A の SSoT を補完する詳細解説。v1→v10 経緯 table (full、10 版分の改訂理由 + user 指摘) / SUPERSEDED 履歴 / 旧 version の format 例 / 関連 feedback memory 全件 list / v10 改訂の起源を含む。Read trigger 4 条件は Layer A 冒頭参照。
 

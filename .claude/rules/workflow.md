@@ -18,7 +18,7 @@ paths:
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [workflow.details.md](./workflow.details.md)
+> 詳細: [workflow.details.md](../rules-details/workflow.details.md)
 
 ## 概要
 
@@ -62,7 +62,7 @@ paths:
 
 各 stage 完了時、メインが `.claude/.workflow-state/<slug>.json` の `current_stage` を次 stage に進め、`completed_stages` に追加。state JSON は Stage 7 で初期化 (Stage 1〜6 完了済として列挙)。stage 名の SSoT は env `HC_WORKFLOW_STAGES_NEW`。
 
-> **Stage 8 TDD の git log 既存 commit 確認義務 / 各 stage 連携 command 詳細**: [workflow.details.md §14-stage 詳細](./workflow.details.md#14-stage-詳細)
+> **Stage 8 TDD の git log 既存 commit 確認義務 / 各 stage 連携 command 詳細**: [workflow.details.md §14-stage 詳細](../rules-details/workflow.details.md#14-stage-詳細)
 
 ## 既存機能修正フロー (10-stage)
 
@@ -83,7 +83,7 @@ paths:
 
 `/new-feature` との主要差分: 要件定義 / `design-review` / `task-creation` / `ci-cd` / `scenario-test` は省略され、代わりに `recover-design` / `pre-test` / `retest-design` が入る。
 
-> **詳細比較 / Stage 7 TDD git log 検証**: [workflow.details.md §10-stage 詳細](./workflow.details.md#10-stage-詳細) + [`modify-feature.md`](../commands/modify-feature.md)
+> **詳細比較 / Stage 7 TDD git log 検証**: [workflow.details.md §10-stage 詳細](../rules-details/workflow.details.md#10-stage-詳細) + [`modify-feature.md`](../commands/modify-feature.md)
 
 ## workflow-guard.sh による強制機構
 
@@ -155,7 +155,7 @@ honor system: bypass の根拠は CLAUDE.md / docs/tasks/ にも記録 (env 系�
 
 honor system: bypass 根拠は `docs/tasks/<task-N>.md` の該当 entry に記録。
 
-> **2026-05-28 緩和の経緯 (task-40 拡張撤廃) / frontmatter parser 削除詳細 / 関連 rule**: [workflow.details.md §draft-flow-guard 緩和履歴](./workflow.details.md#draft-flow-guard-緩和履歴)
+> **2026-05-28 緩和の経緯 (task-40 拡張撤廃) / frontmatter parser 削除詳細 / 関連 rule**: [workflow.details.md §draft-flow-guard 緩和履歴](../rules-details/workflow.details.md#draft-flow-guard-緩和履歴)
 
 ## リファクタリング強制 (W3)
 
@@ -181,7 +181,7 @@ CRITICAL / HIGH findings は state JSON の `pending_findings.module_review` / `
 
 **yml 値による制御**: `/module-review` は `review_required_module` / `review_min_count_module` (default 2) / `review_max_count_module` (default 5)、`/system-review` は `review_required_system` / `review_min_count_system` / `review_max_count_system`。`review_iteration_max` (default 5) は全レビュー共通。`hc-config.sh --set review_required_module=false` で局所無効化可。
 
-> **review prompt 規約 (behavior-preserving / 末尾 confidence:0.X) / Layer 詳細 sub-checklist**: [workflow.details.md §リファクタリング 3 観点詳細](./workflow.details.md#リファクタリング-3-観点詳細) + [`module-review.md`](../commands/module-review.md) Phase 3
+> **review prompt 規約 (behavior-preserving / 末尾 confidence:0.X) / Layer 詳細 sub-checklist**: [workflow.details.md §リファクタリング 3 観点詳細](../rules-details/workflow.details.md#リファクタリング-3-観点詳細) + [`module-review.md`](../commands/module-review.md) Phase 3
 
 ## テスト設計の MECE 強制 (W1)
 
@@ -206,7 +206,7 @@ W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK (workfl
 
 **yml 値による制御**: `review_required_test` / `review_min_count_test` (default 5、採用 6 条 4 起源) / `review_max_count_test` (default 10) / `review_iteration_max` (default 5) で集中制御。
 
-> **20 MECE カテゴリ各論 (採用 / 不採用判定例)**: [workflow.details.md §20 MECE 各論](./workflow.details.md#20-mece-各論) + [`_TEST_DESIGN_TEMPLATE.md`](../templates/docs/draft/_TEST_DESIGN_TEMPLATE.md)
+> **20 MECE カテゴリ各論 (採用 / 不採用判定例)**: [workflow.details.md §20 MECE 各論](../rules-details/workflow.details.md#20-mece-各論) + [`_TEST_DESIGN_TEMPLATE.md`](../templates/docs/draft/_TEST_DESIGN_TEMPLATE.md)
 
 ## 設計レビューの fan-out (W2)
 
@@ -240,7 +240,7 @@ draft レビューは「修正 → 再レビュー」を **CRITICAL + HIGH + MED
 
 CRITICAL / HIGH / MEDIUM 全て 0 件 → draft「承認待ち」へ遷移可、1 件以上 → 「修正待ち」状態を明示し draft 修正 → 再 `/design-review` で round-N+1 review。
 
-> **stack heuristic 絞り込みロジック詳細 (database / API / UI 検出) / 集約フォーマット**: [workflow.details.md §fan-out reviewer-registry 詳細](./workflow.details.md#fan-out-reviewer-registry-詳細)
+> **stack heuristic 絞り込みロジック詳細 (database / API / UI 検出) / 集約フォーマット**: [workflow.details.md §fan-out reviewer-registry 詳細](../rules-details/workflow.details.md#fan-out-reviewer-registry-詳細)
 
 ## 副産物 discharge (5 層強制機構)
 
@@ -265,7 +265,7 @@ CRITICAL / HIGH / MEDIUM 全て 0 件 → draft「承認待ち」へ遷移可、
 
 honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry のコメント列に記録。
 
-> **処理フロー (entry → draft / parking-lot / 無視 の判定) / 関連 artifact**: [workflow.details.md §副産物 discharge 詳細](./workflow.details.md#副産物-discharge-詳細)
+> **処理フロー (entry → draft / parking-lot / 無視 の判定) / 関連 artifact**: [workflow.details.md §副産物 discharge 詳細](../rules-details/workflow.details.md#副産物-discharge-詳細)
 
 ## Loop モード自律規律
 
@@ -302,7 +302,7 @@ honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry �
 
 `mode-session-start.sh` が `.serena/memories/session/context.md` 存在時に `<system-reminder>` で `/resume-state` 提案を自動注入 (W2)。手動入力不要で前 session からの継続が可能。
 
-> **Serena 必須化の設計補足 (旧 check_onboarding_performed tool 不在経緯) / 関連 artifact 完全 list**: [workflow.details.md §Session 永続化詳細](./workflow.details.md#session-永続化詳細)
+> **Serena 必須化の設計補足 (旧 check_onboarding_performed tool 不在経緯) / 関連 artifact 完全 list**: [workflow.details.md §Session 永続化詳細](../rules-details/workflow.details.md#session-永続化詳細)
 
 ## 関連ルール / skill (代表)
 
@@ -313,4 +313,4 @@ honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry �
 - [`git-workflow.md`](./git-workflow.md) — branch 命名規約 (`/modify-feature` Stage 2 `checkout` の検証基準)
 - state schema: [`.workflow-state/SCHEMA.md`](../.workflow-state/SCHEMA.md)
 
-> **全 skill / 設計 draft 完全 list**: [workflow.details.md §関連 skill 完全](./workflow.details.md#関連-skill-完全)
+> **全 skill / 設計 draft 完全 list**: [workflow.details.md §関連 skill 完全](../rules-details/workflow.details.md#関連-skill-完全)

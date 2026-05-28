@@ -5,7 +5,7 @@ related: modes.md
 
 # HIRAI メソッド 動作モード — 詳細版 (Layer B)
 
-> Layer A: [`modes.md`](./modes.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`modes.md`](../rules/modes.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 本 file は Layer A の SSoT を補完する詳細解説。Loop モード遵守事項 9 件の例外条項詳細 / 違反例 / 緩和経緯 / 5 層強制機構の各層動作 / smoke list 完全版 / mode hook 内部仕様 / 関連 artifact 完全 list / 起源を含む。Read trigger 4 条件は Layer A 冒頭参照。
 

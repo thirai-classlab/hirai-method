@@ -14,7 +14,7 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [why-x5-output.details.md](./why-x5-output.details.md)
+> 詳細: [why-x5-output.details.md](../rules-details/why-x5-output.details.md)
 
 ## format
 
@@ -65,7 +65,7 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 - 「何をやる」だけ書いて「何のため」を省略 (例: 「install.sh を smoke test する」 — NG)
 - 1 ステップで 2 行以上書く (例: 改行で目的と作業を分けて書く — NG)
 
-> **例詳細 / 旧 version の format 例**: [why-x5-output.details.md §例詳細](./why-x5-output.details.md#例詳細)
+> **例詳細 / 旧 version の format 例**: [why-x5-output.details.md §例詳細](../rules-details/why-x5-output.details.md#例詳細)
 
 ## 一時無効化
 
@@ -83,4 +83,4 @@ export HC_WHY_X5_DISABLE=1
 - `feedback_why_x5_once_per_turn.md` (v10 でも継続有効、ターン冒頭 1 回 / ステップ単位 / 未来時制)
 - `feedback_skip_why_x5_for_mode_command.md` (`/mode` 等 format 省略許可 command 規範、v10 でも有効)
 
-> **v1→v10 経緯 table (full) / SUPERSEDED 履歴 / 起源詳細**: [why-x5-output.details.md §v1-v10-経緯](./why-x5-output.details.md#v1v10-経緯)
+> **v1→v10 経緯 table (full) / SUPERSEDED 履歴 / 起源詳細**: [why-x5-output.details.md §v1-v10-経緯](../rules-details/why-x5-output.details.md#v1v10-経緯)

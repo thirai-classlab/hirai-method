@@ -5,7 +5,7 @@ related: development-process.md
 
 # 開発プロセスルール — 詳細版 (Layer B)
 
-> Layer A: [`development-process.md`](./development-process.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`development-process.md`](../rules/development-process.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 本 file は Layer A の SSoT を補完する詳細解説。委譲必須要件 7 件の各論 / 違反例 / staging 戦略の起源 / cross-repo write 例外の実証経緯 / Confidence Gate の記載例 / harness 取込チェックリストの CI 自動化案 / 各規範の起源 (commit hash / draft path / 副産物 entry) を含む。Read trigger 4 条件は Layer A 冒頭参照。
 

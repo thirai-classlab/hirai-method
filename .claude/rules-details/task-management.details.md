@@ -5,7 +5,7 @@ related: task-management.md
 
 # タスク管理ルール — 詳細版 (Layer B)
 
-> Layer A: [`task-management.md`](./task-management.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`task-management.md`](../rules/task-management.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 本 file は Layer A の SSoT を補完する詳細解説。採用 6 条の OK/NG 例 / 必読義務の起源 / 既存 task 移行優先度 / UI 検出 future work / plan-first 機械検出 hook 仕様 / Hook 強制詳細 / 起源を含む。Read trigger 4 条件は Layer A 冒頭参照。
 

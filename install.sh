@@ -186,6 +186,12 @@ RSYNC_EXCLUDES=(
   --exclude=worktrees/
 )
 
+# NOTE (task-51 A 案、2026-05-28): `.claude/rules-details/` (Layer B 詳細規範) は
+# 意図的に exclude していない。Claude Code は `.claude/rules/` のみを startup 注入する
+# (公式 doc: code.claude.com/docs/en/memory.md) ため、Layer B を別 dir に置くことで
+# context bloat を回避する設計。rsync -a で `.claude/rules-details/` 配下も自動同期
+# されるため 4 リポでも Layer A↔B link が保たれる。SSoT: `.claude/rules-details/README.md`。
+
 # ============================================================
 # 1. .claude/ install
 # ============================================================

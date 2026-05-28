@@ -5,7 +5,7 @@ related: self-improvement.md
 
 # 自己改善 5 層 + 事実性レイヤー — 詳細版 (Layer B)
 
-> Layer A: [`self-improvement.md`](./self-improvement.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`self-improvement.md`](../rules/self-improvement.md) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 本 file は Layer A の SSoT を補完する詳細解説。判断フロー full / L4 動作前提 / 信頼度挙動 / 失敗モード対処 / 関連 skill / command 完全 list / 起源を含む。Read trigger 4 条件は Layer A 冒頭参照。
 

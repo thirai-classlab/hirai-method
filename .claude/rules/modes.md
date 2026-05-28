@@ -17,7 +17,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [modes.details.md](./modes.details.md)
+> 詳細: [modes.details.md](../rules-details/modes.details.md)
 
 ## モード一覧
 
@@ -86,7 +86,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 - タスクの完了
 - 致命的エラー (権限拒否 / 復旧不能 / 重大なデータ破壊リスク)
 
-> **遵守事項 2 例外条項の起源 (recall_poc/docs/01-03 事案 + task-40 規範変更 + 2026-05-28 緩和) / 遵守事項 7 違反例 / 遵守事項 8 緩和 task-39 詳細 / mode-switch bypass log task #9 / 遵守事項 9 起源 task-47**: [modes.details.md §遵守事項-詳細](./modes.details.md#遵守事項-詳細)
+> **遵守事項 2 例外条項の起源 (recall_poc/docs/01-03 事案 + task-40 規範変更 + 2026-05-28 緩和) / 遵守事項 7 違反例 / 遵守事項 8 緩和 task-39 詳細 / mode-switch bypass log task #9 / 遵守事項 9 起源 task-47**: [modes.details.md §遵守事項-詳細](../rules-details/modes.details.md#遵守事項-詳細)
 
 ## Loop モード自律規律の 5 層強制機構
 
@@ -122,7 +122,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 
 honor system: bypass 時は理由を `docs/tasks/<task-N>.md` または `ECC_BYPASS_REASON` env に記録。
 
-> **各層の動作 source code 参照 / smoke list 9 ケース完全版 / 層 6 task-41 起源 (user 「Loopモードなのに聞いてきます」指摘)**: [modes.details.md §5-層強制機構-詳細](./modes.details.md#5-層強制機構-詳細)
+> **各層の動作 source code 参照 / smoke list 9 ケース完全版 / 層 6 task-41 起源 (user 「Loopモードなのに聞いてきます」指摘)**: [modes.details.md §5-層強制機構-詳細](../rules-details/modes.details.md#5-層強制機構-詳細)
 
 ## 設定
 
@@ -163,7 +163,7 @@ mode: normal  # または loop
 
 Loop モードでも委譲・事実検証等の安全ガードは無効化されない。**省略するのはユーザ確認のみ**。
 
-> **mode-loader.sh 内部仕様 / mode-session-start.sh / mode-enforce.sh の context 注入詳細 / context-budget.sh tier 算出ロジック**: [modes.details.md §mode-hook-詳細](./modes.details.md#mode-hook-詳細)
+> **mode-loader.sh 内部仕様 / mode-session-start.sh / mode-enforce.sh の context 注入詳細 / context-budget.sh tier 算出ロジック**: [modes.details.md §mode-hook-詳細](../rules-details/modes.details.md#mode-hook-詳細)
 
 ## 関連 artifact (代表)
 
@@ -172,4 +172,4 @@ Loop モードでも委譲・事実検証等の安全ガードは無効化され
 - [`.claude/hooks/loop-confirmation-detector.sh`](../hooks/loop-confirmation-detector.sh) (層 6)
 - [`.claude/tests/loop-auto-progress-smoke.sh`](../tests/loop-auto-progress-smoke.sh) (層 5)
 
-> **関連 artifact 完全 list (mode 系 hook + 5 層強制機構 + smoke 群 + 設計起源 draft path)**: [modes.details.md §関連-artifact-完全](./modes.details.md#関連-artifact-完全)
+> **関連 artifact 完全 list (mode 系 hook + 5 層強制機構 + smoke 群 + 設計起源 draft path)**: [modes.details.md §関連-artifact-完全](../rules-details/modes.details.md#関連-artifact-完全)

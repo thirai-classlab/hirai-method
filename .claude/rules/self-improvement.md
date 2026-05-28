@@ -1,8 +1,3 @@
----
-paths:
-  - "**/*"
----
-
 # 自己改善 5 層 + 事実性レイヤー（ECC 由来）
 
 このハーネスは ECC（Everything Claude Code）の自己改善アルゴリズム **5 層 + 事実検証 2 層** を完全模倣している。タスク受領時・失敗時・完了時に「どの層を使うか」を意識する。
@@ -14,7 +9,7 @@ paths:
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [self-improvement.details.md](./self-improvement.details.md)
+> 詳細: [self-improvement.details.md](../rules-details/self-improvement.details.md)
 
 ## 層構造
 
@@ -40,7 +35,7 @@ PR 直前 → F2 /verify 6 phase → READY なら commit/push
 複数 project 反復 → L4 /promote project → global
 ```
 
-> **判断フロー full / 大規模・並列ケース詳細**: [self-improvement.details.md §いつどの層を使うか-full](./self-improvement.details.md#いつどの層を使うか-full)
+> **判断フロー full / 大規模・並列ケース詳細**: [self-improvement.details.md §いつどの層を使うか-full](../rules-details/self-improvement.details.md#いつどの層を使うか-full)
 
 ## 事実性レイヤー（F1/F2）の効果
 
@@ -61,7 +56,7 @@ PR 直前 → F2 /verify 6 phase → READY なら commit/push
 4. **新規スキル提案時**: `/evolve` で既存 instinct クラスタから派生提案
 5. **共通ルール抽出時**: `/promote` で project → global 昇格
 
-> **L4 動作前提 / 信頼度挙動 / 失敗モード対処詳細**: [self-improvement.details.md §l4-動作前提](./self-improvement.details.md#l4-動作前提)
+> **L4 動作前提 / 信頼度挙動 / 失敗モード対処詳細**: [self-improvement.details.md §l4-動作前提](../rules-details/self-improvement.details.md#l4-動作前提)
 
 ## 関連スキル / コマンド (代表)
 
@@ -72,4 +67,4 @@ PR 直前 → F2 /verify 6 phase → READY なら commit/push
 - F1: `/gate-status` `/gate-clear` `/gate-bypass` ([gateguard](../skills/gateguard/SKILL.md))
 - F2: `/verify` ([verification-loop](../skills/verification-loop/SKILL.md))
 
-> **全 skill / command 完全 list**: [self-improvement.details.md §関連スキル-コマンド-完全](./self-improvement.details.md#関連スキル-コマンド-完全)
+> **全 skill / command 完全 list**: [self-improvement.details.md §関連スキル--コマンド-完全](../rules-details/self-improvement.details.md#関連スキル--コマンド-完全)
