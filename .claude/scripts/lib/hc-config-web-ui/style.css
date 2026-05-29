@@ -1,13 +1,18 @@
-/* hc-config Web UI custom styles — task-61 Step 5 iter 2 (WCAG 2.2 AA + UX)
+/* hc-config Web UI custom styles — task-63 Step 3 (UX 再設計、sidebar 削除 + top/edit 2 view)
  *
  * Tailwind CDN で大半をカバーするため、ここは Tailwind の @apply を使わず
  * 通常の CSS で薄い補強のみ (CDN 単体動作 / build 不要)。
  *
- * a11y 追加:
+ * a11y 追加 (task-61 iter 6 維持):
  *   - .sr-only (visually hidden、screen reader 可視)
  *   - focus-visible 高 contrast outline (WCAG 2.4.11 Focus Appearance)
  *   - reduced-motion media query 配慮
  *   - <dialog> backdrop / focus
+ *   - forced-colors (Windows high-contrast)
+ *
+ * task-63 追加 (UX 再設計):
+ *   - top view: 現在 preset banner + read-only 6 軸 table + 「設定を変更」CTA
+ *   - edit view: preset 選択 list + 6 軸 drop-down form + アクション buttons
  */
 
 body {
@@ -45,10 +50,9 @@ body {
 button:focus-visible,
 [role='button']:focus-visible,
 input:focus-visible,
+select:focus-visible,
 [tabindex='0']:focus-visible {
-  /* iter 6 A item 6 (LOW tdd + ui-designer): [role='option']:focus-visible 削除
-     (iter 4 B で role=option → role=listitem 移行で dead 化、role=listitem は
-     [tabindex='0']:focus-visible で既に carbon copy された) */
+  /* task-61 iter 6 A item 6: [role='option']:focus-visible 削除 (role=listitem 移行で dead) */
   outline: 3px solid #2563eb;
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25);
@@ -113,10 +117,233 @@ dialog::backdrop {
 @media (forced-colors: active) {
   button,
   [role='button'],
-  [role='option'] {
+  [role='radio'] {
     border: 1px solid ButtonText;
   }
   :focus-visible {
     outline: 3px solid Highlight;
   }
+}
+
+/* ========================================================================
+ * task-63 UX 再設計: top view layout
+ * ======================================================================== */
+
+/* current preset banner (top view 上部、状態別色分け) */
+.preset-banner {
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.preset-banner--preset {
+  background-color: rgb(240 253 244); /* emerald-50 */
+  border: 1px solid rgb(134 239 172); /* emerald-300 */
+}
+.preset-banner--custom {
+  background-color: rgb(239 246 255); /* blue-50 */
+  border: 1px solid rgb(147 197 253); /* blue-300 */
+}
+.preset-banner--unsaved {
+  background-color: rgb(255 251 235); /* amber-50 */
+  border: 1px solid rgb(252 211 77); /* amber-300 */
+}
+
+.preset-banner__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: rgb(71 85 105); /* slate-600 */
+  margin-bottom: 0.25rem;
+}
+.preset-banner__name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: rgb(15 23 42); /* slate-900 */
+}
+
+/* read-only 6 軸 table (top view 中段) */
+.axis-table {
+  width: 100%;
+  background-color: white;
+  border: 1px solid rgb(226 232 240); /* slate-200 */
+  border-radius: 0.5rem;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+.axis-table__row {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(241 245 249); /* slate-100 */
+}
+.axis-table__row:last-child {
+  border-bottom: none;
+}
+.axis-table__label {
+  flex: 0 0 10rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(51 65 85); /* slate-700 */
+}
+.axis-table__value {
+  flex: 1;
+  font-family: 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.875rem;
+  color: rgb(51 65 85); /* slate-700 */
+}
+
+/* primary CTA: 「設定を変更」ボタン (top view 下部、中央配置、prominent) */
+.cta-edit {
+  display: block;
+  margin: 0 auto;
+  padding: 0.875rem 2.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+  background-color: rgb(4 120 87); /* emerald-700 */
+  border-radius: 0.5rem;
+  min-height: 44px; /* WCAG 2.5.5 target size */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease;
+}
+.cta-edit:hover {
+  background-color: rgb(6 95 70); /* emerald-800 */
+}
+
+/* ========================================================================
+ * task-63 UX 再設計: edit view layout
+ * ======================================================================== */
+
+/* edit view section heading */
+.edit-section {
+  background-color: white;
+  border: 1px solid rgb(226 232 240); /* slate-200 */
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.edit-section__heading {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgb(51 65 85); /* slate-700 */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+/* preset 選択 list (edit view、radio group 様式) */
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.preset-list__item {
+  display: flex;
+  align-items: center;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid rgb(226 232 240); /* slate-200 */
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+  min-height: 44px; /* WCAG 2.5.5 */
+}
+.preset-list__item:hover {
+  background-color: rgb(248 250 252); /* slate-50 */
+  border-color: rgb(148 163 184); /* slate-400 */
+}
+.preset-list__item--selected {
+  background-color: rgb(239 246 255); /* blue-50 */
+  border-color: rgb(37 99 235); /* blue-600 */
+}
+.preset-list__name {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: rgb(30 41 59); /* slate-800 */
+}
+
+/* 個別 6 軸 drop-down form */
+.axis-form__row {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0;
+  gap: 1rem;
+}
+.axis-form__label {
+  flex: 0 0 10rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(51 65 85); /* slate-700 */
+}
+.axis-form__select {
+  flex: 1;
+  font-family: 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(203 213 225); /* slate-300 */
+  border-radius: 0.375rem;
+  background-color: white;
+  color: rgb(30 41 59); /* slate-800 */
+  min-height: 44px; /* WCAG 2.5.5 */
+}
+
+/* edit view アクション buttons (footer 配置) */
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+.edit-actions__cancel {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(30 41 59); /* slate-800 */
+  background-color: rgb(226 232 240); /* slate-200 */
+  border-radius: 0.375rem;
+  min-height: 44px;
+}
+.edit-actions__cancel:hover {
+  background-color: rgb(203 213 225); /* slate-300 */
+}
+.edit-actions__save-custom {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+  background-color: rgb(37 99 235); /* blue-600 */
+  border-radius: 0.375rem;
+  min-height: 44px;
+}
+.edit-actions__save-custom:hover {
+  background-color: rgb(29 78 216); /* blue-700 */
+}
+.edit-actions__apply {
+  padding: 0.625rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: white;
+  background-color: rgb(4 120 87); /* emerald-700 */
+  border-radius: 0.375rem;
+  min-height: 44px;
+}
+.edit-actions__apply:hover {
+  background-color: rgb(6 95 70); /* emerald-800 */
+}
+
+/* edit view: 戻るリンク (header 下、left) */
+.edit-back {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.875rem;
+  color: rgb(37 99 235); /* blue-600 */
+  font-weight: 500;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  min-height: 44px;
+}
+.edit-back:hover {
+  background-color: rgb(239 246 255); /* blue-50 */
+  text-decoration: underline;
 }
