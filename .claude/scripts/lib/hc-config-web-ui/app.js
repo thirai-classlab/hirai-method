@@ -76,8 +76,12 @@
       throw new Error(`Invalid JSON response from ${path}: ${text.slice(0, 200)}`)
     }
     if (!res.ok) {
+      // iter 6 A item 5 (MED pr-test): NF-10 fix の UI 連携完成
+      //   server 側で timeout を timedOut/timed_out flag で返却している場合、
+      //   error 文字列に "(timeout 5s 超過)" を追加して UI 上で明示する。
       const detail = data && data.error ? `${data.error}${data.stderr ? ' / ' + data.stderr : ''}` : `${res.status} ${res.statusText}`
-      throw new Error(`${method} ${path} failed: ${detail}`)
+      const timeoutSuffix = data && data.timed_out === true ? ' (timeout 5s 超過)' : ''
+      throw new Error(`${method} ${path} failed: ${detail}${timeoutSuffix}`)
     }
     return data
   }

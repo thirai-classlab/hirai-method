@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-// .claude/scripts/lib/hc-config-web-server.js — task-61 Step 5 iter 4 領域 A (10 fixes)
+// .claude/scripts/lib/hc-config-web-server.js — task-61 Step 5 iter 6 領域 A (iter 4 + 5 iter 6 hot fix)
+//
+// iter 6 A 修正項目 (5 件 = HIGH×2 + MED×2 + 補強):
+//   item 1 (HIGH 3-rev): HC_HISTORY_DIR_OVERRIDE + HC_PRESETS_DIR_OVERRIDE env override (test isolation)
+//   item 2 (HIGH 2-rev / MED-N3 実 HIGH): savePreset で PRESETS in-memory 追加 + /api/presets で
+//                                          PRESETS_DIR/custom-*.yml dynamic scan (§6 DoD 完全達成)
+//   item 3 (MED code-rev): HISTORY_MAX_FILES NaN / 負値 / 0 safe fallback 1000
+//   item 4 (MED code-rev): /api/value/:key + /api/set で hcGet/hcSet に {} 明示 (DI seam)
+// (UI 側 item 5 + style.css item 6 は app.js / style.css に別途実装)
 //
 // 目的:
 //   hc-config.sh interactive (TTY 経路 default) の Web UI 化。
@@ -60,8 +68,11 @@ const SCRIPT_DIR = __dirname // .claude/scripts/lib
 const HC_CONFIG_SCRIPT = path.resolve(SCRIPT_DIR, '..', 'hc-config.sh')
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..')
 const STATIC_DIR = path.join(SCRIPT_DIR, 'hc-config-web-ui')
-const HISTORY_DIR = path.join(REPO_ROOT, '.claude', '.preset-history')
-const PRESETS_DIR = path.join(REPO_ROOT, '.claude', 'presets')
+// iter 6 A item 1 (HIGH 3-rev): env override で test isolation を可能化
+//   smoke が HC_HISTORY_DIR_OVERRIDE / HC_PRESETS_DIR_OVERRIDE を渡しても
+//   server.js が読まなかった bug (server boot で常に repo root の .claude/ を参照)
+const HISTORY_DIR = process.env.HC_HISTORY_DIR_OVERRIDE || path.join(REPO_ROOT, '.claude', '.preset-history')
+const PRESETS_DIR = process.env.HC_PRESETS_DIR_OVERRIDE || path.join(REPO_ROOT, '.claude', 'presets')
 
 const PORT_MIN = 3060
 const PORT_MAX = 3070
@@ -69,7 +80,9 @@ const HOST = '127.0.0.1'
 const HC_SUBPROCESS_TIMEOUT_MS = 5000
 
 // NF-6: history file 最大保持件数 (超過は古い順 cleanup)
-const HISTORY_MAX_FILES = parseInt(process.env.HC_HISTORY_MAX_FILES || '1000', 10)
+// iter 6 A item 3 (MED): NaN / 負値 / 0 は安全 fallback 1000
+const _historyMaxParsed = parseInt(process.env.HC_HISTORY_MAX_FILES || '1000', 10)
+const HISTORY_MAX_FILES = Number.isFinite(_historyMaxParsed) && _historyMaxParsed > 0 ? _historyMaxParsed : 1000
 
 // rollback timestamp validation (M-P3): ISO-8601 風 + preset name 区切り
 //   実 history file 名 stem は `2026-05-29T12-34-56-789Z-poc-no-git` 形式 (toISOString の `:` / `.` を `-` 置換)
@@ -896,10 +909,75 @@ function savePreset(body) {
     fs.renameSync(tmpFile, normalized)
     // HIGH-Q3 fix: invalidate cache (apply preset と同等の一貫性)
     invalidateMetadataCache()
-    return { ok: true, name: `custom-${name}`, path: path.relative(REPO_ROOT, normalized) }
+    // iter 6 A item 2 (HIGH 2-rev / MED-N3 実 HIGH): in-memory PRESETS に登録
+    //   保存後 diff/apply が 404 にならないよう、PRESETS map に正規 entry を追加。
+    //   key 名は `custom-<name>` (file stem と同一、/api/presets 一覧と整合)。
+    //   values は 6 軸 yml 1 行ずつのみ (preset の named values は持たない)、
+    //   diff 計算は PRESETS[name].values の Object.entries で動くため空 {} でも 404 にはならず
+    //   "no changed key" として通る。draft §6 DoD 完全達成。
+    const customKey = `custom-${name}`
+    PRESETS[customKey] = {
+      axes: { ...axes },
+      use_case: `custom preset (${customKey})`,
+      values: { ...axes }, // 6 軸自体を yml key として apply 対象に含める
+    }
+    return { ok: true, name: customKey, path: path.relative(REPO_ROOT, normalized) }
   } catch (e) {
     return { ok: false, error: 'write failed: ' + e.message }
   }
+}
+
+// iter 6 A item 2 (HIGH 2-rev): PRESETS_DIR から custom-*.yml を dynamic scan
+//   起動後に他プロセスや過去 session で保存された custom preset を /api/presets で
+//   発見可能にする。Read 専用、parse 軽量 (key: value 形式のみ、コメント無視)。
+//   失敗時 silent skip (本流 /api/presets 動作を壊さない)。
+function scanCustomPresets() {
+  const result = {}
+  try {
+    if (!fs.existsSync(PRESETS_DIR)) return result
+    const files = fs.readdirSync(PRESETS_DIR).filter((f) => f.startsWith('custom-') && f.endsWith('.yml'))
+    for (const f of files) {
+      const name = f.replace(/^custom-/, '').replace(/\.yml$/, '')
+      // file name validation (savePreset と同一 regex で防御的二重 check)
+      if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(name)) continue
+      const customKey = `custom-${name}`
+      // 既に PRESETS に in-memory 登録済 (今 session で save) ならスキップ
+      if (PRESETS[customKey]) continue
+      // 軽量 yml parse: コメント / 空行を除き、`key: value` のみ取り出す
+      let content
+      try {
+        content = fs.readFileSync(path.join(PRESETS_DIR, f), 'utf8')
+      } catch (_) {
+        continue
+      }
+      const axes = {}
+      for (const rawLine of content.split('\n')) {
+        const line = rawLine.trim()
+        if (line.length === 0 || line.startsWith('#')) continue
+        const m = line.match(/^([a-z_][a-z0-9_]*)\s*:\s*(\S.*?)\s*$/)
+        if (m) axes[m[1]] = m[2]
+      }
+      // 6 軸 whitelist でフィルタ (yml 内の他 key は無視)
+      const axesByKey = {}
+      for (const a of PRESET_AXES) axesByKey[a.key] = new Set(a.values)
+      const safeAxes = {}
+      for (const a of PRESET_AXES) {
+        if (axes[a.key] !== undefined && axesByKey[a.key].has(axes[a.key])) {
+          safeAxes[a.key] = axes[a.key]
+        }
+      }
+      // 6 軸全揃わない preset は entry スキップ (corrupt file 防御)
+      if (Object.keys(safeAxes).length !== PRESET_AXES.length) continue
+      result[customKey] = {
+        axes: safeAxes,
+        use_case: `custom preset (${customKey})`,
+        values: { ...safeAxes },
+      }
+    }
+  } catch (_) {
+    // scan 失敗は silent (本流 /api/presets を壊さない)
+  }
+  return result
 }
 
 // ============================================================
@@ -1052,9 +1130,10 @@ async function handleRequest(req, res) {
   }
 
   // GET /api/value/:key (個別 key、single hcGet 維持)
+  // iter 6 A item 4 (MED): DI seam を明示 (integration test で spawnFn 差替可能化)
   if (req.method === 'GET' && pathname.startsWith('/api/value/')) {
     const key = decodeURIComponent(pathname.slice('/api/value/'.length))
-    const current = hcGet(key)
+    const current = hcGet(key, {})
     if (current === null) {
       sendJson(res, 404, { error: 'key not found or get failed', key })
       return
@@ -1082,7 +1161,8 @@ async function handleRequest(req, res) {
       sendJson(res, 400, { error: 'unknown key', key: body.key })
       return
     }
-    const r = hcSet(body.key, String(body.value))
+    // iter 6 A item 4 (MED): DI seam を明示 (integration test で spawnFn 差替可能化)
+    const r = hcSet(body.key, String(body.value), {})
     if (r.exitCode !== 0) {
       // NF-10: timeout 明示
       const errPayload = {
@@ -1104,7 +1184,13 @@ async function handleRequest(req, res) {
   }
 
   // GET /api/presets
+  // iter 6 A item 2 (HIGH 2-rev): PRESETS_DIR から custom-*.yml を dynamic scan して merge
   if (req.method === 'GET' && pathname === '/api/presets') {
+    const customMap = scanCustomPresets()
+    // PRESETS (in-memory) を起点に、未登録 custom を merge (in-memory 優先 = 同 session save 優先)
+    for (const [k, v] of Object.entries(customMap)) {
+      if (!PRESETS[k]) PRESETS[k] = v
+    }
     const list = Object.entries(PRESETS).map(([name, p]) => ({
       name,
       axes: p.axes,
@@ -1116,9 +1202,14 @@ async function handleRequest(req, res) {
   }
 
   // GET /api/preset/:name/diff
+  // iter 6 A item 2 (HIGH 2-rev): custom-* preset は直前に scan して PRESETS に merge
   const diffMatch = pathname.match(/^\/api\/preset\/([^/]+)\/diff$/)
   if (req.method === 'GET' && diffMatch) {
     const name = decodeURIComponent(diffMatch[1])
+    if (!PRESETS[name] && name.startsWith('custom-')) {
+      const customMap = scanCustomPresets()
+      if (customMap[name]) PRESETS[name] = customMap[name]
+    }
     const diff = computePresetDiff(name)
     if (!diff) {
       sendJson(res, 404, { error: 'unknown preset', preset: name })
@@ -1129,9 +1220,14 @@ async function handleRequest(req, res) {
   }
 
   // POST /api/preset/:name/apply (H-7: partial failure は 200 OK + body.ok:false)
+  // iter 6 A item 2 (HIGH 2-rev): custom-* preset は直前に scan して PRESETS に merge
   const applyMatch = pathname.match(/^\/api\/preset\/([^/]+)\/apply$/)
   if (req.method === 'POST' && applyMatch) {
     const name = decodeURIComponent(applyMatch[1])
+    if (!PRESETS[name] && name.startsWith('custom-')) {
+      const customMap = scanCustomPresets()
+      if (customMap[name]) PRESETS[name] = customMap[name]
+    }
     let body
     try {
       body = await readJsonBody(req)
@@ -1361,6 +1457,7 @@ module.exports = {
   applyPreset,
   rollbackAppliedFromSnapshot,
   savePreset,
+  scanCustomPresets,
   listHistory,
   rollbackHistory,
   readJsonBody,

@@ -44,9 +44,11 @@ body {
 }
 button:focus-visible,
 [role='button']:focus-visible,
-[role='option']:focus-visible,
 input:focus-visible,
 [tabindex='0']:focus-visible {
+  /* iter 6 A item 6 (LOW tdd + ui-designer): [role='option']:focus-visible 削除
+     (iter 4 B で role=option → role=listitem 移行で dead 化、role=listitem は
+     [tabindex='0']:focus-visible で既に carbon copy された) */
   outline: 3px solid #2563eb;
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25);
