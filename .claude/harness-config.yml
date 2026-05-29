@@ -370,7 +370,7 @@ feature_failure_loop_detect_enabled: true         # failure-loop-detect
 #   - dispatcher は両者を OR 結合判定 (どちらかが true なら TUI fallback)
 # 起源: docs/draft/hc-config-web-ui.md §3 + task-61 Step 5 iter 1 qa-expert H-Q2 (yml 集中管理欠落)
 # bypass: HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED=true で 1 セッション TUI 強制
-feature_hc_config_tui_legacy_enabled: false       # hc-config TUI legacy fallback (task-61 Step 5 iter 2 D)
+feature_hc_config_tui_legacy_enabled: false
 
 # === Reviewer Required / Min Count / Iteration (採用 6 条 4 reviewer 制御) ===
 # /design-review / /test-design / /module-review / /system-review command が消費 (Phase 2)。
