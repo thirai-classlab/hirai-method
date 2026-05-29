@@ -1108,7 +1108,9 @@ async function handleRequest(req, res) {
     for (const m of metadata) {
       counts[m.category] = (counts[m.category] || 0) + 1
     }
-    const categories = Object.entries(counts).map(([name, count]) => ({ name, key_count: count }))
+    // LOW fix 1 (case-03): category name が空文字列 / 'undefined' の場合は表示上の不整合を防ぐため
+    //   name field として返す (client 側で fallback 表示する)。filter はしない (key 件数は正確に保つ)。
+    const categories = Object.entries(counts).map(([name, count]) => ({ name: name || '', key_count: count }))
     sendJson(res, 200, { categories })
     return
   }

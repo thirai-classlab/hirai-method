@@ -438,6 +438,8 @@
     const catUl = document.getElementById('category-list')
     clear(catUl)
     for (const c of state.categories) {
+      // LOW fix 1 (case-03): c.name が undefined / 空文字の場合の fallback 表示
+      const catDisplayName = c.name || '(未分類)'
       const isSel = state.view === 'category' && state.selectedCategory === c.name
       const onSelect = () => onSelectCategory(c.name)
       const li = el(
@@ -448,11 +450,11 @@
           role: 'listitem',
           tabindex: '0',
           'aria-current': isSel ? 'true' : null,
-          'aria-label': `カテゴリ ${c.name} (${c.key_count} key)${isSel ? ' (選択中)' : ''}`,
+          'aria-label': `カテゴリ ${catDisplayName} (${c.key_count} key)${isSel ? ' (選択中)' : ''}`,
           onclick: onSelect,
           onkeydown: activateOnEnterOrSpace(onSelect),
         },
-        el('span', { class: '' }, c.name),
+        el('span', { class: '' }, catDisplayName),
         el('span', { class: 'text-xs text-slate-400 ml-1' }, `(${c.key_count})`)
       )
       catUl.appendChild(li)
@@ -850,6 +852,20 @@
     return box
   }
 
+  // LOW fix 2 (case-07): history timestamp の人間可読表示
+  //   h.timestamp は ISO `:` `.` を `-` に置換したファイル名 stem (例: 2026-05-29T12-34-56-789Z-pid-n-preset)
+  //   → new Date() では Invalid Date になる。h.applied_at (ISO-8601) を優先し、
+  //     parse 失敗 / 不在時は h.timestamp を raw fallback 表示する。
+  function formatHistoryTime(h) {
+    if (h.applied_at) {
+      const d = new Date(h.applied_at)
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false })
+      }
+    }
+    return h.timestamp
+  }
+
   // MED-Q1 iter 4 B: history table に Rolled back 列追加 + colspan=6 化
   function renderHistory() {
     const tbody = document.getElementById('history-tbody')
@@ -886,7 +902,7 @@
       const tr = el(
         'tr',
         { class: 'history-row border-t border-slate-100' },
-        el('td', { class: 'py-1 pr-3 font-mono text-xs' }, h.timestamp),
+        el('td', { class: 'py-1 pr-3 font-mono text-xs' }, formatHistoryTime(h)),
         el('td', { class: 'py-1 pr-3 font-mono text-xs' }, h.preset || '<unknown>'),
         el('td', { class: 'py-1 pr-3' }, String(h.applied_count !== undefined ? h.applied_count : '?')),
         el('td', { class: 'py-1 pr-3' }, failedCell),
