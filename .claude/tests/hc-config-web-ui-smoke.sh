@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .claude/tests/hc-config-web-ui-smoke.sh — task-61 Step 5 iter 4 (領域 C: smoke 拡張)
+# .claude/tests/hc-config-web-ui-smoke.sh — task-61 Step 5 iter 6 (領域 B: smoke S-26 strict + teardown)
 #
 # 目的:
 #   hc-config Web UI (hc-config-web-server.js) の動作を 34 case + 手動 4 case コメント で検証。
@@ -87,6 +87,9 @@ TMP_DIR="$(mktemp -d "/tmp/hc-config-web-ui-smoke.XXXXXX")"
 
 # isolated history dir for test
 ISOLATED_HISTORY_DIR="${TMP_DIR}/.preset-history"
+
+# iter 6 B: isolated presets dir (S-22/S-31/S-33 teardown — custom-test-*.yml pollution 解消)
+ISOLATED_PRESETS_DIR="${TMP_DIR}/presets"
 
 SERVER_PID=""
 
@@ -483,7 +486,10 @@ SHARED_LOG="${TMP_DIR}/shared-server.log"
 
 _start_shared_server() {
   local hist_dir="${1:-}"
-  if [ -n "$hist_dir" ]; then
+  local presets_dir="${2:-}"
+  if [ -n "$hist_dir" ] && [ -n "$presets_dir" ]; then
+    HC_WEB_NO_OPEN=1 HC_HISTORY_DIR_OVERRIDE="$hist_dir" HC_PRESETS_DIR_OVERRIDE="$presets_dir" node "${WEB_SERVER}" >"${SHARED_LOG}" 2>&1 &
+  elif [ -n "$hist_dir" ]; then
     HC_WEB_NO_OPEN=1 HC_HISTORY_DIR_OVERRIDE="$hist_dir" node "${WEB_SERVER}" >"${SHARED_LOG}" 2>&1 &
   else
     HC_WEB_NO_OPEN=1 node "${WEB_SERVER}" >"${SHARED_LOG}" 2>&1 &
@@ -1368,16 +1374,16 @@ _case_s26() (
   http_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
     '{"name":"test-partial-axes","axes":{"quality_level":"poc"}}')
 
-  # axes validation: unknown axis か invalid value 400 (全 6 軸必須かは仕様による)
-  # savePreset は "for (const [k, v] of Object.entries(axes))" で検証するため
-  # 足りないキーは検証されない → 欠落のみでは 200 の可能性がある
-  # ただし known axes 外はエラー → unknown_axis 入りは 400
-  # 本 case は「不明 axis が含まれない 1 軸だけ」= valid だが欠落 = サーバー仕様次第
-  # smoke では「400 または 200」を許容し、field 検証が動作することを verify
+  # iter 6 B strict: server.js iter 4 A で 6 軸必須 reject 実装済 (400 確実)
+  # partial axes (6 軸未満) は 400 のみ PASS。200 返却は regression → FAIL
   case "$http_code" in
-    200|400) return 0 ;;
+    400) return 0 ;;
+    200)
+      printf 'S-26: partial axes save returned HTTP 200 (regression: server should reject with 400)\n' >&2
+      return 1
+      ;;
     *)
-      printf 'S-26: partial axes save returned HTTP %s (expected 200 or 400)\n' "$http_code" >&2
+      printf 'S-26: partial axes save returned HTTP %s (expected 400)\n' "$http_code" >&2
       return 1
       ;;
   esac
@@ -1736,8 +1742,9 @@ _wait_ports_free
 
 if _has_node && [ -f "${WEB_SERVER}" ]; then
   # iter 4 C: T-H2 — ISOLATED_HISTORY_DIR で test isolation
-  # server が HC_HISTORY_DIR_OVERRIDE を読む実装がある場合は isolated dir が使われる
-  _start_shared_server "$ISOLATED_HISTORY_DIR"
+  # iter 6 B: ISOLATED_PRESETS_DIR で custom-test-*.yml pollution 解消
+  # server が HC_HISTORY_DIR_OVERRIDE / HC_PRESETS_DIR_OVERRIDE を読む実装がある場合は isolated dir が使われる
+  _start_shared_server "$ISOLATED_HISTORY_DIR" "$ISOLATED_PRESETS_DIR"
 
   if [ -z "$SHARED_PORT" ]; then
     printf '  WARN: shared server failed to start, skipping S-05 through S-33\n'
@@ -1832,8 +1839,8 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                                     _record FAIL "S-25" "invalid JSON body → 400 (/api/set + /api/preset/save)"
     fi
 
-    if _case_s26 "$_PORT" 2>/dev/null; then _record PASS "S-26" "/api/preset/save 部分 axes → 200 or 400"
-    else                                     _record FAIL "S-26" "/api/preset/save 部分 axes → 200 or 400"
+    if _case_s26 "$_PORT" 2>/dev/null; then _record PASS "S-26" "/api/preset/save 部分 axes (6 軸欠落) → 400 strict"
+    else                                     _record FAIL "S-26" "/api/preset/save 部分 axes (6 軸欠落) → 400 strict"
     fi
 
     if _case_s27 "$_PORT" 2>/dev/null; then _record PASS "S-27" "POST /api/set empty string value → 200 or 400 (仕様確認)"

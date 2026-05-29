@@ -340,7 +340,7 @@ parallel_subagent_ttl_sec: 300
 #   export HC_FEATURE_DRAFT_FLOW_GUARD_ENABLED=false        # draft-flow-guard OFF
 
 feature_loop_mode_enforcement_enabled: true       # loop-confirmation-detector + loop-auto-progress-reminder + mode-enforce
-feature_draft_flow_guard_enabled: false
+feature_draft_flow_guard_enabled: false            # draft-flow-guard
 feature_task_rule_guard_enabled: false
 feature_delegation_guard_enabled: true            # delegation-guard
 feature_workflow_enforcement_enabled: false
@@ -410,4 +410,4 @@ review_required_security: false       # default false (security 影響 task の�
 review_min_count_security: 1          # default 1 (security-reviewer)
 
 # 反復制御
-review_iteration_max: 2
+review_iteration_max: 2               # default 5 (採用 6 条 4 で 5 回上限、現在値: task-61 作業中に変更)
