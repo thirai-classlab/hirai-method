@@ -239,39 +239,44 @@ const initialState = {
   pendingPreset: null,  // diff dialog 用 preset name
 };
 
-// actions
-const ACTIONS = {
-  LOAD_CURRENT: 'LOAD_CURRENT',  // GET /api/current-preset で初期化
-  GOTO_EDIT: 'GOTO_EDIT',  // top → edit (「設定を変更」)
-  GOTO_TOP: 'GOTO_TOP',  // edit → top (Cancel / 適用後)
-  SELECT_PRESET: 'SELECT_PRESET',  // edit 内で preset 選択 → editMode='preset' + diff dialog
-  APPLY_PRESET: 'APPLY_PRESET',  // diff dialog confirm → POST /api/preset/:name/apply
-  CHANGE_KEY: 'CHANGE_KEY',  // edit 内で個別 key 変更 (editMode='individual' + editBuffer 更新)
-  APPLY_INDIVIDUAL: 'APPLY_INDIVIDUAL',  // editMode='individual' の「適用」→ editBuffer を /api/set で 1 件ずつ apply
-  CANCEL: 'CANCEL',  // 編集破棄 → top
-};
+// actions (実装は colon-style 命名規約を採用、9 件。本 draft §3.7 は実装 SSoT に同期済)
+// 'load:current'      // GET /api/current-preset で初期化
+// 'top:enter'         // edit → top (Cancel / 適用後)
+// 'edit:enter'        // top → edit (「設定を変更」)
+// 'edit:select_preset'// edit 内で preset 選択 → editMode='preset' + diff dialog
+// 'edit:change_axis'  // edit 内で個別 key 変更 (editMode='individual' + editBuffer 更新)
+// 'edit:cancel'       // 編集破棄 → top
+// 'edit:apply'        // preset 一括 (diff dialog confirm) / 個別 (editBuffer を /api/set 逐次) の適用完了 → top 復帰 + applying flag reset
+// 'ui:set_flag'       // applying 等の UI flag 制御
+// 'history:update'    // 適用履歴 footer 更新
 
-// reducer (Pure Function、task-61 から拡張)
+// reducer (Pure Function、task-61 から拡張、抜粋)
 function reducer(state, action) {
   switch (action.type) {
-    case 'LOAD_CURRENT':
+    case 'load:current':
       return { ...state, view: 'top', currentPreset: action.payload };
-    case 'GOTO_EDIT':
+    case 'edit:enter':
       return { ...state, view: 'edit', editMode: 'preset', editBuffer: { ...state.currentPreset.values } };
-    case 'GOTO_TOP':
+    case 'top:enter':
+    case 'edit:cancel':
       return { ...state, view: 'top', editMode: 'preset', editBuffer: null, pendingPreset: null };
-    case 'CHANGE_KEY':
+    case 'edit:change_axis':
       return { ...state, editMode: 'individual', editBuffer: { ...state.editBuffer, [action.key]: action.value } };
-    // ... 他 actions
+    case 'edit:apply':
+      // preset 一括 / 個別いずれの適用完了でも top 復帰 + applying flag を必ず reset (部分失敗時の残留防止、task-63 Step 6 F14 fix)
+      return { ...state, view: 'top', currentPreset: action.payload, editMode: 'preset', editBuffer: null, applying: false };
+    // ... ui:set_flag / history:update
   }
 }
 ```
+
+> **注 (2026-05-29、task-63 Step 6 code-architect review M-02)**: 当初 draft では actions を UPPER_CASE (`LOAD_CURRENT` 等) で記載していたが、実装は colon-style (`load:current` 等) を採用したため、draft を実装 SSoT に同期した。`APPLY_PRESET` / `APPLY_INDIVIDUAL` は実装上 event handler 内で `/api/preset/:name/apply` or `/api/set` 逐次呼出を行った後に単一 `edit:apply` action を dispatch する設計に統合 (action 数 8 → 9、名称 colon 化)。
 
 **editMode 2 種の意味**:
 - `'preset'` — edit view 起動 default / preset 選択中。「適用」は `/api/preset/:name/apply` (6 軸一括) 経路
 - `'individual'` — 個別 drop-down 変更後。「適用」は editBuffer の 6 軸を `/api/set` で 1 件ずつ apply 経路
 
-editMode は `CHANGE_KEY` で `'individual'` に遷移、`SELECT_PRESET` で `'preset'` に遷移 (排他)。`null` 値は廃止 (常に 2 種いずれか)。
+editMode は `edit:change_axis` で `'individual'` に遷移、`edit:select_preset` / `edit:enter` で `'preset'` に遷移 (排他)。`null` 値は廃止 (常に 2 種いずれか)。
 
 ### 3.8 layout 変更概要
 
