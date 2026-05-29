@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# .claude/tests/hc-config-web-ui-smoke.sh — task-61 Step 5 iter 6 (領域 B: smoke S-26 strict + teardown)
+# .claude/tests/hc-config-web-ui-smoke.sh — task-63 Step 5 (設計簡素化 案 C: /api/preset/save 撤去 + /api/current-preset 追加)
 #
 # 目的:
 #   hc-config Web UI (hc-config-web-server.js) の動作を 34 case + 手動 4 case コメント で検証。
-#   iter 4 C: S-20〜S-34 の 15 case 追加、既存 S-12/S-13/S-15/S-16/S-17 修正。
+#   task-63: /api/preset/save 関連 case (S-22/S-25b/S-26/S-31/S-33) 撤去、
+#            /api/current-preset / top view / edit 遷移 / unsaved banner の 5 case (S-35〜S-39) 追加。
 #
 # Case 一覧 (自動 30 + legacy fallback 2 + manual SKIP 4):
 #   server lifecycle (4):
@@ -32,26 +33,29 @@
 #   body size (1):
 #     S-19: 1MB+1byte body POST /api/set → 400/413
 #
-# iter 4 C 新規 case (15):
+# iter 4 C 新規 case (task-61 由来):
 #   S-20: abort rollback silent no-op verify
-#     (abort 時 applied:[] → rollback(ts) → restored:0, ok:true)
 #   S-21: unknown preset 404 path
-#     (GET /api/preset/nonexistent/diff → 404
-#      POST /api/preset/nonexistent/apply → 404)
-#   S-22: /api/preset/save 正常 + 異常 4 sub-case
-#     (valid name+6軸 → 200 + file生成 / invalid regex / unknown axis / path traversal / 6軸欠落)
+#   S-22: 撤去 (/api/preset/save 撤去 — task-63 設計簡素化)
 #   S-23: partial failure ok:false + rollback 件数 verify
 #   S-24: HISTORY_DIR 不在 → 自動作成 verify
-#   S-25: invalid JSON body → 400
-#   S-26: /api/preset/save で 6 軸欠落 → 400
+#   S-25: invalid JSON body → 400 (/api/set のみ、/api/preset/save sub-case は撤去)
+#   S-26: 撤去 (/api/preset/save 6 軸欠落 — task-63 設計簡素化)
 #   S-27: /api/set 空文字列 value (empty string) → 仕様確認
 #   S-28: URL encoded traversal /api/preset/rollback/..%2F..%2F → 400
 #   S-29: GET /api/preset/history → .history array
 #   S-30: 0 件 rollback (targets=[]) → ok:true + restored:0
-#   S-31: /api/preset/save path traversal name → 400
+#   S-31: 撤去 (/api/preset/save path traversal — task-63 設計簡素化)
 #   S-32: category filter GET /api/keys?category=<name> → filtered list
-#   S-33: XSS injection save name 検証 (script タグ = invalid regex → 400)
+#   S-33: 撤去 (XSS injection save name — task-63 設計簡素化)
 #   S-34: SIGTERM graceful shutdown → port release
+#
+# task-63 Step 5 新規 case (/api/current-preset + top/edit view + unsaved banner):
+#   S-35: GET /api/current-preset → 200 + match_type + display_name_ja field 含む
+#   S-36: preset apply 後 GET /api/current-preset → match_type=preset + 正しい name/display_name_ja
+#   S-37: app.js に renderTop 関数 + bannerLabel/bannerValue が静的に存在 (top view banner 描画確認)
+#   S-38: app.js に state.view='edit' 遷移ロジック + renderEdit 関数が静的に存在 (edit view 遷移確認)
+#   S-39: /api/set で 1 key 変更 → GET /api/current-preset → match_type=unsaved (未保存変更あり)
 #
 # 手動 case (smoke 内にコメントとして記載、Step 6 実施):
 #   M-01: browser で preset 選択 → diff preview → checkbox toggle → Apply → history 追加
@@ -1185,67 +1189,10 @@ _case_s21() (
 )
 
 # ============================================================
-# Case S-22: /api/preset/save 正常 + 異常 4 sub-case
-# iter 4 C: HIGH-Q2 — save endpoint comprehensive
-# savePreset の name regex: ^[a-z][a-z0-9-]{1,40}$
-# 6 軸: quality_level, language_framework, git_workflow, tdd_policy, review_intensity, autonomy_level
+# Case S-22: 撤去 (task-63 設計簡素化: /api/preset/save endpoint 撤去)
+# /api/preset/save は task-63 Step 4 A1 で 404 fallback に変更済 (savePreset/scanCustomPresets 撤去)
 # ============================================================
-_case_s22() (
-  set -uo pipefail
-  local port="$1"
-
-  local valid_axes
-  valid_axes='{"quality_level":"poc","language_framework":"mixed","git_workflow":"none","tdd_policy":"optional","review_intensity":"minimum","autonomy_level":"aggressive"}'
-
-  # S-22a: 正常 (valid name + 6 軸 → 200 + ok:true)
-  local ts_name
-  ts_name="test-$(date +%s)"
-  local save_body
-  save_body=$(_curl_post_json "http://127.0.0.1:${port}/api/preset/save" \
-    "{\"name\":\"${ts_name}\",\"axes\":${valid_axes}}")
-  local save_code
-  save_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
-    "{\"name\":\"${ts_name}\",\"axes\":${valid_axes}}")
-
-  if [ "$save_code" != "200" ]; then
-    printf 'S-22a: valid save returned HTTP %s (expected 200, body: %s)\n' "$save_code" "$save_body" >&2
-    return 1
-  fi
-  if ! printf '%s' "$save_body" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
-    printf 'S-22a: save response ok is not true (body: %s)\n' "$save_body" >&2
-    return 1
-  fi
-
-  # S-22b: invalid name (大文字含む / underscore = regex ^[a-z0-9][a-z0-9-]{2,48}$ 不一致 → 400)
-  # regex は lowercase + digit + hyphen のみ許容。大文字 or underscore は reject
-  local inv_code_b
-  inv_code_b=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
-    "{\"name\":\"Invalid_Name\",\"axes\":${valid_axes}}")
-  if [ "$inv_code_b" != "400" ]; then
-    printf 'S-22b: invalid name (uppercase+underscore) returned HTTP %s (expected 400)\n' "$inv_code_b" >&2
-    return 1
-  fi
-
-  # S-22c: unknown axis → 400
-  local inv_code_c
-  inv_code_c=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
-    "{\"name\":\"test-save-c\",\"axes\":{\"unknown_axis\":\"poc\",\"quality_level\":\"poc\",\"language_framework\":\"mixed\",\"git_workflow\":\"none\",\"tdd_policy\":\"optional\",\"review_intensity\":\"minimum\",\"autonomy_level\":\"aggressive\"}}")
-  if [ "$inv_code_c" != "400" ]; then
-    printf 'S-22c: unknown axis returned HTTP %s (expected 400)\n' "$inv_code_c" >&2
-    return 1
-  fi
-
-  # S-22d: name に path traversal 文字 (../traverse) → 400 (regex 不一致: "/" は許可されない)
-  local inv_code_d
-  inv_code_d=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
-    "{\"name\":\"../traverse\",\"axes\":${valid_axes}}")
-  if [ "$inv_code_d" != "400" ]; then
-    printf 'S-22d: path traversal name returned HTTP %s (expected 400)\n' "$inv_code_d" >&2
-    return 1
-  fi
-
-  return 0
-)
+# _case_s22 は削除 — /api/preset/save endpoint が 404 fallback になったため
 
 # ============================================================
 # Case S-23: partial failure ok:false + rollback 件数 verify
@@ -1327,8 +1274,9 @@ _case_s24() (
 )
 
 # ============================================================
-# Case S-25: invalid JSON body → 400
+# Case S-25: invalid JSON body → 400 (/api/set のみ)
 # iter 4 C: T-U1 — invalid JSON body 400
+# task-63: /api/preset/save sub-case b は撤去 (/api/preset/save endpoint 撤去済のため)
 # ============================================================
 _case_s25() (
   set -uo pipefail
@@ -1346,48 +1294,14 @@ _case_s25() (
     return 1
   fi
 
-  # /api/preset/save にも invalid JSON
-  local http_code2
-  http_code2=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 \
-    -X POST -H 'Content-Type: application/json' \
-    -d 'not_json_at_all' \
-    "http://127.0.0.1:${port}/api/preset/save" 2>/dev/null || true)
-
-  if [ "$http_code2" != "400" ]; then
-    printf 'S-25b: invalid JSON to /api/preset/save returned HTTP %s (expected 400)\n' "$http_code2" >&2
-    return 1
-  fi
-
   return 0
 )
 
 # ============================================================
-# Case S-26: /api/preset/save で 6 軸欠落 → 400
-# iter 4 C: HIGH-Q2 — 6 軸必須検証
+# Case S-26: 撤去 (task-63 設計簡素化: /api/preset/save endpoint 撤去)
+# /api/preset/save は task-63 Step 4 A1 で 404 fallback に変更済
 # ============================================================
-_case_s26() (
-  set -uo pipefail
-  local port="$1"
-
-  # name は有効、axes が部分的のみ (quality_level のみ)
-  local http_code
-  http_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
-    '{"name":"test-partial-axes","axes":{"quality_level":"poc"}}')
-
-  # iter 6 B strict: server.js iter 4 A で 6 軸必須 reject 実装済 (400 確実)
-  # partial axes (6 軸未満) は 400 のみ PASS。200 返却は regression → FAIL
-  case "$http_code" in
-    400) return 0 ;;
-    200)
-      printf 'S-26: partial axes save returned HTTP 200 (regression: server should reject with 400)\n' >&2
-      return 1
-      ;;
-    *)
-      printf 'S-26: partial axes save returned HTTP %s (expected 400)\n' "$http_code" >&2
-      return 1
-      ;;
-  esac
-)
+# _case_s26 は削除 — /api/preset/save endpoint が 404 fallback になったため
 
 # ============================================================
 # Case S-27: /api/set 空文字列 value → 仕様確認
@@ -1516,28 +1430,10 @@ _case_s30() (
 )
 
 # ============================================================
-# Case S-31: /api/preset/save path traversal name → 400
-# iter 4 C: G6 統合 — name に "/" 含む → regex 不一致 → 400
+# Case S-31: 撤去 (task-63 設計簡素化: /api/preset/save endpoint 撤去)
+# /api/preset/save は task-63 Step 4 A1 で 404 fallback に変更済
 # ============================================================
-_case_s31() (
-  set -uo pipefail
-  local port="$1"
-
-  local valid_axes
-  valid_axes='{"quality_level":"poc","language_framework":"mixed","git_workflow":"none","tdd_policy":"optional","review_intensity":"minimum","autonomy_level":"aggressive"}'
-
-  # "../traverse" → name に "/" が含まれる = regex ^[a-z][a-z0-9-]{1,40}$ 不一致
-  local http_code
-  http_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
-    "{\"name\":\"../traverse\",\"axes\":${valid_axes}}")
-
-  if [ "$http_code" != "400" ]; then
-    printf 'S-31: path traversal name returned HTTP %s (expected 400)\n' "$http_code" >&2
-    return 1
-  fi
-
-  return 0
-)
+# _case_s31 は削除 — /api/preset/save endpoint が 404 fallback になったため
 
 # ============================================================
 # Case S-32: category filter GET /api/keys?category=<name> → filtered list
@@ -1583,24 +1479,245 @@ _case_s32() (
 )
 
 # ============================================================
-# Case S-33: XSS injection save name 検証
-# iter 4 C: G1 — <script> タグ含む name は regex 不一致 → 400
+# Case S-33: 撤去 (task-63 設計簡素化: /api/preset/save endpoint 撤去)
+# /api/preset/save は task-63 Step 4 A1 で 404 fallback に変更済
 # ============================================================
-_case_s33() (
+# _case_s33 は削除 — /api/preset/save endpoint が 404 fallback になったため
+
+# ============================================================
+# task-63 Step 5 新規 case (S-35〜S-39)
+# /api/current-preset + top view banner + edit 遷移 + unsaved banner 検証
+# ============================================================
+
+# ============================================================
+# Case S-35: GET /api/current-preset → 200 + match_type field + display_name_ja field 含む
+# draft §3.4 / §3.6: /api/current-preset は { match_type, name, display_name_ja } を返す (案 C values 一致判定)
+# ============================================================
+_case_s35() (
   set -uo pipefail
   local port="$1"
 
-  local valid_axes
-  valid_axes='{"quality_level":"poc","language_framework":"mixed","git_workflow":"none","tdd_policy":"optional","review_intensity":"minimum","autonomy_level":"aggressive"}'
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
 
-  # <script>alert(1)</script> は name regex 不一致 → 400
-  # (URL エンコードして送る)
-  local http_code
-  http_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
-    "{\"name\":\"<script>alert(1)</script>\",\"axes\":${valid_axes}}")
+  if ! printf '%s' "$body" | grep -q '"match_type"'; then
+    printf 'S-35: /api/current-preset missing .match_type field (body: %s)\n' "$body" >&2
+    return 1
+  fi
 
-  if [ "$http_code" != "400" ]; then
-    printf 'S-33: XSS name returned HTTP %s (expected 400)\n' "$http_code" >&2
+  if ! printf '%s' "$body" | grep -q '"display_name_ja"'; then
+    printf 'S-35: /api/current-preset missing .display_name_ja field (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # match_type は "preset" または "unsaved" のどちらかであること
+  if ! printf '%s' "$body" | grep -qE '"match_type"[[:space:]]*:[[:space:]]*"(preset|unsaved)"'; then
+    printf 'S-35: /api/current-preset .match_type is not "preset" or "unsaved" (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-36: preset apply 後 GET /api/current-preset → match_type=preset + 正しい name/display_name_ja
+# draft §3.4: preset 完全一致時は { match_type: "preset", name: "<key>", display_name_ja: "<日本語名>" }
+# ============================================================
+_case_s36() (
+  set -uo pipefail
+  local port="$1"
+
+  # poc-no-git を apply して既知の preset 状態にする
+  local apply_code
+  apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
+  case "$apply_code" in
+    200|207) : ;;
+    *)
+      printf 'S-36: preset apply returned HTTP %s (expected 200/207), skip\n' "$apply_code" >&2
+      return 2
+      ;;
+  esac
+
+  # /api/current-preset を取得
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+
+  # match_type が "preset" であること
+  if ! printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"preset"'; then
+    printf 'S-36: after poc-no-git apply, match_type is not "preset" (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # name が "poc-no-git" であること
+  if ! printf '%s' "$body" | grep -q '"name"[[:space:]]*:[[:space:]]*"poc-no-git"'; then
+    printf 'S-36: after poc-no-git apply, name is not "poc-no-git" (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # display_name_ja が存在すること (日本語名: "POC・お試し (Git なし)")
+  if ! printf '%s' "$body" | grep -q '"display_name_ja"'; then
+    printf 'S-36: /api/current-preset missing display_name_ja after preset apply (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-37: app.js に renderTop 関数 + bannerLabel/bannerValue が静的に存在 (top view banner 描画確認)
+# draft §3.4: top view は「プリセット: <日本語名>」または「未保存変更あり」banner を描画する
+# 検証方式: app.js 静的 grep (server endpoint での DOM 検証は smoke スコープ外)
+# ============================================================
+_case_s37() (
+  set -uo pipefail
+  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
+
+  if [ ! -f "$app_js" ]; then
+    printf 'S-37: app.js not found at %s\n' "$app_js" >&2
+    return 1
+  fi
+
+  # renderTop 関数が存在すること
+  if ! grep -q 'function renderTop' "$app_js"; then
+    printf 'S-37: app.js missing renderTop function\n' >&2
+    return 1
+  fi
+
+  # bannerLabel / bannerValue が存在すること (top view banner 描画ロジック)
+  if ! grep -q 'bannerLabel' "$app_js"; then
+    printf 'S-37: app.js missing bannerLabel (top view banner logic)\n' >&2
+    return 1
+  fi
+
+  if ! grep -q 'bannerValue' "$app_js"; then
+    printf 'S-37: app.js missing bannerValue (top view banner logic)\n' >&2
+    return 1
+  fi
+
+  # 「設定を変更」ボタンが存在すること (top view CTA)
+  if ! grep -q '設定を変更' "$app_js"; then
+    printf 'S-37: app.js missing 「設定を変更」CTA button text\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-38: app.js に state.view='edit' 遷移ロジック + renderEdit 関数が存在 (edit view 遷移確認)
+# draft §3.3 / §3.7: state machine で top → edit 遷移は GOTO_EDIT action で行われる
+# 検証方式: app.js 静的 grep
+# ============================================================
+_case_s38() (
+  set -uo pipefail
+  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
+
+  if [ ! -f "$app_js" ]; then
+    printf 'S-38: app.js not found at %s\n' "$app_js" >&2
+    return 1
+  fi
+
+  # renderEdit 関数が存在すること
+  if ! grep -q 'function renderEdit' "$app_js"; then
+    printf 'S-38: app.js missing renderEdit function\n' >&2
+    return 1
+  fi
+
+  # view: 'edit' への遷移ロジックが存在すること (reducer で view を 'edit' に遷移)
+  if ! grep -q "view: 'edit'" "$app_js"; then
+    printf 'S-38: app.js missing view:"edit" transition in reducer\n' >&2
+    return 1
+  fi
+
+  # 'top' → 'edit' の排他切替が render 内に存在すること
+  if ! grep -q "state.view === 'edit'" "$app_js"; then
+    printf 'S-38: app.js missing state.view===edit branch in render\n' >&2
+    return 1
+  fi
+
+  # editMode が 'preset' | 'individual' の 2 種であること
+  if ! grep -q "editMode: 'preset'" "$app_js"; then
+    printf 'S-38: app.js missing editMode:preset in reducer\n' >&2
+    return 1
+  fi
+
+  if ! grep -q "editMode: 'individual'" "$app_js"; then
+    printf 'S-38: app.js missing editMode:individual in reducer\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-39: /api/set で 1 key 変更 → GET /api/current-preset → match_type=unsaved
+# draft §3.4 / §3.7: 個別 key 変更後、どの preset にも完全一致しない場合は match_type=unsaved
+# 検証方式: server endpoint レベル (DOM は不要)
+# ============================================================
+_case_s39() (
+  set -uo pipefail
+  local port="$1"
+
+  # まず poc-no-git を apply して既知 preset 状態にする
+  local apply_code
+  apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
+  case "$apply_code" in
+    200|207) : ;;
+    *)
+      printf 'S-39: preset apply returned HTTP %s (expected 200/207), skip\n' "$apply_code" >&2
+      return 2
+      ;;
+  esac
+
+  # apply 後の /api/current-preset が match_type=preset であることを確認 (前提)
+  local before_body
+  before_body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+  if ! printf '%s' "$before_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"preset"'; then
+    # apply が no-op (変更なし) だった場合は既に unsaved かもしれないのでスキップ
+    printf 'S-39: before state is not match_type=preset (may be no-op apply), skip\n' >&2
+    return 2
+  fi
+
+  # /api/keys から known key を取得して 1 key 変更する
+  # confidence_threshold を現在値と異なるダミー値に変更する
+  # (まず現在値を取得して、異なる値をセットする)
+  local keys_body
+  keys_body=$(_curl_json "http://127.0.0.1:${port}/api/keys")
+
+  # confidence_threshold という known key が存在する場合はそれを使う
+  # 存在しない場合は feature_confidence_gate_enabled を使う (bool 型、true/false)
+  local test_key test_value
+  if printf '%s' "$keys_body" | grep -q '"confidence_threshold"'; then
+    test_key="confidence_threshold"
+    test_value="0.1234"
+  else
+    # fallback: feature_confidence_gate_enabled の値を反転
+    local cur_val
+    cur_val=$(printf '%s' "$keys_body" | grep -A5 '"feature_confidence_gate_enabled"' | grep '"current_value"' | grep -oE '"(true|false)"' | head -1 | tr -d '"' || true)
+    test_key="feature_confidence_gate_enabled"
+    if [ "$cur_val" = "true" ]; then
+      test_value="false"
+    else
+      test_value="true"
+    fi
+  fi
+
+  # /api/set で key を変更する
+  local set_code
+  set_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/set" \
+    "{\"key\":\"${test_key}\",\"value\":\"${test_value}\"}")
+
+  if [ "$set_code" != "200" ]; then
+    printf 'S-39: /api/set returned HTTP %s (key=%s, value=%s), skip\n' "$set_code" "$test_key" "$test_value" >&2
+    return 2
+  fi
+
+  # /api/current-preset を取得して match_type=unsaved であることを確認
+  local after_body
+  after_body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+
+  if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
+    printf 'S-39: after /api/set change, match_type is not "unsaved" (body: %s)\n' "$after_body" >&2
     return 1
   fi
 
@@ -1677,7 +1794,7 @@ _case_s34() (
 # テスト実行
 # ============================================================
 
-printf '\n%s\n\n' '=== hc-config-web-ui-smoke (task-61 Step 5 iter 4 C: 34 cases) ==='
+printf '\n%s\n\n' '=== hc-config-web-ui-smoke (task-63 Step 5: /api/current-preset + top/edit view 5 case) ==='
 
 # --- server lifecycle (独立 server、各 case で起動/停止) ---
 
@@ -1747,10 +1864,24 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
   _start_shared_server "$ISOLATED_HISTORY_DIR" "$ISOLATED_PRESETS_DIR"
 
   if [ -z "$SHARED_PORT" ]; then
-    printf '  WARN: shared server failed to start, skipping S-05 through S-33\n'
-    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-22 S-23 S-24 S-25 S-26 S-27 S-28 S-29 S-30 S-31 S-32 S-33; do
+    printf '  WARN: shared server failed to start, skipping shared-server cases\n'
+    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39; do
       _record SKIP "$cid" "shared server not available"
     done
+    _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
+    _record SKIP "S-26" "/api/preset/save 6 軸欠落 case 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
+    _record SKIP "S-31" "/api/preset/save path traversal case 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
+    _record SKIP "S-33" "XSS injection save name case 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
+    if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
+    else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
+    fi
+    if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
+    else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
+    fi
   else
     _PORT="$SHARED_PORT"
 
@@ -1823,9 +1954,8 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                                     _record FAIL "S-21" "unknown preset → 404 (diff + apply)"
     fi
 
-    if _case_s22 "$_PORT" 2>/dev/null; then _record PASS "S-22" "/api/preset/save 正常 + 異常 4 sub-case"
-    else                                     _record FAIL "S-22" "/api/preset/save 正常 + 異常 4 sub-case"
-    fi
+    _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
 
     if _case_s23 "$_PORT" 2>/dev/null; then _record PASS "S-23" "apply response ok + applied + partial フィールド verify"
     else                                     _record FAIL "S-23" "apply response ok + applied + partial フィールド verify"
@@ -1835,13 +1965,12 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                                                              _record FAIL "S-24" "HISTORY_DIR 不在 → apply で自動作成"
     fi
 
-    if _case_s25 "$_PORT" 2>/dev/null; then _record PASS "S-25" "invalid JSON body → 400 (/api/set + /api/preset/save)"
-    else                                     _record FAIL "S-25" "invalid JSON body → 400 (/api/set + /api/preset/save)"
+    if _case_s25 "$_PORT" 2>/dev/null; then _record PASS "S-25" "invalid JSON body → 400 (/api/set のみ)"
+    else                                     _record FAIL "S-25" "invalid JSON body → 400 (/api/set のみ)"
     fi
 
-    if _case_s26 "$_PORT" 2>/dev/null; then _record PASS "S-26" "/api/preset/save 部分 axes (6 軸欠落) → 400 strict"
-    else                                     _record FAIL "S-26" "/api/preset/save 部分 axes (6 軸欠落) → 400 strict"
-    fi
+    _record SKIP "S-26" "/api/preset/save 6 軸欠落 case 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
 
     if _case_s27 "$_PORT" 2>/dev/null; then _record PASS "S-27" "POST /api/set empty string value → 200 or 400 (仕様確認)"
     else                                     _record FAIL "S-27" "POST /api/set empty string value → 200 or 400 (仕様確認)"
@@ -1862,9 +1991,8 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-30" "rollback → ok + restored フィールド verify"
     fi
 
-    if _case_s31 "$_PORT" 2>/dev/null; then _record PASS "S-31" "/api/preset/save path traversal name → 400"
-    else                                     _record FAIL "S-31" "/api/preset/save path traversal name → 400"
-    fi
+    _record SKIP "S-31" "/api/preset/save path traversal case 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
 
     _s32_result=0
     _case_s32 "$_PORT" 2>/dev/null || _s32_result=$?
@@ -1873,14 +2001,42 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-32" "GET /api/keys?category=<name> → filtered list"
     fi
 
-    if _case_s33 "$_PORT" 2>/dev/null; then _record PASS "S-33" "XSS injection save name → 400 (regex reject)"
-    else                                     _record FAIL "S-33" "XSS injection save name → 400 (regex reject)"
+    _record SKIP "S-33" "XSS injection save name case 撤去 (task-63 設計簡素化)"
+    SKIP=$((SKIP + 1))
+
+    # --- task-63 Step 5 新規 case ---
+    printf '\n%s\n' '--- task-63 Step 5 新規 case (S-35〜S-39) ---'
+
+    if _case_s35 "$_PORT" 2>/dev/null; then _record PASS "S-35" "GET /api/current-preset → match_type + display_name_ja field"
+    else                                     _record FAIL "S-35" "GET /api/current-preset → match_type + display_name_ja field"
+    fi
+
+    _s36_result=0
+    _case_s36 "$_PORT" 2>/dev/null || _s36_result=$?
+    if [ $_s36_result -eq 0 ];   then _record PASS "S-36" "preset apply 後 /api/current-preset → match_type=preset"
+    elif [ $_s36_result -eq 2 ]; then _record SKIP "S-36" "preset apply skip (apply failed)"
+    else                              _record FAIL "S-36" "preset apply 後 /api/current-preset → match_type=preset"
+    fi
+
+    if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
+    else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
+    fi
+
+    if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
+    else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
+    fi
+
+    _s39_result=0
+    _case_s39 "$_PORT" 2>/dev/null || _s39_result=$?
+    if [ $_s39_result -eq 0 ];   then _record PASS "S-39" "/api/set 1 key 変更 → /api/current-preset match_type=unsaved"
+    elif [ $_s39_result -eq 2 ]; then _record SKIP "S-39" "/api/set unsaved 確認 skip (apply no-op or key not found)"
+    else                              _record FAIL "S-39" "/api/set 1 key 変更 → /api/current-preset match_type=unsaved"
     fi
 
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-22 S-23 S-24 S-25 S-26 S-27 S-28 S-29 S-30 S-31 S-32 S-33; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
 fi
