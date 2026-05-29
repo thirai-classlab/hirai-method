@@ -1779,9 +1779,15 @@ _cmd_interactive_tui() {
 #   - 上記以外 (default)                 → `_cmd_interactive_web` (Step 1 では placeholder + TUI 降格)
 #   非 TTY 経路は従来通り `_cmd_interactive_numeric`。
 #   Step 2 で `_cmd_interactive_web` を hc-config-web-server.js 起動に置換予定。
+#
+# task-61 Step 5 iter 2 D (2026-05-29): yml feature toggle 経路を追加 (OR 結合)。
+#   - HC_HC_CONFIG_TUI_LEGACY=true                       (legacy compat env、Step 1 起源、user 直接 set 用)
+#   - HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED=true       (yml feature_hc_config_tui_legacy_enabled 経由)
+#   どちらかが true なら TUI fallback (両者 OR 結合、後方互換維持)。
+#   起源: Design Constraints 「機能 on/off は yml feature toggle で集中管理」 + Step 5 iter 1 qa-expert H-Q2。
 cmd_interactive() {
   if [ -t 0 ] && [ -t 1 ] && [ "${HC_HC_CONFIG_FORCE_NUMERIC:-}" != "1" ]; then
-    if [ "${HC_HC_CONFIG_TUI_LEGACY:-}" = "true" ]; then
+    if [ "${HC_HC_CONFIG_TUI_LEGACY:-}" = "true" ] || [ "${HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED:-}" = "true" ]; then
       _cmd_interactive_tui
     else
       _cmd_interactive_web

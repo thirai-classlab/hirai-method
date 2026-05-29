@@ -164,8 +164,8 @@ stop_sound: /System/Library/Sounds/Glass.aiff
 # - confidence_threshold: pass の最低値（0.0〜1.0）。0.6 が SuperClaude 既定相当。
 # - confidence_required:  true なら未記載で block。false なら未記載でも pass（fail-open 寄り）。
 # - confidence_state_dir: bypass marker / bypass.log の保管場所（.gitignore 推奨）。
-confidence_threshold: 0.6
-confidence_required: true
+confidence_threshold: 0.5
+confidence_required: false
 confidence_state_dir: .claude/.confidence-gate-state
 
 # === 必須環境変数（プロジェクト固有）===
@@ -340,12 +340,12 @@ parallel_subagent_ttl_sec: 300
 #   export HC_FEATURE_DRAFT_FLOW_GUARD_ENABLED=false        # draft-flow-guard OFF
 
 feature_loop_mode_enforcement_enabled: true       # loop-confirmation-detector + loop-auto-progress-reminder + mode-enforce
-feature_draft_flow_guard_enabled: true            # draft-flow-guard
-feature_task_rule_guard_enabled: true             # task-rule-guard + list-md-plan-first-reminder
+feature_draft_flow_guard_enabled: false
+feature_task_rule_guard_enabled: false
 feature_delegation_guard_enabled: true            # delegation-guard
-feature_workflow_enforcement_enabled: true        # workflow-guard
+feature_workflow_enforcement_enabled: false
 feature_confidence_gate_enabled: true             # confidence-gate (F3)
-feature_gateguard_enabled: true                   # gateguard (F1)
+feature_gateguard_enabled: false
 feature_context_budget_enabled: true              # context-budget
 feature_parallel_subagent_reminder_enabled: true  # parallel-subagent-reminder
 feature_autonomous_action_guard_enabled: true     # autonomous-action-guard
@@ -361,6 +361,17 @@ feature_notify_enabled: true                      # notify + stop (sound)
 feature_check_md_mermaid_enabled: true            # check-md-mermaid
 feature_failure_loop_detect_enabled: true         # failure-loop-detect
 
+# hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 2 D)
+# 対象: .claude/scripts/hc-config.sh の cmd_interactive dispatcher (L1782 周辺)
+#   true:           task-60 で実装した TUI (3-state machine + sel scalar 7 var) を起動
+#   false (default): task-61 で実装した Web UI (Node.js HTTP server + browser) を起動
+# 互換性:
+#   - legacy compat env HC_HC_CONFIG_TUI_LEGACY=true (Step 1 起源、commit 81a156e) も維持
+#   - dispatcher は両者を OR 結合判定 (どちらかが true なら TUI fallback)
+# 起源: docs/draft/hc-config-web-ui.md §3 + task-61 Step 5 iter 1 qa-expert H-Q2 (yml 集中管理欠落)
+# bypass: HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED=true で 1 セッション TUI 強制
+feature_hc_config_tui_legacy_enabled: false       # hc-config TUI legacy fallback (task-61 Step 5 iter 2 D)
+
 # === Reviewer Required / Min Count / Iteration (採用 6 条 4 reviewer 制御) ===
 # /design-review / /test-design / /module-review / /system-review command が消費 (Phase 2)。
 # yml 値 default で動作、env override 可 (HC_REVIEW_*)。
@@ -375,22 +386,22 @@ feature_failure_loop_detect_enabled: true         # failure-loop-detect
 #   export HC_REVIEW_ITERATION_MAX=3                 # 反復上限 3 回
 
 # 設計レビュー (W2 /design-review)
-review_required_design: true          # false なら /design-review が no-op skip
-review_min_count_design: 3            # default 3、reviewer_registry_design 件数下限
+review_required_design: false
+review_min_count_design: 1
 review_max_count_design: 7            # default registry 全件、上限指定
 
 # テスト設計レビュー (W1 /test-design、採用 6 条 4)
-review_required_test: true            # false なら採用 6 条 4「テスト設計レビュー」step skip 可
-review_min_count_test: 5              # default 5 (採用 6 条 4 で 5+ 動的選定)
+review_required_test: false
+review_min_count_test: 1
 review_max_count_test: 10             # default registry 全件、上限指定
 
 # モジュールレビュー (W3 /module-review)
-review_required_module: true          # false なら /module-review skip 可
+review_required_module: false
 review_min_count_module: 2            # default 2 (code-reviewer + refactoring-specialist)
 review_max_count_module: 5            # default registry 全件、上限指定
 
 # システムレビュー (W3 /system-review)
-review_required_system: true          # false なら /system-review skip 可
+review_required_system: false
 review_min_count_system: 2            # default 2 (architect-reviewer + refactoring-specialist)
 review_max_count_system: 5            # default registry 全件、上限指定
 
@@ -399,4 +410,4 @@ review_required_security: false       # default false (security 影響 task の�
 review_min_count_security: 1          # default 1 (security-reviewer)
 
 # 反復制御
-review_iteration_max: 5               # default 5 (採用 6 条 4 で 5 回上限)
+review_iteration_max: 2

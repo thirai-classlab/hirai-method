@@ -102,6 +102,7 @@ feature_init_tasks_on_start_enabled	feature_toggle	init-tasks-on-start	false に
 feature_notify_enabled	feature_toggle	notify + stop (sound)	false にすると notify/stop の音通知を OFF にし afplay 再生が止まる
 feature_check_md_mermaid_enabled	feature_toggle	check-md-mermaid	false にすると check-md-mermaid を OFF にし md 内 mermaid 構文検証が止まる
 feature_failure_loop_detect_enabled	feature_toggle	failure-loop-detect	false にすると failure-loop-detect を OFF にし同一エラー連続失敗の検出が止まる
+feature_hc_config_tui_legacy_enabled	feature_toggle	hc-config TUI legacy fallback (task-61 Step 5 iter 2 D、HC_HC_CONFIG_TUI_LEGACY と OR 結合で dispatcher が判定)	true にすると hc-config.sh interactive で task-60 TUI を起動 (default false で task-61 Web UI を起動)
 review_required_design	reviewer_control	false なら /design-review が no-op skip	false にすると design-review が no-op skip され設計レビュー fan-out が省かれる
 review_min_count_design	reviewer_control	design-review fan-out で並列起動する reviewer の最小数 (default 3、reviewer_registry_design 件数下限)	増やすと設計レビューの網羅性が上がるが並列 subagent 消費が増える。減らすとレビューが手薄になり見逃しリスクが上がる
 review_max_count_design	reviewer_control	design-review fan-out で並列起動する reviewer の最大数 (default は registry 全件)	減らすと並列 subagent 消費を抑えられるが設計レビューの網羅性が下がる。増やすと網羅性が上がるが消費が増える
