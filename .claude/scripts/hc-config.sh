@@ -1367,7 +1367,12 @@ _tui_handle_enter() {
 # iter1 H4 fix (effect panel が Enter 後に消える):
 #   ENTER で新値入力に入る際、入力プロンプト直上に「変更効果: <effect>」を 1 行再掲。
 #   ENTER 時は canonical mode へ戻して行編集 (backspace 等) を効かせ、入力後 raw に復帰。
-_cmd_interactive_tui() {
+#
+# task-60 Step 1 (2026-05-29): 旧 1 階層 flat 実装を `_cmd_interactive_tui_flat` に rename。
+#   新 `_cmd_interactive_tui` wrapper (本関数の直後) が `HC_HC_CONFIG_FLAT_NAVIGATION=true` env
+#   による fallback switch を提供する。Step 4 で本 wrapper を 3-state machine (category_menu →
+#   key_menu → effect_edit) に置換予定。Step 1 段階では env 有無に関わらず flat 動作を維持。
+_cmd_interactive_tui_flat() {
   local all_keys
   all_keys=$(_yml_list_keys "$CONFIG_PATH")
   # H3: category 順に並べ替え (区切り行表示は _tui_render が担当)
@@ -1410,6 +1415,27 @@ _cmd_interactive_tui() {
       *) : ;;  # その他キーは無視 (区切り行は選択不可なので skip 不要)
     esac
   done
+}
+
+# === task-60 Step 1: flat fallback wrapper ===
+#
+# `_cmd_interactive_tui` は cmd_interactive (TTY menu dispatcher) から呼ばれる entry point。
+# Step 1 段階では env switch を導入のみで動作は旧 flat と完全同一。
+#   - HC_HC_CONFIG_FLAT_NAVIGATION=true  → 明示的に旧 flat 実装を呼出 (fallback 経路の存続保証)
+#   - 上記以外                            → TODO (Step 4 で 3-state machine に置換)、現状は flat
+#
+# Step 4 で本 wrapper を category_menu → key_menu → effect_edit の 3-state machine ループに置換し、
+# `HC_HC_CONFIG_FLAT_NAVIGATION=true` 時のみ旧 flat を fallback 起動する形に切替える。
+_cmd_interactive_tui() {
+  # task-60 Step 1: env fallback switch
+  if [ "${HC_HC_CONFIG_FLAT_NAVIGATION:-}" = "true" ]; then
+    _cmd_interactive_tui_flat
+    return $?
+  fi
+  # TODO (task-60 Step 4): 3-state machine ループ (category_menu → key_menu → effect_edit) に置換
+  # 現状は task-60 Step 4 実装まで旧 flat 動作を維持
+  _cmd_interactive_tui_flat
+  return $?
 }
 
 # === 対話 menu dispatcher (TTY check + fallback) ===
