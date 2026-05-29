@@ -17,7 +17,7 @@
 //
 // task-63 簡素化版:
 //   - state.view 'top' | 'edit' 排他切替
-//   - state.currentPreset (起動時 /api/current-preset fetch、match_type 3 種: preset/custom/unsaved)
+//   - state.currentPreset (起動時 /api/current-preset fetch、match_type 2 種: preset/unsaved。custom は撤去済 draft §8)
 //   - state.editPresetSelection (編集画面 preset 選択中の英 key)
 //   - state.editAxisChanges (個別 key 変更 in-memory diff)
 //   - reducer(state, action) Pure Function (副作用なし、state 不変更新)
@@ -58,7 +58,7 @@
   // ============================================================
   const initialState = {
     view: 'top', // 'top' | 'edit'  (task-63 採用、task-61 'idle'/'category'/'key'/'preset' 廃止)
-    currentPreset: null, // { match_type: 'preset'|'custom'|'unsaved', name, display_name_ja, axes: {6 軸} }
+    currentPreset: null, // { match_type: 'preset'|'unsaved', name, display_name_ja, axes: {6 軸} } (custom 撤去済 draft §8)
     presets: [], // [{ name, display_name_ja, ... }] (server /api/presets)
     history: [],
     // edit view 内 sub-state
@@ -147,6 +147,8 @@
       }
       case 'edit:apply': {
         // 適用後は top 復帰、currentPreset は payload で更新、editMode は 'preset' に reset
+        // applying flag を必ず false に戻す (部分失敗パスでも applying 残留を防ぐ。
+        //   catch 節以外の成功/部分失敗パスは明示 reset が無いため、apply 完了 action で集中 reset)
         return {
           ...prevState,
           view: 'top',
@@ -155,6 +157,7 @@
           editPresetDiff: null,
           editAxisChanges: {},
           editCurrentAxes: {},
+          applying: false,
           currentPreset: action.payload && action.payload.currentPreset ? action.payload.currentPreset : prevState.currentPreset,
         }
       }
@@ -217,8 +220,8 @@
     return r.history || []
   }
   // task-63: 起動時に /api/current-preset で現在 preset 判定
-  //   draft §3.6 仕様: { match_type: 'preset'|'custom'|'unsaved', name, display_name_ja, axes }
-  //   server 互換補正: match_type 不在で name == 'custom' / 'unsaved' の場合に補完
+  //   draft §3.6 仕様: { match_type: 'preset'|'unsaved', name, display_name_ja, axes } (custom 撤去済 draft §8)
+  //   server 互換補正: match_type 不在で name == 'custom' / 'unsaved' の旧 server response も unsaved に正規化
   const loadCurrentPreset = async () => {
     try {
       const r = await api('GET', '/api/current-preset')
