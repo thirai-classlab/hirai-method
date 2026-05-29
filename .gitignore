@@ -23,6 +23,15 @@
 .claude/worktrees/
 .claude/bash-whitelist-requests/
 
+# preset save (custom-*.yml) は user manual 保存物。
+# 通常は git 管理対象外 (個人保存。共有したい場合のみ明示 add)。
+# smoke / test 由来 pollution を将来 stage しても commit 漏れさせない:
+.claude/presets/custom-test-*.yml
+.claude/presets/custom-*invalid*.yml
+
+# task-61 visual verification screenshot (再生成可能 artifact)
+.claude/.task-screenshots/
+
 # Caches
 __pycache__/
 *.pyc
