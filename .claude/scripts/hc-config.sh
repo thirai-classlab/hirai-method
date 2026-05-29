@@ -1353,6 +1353,69 @@ _tui_render_category_menu() {
   done
 }
 
+# task-60 Step 3 (2026-05-29): 3-state machine の key_menu state 用 menu 描画
+# $1: category index (0-5、`_tui_render_category_menu` の cat_names 順)
+# $2: 現在の key sel index (0-based、category 内の key 連番)
+# 標準出力:
+#   - 画面クリア + header (=== hc-config TUI ===  category: <cat>  (ESC: 戻る, q: 終了))
+#   - category 配下の全 key を hc_metadata_keys_by_category 経由で取得し改行区切りで列挙
+#   - 選択行は "> " prefix + reverse video、非選択は "  " prefix
+#   - 下部 effect panel (区切り行 + key/説明/型/現在値/default/変更効果) を _tui_render_effect_panel と同じ
+#     描画規約で inline 実装 (panel 関数は all_keys+sel 前提のため category scope 用に新規実装)
+#
+# Step 4 で 3-state machine の key_menu state から呼出される。本 Step では関数定義のみ追加、呼出側は未配線。
+# bash 3.2 互換: index array (local -a) のみ使用、連想配列 / declare -g 不使用。lib 不在時は (該当 key なし) で degrade。
+_tui_render_key_menu() {
+  local cat_idx="${1:-0}"
+  local key_sel="${2:-0}"
+  local -a cat_names=("保護パス" "ファイル配置" "state_dir" "Gate/Confidence" "feature_toggle" "reviewer_control")
+  local cat="${cat_names[$cat_idx]}"
+
+  printf '%s' "$_TUI_CLEAR"
+  printf '%s=== hc-config TUI ===%s  category: %s  (ESC: 戻る, q: 終了)\n\n' "$_TUI_BOLD" "$_TUI_RESET" "$cat"
+
+  # category 配下 key 一覧取得 (lib 不在なら空)
+  local keys=""
+  if command -v hc_metadata_keys_by_category >/dev/null 2>&1; then
+    keys=$(hc_metadata_keys_by_category "$cat" 2>/dev/null || true)
+  fi
+  if [ -z "$keys" ]; then
+    printf '  (該当 key なし)\n'
+    return 0
+  fi
+
+  # key 一覧描画 (sel ハイライト) + 選択 key 捕捉
+  local i=0 key selected_key=""
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    if [ "$i" = "$key_sel" ]; then
+      printf '%s> %-46s%s\n' "$_TUI_REVERSE" "$key" "$_TUI_RESET"
+      selected_key="$key"
+    else
+      printf '  %-46s\n' "$key"
+    fi
+    i=$((i + 1))
+  done <<< "$keys"
+
+  # 下部 effect panel (_tui_render_effect_panel と同じ描画規約で inline 実装)
+  if [ -n "$selected_key" ]; then
+    local cur type raw desc effect def
+    raw=$(_yml_get_raw "$CONFIG_PATH" "$selected_key" || printf '')
+    cur=$(_get_current "$selected_key")
+    def=$(_get_default "$selected_key" 2>/dev/null || printf '')
+    type=$(_infer_type "$selected_key" "$raw")
+    desc=$(_meta_desc "$selected_key")
+    effect=$(_meta_effect "$selected_key")
+    printf '\n%s---------------------------------------------------------------%s\n' "$_TUI_DIM" "$_TUI_RESET"
+    printf '%skey%s     : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$selected_key"
+    printf '%s説明%s    : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$desc"
+    printf '%s型%s      : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$type"
+    printf '%s現在値%s  : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$cur" | tr '\n' ',')"
+    printf '%sdefault%s : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$def" | tr '\n' ',')"
+    printf '%s変更効果%s: %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$effect"
+  fi
+}
+
 # key 一覧の選択画面 + effect panel を描画 (H3: category 境界に区切り行を挿入)
 # $1: category 順に並んだ全 key 改行区切り (1 行 1 key), $2: 選択 index (0-based、key のみ counts)
 # 区切り行 (=== <category> (N keys) ===) は選択対象外。sel は key の連番。
