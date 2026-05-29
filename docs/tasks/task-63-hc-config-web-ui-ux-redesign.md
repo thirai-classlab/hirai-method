@@ -209,31 +209,58 @@ stateDiagram-v2
 
 ### Step 6: (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle
 
-**Step status**: 🔲
+**Step status**: ✅ (iter 2 で収束、2026-05-29)
 
-**作業概要**: メインが reviewer 5+ を動的選定 (base 4: `tdd-guide` / `test-automator` / `qa-expert` / `pr-test-analyzer` + domain-specific 1+: `frontend-design-reviewer` / `code-architect` / `security-reviewer`) し並列起動 (`run_in_background: true`)、CRITICAL+HIGH+MEDIUM=0 まで反復 (上限 5 回)。各 reviewer prompt に `.claude/rules/workflow.md` §reviewer prompt 共通規約 5 必須項目 (対象 Read / 観点 / findings format / confidence / プロジェクト整合性 + 他 task 影響確認) を含める。
+**作業概要**: メインが reviewer 6 を動的選定 (base 4: `tdd-guide` / `test-automator` / `qa-expert` / `pr-test-analyzer` + domain-specific 2: `code-architect` [state machine / API 契約] / `accessibility-tester` [WCAG / i18n]) し並列起動 (`run_in_background: true`)、CRITICAL+HIGH+MEDIUM=0 まで反復 (上限 5 回)。各 reviewer prompt に `.claude/rules/workflow.md` §reviewer prompt 共通規約 5 必須項目 (対象 Read / 観点 / findings format / confidence / プロジェクト整合性 + 他 task 影響確認) を含める。
 
 **完了条件**:
 - 全 reviewer approve / no objection (CRITICAL+HIGH+MEDIUM=0、LOW 許容)
 - iter cycle 5 回以内収束 (超過時 user escalation + `ECC_TEST_DESIGN_REVIEW_OFF=1` bypass)
 - 各 reviewer median confidence 0.85 以上
 
+**iter cycle 記録**:
+
+| iter | reviewer (起動数) | CRIT | HIGH | MED | LOW | 修正 commit | 状態 |
+|:---:|---|:---:|:---:|:---:|:---:|---|---|
+| 1 | tdd-guide / test-automator / qa-expert / pr-test-analyzer / code-architect / accessibility-tester (6) | 2 | 9 | 多数 | 多数 | — | 要 fix |
+| 2 | 同 6 (re-review) | 0 | 0 | 2 | 3 | `520b8eb` (F14 app.js) / `9250648` (smoke iter-2) / `9f5a73f` (draft §3.7 同期) | **収束** |
+
+- **iter 1 主要 findings**: yml 汚染 (S-36/S-39 が実 harness-config.yml を書換、4 reviewer cross-confirm、実害復元済) / SKIP 二重加算 / display_name_ja 値未検証 / save 404・絵文字 negative test 不在 / **applyIndividualMode applying flag 残留 (F14 実バグ)**。
+- **iter 2 fix**: F1-F14 是正 (smoke snapshot/restore + 値検証 + S-40/S-41 追加 + S-39 2 段方式 + edit:apply reducer の applying reset + draft §3.7 colon-style 同期)。smoke 37/45 PASS / 0 FAIL、TUI 14/14 regression 0、`git diff harness-config.yml` 空実証。
+- **iter 2 残**: MED 2 (S-39 fallback compact-JSON edge [fallback 未到達・実害 LOW 相当] / applyPresetMode の `state=reducer()` 直書き vs dispatch 一貫性) + LOW 3 (`_axesOptions` mutation / S-37-38 静的 grep tautological / S-19 mkdir)。**いずれも refactor-grade のため Step 8 に routing** (test-design 観点の CRIT+HIGH = 0 で収束、impl refactor 残は次 Step で吸収)。
+- median confidence 0.93 (全 reviewer ≥ 0.85)。
+
 ### Step 7: (テスト合格)
 
 **Step status**: 🔲
 
-**作業概要**: unit smoke (`hc-config-web-ui-smoke.sh` 既存 + 新 5 case) + tui smoke (`hc-config-tui-smoke.sh` 14/14 regression 0) + script smoke 21/21 + E2E (agent-browser Playwright top→edit→apply→top) + visual verification 14 case (top × 3 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 2、`.claude/.task-screenshots/task-63/case-NN-*.png`) を全実行。
+**作業概要**: unit smoke (`hc-config-web-ui-smoke.sh` 既存 + 新 case S-35〜S-41) + tui smoke (`hc-config-tui-smoke.sh` 14/14 regression 0) + script smoke 21/21 + E2E (agent-browser Playwright top→edit→apply→top) + visual verification 10 case (案 C 簡素化: top × 2 状態 [preset/unsaved] × 3 breakpoint + edit × 3 breakpoint + dialog × 1、`.claude/.task-screenshots/task-63/case-NN-*.png`) を全実行。
 
 **完了条件**:
 - 全 smoke PASS、regression 0 (task-60 TUI legacy fallback 含む)
-- visual 14 case 全 PASS (絵文字なし / 日本語名表示 / WCAG 2.2 AA / 3 breakpoint)
+- visual 10 case 全 PASS (絵文字なし / 日本語名表示 / WCAG 2.2 AA / 3 breakpoint)
 - task-60 TUI legacy 維持: `HC_HC_CONFIG_TUI_LEGACY=true bash .claude/scripts/lib/hc-config.sh interactive` で旧 TUI 起動
+
+**a11y 検証強化項目 (Step 6 iter-1 accessibility-tester review 由来、visual 10 case 内で確認)**:
+- top↔edit view 排他切替時の focus 管理 + async 操作 (preset apply / 個別 apply) 後の focus 復元先 (WCAG 2.4.3) — F14 で applying flag 残留は修正済、focus 移動先は visual/manual で確認
+- async 状態変化 (apply 完了 / 編集モード遷移) の screen reader 通知 (aria-live / role=status、WCAG 4.1.3)
+- focus visible の contrast 3:1 を 375/768/1440px + dark theme で確認 (WCAG 2.4.7)
+- dialog (diff preview) の focus trap + Esc close 動作 (WCAG 2.4.3 / 2.1.1)
+- 日本語名読み上げ確認 (lang="ja"、可能なら NVDA/VoiceOver ja-JP)
+- dark theme コントラスト 4.5:1 (banner / button / table text、WCAG 1.4.3)
+- (note) 320px は design system 最小 375px のため accepted risk、必要時のみ追加撮影
 
 ### Step 8: (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出
 
 **Step status**: 🔲
 
 **作業概要**: 3 観点 (持続可能性: PRESETS `display_name_ja` 必須化 lint or runtime check / 汎用性: state machine `view` enum 2 値固定で将来 `settings|help` 拡張可能 / 非冗長化: `formatPresetName(preset)` ヘルパー抽出で banner/list/dialog 3 箇所 DRY 化) を判定し、軽量 refactor 1 件 (`formatPresetName` 抽出) のみ実施する。
+
+**Step 6 review 由来の refactor 候補 (本 Step で判定 + 軽量分のみ実施)**:
+- `applyPresetMode` / `applyIndividualMode` 成功パスの `state = reducer(...)` 直書き → `dispatch({type:'edit:apply'})` に統一 (pr-test MED、将来 middleware 追加時の state 追跡漏れ防止)
+- `delete state._axesOptions` 直接 mutation → state 正式フィールド化 or 外部 cache 分離 (pr-test/code-arch LOW、immutability 原則整合)
+- S-37/S-38 静的 grep の tautological 性 → reducer を DOM 非依存 module 抽出し `reducer(state,{type:'edit:enter'}).view==='edit'` の純粋 unit test 化 (全 reviewer LOW、規模大なら別 task 提案)
+- S-39 fallback (`feature_confidence_gate_enabled` 反転) の compact-JSON 脆弱性 → fallback 簡素化 or 堅牢化 (tdd MED、fallback 未到達のため優先度低)
 
 **完了条件**:
 - refactor 実施: `formatPresetName` 関数 1 件抽出 (LOC < 20、3 箇所 call site DRY)
