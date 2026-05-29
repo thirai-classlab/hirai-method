@@ -931,6 +931,27 @@ function savePreset(body) {
 //   起動後に他プロセスや過去 session で保存された custom preset を /api/presets で
 //   発見可能にする。Read 専用、parse 軽量 (key: value 形式のみ、コメント無視)。
 //   失敗時 silent skip (本流 /api/presets 動作を壊さない)。
+//
+// fix/preset-test-pollution-cleanup (2026-05-29):
+//   smoke / manual test 由来の意味なし name (test-* / aaaaaa / 数字のみ / 同一文字 6 連
+//   以上 / *invalid*) を sidebar 表示から除外する blacklist regex を追加。
+//   user manual 保存の意味ある name (英数 hyphen 自由組み合わせ) は引き続き通過。
+//   削除ではなく非表示なので、user が意図せず regex に該当する name で保存しても
+//   yml file 自体は残り、後で regex 緩和すれば復活可能。
+const TEST_POLLUTION_PATTERNS = [
+  /^test-/,            // smoke 由来 (test-<timestamp> 等)
+  /^(.)\1{5,}$/,       // 同一文字 6 連以上 (aaaaaa, bbbbbb, ----- 等)
+  /^\d+$/,             // 数字のみ (123, 456 等の意味なし name)
+  /invalid/i,          // *invalid* 含む (test 失敗試験由来明示語)
+]
+
+function isTestPollutionName(name) {
+  for (const re of TEST_POLLUTION_PATTERNS) {
+    if (re.test(name)) return true
+  }
+  return false
+}
+
 function scanCustomPresets() {
   const result = {}
   try {
@@ -940,6 +961,8 @@ function scanCustomPresets() {
       const name = f.replace(/^custom-/, '').replace(/\.yml$/, '')
       // file name validation (savePreset と同一 regex で防御的二重 check)
       if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(name)) continue
+      // test pollution name (smoke / manual test 残骸) は sidebar 表示から除外
+      if (isTestPollutionName(name)) continue
       const customKey = `custom-${name}`
       // 既に PRESETS に in-memory 登録済 (今 session で save) ならスキップ
       if (PRESETS[customKey]) continue
@@ -1460,6 +1483,7 @@ module.exports = {
   rollbackAppliedFromSnapshot,
   savePreset,
   scanCustomPresets,
+  isTestPollutionName,
   listHistory,
   rollbackHistory,
   readJsonBody,
