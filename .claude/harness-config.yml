@@ -40,7 +40,7 @@
 # 形式: "YYYY-MM-DD" (UTC)。
 # 不正値 (regex 不一致) は UNKNOWN 表示 + 注意 WARN、未来日付は別系 WARN。
 # 採用先 project は手動で編集しない (install.sh が更新する)。
-harness_version: "2026-05-28"
+harness_version: "2026-05-29"
 
 # === Stale Harness Detect (task-56 F) ===
 # .claude/hooks/stale-harness-detect.sh (SessionStart hook) が消費。
