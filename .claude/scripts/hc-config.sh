@@ -1004,6 +1004,7 @@ hc-config — harness-config.yml interactive editor
 
 USAGE:
   hc-config.sh                          引数なし: 対話 menu 起動 (TTY=矢印キー TUI / 非TTY=番号選択)
+  hc-config.sh interactive              明示起動: 対話 menu (上記と同等、task-61 draft DoD 経路)
   hc-config.sh --list                   全 key 一覧表示 (KEY/CURRENT/TYPE/説明、category 別)
   hc-config.sh --list --verbose         全 key 一覧 + DEFAULT + 変更効果 (6 列)
   hc-config.sh --list --show-default     全 key 一覧 + DEFAULT 列
@@ -1862,6 +1863,7 @@ _main_dispatch() {
     --diff)      cmd_diff ;;
     --validate)  cmd_validate ;;
     --help|-h)   cmd_help ;;
+    interactive) cmd_interactive ;;
     *)
       _err "unknown command: ${cmd}"
       _err "run 'hc-config.sh --help' for usage"
