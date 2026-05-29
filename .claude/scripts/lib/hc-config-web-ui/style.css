@@ -1,7 +1,13 @@
-/* hc-config Web UI custom styles — task-61 Step 3
+/* hc-config Web UI custom styles — task-61 Step 5 iter 2 (WCAG 2.2 AA + UX)
  *
  * Tailwind CDN で大半をカバーするため、ここは Tailwind の @apply を使わず
  * 通常の CSS で薄い補強のみ (CDN 単体動作 / build 不要)。
+ *
+ * a11y 追加:
+ *   - .sr-only (visually hidden、screen reader 可視)
+ *   - focus-visible 高 contrast outline (WCAG 2.4.11 Focus Appearance)
+ *   - reduced-motion media query 配慮
+ *   - <dialog> backdrop / focus
  */
 
 body {
@@ -9,9 +15,46 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* diff row が skip 状態の見た目 */
+/* a11y: screen-reader only (visually hidden) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.focus\:not-sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* a11y: focus indicator (WCAG 2.4.11 / 2.4.13 Focus Appearance) */
+:focus-visible {
+  outline: 3px solid #2563eb; /* blue-600 */
+  outline-offset: 2px;
+}
+button:focus-visible,
+[role='button']:focus-visible,
+[role='option']:focus-visible,
+input:focus-visible,
+[tabindex='0']:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25);
+}
+
+/* diff row が skip 状態の見た目 (color のみ依存しない、line-through 併用) */
 .diff-row.skip {
-  opacity: 0.45;
+  opacity: 0.55;
   text-decoration: line-through;
 }
 
@@ -39,7 +82,39 @@ body {
   background: rgb(148 163 184); /* slate-400 */
 }
 
-/* main grid 高さ調整 (sticky header + footer 内で残り領域占有) */
+/* main grid 高さ調整 */
 main {
   min-height: 0;
+}
+
+/* <dialog> native styling 補強 */
+dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+dialog::backdrop {
+  background-color: rgba(15, 23, 42, 0.5); /* slate-900 / 50% */
+}
+
+/* reduced-motion 配慮 (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* high-contrast OS 設定対応 (Windows Forced Colors) */
+@media (forced-colors: active) {
+  button,
+  [role='button'],
+  [role='option'] {
+    border: 1px solid ButtonText;
+  }
+  :focus-visible {
+    outline: 3px solid Highlight;
+  }
 }

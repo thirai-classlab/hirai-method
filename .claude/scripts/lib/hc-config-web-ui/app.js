@@ -1,4 +1,4 @@
-// hc-config Web UI — task-61 Step 3
+// hc-config Web UI — task-61 Step 5 iter 2 (WCAG 2.2 AA + UX 改善)
 // vanilla JS + Tailwind CDN, fetch API only, no external deps
 //
 // State machine:
@@ -7,6 +7,17 @@
 //   - category: category 選択 → key 一覧
 //   - key     : key 選択 → edit form
 //   - preset  : preset 選択 → diff preview + apply
+//
+// WCAG 2.2 AA 準拠 (本 iter で対応):
+//   - C-U1 accessible name: rollback / diff checkbox / 全 button
+//   - C-U2 label-input 関連付け: for=/id= 形式
+//   - H-U1 keyboard navigation: tabindex / role + Enter/Space handler
+//   - H-U3 color only state: ●○⚠ アイコン併用
+//   - H-U4 custom dialog: <dialog> + focus trap + Esc cancel
+//   - H-XSS textContent only (innerHTML 禁止)
+//   - M-U3 二重送信防止 (state.applying flag + disabled)
+//   - M-U4 heading 階層: <h3>/<h4> 動的 panel
+//
 ;(function () {
   'use strict'
 
@@ -25,6 +36,8 @@
     presetDiff: null,
     skipKeys: {}, // key -> bool (true = skip)
     history: [],
+    applying: false, // M-U3 二重送信防止
+    rollbackInProgress: false,
   }
 
   // ============================================================
@@ -79,9 +92,12 @@
   const rollbackApi = async (timestamp) => {
     return await api('POST', `/api/preset/rollback/${encodeURIComponent(timestamp)}`)
   }
+  const savePresetApi = async (name, axes) => {
+    return await api('POST', '/api/preset/save', { name, axes })
+  }
 
   // ============================================================
-  // utils
+  // utils (DOM 構築は createElement + textContent のみ、innerHTML 禁止)
   // ============================================================
   function el(tag, attrs, ...children) {
     const e = document.createElement(tag)
@@ -91,13 +107,23 @@
         else if (k === 'onclick') e.addEventListener('click', v)
         else if (k === 'onchange') e.addEventListener('change', v)
         else if (k === 'oninput') e.addEventListener('input', v)
-        else if (v !== undefined && v !== null) e.setAttribute(k, String(v))
+        else if (k === 'onkeydown') e.addEventListener('keydown', v)
+        else if (k === 'htmlFor') e.htmlFor = v
+        else if (v === true) e.setAttribute(k, '')
+        else if (v === false || v === undefined || v === null) {
+          // skip
+        } else {
+          e.setAttribute(k, String(v))
+        }
       }
     }
     for (const c of children) {
-      if (c === null || c === undefined) continue
-      if (typeof c === 'string' || typeof c === 'number') e.appendChild(document.createTextNode(String(c)))
-      else e.appendChild(c)
+      if (c === null || c === undefined || c === false) continue
+      if (typeof c === 'string' || typeof c === 'number') {
+        e.appendChild(document.createTextNode(String(c)))
+      } else {
+        e.appendChild(c)
+      }
     }
     return e
   }
@@ -106,14 +132,37 @@
     while (node.firstChild) node.removeChild(node.firstChild)
   }
 
+  // ============================================================
+  // toast (4 type: error / success / warning / info)
+  // ============================================================
   function toast(message, type) {
-    const cls =
-      type === 'error'
-        ? 'bg-red-600 text-white'
-        : type === 'success'
-        ? 'bg-emerald-600 text-white'
-        : 'bg-slate-800 text-white'
-    const t = el('div', { class: `pointer-events-auto px-4 py-2 rounded shadow-lg text-sm ${cls}` }, message)
+    let cls
+    let icon
+    if (type === 'error') {
+      cls = 'bg-red-700 text-white'
+      icon = '✖' // ✖
+    } else if (type === 'success') {
+      cls = 'bg-emerald-700 text-white'
+      icon = '✔' // ✔
+    } else if (type === 'warning') {
+      cls = 'bg-amber-600 text-white'
+      icon = '⚠' // ⚠
+    } else if (type === 'info') {
+      cls = 'bg-blue-700 text-white'
+      icon = 'ℹ' // ℹ
+    } else {
+      cls = 'bg-slate-800 text-white'
+      icon = ''
+    }
+    const t = el(
+      'div',
+      {
+        class: `pointer-events-auto px-4 py-2 rounded shadow-lg text-sm flex items-center gap-2 ${cls}`,
+        role: type === 'error' ? 'alert' : 'status',
+      },
+      icon ? el('span', { 'aria-hidden': 'true' }, icon) : null,
+      el('span', null, message)
+    )
     document.getElementById('toast-container').appendChild(t)
     setTimeout(() => t.remove(), 4000)
   }
@@ -124,6 +173,157 @@
   }
 
   // ============================================================
+  // dialog helpers (H-U4: custom <dialog> + focus trap + Esc cancel)
+  // ============================================================
+  function showConfirmDialog(opts) {
+    // opts: { title, bodyLines: string[], okLabel, cancelLabel, danger }
+    return new Promise((resolve) => {
+      const dlg = document.getElementById('confirm-dialog')
+      const titleEl = document.getElementById('confirm-dialog-title')
+      const bodyEl = document.getElementById('confirm-dialog-body')
+      const okBtn = document.getElementById('confirm-dialog-ok')
+      const cancelBtn = document.getElementById('confirm-dialog-cancel')
+
+      titleEl.textContent = opts.title || '確認'
+      clear(bodyEl)
+      for (const line of opts.bodyLines || []) {
+        bodyEl.appendChild(el('p', null, line))
+      }
+      okBtn.textContent = opts.okLabel || '実行'
+      cancelBtn.textContent = opts.cancelLabel || 'キャンセル'
+      // danger 時は red、それ以外は emerald (CSS class 上書き)
+      okBtn.className = opts.danger
+        ? 'px-4 py-2 text-sm bg-red-700 hover:bg-red-800 text-white font-semibold rounded min-h-[44px]'
+        : 'px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded min-h-[44px]'
+
+      const onOk = () => {
+        cleanup()
+        resolve(true)
+      }
+      const onCancel = () => {
+        cleanup()
+        resolve(false)
+      }
+      const onCancelKey = (ev) => {
+        // <dialog> native は Esc で close する。close 時 returnValue が 'cancel' なら cancel 扱い。
+        if (ev.key === 'Escape') {
+          // 既定動作で close するため、close event で resolve
+        }
+      }
+      const onClose = () => {
+        cleanup()
+        resolve(dlg.returnValue === 'ok')
+      }
+
+      function cleanup() {
+        okBtn.removeEventListener('click', onOk)
+        cancelBtn.removeEventListener('click', onCancel)
+        dlg.removeEventListener('keydown', onCancelKey)
+        dlg.removeEventListener('close', onClose)
+        if (dlg.open) {
+          try { dlg.close() } catch (e) { /* noop */ }
+        }
+      }
+
+      okBtn.addEventListener('click', () => { dlg.returnValue = 'ok'; onOk() })
+      cancelBtn.addEventListener('click', () => { dlg.returnValue = 'cancel'; onCancel() })
+      dlg.addEventListener('keydown', onCancelKey)
+      dlg.addEventListener('close', onClose)
+
+      if (typeof dlg.showModal === 'function') {
+        dlg.showModal()
+      } else {
+        dlg.setAttribute('open', '')
+      }
+      // 初期フォーカスは Cancel ボタン (誤操作防止)
+      setTimeout(() => cancelBtn.focus(), 10)
+    })
+  }
+
+  function showPromptDialog(opts) {
+    // opts: { title, message, placeholder, validate(name) -> string | null }
+    return new Promise((resolve) => {
+      const dlg = document.getElementById('prompt-dialog')
+      const titleEl = document.getElementById('prompt-dialog-title')
+      const input = document.getElementById('prompt-dialog-input')
+      const okBtn = document.getElementById('prompt-dialog-ok')
+      const cancelBtn = document.getElementById('prompt-dialog-cancel')
+
+      if (opts.title) titleEl.textContent = opts.title
+      input.value = ''
+      input.placeholder = opts.placeholder || ''
+
+      const onOk = () => {
+        const value = input.value.trim()
+        if (opts.validate) {
+          const err = opts.validate(value)
+          if (err) {
+            toast(err, 'error')
+            input.focus()
+            return
+          }
+        }
+        cleanup()
+        resolve(value)
+      }
+      const onCancel = () => {
+        cleanup()
+        resolve(null)
+      }
+      const onKey = (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault()
+          onOk()
+        }
+      }
+      const onClose = () => {
+        // close event for backdrop Esc
+        if (dlg.returnValue !== 'ok') {
+          cleanup()
+          resolve(null)
+        }
+      }
+
+      function cleanup() {
+        okBtn.removeEventListener('click', okHandler)
+        cancelBtn.removeEventListener('click', cancelHandler)
+        input.removeEventListener('keydown', onKey)
+        dlg.removeEventListener('close', onClose)
+        if (dlg.open) {
+          try { dlg.close() } catch (e) { /* noop */ }
+        }
+      }
+
+      const okHandler = () => { dlg.returnValue = 'ok'; onOk() }
+      const cancelHandler = () => { dlg.returnValue = 'cancel'; onCancel() }
+
+      okBtn.addEventListener('click', okHandler)
+      cancelBtn.addEventListener('click', cancelHandler)
+      input.addEventListener('keydown', onKey)
+      dlg.addEventListener('close', onClose)
+
+      if (typeof dlg.showModal === 'function') {
+        dlg.showModal()
+      } else {
+        dlg.setAttribute('open', '')
+      }
+      setTimeout(() => input.focus(), 10)
+    })
+  }
+
+  // ============================================================
+  // keyboard helper: Enter/Space → action (H-U1)
+  // ============================================================
+  function activateOnEnterOrSpace(action) {
+    return (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+        ev.preventDefault()
+        action(ev)
+      }
+    }
+  }
+
+  // ============================================================
   // render: sidebar
   // ============================================================
   function renderSidebar() {
@@ -131,15 +331,22 @@
     clear(presetUl)
     for (const p of state.presets) {
       const isSel = state.view === 'preset' && state.selectedPreset === p.name
+      const onSelect = () => onSelectPreset(p.name)
+      const keyWord = `${p.affected_key_count} key${p.affected_key_count === 1 ? '' : 's'}`
       const li = el(
         'li',
         {
-          class: `preset-card cursor-pointer px-2 py-1.5 rounded border ${isSel ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-transparent hover:bg-slate-100'}`,
-          onclick: () => onSelectPreset(p.name),
+          class: `preset-card cursor-pointer px-2 py-1.5 rounded border min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isSel ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-transparent hover:bg-slate-100'}`,
+          role: 'option',
+          tabindex: '0',
+          'aria-selected': isSel ? 'true' : 'false',
+          'aria-label': `プリセット ${p.name}: ${p.use_case || ''} (${keyWord})`,
+          onclick: onSelect,
+          onkeydown: activateOnEnterOrSpace(onSelect),
         },
         el('div', { class: 'font-mono text-xs font-semibold text-slate-800' }, p.name),
         el('div', { class: 'text-xs text-slate-500 mt-0.5' }, p.use_case || ''),
-        el('div', { class: 'text-xs text-slate-400 mt-0.5' }, `${p.affected_key_count} keys`)
+        el('div', { class: 'text-xs text-slate-400 mt-0.5' }, keyWord)
       )
       presetUl.appendChild(li)
     }
@@ -148,11 +355,17 @@
     clear(catUl)
     for (const c of state.categories) {
       const isSel = state.view === 'category' && state.selectedCategory === c.name
+      const onSelect = () => onSelectCategory(c.name)
       const li = el(
         'li',
         {
-          class: `cursor-pointer px-2 py-1.5 rounded ${isSel ? 'bg-blue-50 text-blue-900 font-semibold' : 'hover:bg-slate-100'}`,
-          onclick: () => onSelectCategory(c.name),
+          class: `cursor-pointer px-2 py-1.5 rounded min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isSel ? 'bg-blue-50 text-blue-900 font-semibold' : 'hover:bg-slate-100'}`,
+          role: 'option',
+          tabindex: '0',
+          'aria-selected': isSel ? 'true' : 'false',
+          'aria-label': `カテゴリ ${c.name} (${c.key_count} key)`,
+          onclick: onSelect,
+          onkeydown: activateOnEnterOrSpace(onSelect),
         },
         el('span', { class: '' }, c.name),
         el('span', { class: 'text-xs text-slate-400 ml-1' }, `(${c.key_count})`)
@@ -174,9 +387,9 @@
           'div',
           { class: 'bg-white rounded-lg border border-slate-200 p-6' },
           el('p', { class: 'text-slate-600' }, '左 sidebar から '),
-          el('strong', null, 'Preset'),
+          el('strong', null, 'プリセット'),
           el('span', { class: 'text-slate-600' }, ' または '),
-          el('strong', null, 'Category'),
+          el('strong', null, 'カテゴリ'),
           el('span', { class: 'text-slate-600' }, ' を選択してください。')
         )
       )
@@ -206,19 +419,33 @@
     const header = el(
       'div',
       { class: 'bg-white rounded-lg border border-slate-200 p-4' },
-      el('h2', { class: 'text-lg font-bold text-slate-800' }, `Preset: ${state.selectedPreset}`),
+      // M-U4: 動的 panel の見出しは h3 (header h1 / sidebar h2 の下)
+      el('h3', { class: 'text-lg font-bold text-slate-800' }, `プリセット: ${state.selectedPreset}`),
       el('p', { class: 'text-sm text-slate-600 mt-1' }, diff && diff.use_case ? diff.use_case : '')
     )
 
     // axes pills
     if (diff && diff.axes) {
-      const pills = el('div', { class: 'flex flex-wrap gap-1.5 mt-2' })
+      const pills = el('div', { class: 'flex flex-wrap gap-1.5 mt-2', 'aria-label': '6 軸状態' })
       for (const [k, v] of Object.entries(diff.axes)) {
         pills.appendChild(
           el('span', { class: 'text-xs px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono' }, `${k}=${v}`)
         )
       }
       header.appendChild(pills)
+
+      // Save as Custom Preset button (draft §6 DoD)
+      const saveBtn = el(
+        'button',
+        {
+          type: 'button',
+          class: 'mt-3 px-3 py-2 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-800 min-h-[44px]',
+          onclick: () => onSaveCustomPreset(diff.axes),
+          'aria-label': '現在の軸状態をカスタムプリセットとして保存',
+        },
+        '⬇ カスタムプリセットとして保存'
+      )
+      header.appendChild(saveBtn)
     }
     box.appendChild(header)
 
@@ -236,28 +463,32 @@
     tableBox.appendChild(
       el(
         'div',
-        { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between' },
+        { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between flex-wrap gap-2' },
         el(
-          'div',
+          'h4',
           { class: 'text-sm font-semibold text-slate-700' },
-          `Diff Preview: ${changed.length} 変更, ${unchanged.length} 不変`
+          `差分プレビュー: ${changed.length} 変更, ${unchanged.length} 不変`
         ),
         el(
           'div',
-          { class: 'space-x-2' },
+          { class: 'flex gap-2' },
           el(
             'button',
             {
-              class: 'px-3 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded',
+              type: 'button',
+              class: 'px-3 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded min-h-[32px]',
               onclick: () => onToggleAllSkip(true),
+              'aria-label': 'すべての変更を skip にする',
             },
             'すべて skip'
           ),
           el(
             'button',
             {
-              class: 'px-3 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded',
+              type: 'button',
+              class: 'px-3 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded min-h-[32px]',
               onclick: () => onToggleAllSkip(false),
+              'aria-label': 'すべての変更を適用対象にする',
             },
             'すべて適用'
           )
@@ -265,48 +496,64 @@
       )
     )
 
-    const table = el('table', { class: 'w-full text-sm' })
+    const table = el('table', { class: 'w-full text-sm', 'aria-label': '差分プレビュー table' })
     const thead = el(
       'thead',
       { class: 'bg-slate-50 text-xs uppercase text-slate-500' },
       el(
         'tr',
         null,
-        el('th', { class: 'text-left px-3 py-2 w-12' }, '適用'),
-        el('th', { class: 'text-left px-3 py-2' }, 'Key'),
-        el('th', { class: 'text-left px-3 py-2' }, 'Current'),
-        el('th', { class: 'text-left px-3 py-2' }, 'New'),
-        el('th', { class: 'text-left px-3 py-2 w-20' }, '状態')
+        el('th', { scope: 'col', class: 'text-left px-3 py-2 w-12' }, '適用'),
+        el('th', { scope: 'col', class: 'text-left px-3 py-2' }, 'キー'),
+        el('th', { scope: 'col', class: 'text-left px-3 py-2' }, '現在値'),
+        el('th', { scope: 'col', class: 'text-left px-3 py-2' }, '新しい値'),
+        el('th', { scope: 'col', class: 'text-left px-3 py-2' }, 'Effect'),
+        el('th', { scope: 'col', class: 'text-left px-3 py-2 w-20' }, '状態')
       )
     )
     table.appendChild(thead)
     const tbody = el('tbody', null)
     for (const c of changes) {
       const isSkip = state.skipKeys[c.key] === true
+      const cbAttrs = {
+        type: 'checkbox',
+        class: 'w-5 h-5 cursor-pointer',
+        'aria-label': `${c.key} を適用対象にする`,
+        onchange: (ev) => onToggleSkip(c.key, !ev.target.checked),
+      }
+      if (!isSkip) cbAttrs.checked = true
+      const cb = c.changed
+        ? el('input', cbAttrs)
+        : el('span', { class: 'text-slate-300', 'aria-label': '変更なし、適用対象外' }, '—')
+
+      // H-U3 color only state → アイコン併用
+      const stateCell = c.changed
+        ? el(
+            'span',
+            { class: 'inline-flex items-center gap-1 text-amber-700 font-semibold' },
+            el('span', { 'aria-hidden': 'true' }, '●'), // ●
+            'changed'
+          )
+        : el(
+            'span',
+            { class: 'inline-flex items-center gap-1 text-slate-500' },
+            el('span', { 'aria-hidden': 'true' }, '○'), // ○
+            'unchanged'
+          )
+
+      const effectText = (c.effect !== undefined && c.effect !== null && c.effect !== '') ? String(c.effect) : '—'
+
       const row = el(
         'tr',
         {
-          class: `diff-row border-t border-slate-100 ${isSkip ? 'skip' : ''} ${c.changed ? '' : 'opacity-60'}`,
+          class: `diff-row border-t border-slate-100 ${isSkip ? 'skip' : ''} ${c.changed ? '' : 'opacity-70'}`,
         },
-        el(
-          'td',
-          { class: 'px-3 py-2' },
-          c.changed
-            ? el('input', {
-                type: 'checkbox',
-                ...(isSkip ? {} : { checked: 'checked' }),
-                onchange: (ev) => onToggleSkip(c.key, !ev.target.checked),
-              })
-            : el('span', { class: 'text-slate-300' }, '—')
-        ),
+        el('td', { class: 'px-3 py-2' }, cb),
         el('td', { class: 'px-3 py-2 font-mono text-xs text-slate-800' }, c.key),
         el('td', { class: 'px-3 py-2 font-mono text-xs text-slate-600' }, c.current),
         el('td', { class: 'px-3 py-2 font-mono text-xs text-blue-700' }, c.new),
-        el(
-          'td',
-          { class: 'px-3 py-2 text-xs' },
-          c.changed ? el('span', { class: 'text-amber-700' }, '変更') : el('span', { class: 'text-slate-400' }, '不変')
-        )
+        el('td', { class: 'px-3 py-2 text-xs text-slate-700' }, effectText),
+        el('td', { class: 'px-3 py-2 text-xs' }, stateCell)
       )
       tbody.appendChild(row)
     }
@@ -315,22 +562,30 @@
     box.appendChild(tableBox)
 
     // apply button
+    const applyCount = changed.length - countSkip(changed)
+    const applyDisabled = state.applying || applyCount === 0
     const actions = el(
       'div',
-      { class: 'flex items-center gap-3' },
+      { class: 'flex items-center gap-3 flex-wrap' },
       el(
         'button',
         {
-          class: 'px-4 py-2 bg-emerald-600 text-white rounded shadow-sm hover:bg-emerald-700 text-sm font-semibold',
+          type: 'button',
+          class: `px-4 py-2 text-sm font-semibold rounded shadow-sm min-h-[44px] ${applyDisabled ? 'bg-emerald-400 text-white opacity-60 cursor-not-allowed' : 'bg-emerald-700 text-white hover:bg-emerald-800'}`,
           onclick: onApplyPreset,
+          disabled: applyDisabled,
+          'aria-label': state.applying ? '適用処理中...' : `プリセットを適用 (${applyCount} key)`,
+          'aria-disabled': applyDisabled ? 'true' : 'false',
         },
-        `Apply Preset (${changed.length - countSkip(changed)} keys)`
+        state.applying ? '適用中...' : `プリセットを適用 (${applyCount} key)`
       ),
       el(
         'button',
         {
-          class: 'px-4 py-2 bg-slate-200 text-slate-800 rounded hover:bg-slate-300 text-sm',
+          type: 'button',
+          class: 'px-4 py-2 bg-slate-200 text-slate-800 rounded hover:bg-slate-300 text-sm min-h-[44px]',
           onclick: () => loadPresetDiff(state.selectedPreset).then(() => renderMain()),
+          'aria-label': '差分を再計算',
         },
         '差分再読込'
       )
@@ -350,13 +605,13 @@
       el(
         'div',
         { class: 'bg-white rounded-lg border border-slate-200 p-4' },
-        el('h2', { class: 'text-lg font-bold text-slate-800' }, `Category: ${state.selectedCategory}`),
+        el('h3', { class: 'text-lg font-bold text-slate-800' }, `カテゴリ: ${state.selectedCategory}`),
         el('p', { class: 'text-sm text-slate-600 mt-1' }, `${state.keys.length} 個の key`)
       )
     )
 
     const tableBox = el('div', { class: 'bg-white rounded-lg border border-slate-200 overflow-hidden' })
-    const table = el('table', { class: 'w-full text-sm' })
+    const table = el('table', { class: 'w-full text-sm', 'aria-label': `${state.selectedCategory} カテゴリの key 一覧` })
     table.appendChild(
       el(
         'thead',
@@ -364,22 +619,30 @@
         el(
           'tr',
           null,
-          el('th', { class: 'text-left px-3 py-2' }, 'Key'),
-          el('th', { class: 'text-left px-3 py-2' }, '現在値'),
-          el('th', { class: 'text-left px-3 py-2' }, '説明'),
-          el('th', { class: 'text-left px-3 py-2 w-16' }, '操作')
+          el('th', { scope: 'col', class: 'text-left px-3 py-2' }, 'キー'),
+          el('th', { scope: 'col', class: 'text-left px-3 py-2' }, '現在値'),
+          el('th', { scope: 'col', class: 'text-left px-3 py-2' }, '説明'),
+          el('th', { scope: 'col', class: 'text-left px-3 py-2 w-16' }, '操作')
         )
       )
     )
     const tbody = el('tbody', null)
     for (const k of state.keys) {
+      const onEdit = () => onSelectKey(k.key)
       const tr = el(
         'tr',
-        { class: 'border-t border-slate-100 hover:bg-slate-50 cursor-pointer', onclick: () => onSelectKey(k.key) },
+        {
+          class: 'border-t border-slate-100 hover:bg-slate-50 cursor-pointer focus:outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-400',
+          tabindex: '0',
+          role: 'button',
+          'aria-label': `${k.key} を編集`,
+          onclick: onEdit,
+          onkeydown: activateOnEnterOrSpace(onEdit),
+        },
         el('td', { class: 'px-3 py-2 font-mono text-xs text-slate-800' }, k.key),
         el('td', { class: 'px-3 py-2 font-mono text-xs text-blue-700' }, k.current_value === null ? '<n/a>' : String(k.current_value)),
-        el('td', { class: 'px-3 py-2 text-xs text-slate-600' }, k.description || ''),
-        el('td', { class: 'px-3 py-2 text-xs text-blue-600 underline' }, '編集')
+        el('td', { class: 'px-3 py-2 text-xs text-slate-700' }, k.description || ''),
+        el('td', { class: 'px-3 py-2 text-xs text-blue-700 underline' }, '編集')
       )
       tbody.appendChild(tr)
     }
@@ -397,55 +660,81 @@
       el(
         'div',
         { class: 'bg-white rounded-lg border border-slate-200 p-4' },
-        el('h2', { class: 'text-lg font-bold text-slate-800 font-mono' }, key),
+        // M-U4: panel header h3
+        el('h3', { class: 'text-lg font-bold text-slate-800 font-mono break-all' }, key),
         meta.description ? el('p', { class: 'text-sm text-slate-700 mt-2' }, meta.description) : null,
-        meta.effect ? el('p', { class: 'text-xs text-slate-500 mt-1' }, `効果: ${meta.effect}`) : null
+        meta.effect ? el('p', { class: 'text-xs text-slate-600 mt-1' }, `効果: ${meta.effect}`) : null
       )
     )
 
     const formBox = el('div', { class: 'bg-white rounded-lg border border-slate-200 p-4 space-y-3' })
+    formBox.appendChild(el('h4', { class: 'sr-only' }, 'キー値編集フォーム'))
+
+    // C-U2 「現在値」は label + read-only div (関連付け aria-describedby)
+    const currentDisplayId = 'key-current-display'
     formBox.appendChild(
       el(
         'div',
         null,
-        el('label', { class: 'text-xs uppercase text-slate-500 font-semibold' }, '現在値'),
         el(
-          'div',
-          { class: 'mt-1 font-mono text-sm bg-slate-100 rounded px-3 py-2' },
+          'label',
+          { class: 'text-xs uppercase text-slate-600 font-semibold', htmlFor: currentDisplayId },
+          '現在値'
+        ),
+        el(
+          'output',
+          { id: currentDisplayId, class: 'mt-1 block font-mono text-sm bg-slate-100 rounded px-3 py-2', 'aria-live': 'polite' },
           meta.current_value === null ? '<n/a>' : String(meta.current_value)
         )
       )
     )
+
+    // C-U2 「新しい値」は label + input (for=/id= 形式)
+    const inputId = 'key-value-input'
     const input = el('input', {
+      id: inputId,
       type: 'text',
-      class: 'w-full font-mono text-sm border border-slate-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200',
+      class: 'w-full font-mono text-sm border border-slate-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200 min-h-[44px]',
       value: meta.current_value === null ? '' : String(meta.current_value),
       placeholder: '新しい値',
+      'aria-describedby': meta.effect ? 'key-effect-hint' : null,
+      autocomplete: 'off',
     })
     formBox.appendChild(
       el(
         'div',
         null,
-        el('label', { class: 'text-xs uppercase text-slate-500 font-semibold' }, '新しい値'),
-        el('div', { class: 'mt-1' }, input)
+        el(
+          'label',
+          { class: 'text-xs uppercase text-slate-600 font-semibold', htmlFor: inputId },
+          '新しい値'
+        ),
+        el('div', { class: 'mt-1' }, input),
+        meta.effect
+          ? el('p', { id: 'key-effect-hint', class: 'text-xs text-slate-600 mt-1' }, `効果ヒント: ${meta.effect}`)
+          : null
       )
     )
+
     formBox.appendChild(
       el(
         'div',
-        { class: 'flex gap-2' },
+        { class: 'flex gap-2 flex-wrap' },
         el(
           'button',
           {
-            class: 'px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded hover:bg-blue-700',
+            type: 'button',
+            class: 'px-4 py-2 bg-blue-700 text-white text-sm font-semibold rounded hover:bg-blue-800 min-h-[44px]',
             onclick: () => onApplyKey(key, input.value),
+            'aria-label': `${key} の新しい値を適用`,
           },
-          'Apply'
+          '適用'
         ),
         el(
           'button',
           {
-            class: 'px-4 py-2 bg-slate-200 text-slate-800 text-sm rounded hover:bg-slate-300',
+            type: 'button',
+            class: 'px-4 py-2 bg-slate-200 text-slate-800 text-sm rounded hover:bg-slate-300 min-h-[44px]',
             onclick: () => {
               if (state.selectedCategory) {
                 onSelectCategory(state.selectedCategory)
@@ -455,6 +744,7 @@
                 renderMain()
               }
             },
+            'aria-label': '編集をキャンセル',
           },
           'キャンセル'
         )
@@ -472,29 +762,40 @@
       return
     }
     for (const h of state.history) {
+      // H-U3 失敗時のアイコン併用
+      const failedCount = Number(h.failed_count || 0)
+      const failedCell = failedCount > 0
+        ? el(
+            'span',
+            { class: 'inline-flex items-center gap-1 text-red-700 font-semibold' },
+            el('span', { 'aria-hidden': 'true' }, '⚠'), // ⚠
+            String(failedCount)
+          )
+        : el('span', { class: 'text-slate-500' }, '0')
+
+      const rollbackLabel = `${h.timestamp} (preset: ${h.preset || 'unknown'}) をロールバック`
+      const rollbackDisabled = state.rollbackInProgress
       const tr = el(
         'tr',
         { class: 'history-row border-t border-slate-100' },
         el('td', { class: 'py-1 pr-3 font-mono text-xs' }, h.timestamp),
         el('td', { class: 'py-1 pr-3 font-mono text-xs' }, h.preset || '<unknown>'),
         el('td', { class: 'py-1 pr-3' }, String(h.applied_count !== undefined ? h.applied_count : '?')),
-        el(
-          'td',
-          { class: 'py-1 pr-3' },
-          h.failed_count > 0
-            ? el('span', { class: 'text-red-600 font-semibold' }, String(h.failed_count))
-            : el('span', { class: 'text-slate-400' }, '0')
-        ),
+        el('td', { class: 'py-1 pr-3' }, failedCell),
         el(
           'td',
           { class: 'py-1 pr-3' },
           el(
             'button',
             {
-              class: 'text-xs px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded border border-amber-300',
-              onclick: () => onRollback(h.timestamp),
+              type: 'button',
+              class: `text-xs px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded border border-amber-400 min-h-[32px] ${rollbackDisabled ? 'opacity-60 cursor-not-allowed' : ''}`,
+              onclick: () => onRollback(h.timestamp, h.preset || 'unknown', h.applied_count),
+              disabled: rollbackDisabled,
+              'aria-label': rollbackLabel,
+              'aria-disabled': rollbackDisabled ? 'true' : 'false',
             },
-            'Rollback'
+            'ロールバック'
           )
         )
       )
@@ -512,12 +813,12 @@
     state.selectedKey = null
     state.skipKeys = {}
     state.presetDiff = null
-    setStatus(`Preset: ${name} の diff を計算中...`)
+    setStatus(`プリセット: ${name} の diff を計算中...`)
     renderSidebar()
     renderMain()
     try {
       await loadPresetDiff(name)
-      setStatus(`Preset: ${name}`)
+      setStatus(`プリセット: ${name}`)
       renderMain()
     } catch (e) {
       toast(`diff 取得失敗: ${e.message}`, 'error')
@@ -530,12 +831,12 @@
     state.selectedCategory = name
     state.selectedPreset = null
     state.selectedKey = null
-    setStatus(`Category: ${name} を読込中...`)
+    setStatus(`カテゴリ: ${name} を読込中...`)
     renderSidebar()
     renderMain()
     try {
       await loadKeys(name)
-      setStatus(`Category: ${name}`)
+      setStatus(`カテゴリ: ${name}`)
       renderMain()
     } catch (e) {
       toast(`key 取得失敗: ${e.message}`, 'error')
@@ -547,6 +848,11 @@
     state.view = 'key'
     state.selectedKey = key
     renderMain()
+    // 編集 panel に focus 移動 (a11y)
+    setTimeout(() => {
+      const inp = document.getElementById('key-value-input')
+      if (inp) inp.focus()
+    }, 10)
   }
 
   function onToggleSkip(key, skip) {
@@ -563,6 +869,7 @@
   }
 
   async function onApplyPreset() {
+    if (state.applying) return
     if (!state.selectedPreset || !state.presetDiff) return
     const skipKeys = Object.entries(state.skipKeys)
       .filter(([_, v]) => v === true)
@@ -572,59 +879,92 @@
       toast('適用対象 key が 0 件です', 'info')
       return
     }
-    if (!confirm(`${changed.length} key を適用します。よろしいですか?`)) return
+    const confirmed = await showConfirmDialog({
+      title: 'プリセット適用の確認',
+      bodyLines: [
+        `プリセット: ${state.selectedPreset}`,
+        `適用対象: ${changed.length} key (skip: ${skipKeys.length} key)`,
+        '実行すると harness-config.yml が atomic backup 付きで更新されます。',
+      ],
+      okLabel: '適用する',
+      cancelLabel: 'キャンセル',
+      danger: false,
+    })
+    if (!confirmed) return
+
+    state.applying = true
+    renderMain()
     setStatus('適用中...')
     try {
       const r = await applyPresetApi(state.selectedPreset, skipKeys)
       if (r.ok) {
-        toast(`Apply 成功: ${r.applied} keys`, 'success')
+        toast(`適用成功: ${r.applied} key 適用`, 'success')
       } else {
-        toast(`Apply 部分失敗: ${r.applied} 成功 / ${r.failed} 失敗`, 'error')
+        toast(`部分失敗: ${r.applied} 成功 / ${r.failed} 失敗`, 'warning')
       }
       await Promise.all([loadHistory(), loadPresetDiff(state.selectedPreset)])
-      setStatus(`Preset: ${state.selectedPreset}`)
+      setStatus(`プリセット: ${state.selectedPreset}`)
+    } catch (e) {
+      toast(`適用失敗: ${e.message}`, 'error')
+      setStatus('エラー')
+    } finally {
+      state.applying = false
       renderMain()
       renderHistory()
-    } catch (e) {
-      toast(`Apply 失敗: ${e.message}`, 'error')
-      setStatus('エラー')
     }
   }
 
   async function onApplyKey(key, value) {
     if (!key) return
+    if (state.applying) return
+    state.applying = true
     setStatus(`${key} を設定中...`)
     try {
       await setKeyApi(key, value)
       toast(`${key} = ${value} を適用しました`, 'success')
-      // 再ロード
       if (state.selectedCategory) {
         await loadKeys(state.selectedCategory)
       }
       setStatus('完了')
-      // category panel に戻る
       if (state.selectedCategory) {
         state.view = 'category'
         renderMain()
       }
     } catch (e) {
-      toast(`apply 失敗: ${e.message}`, 'error')
+      toast(`適用失敗: ${e.message}`, 'error')
       setStatus('エラー')
+    } finally {
+      state.applying = false
     }
   }
 
-  async function onRollback(timestamp) {
-    if (!confirm(`${timestamp} の preset apply を rollback します。よろしいですか?`)) return
-    setStatus('Rollback 中...')
+  async function onRollback(timestamp, presetName, appliedCount) {
+    if (state.rollbackInProgress) return
+    const confirmed = await showConfirmDialog({
+      title: 'ロールバック確認',
+      bodyLines: [
+        `履歴: ${timestamp}`,
+        `元プリセット: ${presetName}`,
+        `復元 key 数: 約 ${appliedCount !== undefined ? appliedCount : '?'} 件`,
+        '当時の適用前の値に復元します。現在値は上書きされます。',
+      ],
+      okLabel: 'ロールバック実行',
+      cancelLabel: 'キャンセル',
+      danger: true,
+    })
+    if (!confirmed) return
+
+    state.rollbackInProgress = true
+    renderHistory()
+    setStatus('ロールバック中...')
     try {
       const r = await rollbackApi(timestamp)
       if (r.ok) {
-        toast(`Rollback 成功: ${r.restored} keys 復元`, 'success')
+        toast(`ロールバック成功: ${r.restored} key 復元`, 'success')
       } else {
-        toast(`Rollback 部分失敗: ${r.restored} 成功 / ${r.failed} 失敗`, 'error')
+        toast(`部分失敗: ${r.restored} 成功 / ${r.failed} 失敗`, 'warning')
       }
       await loadHistory()
-      // 現在 preset 表示中なら diff 再計算
       if (state.view === 'preset' && state.selectedPreset) {
         await loadPresetDiff(state.selectedPreset)
         renderMain()
@@ -632,25 +972,77 @@
         await loadKeys(state.selectedCategory)
         renderMain()
       }
-      renderHistory()
-      setStatus('Rollback 完了')
+      setStatus('ロールバック完了')
     } catch (e) {
-      toast(`Rollback 失敗: ${e.message}`, 'error')
+      toast(`ロールバック失敗: ${e.message}`, 'error')
+      setStatus('エラー')
+    } finally {
+      state.rollbackInProgress = false
+      renderHistory()
+    }
+  }
+
+  async function onSaveCustomPreset(axes) {
+    const name = await showPromptDialog({
+      title: 'カスタムプリセットとして保存',
+      placeholder: 'my-preset',
+      validate: (v) => {
+        if (!v) return 'プリセット名を入力してください'
+        if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(v)) return '英数字とハイフン (先頭は英数字、3-49 文字) のみ使えます'
+        return null
+      },
+    })
+    if (!name) return
+    setStatus(`カスタムプリセット ${name} を保存中...`)
+    try {
+      await savePresetApi(name, axes)
+      toast(`カスタムプリセット ${name} を保存しました`, 'success')
+      await loadPresets()
+      renderSidebar()
+      setStatus('保存完了')
+    } catch (e) {
+      toast(`保存失敗: ${e.message}`, 'error')
       setStatus('エラー')
     }
   }
 
   // ============================================================
-  // Tailwind CDN detection
+  // Tailwind CDN detection (M-U1: link.onerror + MutationObserver 2 段)
   // ============================================================
   function detectTailwind() {
-    // Tailwind CDN は window.tailwind を設定する
-    setTimeout(() => {
-      if (typeof window.tailwind === 'undefined') {
-        const w = document.getElementById('cdn-warning')
-        if (w) w.classList.remove('hidden')
+    const warningEl = document.getElementById('cdn-warning')
+    if (!warningEl) return
+
+    const cdnLoaded = () => typeof window.tailwind !== 'undefined'
+    const hideWarning = () => warningEl.classList.add('hidden')
+    const showWarning = () => warningEl.classList.remove('hidden')
+
+    // 1 段目: script tag の onerror で即検知
+    const scripts = document.querySelectorAll('script[src*="tailwindcss.com"]')
+    let scriptErrored = false
+    for (const s of scripts) {
+      s.addEventListener('error', () => {
+        scriptErrored = true
+        showWarning()
+      })
+    }
+
+    // 2 段目: MutationObserver + polling fallback で window.tailwind 設定検知
+    const start = Date.now()
+    const timeoutMs = 3000
+    const tick = () => {
+      if (cdnLoaded()) {
+        hideWarning()
+        return
       }
-    }, 1500)
+      if (scriptErrored) return
+      if (Date.now() - start > timeoutMs) {
+        showWarning()
+        return
+      }
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
   }
 
   // ============================================================
