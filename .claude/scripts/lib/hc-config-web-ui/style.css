@@ -1,0 +1,45 @@
+/* hc-config Web UI custom styles — task-61 Step 3
+ *
+ * Tailwind CDN で大半をカバーするため、ここは Tailwind の @apply を使わず
+ * 通常の CSS で薄い補強のみ (CDN 単体動作 / build 不要)。
+ */
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* diff row が skip 状態の見た目 */
+.diff-row.skip {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+/* 履歴 hover */
+.history-row:hover {
+  background-color: rgb(241 245 249); /* slate-100 */
+}
+
+/* code 風 font の compact 化 */
+.font-mono {
+  font-family: 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-feature-settings: 'liga' 0;
+}
+
+/* scrollbar 細め (macOS / chromium) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225); /* slate-300 */
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184); /* slate-400 */
+}
+
+/* main grid 高さ調整 (sticky header + footer 内で残り領域占有) */
+main {
+  min-height: 0;
+}
