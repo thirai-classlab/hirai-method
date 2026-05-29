@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-// .claude/scripts/lib/hc-config-web-server.js — task-61 Step 5 iter 6 領域 A (iter 4 + 5 iter 6 hot fix)
+// .claude/scripts/lib/hc-config-web-server.js — task-63 Step 1 (task-61 Step 5 iter 6 領域 A 継承)
+//
+// task-63 Step 1 修正項目 (5 件、UX 再設計の API 基盤):
+//   1. PRESETS 全 10 件に display_name_ja field 追加 (draft §3.1 mapping、日本語表示専用、絵文字なし)
+//   2. /api/presets response 各 entry に display_name_ja field 追加 (built-in 明示定義 / custom は fallback で "カスタム: <user name>")
+//   3. /api/current-preset 新規 endpoint (現在 yml 6 軸 vs PRESETS + custom-*.yml 完全一致照合)
+//   4. router に /api/current-preset GET 分岐追加
+//   5. module.exports に getCurrentPreset / axesEqual 追加 (将来 unit test 用 seam)
 //
 // iter 6 A 修正項目 (5 件 = HIGH×2 + MED×2 + 補強):
 //   item 1 (HIGH 3-rev): HC_HISTORY_DIR_OVERRIDE + HC_PRESETS_DIR_OVERRIDE env override (test isolation)
@@ -41,9 +48,10 @@
 //   GET  /static/*                  → static file serve (index.html / app.js / style.css)
 //   GET  /api/keys                  → 74 key + metadata (現在値含む、bulk hcListAll = 1 spawn)
 //   GET  /api/categories            → 6 category 一覧
+//   GET  /api/current-preset        → 現在 yml 6 軸 vs PRESETS 完全一致照合 (task-63 Step 1)
 //   GET  /api/value/:key            → 単一 key 現在値
 //   POST /api/set                   → {key,value} → hc-config.sh --set
-//   GET  /api/presets               → 10 preset 一覧 (6 軸 + 説明)
+//   GET  /api/presets               → 10 preset 一覧 (display_name_ja 含む、6 軸 + 説明)
 //   GET  /api/preset/:name/diff     → preset 適用差分 (effect 列含む)
 //   POST /api/preset/:name/apply    → batch hc-config.sh --set + history 保存 (atomic)
 //   POST /api/preset/save           → {name, axes} → .claude/presets/custom-<name>.yml 保存
@@ -116,6 +124,7 @@ const PRESET_AXES = [
 
 const PRESETS = {
   'poc-no-git': {
+    display_name_ja: 'POC・お試し (Git なし)',
     axes: { quality_level: 'poc', language_framework: 'mixed', git_workflow: 'none', tdd_policy: 'optional', review_intensity: 'minimum', autonomy_level: 'aggressive' },
     use_case: '実験 / 一時試作 (1 日以内、捨てる予定)',
     values: {
@@ -137,6 +146,7 @@ const PRESETS = {
     },
   },
   'poc-with-git': {
+    display_name_ja: 'POC・お試し (Git あり)',
     axes: { quality_level: 'poc', language_framework: 'mixed', git_workflow: 'unrestricted', tdd_policy: 'optional', review_intensity: 'minimum', autonomy_level: 'aggressive' },
     use_case: '個人 spike / 軽量 POC (Git 管理あり)',
     values: {
@@ -154,6 +164,7 @@ const PRESETS = {
     },
   },
   'inner-typescript': {
+    display_name_ja: '社内ツール (TypeScript)',
     axes: { quality_level: 'inner_system', language_framework: 'typescript', git_workflow: 'main_protected', tdd_policy: 'recommended', review_intensity: 'standard', autonomy_level: 'moderate' },
     use_case: '内部 tool TypeScript (社内利用、main protected)',
     values: {
@@ -172,6 +183,7 @@ const PRESETS = {
     },
   },
   'inner-python': {
+    display_name_ja: '社内ツール (Python)',
     axes: { quality_level: 'inner_system', language_framework: 'python', git_workflow: 'main_protected', tdd_policy: 'recommended', review_intensity: 'standard', autonomy_level: 'moderate' },
     use_case: '内部 tool Python (社内利用、main protected)',
     values: {
@@ -190,6 +202,7 @@ const PRESETS = {
     },
   },
   'production-typescript-personal': {
+    display_name_ja: '本番運用・個人 (TypeScript)',
     axes: { quality_level: 'production_service', language_framework: 'typescript', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'standard', autonomy_level: 'moderate' },
     use_case: '個人 production (classlab 等、main/stg protected)',
     values: {
@@ -211,6 +224,7 @@ const PRESETS = {
     },
   },
   'production-typescript-enterprise': {
+    display_name_ja: '本番運用・企業 (TypeScript)',
     axes: { quality_level: 'production_service', language_framework: 'typescript', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production TypeScript (strict review + conservative autonomy)',
     values: {
@@ -234,6 +248,7 @@ const PRESETS = {
     },
   },
   'production-python': {
+    display_name_ja: '本番運用 (Python)',
     axes: { quality_level: 'production_service', language_framework: 'python', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production Python (strict + conservative)',
     values: {
@@ -255,6 +270,7 @@ const PRESETS = {
     },
   },
   'production-rust': {
+    display_name_ja: '本番運用 (Rust)',
     axes: { quality_level: 'production_service', language_framework: 'rust', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production Rust (strict + conservative)',
     values: {
@@ -276,6 +292,7 @@ const PRESETS = {
     },
   },
   'production-go': {
+    display_name_ja: '本番運用 (Go)',
     axes: { quality_level: 'production_service', language_framework: 'go', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production Go (strict + conservative)',
     values: {
@@ -297,6 +314,7 @@ const PRESETS = {
     },
   },
   'harness-development': {
+    display_name_ja: 'ハーネス開発専用',
     axes: { quality_level: 'inner_system', language_framework: 'mixed', git_workflow: 'main_protected', tdd_policy: 'recommended', review_intensity: 'strict', autonomy_level: 'moderate' },
     use_case: 'hirai-method 自体の開発 (dogfooding)',
     values: {
@@ -1004,6 +1022,95 @@ function scanCustomPresets() {
 }
 
 // ============================================================
+// task-63 Step 1: getCurrentPreset (現在 yml 6 軸を全 preset と照合)
+// ============================================================
+//
+// 仕様 (task-63 Step 1 spec):
+//   1. 現在の yml 6 軸値を取得 (hcListAll cache 経由で 1 spawn)
+//   2. PRESETS (built-in 10 件) + scanCustomPresets() (custom-*.yml) の全 preset 軸定義と比較
+//   3. 完全一致 (built-in): { name: <preset key>, display_name_ja: <preset 日本語名> }
+//   4. 完全一致 (custom): { name: "custom", display_name_ja: "カスタム: <user name>" }
+//      (注: name field は "custom" 固定、user name は display_name_ja に埋める。
+//       task spec L186 「custom + display_name_ja: 'カスタム: <user name>'」準拠)
+//   5. 一致なし: { name: "custom", display_name_ja: "未保存変更あり" }
+//
+// 返却 shape: { name, display_name_ja, axes }
+//   axes は 6 軸現状値の object (key=軸名, value=現状値)
+//
+// 失敗時 (hcListAll が空 / 6 軸取得失敗): name="custom" + display_name_ja="未保存変更あり" + axes={取得できた分}
+//
+// overrides.spawnFn: DI seam (テスト用)
+function getCurrentPreset(overrides) {
+  overrides = overrides || {}
+  // 1. 現在 yml 6 軸を取得 (hcListAll 経由、cache hit で 0 spawn)
+  const allValues = hcListAll(overrides)
+  const currentAxes = {}
+  for (const a of PRESET_AXES) {
+    if (Object.prototype.hasOwnProperty.call(allValues, a.key)) {
+      currentAxes[a.key] = allValues[a.key]
+    }
+  }
+  // 6 軸が全て取得できない場合は unsaved 扱い
+  if (Object.keys(currentAxes).length !== PRESET_AXES.length) {
+    return { name: 'custom', display_name_ja: '未保存変更あり', axes: currentAxes }
+  }
+
+  // 2. PRESETS (built-in) を順次照合
+  for (const [key, p] of Object.entries(PRESETS)) {
+    // built-in only (custom-* prefix は scanCustomPresets 結果と二重照合しない、
+    //   in-memory 保存済 custom があれば下の scan loop で発見)
+    if (key.startsWith('custom-')) continue
+    if (axesEqual(p.axes, currentAxes)) {
+      return {
+        name: key,
+        display_name_ja: p.display_name_ja || key,
+        axes: currentAxes,
+      }
+    }
+  }
+
+  // 3. custom-*.yml (dynamic scan + in-memory 両方) を順次照合
+  //    in-memory PRESETS の custom-* も先に確認 (同 session save 直後ケース)
+  for (const [key, p] of Object.entries(PRESETS)) {
+    if (!key.startsWith('custom-')) continue
+    if (axesEqual(p.axes, currentAxes)) {
+      const userName = key.replace(/^custom-/, '')
+      return {
+        name: 'custom',
+        display_name_ja: `カスタム: ${userName}`,
+        axes: currentAxes,
+      }
+    }
+  }
+  const customMap = scanCustomPresets()
+  for (const [key, p] of Object.entries(customMap)) {
+    if (PRESETS[key]) continue // 上 loop で照合済
+    if (axesEqual(p.axes, currentAxes)) {
+      const userName = key.replace(/^custom-/, '')
+      return {
+        name: 'custom',
+        display_name_ja: `カスタム: ${userName}`,
+        axes: currentAxes,
+      }
+    }
+  }
+
+  // 4. 一致なし
+  return { name: 'custom', display_name_ja: '未保存変更あり', axes: currentAxes }
+}
+
+// 6 軸完全一致判定 (string 比較、yml 形式差異吸収のため trim)
+function axesEqual(presetAxes, currentAxes) {
+  for (const a of PRESET_AXES) {
+    const pv = presetAxes ? presetAxes[a.key] : undefined
+    const cv = currentAxes[a.key]
+    if (pv === undefined || cv === undefined) return false
+    if (String(pv).trim() !== String(cv).trim()) return false
+  }
+  return true
+}
+
+// ============================================================
 // HTTP helpers
 // ============================================================
 
@@ -1124,6 +1231,18 @@ async function handleRequest(req, res) {
     return
   }
 
+  // GET /api/current-preset (task-63 Step 1)
+  //   現在 yml 6 軸 vs PRESETS (built-in 10 + custom-*) を完全一致照合し、
+  //   { name, display_name_ja, axes } を返却。
+  //   - built-in 一致: name=<preset key> + display_name_ja=preset 日本語名
+  //   - custom 一致: name="custom" + display_name_ja="カスタム: <user name>"
+  //   - 不一致: name="custom" + display_name_ja="未保存変更あり"
+  if (req.method === 'GET' && pathname === '/api/current-preset') {
+    const result = getCurrentPreset()
+    sendJson(res, 200, result)
+    return
+  }
+
   // GET /api/categories
   if (req.method === 'GET' && pathname === '/api/categories') {
     const metadata = loadMetadata()
@@ -1218,6 +1337,12 @@ async function handleRequest(req, res) {
     }
     const list = Object.entries(PRESETS).map(([name, p]) => ({
       name,
+      // task-63 Step 1: display_name_ja を response に含める
+      //   built-in 10 件は明示定義済、custom preset は fallback で "カスタム: <user name>" を組み立てる
+      //   (custom-<name>.yml は use_case が `custom preset (custom-<name>)` 固定、表示用ではない)
+      display_name_ja:
+        p.display_name_ja ||
+        (name.startsWith('custom-') ? `カスタム: ${name.replace(/^custom-/, '')}` : name),
       axes: p.axes,
       use_case: p.use_case,
       affected_key_count: Object.keys(p.values).length,
@@ -1484,6 +1609,8 @@ module.exports = {
   savePreset,
   scanCustomPresets,
   isTestPollutionName,
+  getCurrentPreset, // task-63 Step 1
+  axesEqual,        // task-63 Step 1 (helper、test seam)
   listHistory,
   rollbackHistory,
   readJsonBody,
