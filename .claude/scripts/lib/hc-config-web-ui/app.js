@@ -1,4 +1,4 @@
-// hc-config Web UI — task-61 Step 5 iter 2 (WCAG 2.2 AA + UX 改善)
+// hc-config Web UI — task-61 Step 5 iter 4 B (UI a11y + UX fix)
 // vanilla JS + Tailwind CDN, fetch API only, no external deps
 //
 // State machine:
@@ -8,7 +8,7 @@
 //   - key     : key 選択 → edit form
 //   - preset  : preset 選択 → diff preview + apply
 //
-// WCAG 2.2 AA 準拠 (本 iter で対応):
+// WCAG 2.2 AA 準拠 (iter 2 で 16 SC 違反全 closure 済、iter 4 B で追加維持):
 //   - C-U1 accessible name: rollback / diff checkbox / 全 button
 //   - C-U2 label-input 関連付け: for=/id= 形式
 //   - H-U1 keyboard navigation: tabindex / role + Enter/Space handler
@@ -18,8 +18,29 @@
 //   - M-U3 二重送信防止 (state.applying flag + disabled)
 //   - M-U4 heading 階層: <h3>/<h4> 動的 panel
 //
+// iter 4 B 修正項目 (7 件):
+//   - H-new-1: sidebar role="listbox" → role="list" + role="option" → role="listitem" (APG 完全実装の代わりに YAGNI)
+//   - M-new-1: showConfirmDialog/showPromptDialog cleanup 二重呼び出し防止 (resolved flag)
+//   - M-new-2: prompt dialog validation error を aria-live="assertive" output で SR 通知
+//   - M-new-3: diff table skip row tr に aria-label dynamic + checkbox aria-label dynamic
+//   - MED-Q1: onApplyPreset partial failure 時 toast に applied/failed/rolled_back/rollback_failed 詳細明示
+//   - MED-Q5: onSaveCustomPreset axes を「選択中 preset の axes」ではなく「現在の yml 6 軸」を fetch して送信
+//   - API contract: preset name regex 3-49 char に統一 (server.js 領域 A と整合)
+//
 ;(function () {
   'use strict'
+
+  // ============================================================
+  // 6 軸 key list (axes fetcher 用、領域 A server.js PRESET_AXES と整合)
+  // ============================================================
+  const AXIS_KEYS = [
+    'quality_level',
+    'language_framework',
+    'git_workflow',
+    'tdd_policy',
+    'review_intensity',
+    'autonomy_level',
+  ]
 
   // ============================================================
   // state
@@ -94,6 +115,22 @@
   }
   const savePresetApi = async (name, axes) => {
     return await api('POST', '/api/preset/save', { name, axes })
+  }
+
+  // MED-Q5 iter 4 B: 現在の yml 6 軸を取得 (server.js /api/keys は metadata.sh 経由で current_value 含む)
+  //   /api/keys?category=... の API が axes 専用 endpoint を持たないため、全 key 取得 → 6 軸 filter
+  //   (将来 /api/axes or /api/keys?keys=a,b,c で軽量化可能、本 iter は最小修正)
+  const loadCurrentAxes = async () => {
+    const r = await api('GET', '/api/keys')
+    const keys = r.keys || []
+    const axes = {}
+    for (const k of AXIS_KEYS) {
+      const entry = keys.find((x) => x.key === k)
+      if (entry && entry.current_value !== null && entry.current_value !== undefined) {
+        axes[k] = String(entry.current_value)
+      }
+    }
+    return axes
   }
 
   // ============================================================
@@ -174,6 +211,7 @@
 
   // ============================================================
   // dialog helpers (H-U4: custom <dialog> + focus trap + Esc cancel)
+  // M-new-1 iter 4 B: resolved flag で cleanup 二重呼び出し / 二重 resolve 防止
   // ============================================================
   function showConfirmDialog(opts) {
     // opts: { title, bodyLines: string[], okLabel, cancelLabel, danger }
@@ -196,28 +234,29 @@
         ? 'px-4 py-2 text-sm bg-red-700 hover:bg-red-800 text-white font-semibold rounded min-h-[44px]'
         : 'px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded min-h-[44px]'
 
-      const onOk = () => {
+      // M-new-1 iter 4 B: resolved flag で二重発火を防止
+      let resolved = false
+
+      const safeResolve = (value) => {
+        if (resolved) return
+        resolved = true
         cleanup()
-        resolve(true)
+        resolve(value)
       }
-      const onCancel = () => {
-        cleanup()
-        resolve(false)
-      }
+
+      const onOk = () => safeResolve(true)
+      const onCancel = () => safeResolve(false)
       const onCancelKey = (ev) => {
         // <dialog> native は Esc で close する。close 時 returnValue が 'cancel' なら cancel 扱い。
         if (ev.key === 'Escape') {
           // 既定動作で close するため、close event で resolve
         }
       }
-      const onClose = () => {
-        cleanup()
-        resolve(dlg.returnValue === 'ok')
-      }
+      const onClose = () => safeResolve(dlg.returnValue === 'ok')
 
       function cleanup() {
-        okBtn.removeEventListener('click', onOk)
-        cancelBtn.removeEventListener('click', onCancel)
+        okBtn.removeEventListener('click', okClickHandler)
+        cancelBtn.removeEventListener('click', cancelClickHandler)
         dlg.removeEventListener('keydown', onCancelKey)
         dlg.removeEventListener('close', onClose)
         if (dlg.open) {
@@ -225,8 +264,11 @@
         }
       }
 
-      okBtn.addEventListener('click', () => { dlg.returnValue = 'ok'; onOk() })
-      cancelBtn.addEventListener('click', () => { dlg.returnValue = 'cancel'; onCancel() })
+      const okClickHandler = () => { dlg.returnValue = 'ok'; onOk() }
+      const cancelClickHandler = () => { dlg.returnValue = 'cancel'; onCancel() }
+
+      okBtn.addEventListener('click', okClickHandler)
+      cancelBtn.addEventListener('click', cancelClickHandler)
       dlg.addEventListener('keydown', onCancelKey)
       dlg.addEventListener('close', onClose)
 
@@ -246,48 +288,81 @@
       const dlg = document.getElementById('prompt-dialog')
       const titleEl = document.getElementById('prompt-dialog-title')
       const input = document.getElementById('prompt-dialog-input')
+      const errorEl = document.getElementById('prompt-dialog-error')
       const okBtn = document.getElementById('prompt-dialog-ok')
       const cancelBtn = document.getElementById('prompt-dialog-cancel')
 
       if (opts.title) titleEl.textContent = opts.title
       input.value = ''
       input.placeholder = opts.placeholder || ''
+      // M-new-2 iter 4 B: error 表示を初期状態にリセット
+      input.setAttribute('aria-invalid', 'false')
+      if (errorEl) {
+        errorEl.textContent = ''
+        errorEl.classList.add('hidden')
+      }
+
+      // M-new-1 iter 4 B: resolved flag で二重発火を防止
+      let resolved = false
+
+      const safeResolve = (value) => {
+        if (resolved) return
+        resolved = true
+        cleanup()
+        resolve(value)
+      }
+
+      // M-new-2 iter 4 B: validation error 表示 (toast 廃止、inline aria-live で SR 通知)
+      const showError = (msg) => {
+        input.setAttribute('aria-invalid', 'true')
+        if (errorEl) {
+          errorEl.textContent = msg
+          errorEl.classList.remove('hidden')
+        }
+        input.focus()
+        input.select()
+      }
+      const clearError = () => {
+        input.setAttribute('aria-invalid', 'false')
+        if (errorEl) {
+          errorEl.textContent = ''
+          errorEl.classList.add('hidden')
+        }
+      }
 
       const onOk = () => {
         const value = input.value.trim()
         if (opts.validate) {
           const err = opts.validate(value)
           if (err) {
-            toast(err, 'error')
-            input.focus()
+            showError(err)
             return
           }
         }
-        cleanup()
-        resolve(value)
+        clearError()
+        safeResolve(value)
       }
-      const onCancel = () => {
-        cleanup()
-        resolve(null)
-      }
+      const onCancel = () => safeResolve(null)
       const onKey = (ev) => {
         if (ev.key === 'Enter') {
           ev.preventDefault()
           onOk()
         }
       }
+      // M-new-2 iter 4 B: input 変化で error 自動 clear (UX 改善)
+      const onInputChange = () => {
+        if (input.getAttribute('aria-invalid') === 'true') clearError()
+      }
       const onClose = () => {
         // close event for backdrop Esc
-        if (dlg.returnValue !== 'ok') {
-          cleanup()
-          resolve(null)
-        }
+        if (dlg.returnValue !== 'ok') safeResolve(null)
       }
 
       function cleanup() {
         okBtn.removeEventListener('click', okHandler)
         cancelBtn.removeEventListener('click', cancelHandler)
         input.removeEventListener('keydown', onKey)
+        input.removeEventListener('input', onInputChange)
         dlg.removeEventListener('close', onClose)
         if (dlg.open) {
           try { dlg.close() } catch (e) { /* noop */ }
@@ -300,6 +375,7 @@
       okBtn.addEventListener('click', okHandler)
       cancelBtn.addEventListener('click', cancelHandler)
       input.addEventListener('keydown', onKey)
+      input.addEventListener('input', onInputChange)
       dlg.addEventListener('close', onClose)
 
       if (typeof dlg.showModal === 'function') {
@@ -325,6 +401,9 @@
 
   // ============================================================
   // render: sidebar
+  // H-new-1 iter 4 B: role="option" + aria-selected 廃止、role="listitem" 化
+  //   (APG Listbox 完全実装 (Arrow key navigation / aria-activedescendant) は YAGNI、
+  //    keyboard accessibility は tabindex=0 + Tab + Enter/Space で確保 SC 2.1.1)
   // ============================================================
   function renderSidebar() {
     const presetUl = document.getElementById('preset-list')
@@ -337,10 +416,11 @@
         'li',
         {
           class: `preset-card cursor-pointer px-2 py-1.5 rounded border min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isSel ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-transparent hover:bg-slate-100'}`,
-          role: 'option',
+          // H-new-1: role="option" → "listitem"、aria-selected 削除 (listbox 専用)
+          role: 'listitem',
           tabindex: '0',
-          'aria-selected': isSel ? 'true' : 'false',
-          'aria-label': `プリセット ${p.name}: ${p.use_case || ''} (${keyWord})`,
+          'aria-current': isSel ? 'true' : null,
+          'aria-label': `プリセット ${p.name}: ${p.use_case || ''} (${keyWord})${isSel ? ' (選択中)' : ''}`,
           onclick: onSelect,
           onkeydown: activateOnEnterOrSpace(onSelect),
         },
@@ -360,10 +440,11 @@
         'li',
         {
           class: `cursor-pointer px-2 py-1.5 rounded min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isSel ? 'bg-blue-50 text-blue-900 font-semibold' : 'hover:bg-slate-100'}`,
-          role: 'option',
+          // H-new-1: role="option" → "listitem"、aria-selected 削除
+          role: 'listitem',
           tabindex: '0',
-          'aria-selected': isSel ? 'true' : 'false',
-          'aria-label': `カテゴリ ${c.name} (${c.key_count} key)`,
+          'aria-current': isSel ? 'true' : null,
+          'aria-label': `カテゴリ ${c.name} (${c.key_count} key)${isSel ? ' (選択中)' : ''}`,
           onclick: onSelect,
           onkeydown: activateOnEnterOrSpace(onSelect),
         },
@@ -435,15 +516,16 @@
       header.appendChild(pills)
 
       // Save as Custom Preset button (draft §6 DoD)
+      // MED-Q5 iter 4 B: onSaveCustomPreset は現在の yml 6 軸を fetch するため引数なしに変更
       const saveBtn = el(
         'button',
         {
           type: 'button',
           class: 'mt-3 px-3 py-2 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-800 min-h-[44px]',
-          onclick: () => onSaveCustomPreset(diff.axes),
-          'aria-label': '現在の軸状態をカスタムプリセットとして保存',
+          onclick: () => onSaveCustomPreset(),
+          'aria-label': '現在の yml 6 軸状態をカスタムプリセットとして保存',
         },
-        '⬇ カスタムプリセットとして保存'
+        '⬇ 現在の 6 軸を保存'
       )
       header.appendChild(saveBtn)
     }
@@ -515,10 +597,14 @@
     const tbody = el('tbody', null)
     for (const c of changes) {
       const isSkip = state.skipKeys[c.key] === true
+      // M-new-3 iter 4 B: checkbox aria-label を skip 状態で動的化
+      const cbLabel = c.changed
+        ? (isSkip ? `${c.key} を適用対象にする (現在: skip)` : `${c.key} を skip にする (現在: 適用対象)`)
+        : `${c.key} は変更なし、適用対象外`
       const cbAttrs = {
         type: 'checkbox',
         class: 'w-5 h-5 cursor-pointer',
-        'aria-label': `${c.key} を適用対象にする`,
+        'aria-label': cbLabel,
         onchange: (ev) => onToggleSkip(c.key, !ev.target.checked),
       }
       if (!isSkip) cbAttrs.checked = true
@@ -543,10 +629,16 @@
 
       const effectText = (c.effect !== undefined && c.effect !== null && c.effect !== '') ? String(c.effect) : '—'
 
+      // M-new-3 iter 4 B: tr に aria-label dynamic
+      const rowAriaLabel = c.changed
+        ? (isSkip ? `${c.key}: skip 対象 (適用しない)` : `${c.key}: 適用対象`)
+        : `${c.key}: 変更なし`
+
       const row = el(
         'tr',
         {
           class: `diff-row border-t border-slate-100 ${isSkip ? 'skip' : ''} ${c.changed ? '' : 'opacity-70'}`,
+          'aria-label': rowAriaLabel,
         },
         el('td', { class: 'px-3 py-2' }, cb),
         el('td', { class: 'px-3 py-2 font-mono text-xs text-slate-800' }, c.key),
@@ -754,11 +846,12 @@
     return box
   }
 
+  // MED-Q1 iter 4 B: history table に Rolled back 列追加 + colspan=6 化
   function renderHistory() {
     const tbody = document.getElementById('history-tbody')
     clear(tbody)
     if (!state.history.length) {
-      tbody.appendChild(el('tr', null, el('td', { class: 'py-2 text-slate-400', colspan: 5 }, '履歴なし')))
+      tbody.appendChild(el('tr', null, el('td', { class: 'py-2 text-slate-400', colspan: 6 }, '履歴なし')))
       return
     }
     for (const h of state.history) {
@@ -773,6 +866,17 @@
           )
         : el('span', { class: 'text-slate-500' }, '0')
 
+      // MED-Q1 iter 4 B: rolled_back_count を視覚化
+      const rolledBackCount = Number(h.rolled_back_count || 0)
+      const rolledBackCell = rolledBackCount > 0
+        ? el(
+            'span',
+            { class: 'inline-flex items-center gap-1 text-amber-700 font-semibold' },
+            el('span', { 'aria-hidden': 'true' }, '↺'),
+            String(rolledBackCount)
+          )
+        : el('span', { class: 'text-slate-500' }, '0')
+
       const rollbackLabel = `${h.timestamp} (preset: ${h.preset || 'unknown'}) をロールバック`
       const rollbackDisabled = state.rollbackInProgress
       const tr = el(
@@ -782,6 +886,7 @@
         el('td', { class: 'py-1 pr-3 font-mono text-xs' }, h.preset || '<unknown>'),
         el('td', { class: 'py-1 pr-3' }, String(h.applied_count !== undefined ? h.applied_count : '?')),
         el('td', { class: 'py-1 pr-3' }, failedCell),
+        el('td', { class: 'py-1 pr-3' }, rolledBackCell),
         el(
           'td',
           { class: 'py-1 pr-3' },
@@ -868,6 +973,9 @@
     renderMain()
   }
 
+  // MED-Q1 iter 4 B: partial failure 時 toast 詳細化
+  //   applied / failed / rolled_back / rollback_failed 全列挙
+  //   rollback_failed 上位 3 件 + 残数明示
   async function onApplyPreset() {
     if (state.applying) return
     if (!state.selectedPreset || !state.presetDiff) return
@@ -899,8 +1007,26 @@
       const r = await applyPresetApi(state.selectedPreset, skipKeys)
       if (r.ok) {
         toast(`適用成功: ${r.applied} key 適用`, 'success')
+      } else if (r.partial) {
+        // MED-Q1 iter 4 B: partial failure 詳細
+        const failedKey = r.aborted_at && r.aborted_at.key ? r.aborted_at.key : '<unknown>'
+        const rolledBack = Number(r.rolled_back || 0)
+        const rollbackFailed = Number(r.rollback_failed || 0)
+        // 詳細 toast (warning)
+        const lines = []
+        lines.push(`部分失敗: ${failedKey} で停止`)
+        lines.push(`成功 0 / 失敗 1 / 復元 ${rolledBack} 件`)
+        if (rollbackFailed > 0) {
+          lines.push(`復元失敗 ${rollbackFailed} 件 (yml 状態が不整合の可能性、history を確認)`)
+        }
+        toast(lines.join(' / '), 'warning')
+        // 復元失敗は別 toast (error) で強調 (SR alert)
+        if (rollbackFailed > 0) {
+          toast(`警告: ${rollbackFailed} 件の rollback が失敗、yml 状態確認必須`, 'error')
+        }
       } else {
-        toast(`部分失敗: ${r.applied} 成功 / ${r.failed} 失敗`, 'warning')
+        // 完全失敗 (5xx) は API wrapper で throw されるため通常到達不可
+        toast(`適用失敗: ${r.error || 'unknown error'}`, 'error')
       }
       await Promise.all([loadHistory(), loadPresetDiff(state.selectedPreset)])
       setStatus(`プリセット: ${state.selectedPreset}`)
@@ -982,7 +1108,10 @@
     }
   }
 
-  async function onSaveCustomPreset(axes) {
+  // MED-Q5 iter 4 B: 「選択中 preset の axes」ではなく「現在の yml 6 軸」を fetch して送信
+  //   設計 §6 DoD: 現在の harness-config.yml の 6 軸状態を新規 custom preset として保存
+  // API contract iter 4 B: name regex 3-49 char (server.js 領域 A 仕様と整合: ^[a-z0-9][a-z0-9-]{2,48}$)
+  async function onSaveCustomPreset() {
     const name = await showPromptDialog({
       title: 'カスタムプリセットとして保存',
       placeholder: 'my-preset',
@@ -993,10 +1122,18 @@
       },
     })
     if (!name) return
-    setStatus(`カスタムプリセット ${name} を保存中...`)
+    setStatus(`カスタムプリセット ${name} を保存中 (現在の yml 6 軸を取得)...`)
     try {
-      await savePresetApi(name, axes)
-      toast(`カスタムプリセット ${name} を保存しました`, 'success')
+      // MED-Q5: 現在の yml 値を fetch (選択中 preset の axes ではない)
+      const currentAxes = await loadCurrentAxes()
+      const missing = AXIS_KEYS.filter((k) => currentAxes[k] === undefined)
+      if (missing.length > 0) {
+        toast(`保存失敗: 現在 yml で 6 軸が不完全 (欠落: ${missing.join(', ')})`, 'error')
+        setStatus('エラー')
+        return
+      }
+      await savePresetApi(name, currentAxes)
+      toast(`カスタムプリセット ${name} を保存しました (現在の yml 6 軸)`, 'success')
       await loadPresets()
       renderSidebar()
       setStatus('保存完了')
