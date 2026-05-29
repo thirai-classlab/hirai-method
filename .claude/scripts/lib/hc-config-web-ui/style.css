@@ -1,0 +1,122 @@
+/* hc-config Web UI custom styles — task-61 Step 5 iter 2 (WCAG 2.2 AA + UX)
+ *
+ * Tailwind CDN で大半をカバーするため、ここは Tailwind の @apply を使わず
+ * 通常の CSS で薄い補強のみ (CDN 単体動作 / build 不要)。
+ *
+ * a11y 追加:
+ *   - .sr-only (visually hidden、screen reader 可視)
+ *   - focus-visible 高 contrast outline (WCAG 2.4.11 Focus Appearance)
+ *   - reduced-motion media query 配慮
+ *   - <dialog> backdrop / focus
+ */
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* a11y: screen-reader only (visually hidden) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.focus\:not-sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* a11y: focus indicator (WCAG 2.4.11 / 2.4.13 Focus Appearance) */
+:focus-visible {
+  outline: 3px solid #2563eb; /* blue-600 */
+  outline-offset: 2px;
+}
+button:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible,
+[tabindex='0']:focus-visible {
+  /* iter 6 A item 6 (LOW tdd + ui-designer): [role='option']:focus-visible 削除
+     (iter 4 B で role=option → role=listitem 移行で dead 化、role=listitem は
+     [tabindex='0']:focus-visible で既に carbon copy された) */
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25);
+}
+
+/* diff row が skip 状態の見た目 (color のみ依存しない、line-through 併用) */
+.diff-row.skip {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+/* 履歴 hover */
+.history-row:hover {
+  background-color: rgb(241 245 249); /* slate-100 */
+}
+
+/* code 風 font の compact 化 */
+.font-mono {
+  font-family: 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-feature-settings: 'liga' 0;
+}
+
+/* scrollbar 細め (macOS / chromium) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225); /* slate-300 */
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184); /* slate-400 */
+}
+
+/* main grid 高さ調整 */
+main {
+  min-height: 0;
+}
+
+/* <dialog> native styling 補強 */
+dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+dialog::backdrop {
+  background-color: rgba(15, 23, 42, 0.5); /* slate-900 / 50% */
+}
+
+/* reduced-motion 配慮 (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* high-contrast OS 設定対応 (Windows Forced Colors) */
+@media (forced-colors: active) {
+  button,
+  [role='button'],
+  [role='option'] {
+    border: 1px solid ButtonText;
+  }
+  :focus-visible {
+    outline: 3px solid Highlight;
+  }
+}

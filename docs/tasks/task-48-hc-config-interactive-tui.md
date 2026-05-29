@@ -173,6 +173,7 @@ ui-designer 追加理由: 矢印キー TUI の UX (ハイライト / effect pane
 | 2026-05-27 | 承認 | user「問題ありません。」(確認 3 点 OK)、approved_at 記入 |
 | 2026-05-27 | 着手 | branch `feat/hc-config-interactive-tui` |
 | 2026-05-27 | 完了 | 8 commits `a353b2e`..`c48f15f`、reviewer iter1→iter3 収束 (全 6 approve CRIT+HIGH+MED=0)、TUI 14/14 + script 21/21 (bash3.2) + 全 harness regression 0、全関数 ≤45 LOC、PR [#22](https://github.com/thirai-classlab/hirai-method/pull/22)。user follow-up: 手動 TUI 検証 + 4 リポ install |
+| 2026-05-29 | follow-up | user 手動 TUI 検証で **§3.3 設計乖離発見** (真の 2 階層 navigation 「category 一覧 → key 一覧」が iter cycle で「区切り行付き 1 階層 flat list」に妥協 closure された) → [task-60-hc-config-tui-2tier-navigation.md](task-60-hc-config-tui-2tier-navigation.md) で follow-up 実装。教訓: memory `feedback_iter_approve_design_drift_user_verify.md` (iter approve だけで closure せず、設計 §X grep 検証 + DoD 手動検証項目併用) |
 
 ## 派生 task / 次アクション候補
 
