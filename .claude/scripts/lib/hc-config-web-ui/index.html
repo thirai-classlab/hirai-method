@@ -74,30 +74,6 @@
     </div>
   </dialog>
 
-  <!-- prompt dialog (カスタムプリセットとして保存) -->
-  <dialog id="prompt-dialog" aria-labelledby="prompt-dialog-title" aria-describedby="prompt-dialog-body" class="rounded-lg shadow-xl p-0 backdrop:bg-slate-900/40" lang="ja">
-    <div class="bg-white rounded-lg max-w-lg w-[28rem]">
-      <header class="px-5 py-3 border-b border-slate-200">
-        <h2 id="prompt-dialog-title" class="text-base font-bold text-slate-800">カスタムプリセットとして保存</h2>
-      </header>
-      <div id="prompt-dialog-body" class="px-5 py-4 text-sm text-slate-700 space-y-3">
-        <p>現在の 6 軸状態を新しいカスタムプリセットとして保存します。</p>
-        <div>
-          <label for="prompt-dialog-input" class="block text-xs uppercase text-slate-500 font-semibold mb-1">プリセット名</label>
-          <!-- M-new-2 iter 4 B: aria-describedby で hint + error 関連付け、aria-invalid 初期 false -->
-          <input id="prompt-dialog-input" type="text" class="w-full font-mono text-sm border border-slate-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200" placeholder="my-preset" autocomplete="off" aria-describedby="prompt-dialog-hint prompt-dialog-error" aria-invalid="false" />
-          <p id="prompt-dialog-hint" class="text-xs text-slate-500 mt-1">英数字 / ハイフンのみ、先頭は英数字、3-49 文字 (例: <code>my-preset-2026</code>)</p>
-          <!-- M-new-2 iter 4 B: validation error 用 output (aria-live="assertive" で SR 即時通知) -->
-          <output id="prompt-dialog-error" class="hidden text-xs text-red-700 mt-1 font-semibold" aria-live="assertive"></output>
-        </div>
-      </div>
-      <footer class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2 bg-slate-50 rounded-b-lg">
-        <button id="prompt-dialog-cancel" type="button" class="px-4 py-2 text-sm bg-slate-200 hover:bg-slate-300 rounded text-slate-800 min-h-[44px]">キャンセル</button>
-        <button id="prompt-dialog-ok" type="button" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded min-h-[44px]">保存</button>
-      </footer>
-    </div>
-  </dialog>
-
   <!-- toast container -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none" role="region" aria-label="通知" aria-live="polite"></div>
 
