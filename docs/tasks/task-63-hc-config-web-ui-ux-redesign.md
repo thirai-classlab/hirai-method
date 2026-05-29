@@ -1,0 +1,284 @@
+---
+asana_url: ""
+slack_urls: []
+deadline: ""
+requester: ""
+---
+
+<!--
+# 採用 6 条 (Task=Phase=N Step、2026-05-25 採用) metadata
+total_steps: 8
+-->
+
+# Task #63: hc-config Web UI UX 再設計
+
+> Status: **🔲 未着手**
+> 起案: 2026-05-29
+> 関連: #61 (hc-config Web UI 機能本体), #60 (TUI legacy fallback)
+> 設計起源: [hc-config-web-ui-ux-redesign.md](../draft/hc-config-web-ui-ux-redesign.md) ✅承認済 (approved_at "2026-05-29" / approved_by "takuma.hirai1@gmail.com")
+
+## Task ゴール
+
+`bash .claude/scripts/lib/hc-config.sh interactive` で起動する Web UI が、**現状確認 (top view) と編集 (edit view) の 2 view に分離**され、preset 名が全 10 件**日本語表示** (英 key は内部のみ)、絵文字なしで、「設定を変更」ボタン経由で preset 一括変更 / 個別 key 変更 / カスタムとして保存ができる状態に置き換わる。task-60 TUI legacy fallback (`HC_HC_CONFIG_TUI_LEGACY=true`) は維持され regression 0。
+
+## Task 依存先タスク
+
+> **規約 (採用 6 条 2、2026-05-26)**: 本 task 開発開始時 (`/start-task` 直後) に依存先 task.md + 関連 draft を **必ず Read** すること。
+
+| 依存先 task | 影響内容 | リンク |
+|---|---|---|
+| task-61 | hc-config Web UI 機能本体 (Node.js HTTP server + Tailwind CDN + 素 JS + PRESETS hardcode + Pure Function Reducer pattern + 4 領域 UI) を継承し、本 task で sidebar 削除 + top/edit 2 view 化 + 日本語 preset 名 + `/api/current-preset` endpoint 追加で UX を再設計する。task-61 既存 `.claude/scripts/lib/hc-config-web-server.js` + `hc-config-web-ui/{index.html,app.js,style.css}` を変更する。 | [task-61-hc-config-web-ui.md](task-61-hc-config-web-ui.md) |
+| task-60 | TUI legacy fallback (`HC_HC_CONFIG_TUI_LEGACY=true`) との並走を維持。本 task の変更は Web UI のみで TUI 経路には影響を与えない (smoke 14/14 regression 0 確認必要)。 | [task-60-hc-config-tui-2tier-navigation.md](task-60-hc-config-tui-2tier-navigation.md) |
+
+## Task 作業概要
+
+- `hc-config-web-server.js` の `PRESETS` 定義を `{ display_name_ja, values }` 構造に再編 + `/api/current-preset` endpoint 新規追加 (現在 yml 6 軸 vs PRESETS 完全一致判定 + match_type 3 種返却)
+- `app.js` state machine 拡張 (`view: 'top' | 'edit'` 2 view 排他切替、reducer + actions + state shape を Pure Function Reducer pattern で拡張)
+- `index.html` layout 再構築 (sidebar 280px 削除 → main 100% 化、top view + edit view の 2 section + footer history) + `style.css` 調整 (banner / table / button / preset list / form / dialog overlay)
+- preset 日本語名表示 (banner / list / dialog confirm message に `display_name_ja` 適用、`lang="ja"` 属性、絵文字なし)
+- smoke 拡充 (`hc-config-web-ui-smoke.sh` に `/api/current-preset` + top view 初期表示 + 編集画面遷移 + preset 適用後復帰 + カスタム保存 banner 表示の 5 case 追加)
+
+## Task 完了条件 (DoD)
+
+- [ ] `bash .claude/scripts/lib/hc-config.sh interactive` で **トップ画面**が初期表示される (現在 preset 名 + 6 軸詳細 + 「設定を変更」ボタン)
+- [ ] 「設定を変更」ボタン押下で**編集画面**遷移
+- [ ] 編集画面で preset 選択 → diff preview → 「適用」confirm で 6 軸一括変更 → トップ画面復帰 + 新 preset 名表示
+- [ ] 編集画面で個別 key 変更 → 「カスタムとして保存」 → 名前入力 confirm → `.claude/presets/custom-<name>.yml` 生成 → トップ画面で「カスタム: <name>」表示
+- [ ] preset 名は全 10 件日本語化 (英 key は内部のみ、user 視点では日本語のみ)
+- [ ] 絵文字なし (visual verification 全 14 case で確認)
+- [ ] 既存 smoke 全 PASS (script 21/21 + tui 14/14、regression 0)
+- [ ] 新 smoke 5 case (top view / 編集画面遷移 / `/api/current-preset` 3 識別 / custom 保存後 banner) PASS
+- [ ] visual verification 14 case (top × 3 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 2) PASS
+- [ ] WCAG 2.2 AA 全 SC PASS (task-61 維持 + 日本語 i18n `lang="ja"` 追加項目)
+- [ ] task-60 TUI legacy fallback 維持 (`HC_HC_CONFIG_TUI_LEGACY=true` で旧 TUI 起動確認)
+- [ ] reviewer 5+ approve (Step 6 テスト設計レビューで達成)
+- [ ] commit 完了 (push は user manual で実施、Loop モード自律実行禁止)
+
+## Task 概要欄 (list.md 用、3 要素規範)
+
+> **規約 (採用 6 条 6)**: 「何のため × 何をやる × 何ができるようになる」3 要素
+
+task-61 完遂後の user UX フィードバック 4 件 (英 preset 名 / 初期 sidebar 待ち / 動線固定 / 保存経路 unclear) を解消するため、PRESETS に `display_name_ja` 追加 + `/api/current-preset` endpoint 新規 + app.js state machine `top/edit` 2 view 排他化 + index.html sidebar 削除 + layout 再構築を行う。完成すれば user が browser 起動直後に現在 preset 名 + 6 軸詳細を read-only で確認でき、「設定を変更」ボタン経由で preset 一括変更 / 個別 key 変更 / カスタムとして保存 (`.claude/presets/custom-<name>.yml`) を日本語 UI + 絵文字なし + WCAG 2.2 AA で操作できるようになる。
+
+## 背景・目的
+
+task-61 で hc-config Web UI 初版を実装したが、user 動作確認時に **動線・命名・初期 view の 3 軸で UX 違反**が判明した:
+
+1. **F1**: preset 名が英語 key 表示 (例: `inner-typescript`) → 「猿でも分かる日本語」要求
+2. **F2**: 初期表示が sidebar から preset 選択待ち placeholder → 「現在の設定 + プリセット名 or カスタム + 6 軸詳細」要求 (read-only)
+3. **F3**: 動線が「sidebar → preset 選択 → diff → apply」固定 → 「『設定を変更』ボタン → 編集画面 → プリセット選択 (一括) or 個別 key 変更」動線要求
+4. **F4**: 個別変更時の保存経路が unclear → 「カスタムとして保存」ボタン要求
+
+真因は task-61 設計 (§3) で **「sidebar = preset list + main = key 編集」の 1 画面 dashboard** を採用したが、**初期 view (現在状態確認) と編集 view (preset 一括 / 個別変更) の責務分離が欠落**していた点。さらに preset 名は英 key を string そのまま流用しており i18n を考慮していなかった。本 task は draft §2 解決アプローチ比較 で B 案 (全面 redesign、9.5h、F1-F4 全解決、責務分離明確、将来拡張容易) を採用し、task-61 の Pure Function Reducer pattern と Tailwind 構成は継承する。
+
+## 仕様（要決定 → 決定済）
+
+draft §3.1-§3.9 で全項目決定済 (user 承認 2026-05-29):
+
+| # | 項目 | 決定 |
+|---|---|---|
+| Q1 | preset 日本語名 mapping | 10 件決定 (draft §3.1 table、英 key 内部識別子のみ / 日本語 UI 表示専用 / 絵文字なし) |
+| Q2 | 画面構成 | top view + edit view + confirm dialog の 2 view + 補助 dialog (draft §3.2) |
+| Q3 | 状態遷移 | state machine 図 (draft §3.3 mermaid、top↔edit↔diff_dialog↔custom_save_dialog) |
+| Q4 | `/api/current-preset` response | `{ match_type: "preset"\|"custom"\|"unsaved", name, display_name_ja, values }` (draft §3.4) |
+| Q5 | `/api/presets` response 拡張 | 各 entry に `display_name_ja` field 追加 (draft §3.6) |
+| Q6 | state shape | `{ view, currentPreset, editBuffer, pendingPreset, pendingCustomSave }` (draft §3.7) |
+| Q7 | layout | sidebar 削除 → main 100%、top view + edit view 排他切替 (draft §3.8) |
+| Q8 | アクセシビリティ | WCAG 2.2 AA 維持 + 日本語 `lang="ja"` 属性 + dialog focus trap (draft §3.9) |
+| Q9 | custom 保存 path traversal | name 入力 regex `^[a-z0-9-]+$` 制限 + server.js sanitize (draft §4 リスク table) |
+
+## 設計
+
+詳細設計は draft [§3.1-§3.9](../draft/hc-config-web-ui-ux-redesign.md) を SSoT とする。本 task file では概要のみ記載:
+
+- **PRESETS 再編** (`hc-config-web-server.js`): `{ "inner-typescript": { display_name_ja: "社内ツール (TypeScript)", values: { quality: "inner", lang: "typescript", ... } }, ... }` (10 件 + 将来拡張余地)
+- **新規 endpoint** `GET /api/current-preset`: 現 yml 6 軸を全 preset と照合 → `match_type`/`name`/`display_name_ja`/`values` 返却
+- **state machine** (`app.js`): `view: 'top' | 'edit'` 排他、actions `LOAD_CURRENT` / `GOTO_EDIT` / `GOTO_TOP` / `SELECT_PRESET` / `APPLY_PRESET` / `CHANGE_KEY` / `OPEN_CUSTOM_SAVE` / `SAVE_CUSTOM` / `CANCEL`、reducer Pure Function 維持
+- **layout** (`index.html` + `style.css`): sidebar 280px 削除 → main 100%、`<section id="view-top">` + `<section id="view-edit">` 排他表示 (`hidden` class)、footer history 維持
+- **日本語名表示**: `display_name_ja` を banner / list / dialog confirm message に適用、`lang="ja"` 属性、絵文字なし
+
+```mermaid
+stateDiagram-v2
+    [*] --> top: 起動 (GET /api/current-preset)
+    top --> edit: 「設定を変更」
+    edit --> diff_dialog: プリセット選択
+    diff_dialog --> top: 「適用」 (POST /api/preset/:name/apply)
+    diff_dialog --> edit: 「Cancel」
+    edit --> custom_save_dialog: 「カスタムとして保存」
+    custom_save_dialog --> top: 名前入力 + confirm (POST /api/preset/save)
+    custom_save_dialog --> edit: 「Cancel」
+    edit --> top: 「適用」 or 「Cancel」
+```
+
+## TDD 戦略
+
+### RED（先に追加するテスト）
+
+- `.claude/tests/hc-config-web-ui-smoke.sh` 新規 5 case:
+  - `GET /api/current-preset` 200 + `match_type` 含む
+  - top view 初期表示で「現在の設定」banner 描画
+  - 「設定を変更」ボタン押下で edit view 遷移 (`view-edit` 表示 / `view-top` hidden)
+  - preset 適用後 → top view 復帰 + banner 新 preset 名表示
+  - カスタム保存 → top view で「カスタム: <name>」banner 表示
+- E2E (agent-browser Playwright): top → edit → preset apply → top 復帰 → 6 軸 banner 更新確認
+- visual verification (screenshot 14 case): top × 3 状態 (preset/custom/unsaved) × 3 breakpoint (375/768/1440) + edit × 3 breakpoint + dialog × 2
+
+### GREEN（最小実装）
+
+- `hc-config-web-server.js`: PRESETS 構造再編 + `/api/current-preset` endpoint
+- `app.js`: state machine 拡張 (view / reducer / actions)
+- `index.html` + `style.css`: layout 再構築
+
+### REFACTOR
+
+- `formatPresetName(preset)` ヘルパー抽出 (banner / list / dialog 3 箇所で再利用) — 3 観点 非冗長化
+
+## Step 計画
+
+> **採用 6 条 1 (Task=Phase=N Step、2026-05-25)**: Task 直下に N Step、最終 3 Steps は固定 (テスト設計レビュー / テスト合格 / リファクタリング)。
+
+### Step 一覧 (サマリ表)
+
+| Step | Status | 作業概要 | 工数 | 依存 |
+|:---:|:---:|:---|---:|:---|
+| 1 | 🔲 | PRESETS に `display_name_ja` 追加 + `/api/current-preset` endpoint 実装 (`hc-config-web-server.js`) | 1.0h | — |
+| 2 | 🔲 | `app.js` state machine 拡張 (top view + edit view 排他、reducer / actions / state shape) | 2.0h | Step 1 |
+| 3 | 🔲 | `index.html` layout 再構築 (sidebar 削除 + 新 layout) + `style.css` 調整 | 1.5h | Step 2 |
+| 4 | 🔲 | preset 日本語名表示 (list / banner / dialog confirm、`lang="ja"` 属性) | 0.5h | Step 3 |
+| 5 | 🔲 | smoke 新規 5 case 追加 (`/api/current-preset` / top view / 編集画面遷移 / preset 適用後復帰 / カスタム保存) | 1.0h | Step 4 |
+| 6 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 | 1.5h | Step 5 |
+| 7 | 🔲 | (テスト合格) script smoke + tui smoke + 新 smoke + visual verification 14 case | 1.5h | Step 6 |
+| 8 | 🔲 | (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出 | 0.5h | Step 7 |
+
+合計工数: **9.5h**
+
+### Step 1: PRESETS 再編 + `/api/current-preset` endpoint
+
+**Step status**: 🔲
+
+**作業概要 (list.md 概要欄)**: `hc-config-web-server.js` の PRESETS const を `{ display_name_ja, values }` 構造に再編し、現在 yml 6 軸を全 preset と完全一致照合する `GET /api/current-preset` endpoint を追加して `match_type`/`name`/`display_name_ja`/`values` を返却する。
+
+**完了条件**:
+- `curl http://localhost:<port>/api/current-preset` で 200 + `match_type` (preset/custom/unsaved 3 種) + `display_name_ja` 含む JSON 返却
+- `curl http://localhost:<port>/api/presets` 各 entry に `display_name_ja` field 追加
+- 6 軸 normalize 関数で yml 形式差異 / quote 違いを吸収
+- 既存 smoke (script 21/21 + tui 14/14) regression 0
+
+### Step 2: `app.js` state machine 拡張
+
+**Step status**: 🔲
+
+**作業概要**: state shape (`view`, `currentPreset`, `editBuffer`, `pendingPreset`, `pendingCustomSave`)、9 actions (`LOAD_CURRENT`/`GOTO_EDIT`/`GOTO_TOP`/`SELECT_PRESET`/`APPLY_PRESET`/`CHANGE_KEY`/`OPEN_CUSTOM_SAVE`/`SAVE_CUSTOM`/`CANCEL`)、reducer 拡張を Pure Function Reducer pattern で実装し、`view: 'top' | 'edit'` 排他切替 logic を追加する。
+
+**完了条件**:
+- reducer unit test 7 case PASS (各 action × state 遷移)
+- E2E (agent-browser): top → edit → preset apply → top 復帰 → 6 軸 banner 更新確認
+- 既存 smoke regression 0
+
+### Step 3: `index.html` + `style.css` layout 再構築
+
+**Step status**: 🔲
+
+**作業概要**: `<aside>` sidebar 280px を削除して `<main>` 100% 化、top view `<section id="view-top">` + edit view `<section id="view-edit">` の 2 section を `hidden` class で排他表示、footer history 領域維持、`style.css` で banner / table / button / preset list / form / dialog overlay 調整。
+
+**完了条件**:
+- visual verification (agent-browser screenshot): top view / edit view / dialog 3 種 × 3 breakpoint (375/768/1440) PASS
+- HTML 構造 grep 検証: `<aside>` 削除 / `view-top` + `view-edit` 存在
+- 既存 smoke regression 0
+
+### Step 4: preset 日本語名表示
+
+**Step status**: 🔲
+
+**作業概要**: `/api/presets` response の `display_name_ja` を edit view preset list / top view banner / dialog confirm message render に適用、`lang="ja"` 属性を該当要素に追加、絵文字を一切含めない。
+
+**完了条件**:
+- visual verification: 全 preset list 日本語表示 (10 件) / banner 「現在の設定: 社内ツール (TypeScript)」表示
+- 絵文字 grep 検証: index.html / app.js に絵文字 0 件 (`grep -Pn '[\x{1F300}-\x{1FAFF}]'`)
+- WCAG 2.2 AA 全 SC PASS (`lang="ja"` 含む)
+
+### Step 5: smoke 新規 5 case 追加
+
+**Step status**: 🔲
+
+**作業概要**: `.claude/tests/hc-config-web-ui-smoke.sh` に 5 case 追加 — (1) `GET /api/current-preset` 200 + `match_type` (2) top view 初期表示 banner DOM check (3) 「設定を変更」ボタン → edit view 遷移 (4) preset 適用後 → top view 復帰 + banner 更新 (5) カスタム保存 → top で「カスタム: <name>」banner。
+
+**完了条件**:
+- `bash .claude/tests/hc-config-web-ui-smoke.sh` で新規 5 case 全 PASS
+- 既存 case + 新 case 合計で regression 0
+
+### Step 6: (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle
+
+**Step status**: 🔲
+
+**作業概要**: メインが reviewer 5+ を動的選定 (base 4: `tdd-guide` / `test-automator` / `qa-expert` / `pr-test-analyzer` + domain-specific 1+: `frontend-design-reviewer` / `code-architect` / `security-reviewer`) し並列起動 (`run_in_background: true`)、CRITICAL+HIGH+MEDIUM=0 まで反復 (上限 5 回)。各 reviewer prompt に `.claude/rules/workflow.md` §reviewer prompt 共通規約 5 必須項目 (対象 Read / 観点 / findings format / confidence / プロジェクト整合性 + 他 task 影響確認) を含める。
+
+**完了条件**:
+- 全 reviewer approve / no objection (CRITICAL+HIGH+MEDIUM=0、LOW 許容)
+- iter cycle 5 回以内収束 (超過時 user escalation + `ECC_TEST_DESIGN_REVIEW_OFF=1` bypass)
+- 各 reviewer median confidence 0.85 以上
+
+### Step 7: (テスト合格)
+
+**Step status**: 🔲
+
+**作業概要**: unit smoke (`hc-config-web-ui-smoke.sh` 既存 + 新 5 case) + tui smoke (`hc-config-tui-smoke.sh` 14/14 regression 0) + script smoke 21/21 + E2E (agent-browser Playwright top→edit→apply→top) + visual verification 14 case (top × 3 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 2、`.claude/.task-screenshots/task-63/case-NN-*.png`) を全実行。
+
+**完了条件**:
+- 全 smoke PASS、regression 0 (task-60 TUI legacy fallback 含む)
+- visual 14 case 全 PASS (絵文字なし / 日本語名表示 / WCAG 2.2 AA / 3 breakpoint)
+- task-60 TUI legacy 維持: `HC_HC_CONFIG_TUI_LEGACY=true bash .claude/scripts/lib/hc-config.sh interactive` で旧 TUI 起動
+
+### Step 8: (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出
+
+**Step status**: 🔲
+
+**作業概要**: 3 観点 (持続可能性: PRESETS `display_name_ja` 必須化 lint or runtime check / 汎用性: state machine `view` enum 2 値固定で将来 `settings|help` 拡張可能 / 非冗長化: `formatPresetName(preset)` ヘルパー抽出で banner/list/dialog 3 箇所 DRY 化) を判定し、軽量 refactor 1 件 (`formatPresetName` 抽出) のみ実施する。
+
+**完了条件**:
+- refactor 実施: `formatPresetName` 関数 1 件抽出 (LOC < 20、3 箇所 call site DRY)
+- behavior-preserving: 全 smoke regression 0
+- 3 観点判定記録 (持続可能性: 改善 / 汎用性: 維持 / 非冗長化: 改善)
+
+## 工数見積
+
+合計 **9.5h** (Step 1: 1.0h + Step 2: 2.0h + Step 3: 1.5h + Step 4: 0.5h + Step 5: 1.0h + Step 6: 1.5h + Step 7: 1.5h + Step 8: 0.5h)
+
+## 影響範囲
+
+| 範囲 | 詳細 |
+|---|---|
+| ファイル | `.claude/scripts/lib/hc-config-web-server.js` (PRESETS 構造 + `/api/current-preset`) / `.claude/scripts/lib/hc-config-web-ui/index.html` (layout 再構築) / `.claude/scripts/lib/hc-config-web-ui/app.js` (state machine 拡張) / `.claude/scripts/lib/hc-config-web-ui/style.css` (新 layout 調整) / `.claude/tests/hc-config-web-ui-smoke.sh` (5 case 追加) |
+| migration | なし |
+| 環境変数 | 追加なし (`HC_HC_CONFIG_TUI_LEGACY=true` の legacy fallback は維持) |
+| 互換性 | 破壊的変更: `/api/presets` response 形式変更 (各 entry に `display_name_ja` field 追加)、`PRESETS` const 構造変更 (`{display_name_ja,values}` ネスト化)。本 web UI は CLI から起動する 1 用途のみで外部 API consumer 不在のため影響なし。task-60 TUI legacy fallback は無影響 (smoke 14/14 維持確認)。 |
+| user 視点 | UX 全面刷新 (top view 初期表示 / 「設定を変更」ボタン経由 / 日本語名 / カスタム保存) |
+
+## 再発防止
+
+本 task の draft §8 アンチパターン (絵文字使用禁止 / sidebar に preset list 直置き禁止 / 英語 preset 名禁止 / カスタムと未保存変更の混同禁止 / task-61 sidebar 残置禁止 / custom 保存 sanitize 必須 / TUI legacy 経路への影響禁止) を踏襲する。将来の preset 追加時は **`display_name_ja` field 必須化** (Step 8 リファクタリングで lint rule or runtime check 提案) で漏れ防止。
+
+## ステータスログ
+
+| 日付 | 状態 | 備考 |
+|---|---|---|
+| 2026-05-29 | 起案 | draft `hc-config-web-ui-ux-redesign.md` (535 LOC、§1-§11 整備) |
+| 2026-05-29 | 承認 | user 承認、approved_at "2026-05-29" / approved_by "takuma.hirai1@gmail.com" |
+| 2026-05-29 | task 化 | `/new-task 63 hc-config-web-ui-ux-redesign` で本 file 生成 + list.md row 63 📝→🔲 + 8 Step sub-row 追加 |
+
+## 派生 task / 次アクション候補
+
+(着手時に発生時に都度記入。本 task 起点では空)
+
+### 関連
+
+- [`next-actions.md`](next-actions.md) — 副産物 registry
+- [`.claude/rules/development-process.md`](../../.claude/rules/development-process.md) §「副産物発生時の即時 draft 起こし義務」
+
+## 関連
+
+- Draft: [hc-config-web-ui-ux-redesign.md](../draft/hc-config-web-ui-ux-redesign.md) ✅承認済
+- 依存タスク: #61 (hc-config Web UI 機能本体), #60 (TUI legacy fallback)
+- 派生タスク: (なし、本 task 完遂後 UI 完成形)
+- 関連 memory: `~/.claude/memory/feedback_ui_visual_verification_mandate.md` / `~/.claude/memory/feedback_iter_approve_design_drift_user_verify.md`
+- 関連 rule: `.claude/rules/task-management.md` §採用 6 条 / `.claude/rules/workflow.md` §reviewer prompt 共通規約
