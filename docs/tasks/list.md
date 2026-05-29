@@ -180,3 +180,4 @@ Phase 1 → Phase 2 → Phase 3
 2. **🔄 → ✅**: `/finish-task <id>` で完了 3 条件（build / test / docs 反映）を満たしてから更新
 3. **🔄 → ⏸️**: 保留事由を [`parking-lot.md`](parking-lot.md) に転記し、ここの行は削除
 4. **削除**: 不採用の場合も履歴として `parking-lot.md` の `❌` セクションに残す
+| 60 | 🔲 | **Task: hc-config-tui-2tier-navigation** | task-48 §3.3 設計乖離 (真の 2 階層 navigation 未実装、1 階層 flat list with category headers で妥協 closure) を解消するため、hc-config.sh TUI を 3-state machine (`category_menu` → `key_menu` → `effect_edit`) で書き換え、sel 位置記憶 scalar 7 var + eval (bash 3.2 互換) + 旧 flat rename 保持 (`HC_HC_CONFIG_FLAT_NAVIGATION=true` で fallback) + unit 関数テスト方式 smoke を追加する。完成すれば user が ↑↓ で 6 category → 配下 key → 編集の階層 navigation でき、74 key 横断 scroll cost が消える | task-48 | [task-60-hc-config-tui-2tier-navigation.md](task-60-hc-config-tui-2tier-navigation.md) ← draft: [`docs/draft/hc-config-tui-2tier-navigation.md`](../draft/hc-config-tui-2tier-navigation.md) ✅承認済 |
