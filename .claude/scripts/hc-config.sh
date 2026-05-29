@@ -1204,11 +1204,17 @@ _tui_read_key() {
       stty min 0 time 1 2>/dev/null || true
       IFS= read -rsn2 rest 2>/dev/null || rest=""
       stty min 1 time 0 2>/dev/null || true
+      # task-60 Step 5 iter 4 真の fix (M-new-1、draft §3.1 仕様乖離解消):
+      #   単独 ESC (rest="") は 'ESC' を返し、unknown sequence のみ 'QUIT' に fallback。
+      #   呼出側 (`_cmd_interactive_tui_2tier` key_menu state) で ESC|LEFT → back、
+      #   QUIT (= q キー、L1216 で正規化) → 全終了の分離を実現する。
+      #   `_cmd_interactive_tui_flat` 側は ESC|QUIT 同義扱いで互換維持 (Case 11 baseline)。
       case "$rest" in
         '[A') printf 'UP' ;;
         '[B') printf 'DOWN' ;;
         '[C') printf 'RIGHT' ;;
         '[D') printf 'LEFT' ;;
+        '')   printf 'ESC' ;;
         *)    printf 'QUIT' ;;
       esac
       ;;
@@ -1521,8 +1527,11 @@ _cmd_interactive_tui_flat() {
     case "$k" in
       UP)    [ "$sel" -gt 0 ] && sel=$((sel - 1)) ;;
       DOWN)  [ "$sel" -lt "$((total - 1))" ] && sel=$((sel + 1)) ;;
-      QUIT)
+      QUIT|ESC)
         # 正常終了: canonical 復帰 + 表示属性 reset + trap 解除
+        # task-60 Step 5 iter 4: `_tui_read_key` の戻り値に 'ESC' を追加 (M-new-1 真の fix)。
+        #   flat 実装は ESC = QUIT 同義扱いで Case 11 baseline 14/14 PASS を維持する
+        #   (旧挙動: 単独 ESC は QUIT に正規化されていた)。2tier 実装側で ESC vs QUIT 分離。
         [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
         trap - EXIT INT TERM
         printf '%s\n' "$_TUI_RESET"; _out "bye."; return 0 ;;
@@ -1544,13 +1553,13 @@ _cmd_interactive_tui_flat() {
 # パターンを踏襲し、effect_edit state では `_tui_handle_enter` の入力 / 確認フローを inline 再現
 # (cmd_set "key=val" 形式必須、L1457 と同様)。
 #
-# state machine 遷移:
+# state machine 遷移 (task-60 Step 5 iter 4 真の fix、draft §3.1 仕様完全準拠):
 #   category_menu --ENTER--> key_menu
+#   category_menu --q--> quit (全終了)
 #   key_menu      --ENTER--> effect_edit
-#   key_menu      --LEFT/QUIT--> category_menu (LEFT は back、QUIT は category 側で再判定)
+#   key_menu      --ESC/LEFT--> category_menu (back)
+#   key_menu      --q--> quit (全終了、draft §3.1 `key_menu --q--> quit` 通り)
 #   effect_edit   --完了/skip--> key_menu (自動戻り)
-#   category_menu --QUIT--> 終了
-#   key_menu      --QUIT--> 終了 (LEFT 経路と別扱い、明示 q で全終了)
 #
 # sel 位置記憶 (bash 3.2 互換、scalar 7 var + eval 合成、連想配列 / declare -g 不使用):
 #   _tui_cat_sel        — category sel (0-5)
@@ -1628,13 +1637,25 @@ _cmd_interactive_tui_2tier() {
         esac
         # sel が range 外なら 0 に reset
         if [ "$key_max" -eq 0 ]; then
-          # 該当 key なし → category_menu に戻す (描画は key_menu 側で「該当 key なし」表示)
+          # 該当 key なし → 入力受付。
+          # task-60 Step 5 iter 4 真の fix (M-new-1、draft §3.1 仕様準拠):
+          #   ESC|LEFT|ENTER|RIGHT|その他 → category_menu へ back
+          #   QUIT (q) のみ全終了 (draft §3.1 `key_menu --q--> quit` 通り)
           _tui_render_key_menu "$_tui_cat_sel" 0
           k=$(_tui_read_key)
-          # task-60 Step 5 iter 2 H1 fix: 任意キー (LEFT/QUIT/ENTER/RIGHT/その他) で category_menu へ back。
-          #   key_menu state での QUIT は ESC として扱う方針に統一 (key_menu の他経路と同一挙動)。
-          state="category_menu"
-          continue
+          case "$k" in
+            QUIT)
+              [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+              trap - EXIT INT TERM
+              printf '%s\n' "$_TUI_RESET"
+              _out "bye."
+              return 0
+              ;;
+            *)
+              state="category_menu"
+              continue
+              ;;
+          esac
         fi
         if [ "$cur_key_sel" -ge "$key_max" ] || [ "$cur_key_sel" -lt 0 ]; then
           cur_key_sel=0
@@ -1652,21 +1673,28 @@ _cmd_interactive_tui_2tier() {
             [ "$cur_key_sel" -lt "$((key_max - 1))" ] && cur_key_sel=$((cur_key_sel + 1))
             eval "_tui_key_sel_${_tui_cat_sel}=\${cur_key_sel}"
             ;;
-          LEFT)
+          ESC|LEFT)
+            # task-60 Step 5 iter 4 真の fix (M-new-1、draft §3.1 仕様乖離解消):
+            #   `_tui_read_key` が単独 ESC を 'ESC' で返すよう修正 (L1207-1219) されたため、
+            #   ESC|LEFT を back trigger として直接扱える (iter 2 fix の QUIT 経由 reroute は廃止)。
+            #   draft §3.1 `key_menu --ESC/LEFT--> category_menu` + DoD「key 一覧で ESC または
+            #   LEFT で category 一覧に戻る」を満たす。
             state="category_menu"
             ;;
           ENTER|RIGHT)
             state="effect_edit"
             ;;
           QUIT)
-            # task-60 Step 5 iter 2 H1 fix (ESC back、3 reviewers cross-confirm):
-            #   _tui_read_key は単独 ESC を QUIT に正規化するため、key_menu state での
-            #   QUIT は ESC として扱い category_menu に back する (draft §3.1 + DoD「key 一覧で
-            #   ESC または LEFT で category 一覧に戻る」を満たす)。category_menu state での
-            #   QUIT のみ全終了は既存挙動を維持 (L1579-1585、top level での quit 仕様)。
-            #   trade-off: 真の「q で全終了」は key_menu state では効かなくなるが、
-            #   category_menu に戻ってからの q で実現可能。ESC back が DoD 直結のため優先。
-            state="category_menu"
+            # task-60 Step 5 iter 4 真の fix (M-new-1、draft §3.1 仕様乖離解消):
+            #   QUIT (= q キー、L1216 で正規化) を全終了として扱う (draft §3.1
+            #   `key_menu --q--> quit (全終了)` 通り)。iter 2 fix では `_tui_read_key` の戻り値
+            #   仕様を維持するため QUIT を back に reroute していたが、iter 4 で `_tui_read_key`
+            #   が ESC を独立した戻り値として返すようになり ESC vs QUIT 分離が可能になった。
+            [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+            trap - EXIT INT TERM
+            printf '%s\n' "$_TUI_RESET"
+            _out "bye."
+            return 0
             ;;
           *) : ;;
         esac
