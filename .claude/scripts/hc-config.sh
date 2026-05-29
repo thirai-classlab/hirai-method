@@ -1773,12 +1773,37 @@ _cmd_interactive_tui() {
 #
 # task-48 Step 3: TTY なら矢印キー TUI、非 TTY (pipe / CI) or HC_HC_CONFIG_FORCE_NUMERIC=1 なら
 #   番号選択 menu に降格。
+#
+# task-61 Step 1 (2026-05-29): TTY 時の経路を Web UI default + legacy env switch に拡張。
+#   - HC_HC_CONFIG_TUI_LEGACY=true       → 明示的に task-60 TUI (`_cmd_interactive_tui`) 起動
+#   - 上記以外 (default)                 → `_cmd_interactive_web` (Step 1 では placeholder + TUI 降格)
+#   非 TTY 経路は従来通り `_cmd_interactive_numeric`。
+#   Step 2 で `_cmd_interactive_web` を hc-config-web-server.js 起動に置換予定。
 cmd_interactive() {
   if [ -t 0 ] && [ -t 1 ] && [ "${HC_HC_CONFIG_FORCE_NUMERIC:-}" != "1" ]; then
-    _cmd_interactive_tui
+    if [ "${HC_HC_CONFIG_TUI_LEGACY:-}" = "true" ]; then
+      _cmd_interactive_tui
+    else
+      _cmd_interactive_web
+    fi
   else
     _cmd_interactive_numeric
   fi
+}
+
+# === task-61 Step 1: Web UI entry placeholder ===
+#
+# Step 1 段階では Web UI server (`hc-config-web-server.js`) が未実装のため、warning を
+# stderr に出力した上で task-60 TUI に降格する。Step 2 で以下の logic に置換予定:
+#   1. node binary 探索 (`command -v node`)
+#   2. 空き port 探索 (3060-3070)
+#   3. server.js を `exec node` で起動 + browser auto-open
+#   4. node 不在時のみ TUI fallback
+# legacy env (`HC_HC_CONFIG_TUI_LEGACY=true`) を使えば本 warning なしで TUI 直起動可能。
+_cmd_interactive_web() {
+  printf 'WARN: hc-config Web UI is not yet implemented (task-61 Step 2 pending).\n' >&2
+  printf '      Falling back to TUI. Set HC_HC_CONFIG_TUI_LEGACY=true to silence this notice.\n' >&2
+  _cmd_interactive_tui
 }
 
 # === arg parser ===
