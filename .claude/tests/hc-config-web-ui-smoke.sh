@@ -63,6 +63,10 @@
 #   M-03: Rollback ボタン → confirm dialog → 確認 → 元値復元
 #   M-04: Tailwind CDN offline で degradation 動作確認
 #
+# task-63 Step 6 iter-2 fix 新規 case:
+#   S-40: POST /api/preset/save → 404 (custom 保存撤去 regression guard、F4)
+#   S-41: UI 3 file (index.html/app.js/style.css) に絵文字 0 件 (絵文字不要 regression guard、F5)
+#
 # 設計:
 #   - subshell 関数 ( set -uo pipefail; ... ) で各 case を隔離
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs 規範)
@@ -89,6 +93,15 @@ HISTORY_DIR="${REPO_ROOT}/.claude/.preset-history"
 # tmp dir (cleanup on exit)
 TMP_DIR="$(mktemp -d "/tmp/hc-config-web-ui-smoke.XXXXXX")"
 
+# F2 (iter-2 fix): smoke は S-36/S-39 で poc-no-git apply + confidence_threshold set により
+#   実 .claude/harness-config.yml を永続変更する。teardown で原状復帰させるため起動時に snapshot を取り、
+#   _cleanup (EXIT trap) で restore する。これで smoke 実行後も yml に差分が残らない。
+HARNESS_CONFIG="${REPO_ROOT}/.claude/harness-config.yml"
+HARNESS_CONFIG_SNAPSHOT="${TMP_DIR}/harness-config.yml.snapshot"
+if [ -f "${HARNESS_CONFIG}" ]; then
+  cp "${HARNESS_CONFIG}" "${HARNESS_CONFIG_SNAPSHOT}" 2>/dev/null || true
+fi
+
 # isolated history dir for test
 ISOLATED_HISTORY_DIR="${TMP_DIR}/.preset-history"
 
@@ -112,6 +125,14 @@ _cleanup() {
     kill -9 "$SERVER_PID" 2>/dev/null || true
   fi
   SERVER_PID=""
+  # F2 (iter-2 fix): TMP_DIR 削除前に harness-config.yml を snapshot から restore
+  #   (S-36/S-39 が apply/set で実 yml を変更するため、原状復帰させる)
+  if [ -f "${HARNESS_CONFIG_SNAPSHOT}" ]; then
+    cp "${HARNESS_CONFIG_SNAPSHOT}" "${HARNESS_CONFIG}" 2>/dev/null || true
+    # apply/set 経由で hc-config.sh が生成した atomic backup (harness-config.yml.bak.*) を掃除
+    #   (snapshot restore は yml 本体のみ。.bak.* 兄弟 file は別 side-effect なので明示削除)
+    rm -f "${HARNESS_CONFIG}".bak.* 2>/dev/null || true
+  fi
   # iter 4 C: ISOLATED_HISTORY_DIR も含めて TMP_DIR 全体を削除
   rm -rf "$TMP_DIR"
 }
@@ -702,6 +723,21 @@ _case_s11() (
   done
 
   if [ $missing -gt 0 ]; then
+    return 1
+  fi
+
+  # F6 (iter-2 fix): 各 preset entry に display_name_ja field が含まれること
+  #   (server.js A3: /api/presets response 各 entry に display_name_ja 付与)
+  if ! printf '%s' "$body" | grep -q '"display_name_ja"'; then
+    printf 'S-11: /api/presets response に display_name_ja field が無い (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # display_name_ja の出現回数が 10 件 (preset 数) 分あること
+  local dn_count
+  dn_count=$(printf '%s' "$body" | grep -oE '"display_name_ja"' | wc -l | tr -d ' ' || true)
+  if [ "${dn_count:-0}" -lt 10 ]; then
+    printf 'S-11: display_name_ja の出現回数 %s 件 (expected >= 10)\n' "$dn_count" >&2
     return 1
   fi
 
@@ -1516,6 +1552,25 @@ _case_s35() (
     return 1
   fi
 
+  # F3 (iter-2 fix): display_name_ja の値も検証 (存在のみでなく、match_type 別に内容を確認)
+  if printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"preset"'; then
+    # preset 一致時: name field 存在 + display_name_ja が非空
+    if ! printf '%s' "$body" | grep -q '"name"[[:space:]]*:[[:space:]]*"[^"]'; then
+      printf 'S-35: match_type=preset だが name field が非空でない (body: %s)\n' "$body" >&2
+      return 1
+    fi
+    if ! printf '%s' "$body" | grep -qE '"display_name_ja"[[:space:]]*:[[:space:]]*"[^"]+"'; then
+      printf 'S-35: match_type=preset だが display_name_ja が空 (body: %s)\n' "$body" >&2
+      return 1
+    fi
+  else
+    # unsaved 時: display_name_ja が "未保存変更あり" を含む (server.js 実装値)
+    if ! printf '%s' "$body" | grep -q '未保存変更あり'; then
+      printf 'S-35: match_type=unsaved だが display_name_ja に "未保存変更あり" が含まれない (body: %s)\n' "$body" >&2
+      return 1
+    fi
+  fi
+
   return 0
 )
 
@@ -1528,12 +1583,18 @@ _case_s36() (
   local port="$1"
 
   # poc-no-git を apply して既知の preset 状態にする
+  # F9 (iter-2 fix): 400/500 系は真の FAIL (権限エラー/yml 破損) なので隠蔽せず FAIL にする。
+  #   200/207 のみ正常。それ以外 (000 connection 不可等は環境問題だが、apply 自体の HTTP error は FAIL)。
   local apply_code
   apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
   case "$apply_code" in
     200|207) : ;;
+    4??|5??)
+      printf 'S-36: preset apply returned HTTP %s (権限エラー/yml 破損の疑い、真の FAIL)\n' "$apply_code" >&2
+      return 1
+      ;;
     *)
-      printf 'S-36: preset apply returned HTTP %s (expected 200/207), skip\n' "$apply_code" >&2
+      printf 'S-36: preset apply returned HTTP %s (server 接続不可等の環境 skip)\n' "$apply_code" >&2
       return 2
       ;;
   esac
@@ -1560,13 +1621,24 @@ _case_s36() (
     return 1
   fi
 
+  # F3 (iter-2 fix): poc-no-git の display_name_ja は "POC" で始まる ("POC・お試し (Git なし)")
+  if ! printf '%s' "$body" | grep -qE '"display_name_ja"[[:space:]]*:[[:space:]]*"POC'; then
+    printf 'S-36: poc-no-git の display_name_ja が "POC" で始まらない (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
   return 0
 )
 
 # ============================================================
 # Case S-37: app.js に renderTop 関数 + bannerLabel/bannerValue が静的に存在 (top view banner 描画確認)
 # draft §3.4: top view は「プリセット: <日本語名>」または「未保存変更あり」banner を描画する
-# 検証方式: app.js 静的 grep (server endpoint での DOM 検証は smoke スコープ外)
+# 検証方式: app.js 静的 grep (関数名/変数名の存在確認のみ。tautological)。
+# F7 (iter-2 fix): 本 case は static grep で関数/変数の存在を確認するに留まる。
+#   実 view 遷移 (top↔edit) の動作検証は Step 7 visual verification (agent-browser E2E) でカバーする。
+#   reducer は window.__hcConfigUi.reducer で expose されているが、app.js module load 時に
+#   document/window へ依存するため DOM shim 無しの純粋 eval は不可。reducer を独立 module へ
+#   抽出して DOM 非依存 unit test 化するのは Step 8 refactor 候補 (報告に記載)。
 # ============================================================
 _case_s37() (
   set -uo pipefail
@@ -1605,8 +1677,11 @@ _case_s37() (
 
 # ============================================================
 # Case S-38: app.js に state.view='edit' 遷移ロジック + renderEdit 関数が存在 (edit view 遷移確認)
-# draft §3.3 / §3.7: state machine で top → edit 遷移は GOTO_EDIT action で行われる
-# 検証方式: app.js 静的 grep
+# draft §3.3 / §3.7: state machine で top → edit 遷移は edit:enter action で行われる
+# 検証方式: app.js 静的 grep (関数名/変数名の存在確認のみ。tautological)。
+# F7 (iter-2 fix): 本 case は static grep で reducer 遷移ロジックの存在を確認するに留まる。
+#   実 view 遷移 (top↔edit) の動作検証は Step 7 visual verification (agent-browser E2E) でカバーする。
+#   reducer 純粋 eval が DOM shim 無しに不可な理由は S-37 コメント参照 (Step 8 refactor 候補)。
 # ============================================================
 _case_s38() (
   set -uo pipefail
@@ -1653,18 +1728,27 @@ _case_s38() (
 # Case S-39: /api/set で 1 key 変更 → GET /api/current-preset → match_type=unsaved
 # draft §3.4 / §3.7: 個別 key 変更後、どの preset にも完全一致しない場合は match_type=unsaved
 # 検証方式: server endpoint レベル (DOM は不要)
+# F9 (iter-2 fix): apply の 400/500 系は真の FAIL (権限/yml 破損) として隠蔽しない。
+# F10 (iter-2 fix): poc-no-git の values に確実に含まれる key (confidence_threshold='0.5'、
+#   server.js PRESETS 定義で確認済) を、現在値 0.5 と必ず異なる値 (0.99) に set して
+#   match_type=unsaved を確実に発火させる 2 段方式。apply 後に /api/current-preset で
+#   match_type=preset 前提を確認 → set → unsaved を検証。F2 の snapshot/restore で yml 変更は許容。
 # ============================================================
 _case_s39() (
   set -uo pipefail
   local port="$1"
 
-  # まず poc-no-git を apply して既知 preset 状態にする
+  # まず poc-no-git を apply して既知 preset 状態にする (確実に preset 状態を作る)
   local apply_code
   apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
   case "$apply_code" in
     200|207) : ;;
+    4??|5??)
+      printf 'S-39: preset apply returned HTTP %s (権限エラー/yml 破損の疑い、真の FAIL)\n' "$apply_code" >&2
+      return 1
+      ;;
     *)
-      printf 'S-39: preset apply returned HTTP %s (expected 200/207), skip\n' "$apply_code" >&2
+      printf 'S-39: preset apply returned HTTP %s (server 接続不可等の環境 skip)\n' "$apply_code" >&2
       return 2
       ;;
   esac
@@ -1673,23 +1757,23 @@ _case_s39() (
   local before_body
   before_body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
   if ! printf '%s' "$before_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"preset"'; then
-    # apply が no-op (変更なし) だった場合は既に unsaved かもしれないのでスキップ
-    printf 'S-39: before state is not match_type=preset (may be no-op apply), skip\n' >&2
-    return 2
+    # poc-no-git apply 直後に preset 一致しないのは server バグの疑い → FAIL
+    printf 'S-39: poc-no-git apply 直後に match_type=preset でない (server バグの疑い、body: %s)\n' "$before_body" >&2
+    return 1
   fi
 
-  # /api/keys から known key を取得して 1 key 変更する
-  # confidence_threshold を現在値と異なるダミー値に変更する
-  # (まず現在値を取得して、異なる値をセットする)
+  # F10: poc-no-git の values に確実に含まれる confidence_threshold (='0.5') を
+  #   現在値と必ず異なる 0.99 に set して unsaved を確実に発火させる。
+  #   confidence_threshold が万一存在しない場合のみ feature_confidence_gate_enabled に fallback。
   local keys_body
   keys_body=$(_curl_json "http://127.0.0.1:${port}/api/keys")
 
-  # confidence_threshold という known key が存在する場合はそれを使う
-  # 存在しない場合は feature_confidence_gate_enabled を使う (bool 型、true/false)
   local test_key test_value
   if printf '%s' "$keys_body" | grep -q '"confidence_threshold"'; then
     test_key="confidence_threshold"
-    test_value="0.1234"
+    # poc-no-git の confidence_threshold は '0.5' (server.js PRESETS 定義)。
+    # 0.99 は確実に異なるので match_type=unsaved になる。
+    test_value="0.99"
   else
     # fallback: feature_confidence_gate_enabled の値を反転
     local cur_val
@@ -1707,9 +1791,10 @@ _case_s39() (
   set_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/set" \
     "{\"key\":\"${test_key}\",\"value\":\"${test_value}\"}")
 
+  # F10: known key への set が失敗するのは server バグの疑い → FAIL (skip しない)
   if [ "$set_code" != "200" ]; then
-    printf 'S-39: /api/set returned HTTP %s (key=%s, value=%s), skip\n' "$set_code" "$test_key" "$test_value" >&2
-    return 2
+    printf 'S-39: /api/set returned HTTP %s (key=%s, value=%s — known key の set 失敗、FAIL)\n' "$set_code" "$test_key" "$test_value" >&2
+    return 1
   fi
 
   # /api/current-preset を取得して match_type=unsaved であることを確認
@@ -1718,6 +1803,87 @@ _case_s39() (
 
   if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
     printf 'S-39: after /api/set change, match_type is not "unsaved" (body: %s)\n' "$after_body" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-40: POST /api/preset/save → 404 (custom 保存撤去 regression guard)
+# task-63 Step 4 A1: /api/preset/save endpoint 撤去 (savePreset/scanCustomPresets 全削除)。
+# draft §8 アンチパターン「custom 保存復活禁止」の regression guard。
+# F4 (iter-2 fix): 撤去された endpoint が再導入されていないこと (404 fallback) を負テストで保証。
+# ============================================================
+_case_s40() (
+  set -uo pipefail
+  local port="$1"
+
+  local http_code
+  http_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/save" \
+    '{"name":"my-preset","values":{}}')
+
+  if [ "$http_code" != "404" ]; then
+    printf 'S-40: POST /api/preset/save returned HTTP %s (expected 404 — endpoint 撤去済のはず)\n' "$http_code" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-41: UI 3 file に絵文字 (Unicode emoji) が 0 件 (絵文字不要 regression guard)
+# F5 (iter-2 fix): user 明示要求「絵文字不要」+ draft §8 アンチパターンの regression guard。
+# index.html / app.js / style.css に emoji codepoint (U+1F300〜U+1FAFF 等) が混入したら FAIL。
+# 検証方式: perl で emoji 範囲を grep (hit したら FAIL)。perl 不在時は python3 fallback。
+# ============================================================
+_case_s41() (
+  set -uo pipefail
+  local ui_dir="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui"
+  local files="index.html app.js style.css"
+
+  for f in $files; do
+    if [ ! -f "${ui_dir}/${f}" ]; then
+      printf 'S-41: %s not found at %s\n' "$f" "$ui_dir" >&2
+      return 1
+    fi
+  done
+
+  # emoji 検出: 主要 emoji ブロックを範囲指定 (記号 / 絵文字 / 補助記号 / 拡張A)
+  #   U+1F300-U+1FAFF (Misc Symbols and Pictographs 〜 Symbols and Pictographs Extended-A)
+  #   U+2600-U+27BF   (Misc Symbols + Dingbats)
+  #   U+1F000-U+1F0FF / U+1F1E6-U+1F1FF (Mahjong/Domino/Regional indicators) も含める
+  local hit=""
+  if command -v perl >/dev/null 2>&1; then
+    for f in $files; do
+      local out
+      out=$(perl -CSD -ne 'print "$ARGV:$.: $_" if /[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F1E6}-\x{1F1FF}]/' "${ui_dir}/${f}" 2>/dev/null || true)
+      if [ -n "$out" ]; then
+        hit="${hit}${out}"
+      fi
+    done
+  elif command -v python3 >/dev/null 2>&1; then
+    for f in $files; do
+      local out
+      out=$(python3 -c "
+import sys, re
+pat = re.compile('[\U0001F000-\U0001FAFF☀-➿⬀-⯿]')
+with open(sys.argv[1], encoding='utf-8') as fh:
+    for i, line in enumerate(fh, 1):
+        if pat.search(line):
+            print('%s:%d: %s' % (sys.argv[1], i, line), end='')
+" "${ui_dir}/${f}" 2>/dev/null || true)
+      if [ -n "$out" ]; then
+        hit="${hit}${out}"
+      fi
+    done
+  else
+    printf 'S-41: no perl or python3 to detect emoji, skip\n' >&2
+    return 2
+  fi
+
+  if [ -n "$hit" ]; then
+    printf 'S-41: UI file に絵文字を検出 (絵文字不要):\n%s\n' "$hit" >&2
     return 1
   fi
 
@@ -1869,18 +2035,22 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
       _record SKIP "$cid" "shared server not available"
     done
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
     _record SKIP "S-26" "/api/preset/save 6 軸欠落 case 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
     _record SKIP "S-31" "/api/preset/save path traversal case 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
     _record SKIP "S-33" "XSS injection save name case 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
     if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
     else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
     fi
     if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
     else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
+    fi
+    # S-40 は shared server 必須なので SKIP、S-41 は file-only なので実行
+    _record SKIP "S-40" "POST /api/preset/save 404 (shared server not available)"
+    _s41_result=0
+    _case_s41 2>/dev/null || _s41_result=$?
+    if [ $_s41_result -eq 0 ];   then _record PASS "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
+    elif [ $_s41_result -eq 2 ]; then _record SKIP "S-41" "絵文字検出 (perl/python3 not available)"
+    else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
     fi
   else
     _PORT="$SHARED_PORT"
@@ -1955,7 +2125,6 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     fi
 
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
 
     if _case_s23 "$_PORT" 2>/dev/null; then _record PASS "S-23" "apply response ok + applied + partial フィールド verify"
     else                                     _record FAIL "S-23" "apply response ok + applied + partial フィールド verify"
@@ -1970,7 +2139,6 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     fi
 
     _record SKIP "S-26" "/api/preset/save 6 軸欠落 case 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
 
     if _case_s27 "$_PORT" 2>/dev/null; then _record PASS "S-27" "POST /api/set empty string value → 200 or 400 (仕様確認)"
     else                                     _record FAIL "S-27" "POST /api/set empty string value → 200 or 400 (仕様確認)"
@@ -1992,7 +2160,6 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     fi
 
     _record SKIP "S-31" "/api/preset/save path traversal case 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
 
     _s32_result=0
     _case_s32 "$_PORT" 2>/dev/null || _s32_result=$?
@@ -2002,7 +2169,6 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     fi
 
     _record SKIP "S-33" "XSS injection save name case 撤去 (task-63 設計簡素化)"
-    SKIP=$((SKIP + 1))
 
     # --- task-63 Step 5 新規 case ---
     printf '\n%s\n' '--- task-63 Step 5 新規 case (S-35〜S-39) ---'
@@ -2029,16 +2195,45 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     _s39_result=0
     _case_s39 "$_PORT" 2>/dev/null || _s39_result=$?
     if [ $_s39_result -eq 0 ];   then _record PASS "S-39" "/api/set 1 key 変更 → /api/current-preset match_type=unsaved"
-    elif [ $_s39_result -eq 2 ]; then _record SKIP "S-39" "/api/set unsaved 確認 skip (apply no-op or key not found)"
+    elif [ $_s39_result -eq 2 ]; then _record SKIP "S-39" "/api/set unsaved 確認 skip (server 接続不可)"
     else                              _record FAIL "S-39" "/api/set 1 key 変更 → /api/current-preset match_type=unsaved"
+    fi
+
+    # --- task-63 Step 6 iter-2 新規 negative case (S-40 / S-41) ---
+    printf '\n%s\n' '--- task-63 Step 6 iter-2 negative case (S-40 / S-41) ---'
+
+    # F4: /api/preset/save 撤去 regression guard (404 負テスト)
+    if _case_s40 "$_PORT" 2>/dev/null; then _record PASS "S-40" "POST /api/preset/save → 404 (custom 保存撤去 regression guard)"
+    else                                     _record FAIL "S-40" "POST /api/preset/save → 404 (custom 保存撤去 regression guard)"
+    fi
+
+    # F5: UI 3 file 絵文字 0 件 regression guard (file-only、port 不要)
+    _s41_result=0
+    _case_s41 2>/dev/null || _s41_result=$?
+    if [ $_s41_result -eq 0 ];   then _record PASS "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
+    elif [ $_s41_result -eq 2 ]; then _record SKIP "S-41" "絵文字検出 (perl/python3 not available)"
+    else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
     fi
 
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
+  # S-37 / S-38 / S-41 は file-only (port 不要) なので node 不在でも実行
+  if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
+  else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
+  fi
+  if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
+  else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
+  fi
+  _s41_result=0
+  _case_s41 2>/dev/null || _s41_result=$?
+  if [ $_s41_result -eq 0 ];   then _record PASS "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
+  elif [ $_s41_result -eq 2 ]; then _record SKIP "S-41" "絵文字検出 (perl/python3 not available)"
+  else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
+  fi
 fi
 
 # --- legacy fallback + edge ---
