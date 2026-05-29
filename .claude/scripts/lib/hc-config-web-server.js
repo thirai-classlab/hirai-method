@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// .claude/scripts/lib/hc-config-web-server.js — task-61 Step 5 iter 2 (領域 A fixes)
+// .claude/scripts/lib/hc-config-web-server.js — task-61 Step 5 iter 4 領域 A (10 fixes)
 //
 // 目的:
 //   hc-config.sh interactive (TTY 経路 default) の Web UI 化。
@@ -16,10 +16,22 @@
 //   - loadMetadata は process-lifetime cache、/api/set 成功で invalidate
 //   - module.exports に unit test seam (callHcConfig / loadMetadata / readJsonBody / serveStatic)
 //
+// iter 4 A 修正項目 (10 件):
+//   NEW-C-1 (CRIT): hcListAll() で /api/keys を 74 spawn → 1 spawn に集約 (Node event loop 370s block 解消)
+//   NF-13   (HIGH): history stamp に pid + counter 追加 (同 ms 衝突 silent data loss 防止)
+//   NF-2/9  (HIGH): applyPreset history write 失敗時 snapshot から rollback 実行 (silent data loss 防止)
+//   NF-8    (HIGH): handleRequest catch で internal abs path leak 防止 (REPO_ROOT → <repo> sanitize、stack trace 除外)
+//   HIGH-Q3 (MED) : savePreset で invalidateMetadataCache() 追加 (一貫性確保)
+//   NF-12   (MED) : NEW-C-1 統合で解消 (本項目は no-op 補強のみ)
+//   NF-3    (MED) : rollback restore 順序 LIFO 化 (apply 順 → 逆順、依存 key 不整合最小化)
+//   NF-6    (MED) : listHistory cleanup 機構追加 (1000 件超で古い順削除、HC_HISTORY_MAX_FILES env 上書き可)
+//   NF-10   (MED) : callHcConfig で timeout 判定 + timedOut flag 追加 (UI 側で "timeout 5s 超過" 明示)
+//   設計乖離 : savePreset name regex を ^[a-z0-9][a-z0-9-]{2,48}$ (3-49 char、app.js と統一)、axes 6 軸完全必須
+//
 // API endpoint:
 //   GET  /                          → redirect /static/index.html
 //   GET  /static/*                  → static file serve (index.html / app.js / style.css)
-//   GET  /api/keys                  → 74 key + metadata (現在値含む、bulk hcGet)
+//   GET  /api/keys                  → 74 key + metadata (現在値含む、bulk hcListAll = 1 spawn)
 //   GET  /api/categories            → 6 category 一覧
 //   GET  /api/value/:key            → 単一 key 現在値
 //   POST /api/set                   → {key,value} → hc-config.sh --set
@@ -56,9 +68,14 @@ const PORT_MAX = 3070
 const HOST = '127.0.0.1'
 const HC_SUBPROCESS_TIMEOUT_MS = 5000
 
+// NF-6: history file 最大保持件数 (超過は古い順 cleanup)
+const HISTORY_MAX_FILES = parseInt(process.env.HC_HISTORY_MAX_FILES || '1000', 10)
+
 // rollback timestamp validation (M-P3): ISO-8601 風 + preset name 区切り
 //   実 history file 名 stem は `2026-05-29T12-34-56-789Z-poc-no-git` 形式 (toISOString の `:` / `.` を `-` 置換)
+//   NF-13 後の format: `<ISO-stamp>-<pid>-<counter>-<preset>.json` or `<ISO-stamp>-<pid>-<counter>-rollback-of-<src>.json`
 //   後段 path.basename も併用して path traversal を 2 重に防ぐ。
+//   regex は旧 format (pid/counter 無し) も後方互換で受理 (英数 + `-` + `_` + `.` 許容)。
 const ROLLBACK_TS_REGEX = /^[0-9TZ-]+[a-z0-9._-]+$/i
 
 const MIME_TYPES = {
@@ -293,6 +310,7 @@ const PRESETS = {
 // ============================================================
 
 // overrides.spawnFn: テスト用 DI seam (default は spawnSync)
+// NF-10: timeout 時 timedOut フラグを返し、UI 側で "5s 超過" を明示できるようにする
 function callHcConfig(args, overrides) {
   overrides = overrides || {}
   const spawnFn = overrides.spawnFn || spawnSync
@@ -301,11 +319,19 @@ function callHcConfig(args, overrides) {
     timeout: HC_SUBPROCESS_TIMEOUT_MS,
     cwd: REPO_ROOT,
   })
+  // NF-10: timeout 判定
+  //   spawnSync timeout: result.signal === 'SIGTERM' || error.code === 'ETIMEDOUT'
+  //   exitCode === null (signal kill) も timeout 候補
+  const timedOut =
+    !!(result.error && (result.error.code === 'ETIMEDOUT' || result.error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER')) ||
+    result.signal === 'SIGTERM' ||
+    result.status === null
   return {
     exitCode: result.status === null ? -1 : result.status,
     stdout: result.stdout || '',
     stderr: result.stderr || '',
     error: result.error ? String(result.error.message) : null,
+    timedOut,
   }
 }
 
@@ -320,6 +346,72 @@ function hcSet(key, value, overrides) {
 }
 
 // ============================================================
+// NEW-C-1 fix: hcListAll() で全 key=value を 1 spawnSync で一括取得
+// ============================================================
+//
+// 旧経路: /api/keys は 74 個別 hcGet (=74 spawnSync) を直列実行 → Node event loop ~370s block
+// 新経路: bash subprocess を 1 回起動し、その内部で metadata.sh の key 一覧を取得後、
+//   各 key について `hc-config.sh --get` を bash subprocess 内部 loop で呼び TSV 出力。
+//   Node spawnSync は 1 回のみで、内部 bash の child process spawn は Node event loop を block しない。
+//
+// 出力 format: <key>\t<value>\n (改行終端、空 value は <key>\t\n)
+// 失敗 key は entry なし (Node 側で undefined → null として扱う)
+//
+// overrides.spawnFn: テスト用 DI seam
+
+let _keysValueCache = null
+
+function invalidateKeysValueCache() {
+  _keysValueCache = null
+}
+
+function hcListAll(overrides) {
+  overrides = overrides || {}
+  if (_keysValueCache && !overrides.bypassCache) return _keysValueCache
+  const spawnFn = overrides.spawnFn || spawnSync
+  // bash one-shot:
+  //   1. metadata.sh source して全 key 一覧を取得 (hc_metadata_table | cut -f1)
+  //   2. 各 key を hc-config.sh --get で取得し TSV 出力
+  //   - bash 3.2 互換 (associative array 不使用)
+  //   - エラー key は silent skip (空行ではなく entry 自体省略)
+  const script = `
+set -u
+META="${path.join(SCRIPT_DIR, 'hc-config-metadata.sh').replace(/"/g, '\\"')}"
+HCSCRIPT="${HC_CONFIG_SCRIPT.replace(/"/g, '\\"')}"
+# shellcheck disable=SC1090
+source "$META" 2>/dev/null || exit 1
+keys=$(_hc_metadata_table 2>/dev/null | awk -F'\\t' 'NF>0 && $1!=""{print $1}')
+[ -z "$keys" ] && exit 0
+while IFS= read -r k; do
+  [ -z "$k" ] && continue
+  v=$(bash "$HCSCRIPT" --get "$k" 2>/dev/null) || continue
+  # trailing newline は cmd_get で常に付与されるので除去
+  v=\${v%$'\\n'}
+  printf '%s\\t%s\\n' "$k" "$v"
+done <<< "$keys"
+`
+  const r = spawnFn('bash', ['-c', script], {
+    encoding: 'utf8',
+    timeout: HC_SUBPROCESS_TIMEOUT_MS * 6, // 74 key 内部 fork ぶん拡張 (30s)
+    cwd: REPO_ROOT,
+  })
+  if (r.status !== 0 && !r.stdout) return {}
+  const lines = (r.stdout || '').split('\n').filter((l) => l.length > 0)
+  const map = {}
+  for (const line of lines) {
+    const idx = line.indexOf('\t')
+    if (idx === -1) continue
+    const key = line.slice(0, idx)
+    const value = line.slice(idx + 1)
+    map[key] = value
+  }
+  if (!overrides.bypassCache) {
+    _keysValueCache = map
+  }
+  return map
+}
+
+// ============================================================
 // metadata cache (H-1: process-lifetime cache、/api/set で invalidate)
 // ============================================================
 
@@ -327,6 +419,8 @@ let _metadataCache = null
 
 function invalidateMetadataCache() {
   _metadataCache = null
+  // NEW-C-1: keys-value cache も同期 invalidate (一貫性保証)
+  invalidateKeysValueCache()
 }
 
 // _hc_metadata_table 全体を一括取得 (74 行 TSV) — bash 経由で一度だけ source して dump
@@ -375,6 +469,43 @@ function getEffectMap(overrides) {
 }
 
 // ============================================================
+// NF-13: history stamp 生成 (pid + counter で同 ms 衝突回避)
+// ============================================================
+
+let _historyStampCounter = 0
+
+function nextHistoryStamp() {
+  _historyStampCounter = (_historyStampCounter + 1) % 1000000
+  const iso = new Date().toISOString().replace(/[:.]/g, '-')
+  return `${iso}-${process.pid}-${_historyStampCounter}`
+}
+
+// ============================================================
+// NF-6: history file cleanup (最大 HISTORY_MAX_FILES 件、古い順削除)
+// ============================================================
+
+function cleanupHistoryFiles() {
+  try {
+    if (!fs.existsSync(HISTORY_DIR)) return
+    const files = fs
+      .readdirSync(HISTORY_DIR)
+      .filter((f) => f.endsWith('.json'))
+      .sort() // 名前順 (= 時系列順、ISO stamp prefix のため)
+    if (files.length <= HISTORY_MAX_FILES) return
+    const excess = files.length - HISTORY_MAX_FILES
+    for (let i = 0; i < excess; i++) {
+      try {
+        fs.unlinkSync(path.join(HISTORY_DIR, files[i]))
+      } catch (_) {
+        // cleanup 失敗は silent skip (本流 apply に影響させない)
+      }
+    }
+  } catch (_) {
+    // dir 読み取り失敗も silent (本流に影響させない)
+  }
+}
+
+// ============================================================
 // preset diff 計算 / apply (atomic) / rollback (chain repair)
 // ============================================================
 
@@ -417,8 +548,8 @@ function computePresetDiff(presetName, overrides) {
 //   phase 1: 全変更対象 key の現在値を snapshot
 //   phase 2: hcSet 順次実行、N 番目失敗で snapshot から rollback
 //
-// history payload は applied / failed / snapshot / type を保存し
-// rollbackHistory が chain 修復できる構造に。
+// NF-2/9 fix: history write 失敗時、yml 適用済みを snapshot から rollback (silent data loss 防止)
+// NF-13 fix: history stamp に pid + counter 追加 (同 ms 衝突回避)
 function applyPreset(presetName, skipKeys, overrides) {
   const diff = computePresetDiff(presetName, overrides)
   if (!diff) return { ok: false, error: 'unknown preset' }
@@ -448,10 +579,12 @@ function applyPreset(presetName, skipKeys, overrides) {
   }
 
   // C-atomic phase 2 abort 時の rollback (snapshot 復元)
+  // NF-3: rollback restore 順序を LIFO (apply 逆順) で実行 (依存 key 不整合最小化)
   const rolledBack = []
   const rollbackFailed = []
   if (aborted) {
-    for (const a of applied) {
+    const reverseApplied = applied.slice().reverse()
+    for (const a of reverseApplied) {
       const r = hcSet(a.key, a.from, overrides)
       if (r.exitCode === 0) {
         rolledBack.push(a.key)
@@ -467,14 +600,19 @@ function applyPreset(presetName, skipKeys, overrides) {
       fs.mkdirSync(HISTORY_DIR, { recursive: true })
     }
   } catch (e) {
+    // NF-2/9: history dir create 失敗 → snapshot rollback 実行 (apply 済 yml を元に戻す)
+    const dirRecover = rollbackAppliedFromSnapshot(applied, snapshot, overrides)
     return {
       ok: false,
       error: 'history dir create failed: ' + e.message,
-      applied: aborted ? 0 : applied.length,
+      applied: 0,
       failed: aborted ? 1 : 0,
+      rolled_back_on_history_failure: dirRecover.recovered,
+      rollback_failed_on_history_failure: dirRecover.failed,
     }
   }
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  // NF-13: pid + counter で stamp unique 化
+  const stamp = nextHistoryStamp()
   const histFile = path.join(HISTORY_DIR, `${stamp}-${presetName}.json`)
   const histPayload = {
     preset: presetName,
@@ -496,13 +634,27 @@ function applyPreset(presetName, skipKeys, overrides) {
     fs.writeFileSync(tmpFile, JSON.stringify(histPayload, null, 2))
     fs.renameSync(tmpFile, histFile)
   } catch (e) {
+    // NF-2/9: history write 失敗 → snapshot から apply 済 yml を rollback
+    //   abort 経由なら applied は既に rollback 済なので no-op
+    //   abort なし (= 全 key 成功) なら applied から snapshot 復元
+    const writeRecover = rollbackAppliedFromSnapshot(applied, snapshot, overrides)
     return {
       ok: false,
-      error: 'history write failed: ' + e.message,
-      applied: aborted ? 0 : applied.length,
+      error: 'history_write_failed',
+      detail: e.message,
+      applied: 0,
       failed: aborted ? 1 : 0,
+      rolled_back_on_history_failure: writeRecover.recovered,
+      rollback_failed_on_history_failure: writeRecover.failed,
+      message:
+        writeRecover.failed.length === 0
+          ? 'history write failed, yml was rolled back to original state'
+          : `history write failed and partial rollback occurred (${writeRecover.failed.length} keys failed to restore)`,
     }
   }
+
+  // NF-6: history write 成功後に cleanup (古い分削除、本流に影響させない)
+  cleanupHistoryFiles()
 
   // H-7: partial failure は ok:false だが 200 OK (router 側で判定)
   if (aborted) {
@@ -526,6 +678,30 @@ function applyPreset(presetName, skipKeys, overrides) {
     skipped: skipSet.size,
     history_file: path.basename(histFile),
   }
+}
+
+// NF-2/9 helper: history dir create / write 失敗時、apply 済 yml を snapshot から復元
+//   LIFO 順 (apply 逆順) で hcSet を呼び元値に戻す
+//   返却: { recovered: [key, ...], failed: [{ key, target, stderr }, ...] }
+function rollbackAppliedFromSnapshot(applied, snapshot, overrides) {
+  const recovered = []
+  const failed = []
+  const reverseApplied = applied.slice().reverse()
+  for (const a of reverseApplied) {
+    const original = snapshot[a.key]
+    if (original === undefined) {
+      // snapshot 不在 = 復元不可 (発生条件理論上なし、防御的に記録)
+      failed.push({ key: a.key, target: '<unknown>', stderr: 'snapshot entry missing' })
+      continue
+    }
+    const r = hcSet(a.key, original, overrides)
+    if (r.exitCode === 0) {
+      recovered.push(a.key)
+    } else {
+      failed.push({ key: a.key, target: original, stderr: r.stderr })
+    }
+  }
+  return { recovered, failed }
 }
 
 function listHistory() {
@@ -553,6 +729,8 @@ function listHistory() {
 // 新規 history entry に保存 (type: 'rollback')。これにより rollback chain で
 // 何度でも戻れる構造を確保。
 // C-traversal: timestamp は path.basename + regex 二重防御。
+// NF-3: rollback 内 restore も LIFO 順 (applied 逆順) で実行 (依存 key 不整合最小化)
+// NF-13: chain history stamp も pid + counter で unique 化
 function rollbackHistory(timestamp, overrides) {
   // C-traversal: path traversal 防止
   if (!ROLLBACK_TS_REGEX.test(timestamp)) {
@@ -579,14 +757,15 @@ function rollbackHistory(timestamp, overrides) {
   }
 
   // rollback 前の現在値を snapshot (chain 修復用)
+  const appliedTargets = payload.applied || []
   const rollbackPreSnapshot = {}
-  const targets = (payload.applied || [])
-  for (const change of targets) {
+  for (const change of appliedTargets) {
     const cur = hcGet(change.key, overrides)
     rollbackPreSnapshot[change.key] = cur === null ? '<unknown>' : cur
   }
 
-  // 各 applied entry の from 値に戻す
+  // NF-3: LIFO 順 (apply 逆順) で restore
+  const targets = appliedTargets.slice().reverse()
   const restored = []
   const failed = []
   for (const change of targets) {
@@ -600,7 +779,8 @@ function rollbackHistory(timestamp, overrides) {
     if (!fs.existsSync(HISTORY_DIR)) {
       fs.mkdirSync(HISTORY_DIR, { recursive: true })
     }
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    // NF-13: chain stamp も pid + counter で unique 化
+    const stamp = nextHistoryStamp()
     const chainFile = path.join(HISTORY_DIR, `${stamp}-rollback-of-${safeTs}.json`)
     const chainPayload = {
       preset: payload.preset || '<unknown>',
@@ -613,7 +793,7 @@ function rollbackHistory(timestamp, overrides) {
       // 元 apply 直後状態に復帰可能)
       applied: Object.entries(rollbackPreSnapshot).map(([k, v]) => {
         // rollback で k は change.from (元の preset 適用前値) に戻った
-        const original = targets.find((t) => t.key === k)
+        const original = appliedTargets.find((t) => t.key === k)
         return {
           key: k,
           from: v, // rollback 直前 = preset apply 後の状態
@@ -626,6 +806,8 @@ function rollbackHistory(timestamp, overrides) {
     const tmpFile = `${chainFile}.tmp`
     fs.writeFileSync(tmpFile, JSON.stringify(chainPayload, null, 2))
     fs.renameSync(tmpFile, chainFile)
+    // NF-6: chain write 後も cleanup
+    cleanupHistoryFiles()
     return {
       ok: failed.length === 0,
       restored: restored.length,
@@ -651,20 +833,35 @@ function rollbackHistory(timestamp, overrides) {
 
 // POST /api/preset/save { name, axes } で .claude/presets/custom-<name>.yml を保存。
 // 軽量 YAML 形式 (key: value、コメント先頭) で書出。
+//
+// 設計乖離 fix: name regex を ^[a-z0-9][a-z0-9-]{2,48}$ (3-49 char) に統一 (app.js と同一)
+//              axes は 6 軸完全必須 (whitelist)、invalid 軸 reject、欠落 reject
+// HIGH-Q3 fix: invalidateMetadataCache() 追加 (一貫性確保)
 function savePreset(body) {
   if (!body || typeof body !== 'object') return { ok: false, error: 'body required' }
   const name = body.name
   const axes = body.axes
   if (!name || typeof name !== 'string') return { ok: false, error: 'name required (string)' }
-  if (!/^[a-z][a-z0-9-]{1,40}$/.test(name)) {
-    return { ok: false, error: 'name must match ^[a-z][a-z0-9-]{1,40}$' }
+  // 設計乖離 fix: app.js と完全統一 (^[a-z0-9][a-z0-9-]{2,48}$ = 3-49 char)
+  if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(name)) {
+    return { ok: false, error: 'name must match ^[a-z0-9][a-z0-9-]{2,48}$ (3-49 chars, lowercase + digit + hyphen)' }
   }
   if (!axes || typeof axes !== 'object') return { ok: false, error: 'axes required (object)' }
-  // axes 検証 (6 軸 + 値域)
+  // 設計乖離 fix: 6 軸 完全必須 + whitelist 厳格化
   const axesByKey = {}
   for (const a of PRESET_AXES) axesByKey[a.key] = new Set(a.values)
-  for (const [k, v] of Object.entries(axes)) {
+  // (1) unknown axis 拒否
+  for (const k of Object.keys(axes)) {
     if (!axesByKey[k]) return { ok: false, error: `unknown axis: ${k}` }
+  }
+  // (2) 6 軸全必須 (欠落拒否)
+  for (const a of PRESET_AXES) {
+    if (axes[a.key] === undefined || axes[a.key] === null || axes[a.key] === '') {
+      return { ok: false, error: `axis missing: ${a.key} (all 6 axes required)` }
+    }
+  }
+  // (3) value whitelist
+  for (const [k, v] of Object.entries(axes)) {
     if (!axesByKey[k].has(v)) return { ok: false, error: `invalid value for ${k}: ${v}` }
   }
   try {
@@ -697,6 +894,8 @@ function savePreset(body) {
     const tmpFile = `${normalized}.tmp`
     fs.writeFileSync(tmpFile, content)
     fs.renameSync(tmpFile, normalized)
+    // HIGH-Q3 fix: invalidate cache (apply preset と同等の一貫性)
+    invalidateMetadataCache()
     return { ok: true, name: `custom-${name}`, path: path.relative(REPO_ROOT, normalized) }
   } catch (e) {
     return { ok: false, error: 'write failed: ' + e.message }
@@ -786,6 +985,22 @@ function serveStatic(req, res, relativePath) {
   res.end(content)
 }
 
+// NF-8 helper: error message から internal abs path leak を除外
+//   REPO_ROOT を <repo> に置換 + HOME を <home> に置換
+function sanitizeErrorMessage(message) {
+  if (!message) return ''
+  let s = String(message)
+  // REPO_ROOT 置換 (最も特異)
+  if (REPO_ROOT && REPO_ROOT.length > 0) {
+    s = s.split(REPO_ROOT).join('<repo>')
+  }
+  const home = os.homedir()
+  if (home && home.length > 0) {
+    s = s.split(home).join('<home>')
+  }
+  return s
+}
+
 // ============================================================
 // router (L-3: url.parse → new URL)
 // ============================================================
@@ -820,23 +1035,23 @@ async function handleRequest(req, res) {
     return
   }
 
-  // GET /api/keys (H-1: cache + bulk hcGet 不要、metadata の key 列をそのまま使う)
+  // GET /api/keys (NEW-C-1 fix: hcListAll で 1 spawn に集約、74 spawn 370s block 解消)
   if (req.method === 'GET' && pathname === '/api/keys') {
     const metadata = loadMetadata()
     const categoryFilter = reqUrl.searchParams.get('category')
     const filtered = categoryFilter ? metadata.filter((m) => m.category === categoryFilter) : metadata
-    // H-1: current_value 同期取得は必要だが、cache 化で metadata.sh source は 1 回のみ
-    //   個別 hcGet は spawnSync N 回必要 (個別 key の env override 反映のため)、
-    //   ここは仕様上避けられない (--list で全値出るが key 抽出に正規表現必要)
+    // NEW-C-1: hcListAll() で全 key 値を 1 spawnSync で取得 (74 → 1)
+    //   旧経路 (個別 hcGet ループ) を削除し、cache hit すれば spawn 0 件で即返却
+    const allValues = hcListAll()
     const enriched = filtered.map((m) => {
-      const current = hcGet(m.key)
-      return { ...m, current_value: current }
+      const value = Object.prototype.hasOwnProperty.call(allValues, m.key) ? allValues[m.key] : null
+      return { ...m, current_value: value }
     })
     sendJson(res, 200, { keys: enriched, total: enriched.length })
     return
   }
 
-  // GET /api/value/:key
+  // GET /api/value/:key (個別 key、single hcGet 維持)
   if (req.method === 'GET' && pathname.startsWith('/api/value/')) {
     const key = decodeURIComponent(pathname.slice('/api/value/'.length))
     const current = hcGet(key)
@@ -854,7 +1069,7 @@ async function handleRequest(req, res) {
     try {
       body = await readJsonBody(req)
     } catch (e) {
-      sendJson(res, 400, { error: 'invalid JSON body', detail: String(e.message) })
+      sendJson(res, 400, { error: 'invalid JSON body', detail: sanitizeErrorMessage(e.message) })
       return
     }
     if (!body.key || body.value === undefined) {
@@ -869,12 +1084,20 @@ async function handleRequest(req, res) {
     }
     const r = hcSet(body.key, String(body.value))
     if (r.exitCode !== 0) {
-      sendJson(res, 400, { error: 'hc-config --set failed', stderr: r.stderr, exit_code: r.exitCode })
+      // NF-10: timeout 明示
+      const errPayload = {
+        error: 'hc-config --set failed',
+        stderr: sanitizeErrorMessage(r.stderr),
+        exit_code: r.exitCode,
+      }
+      if (r.timedOut) errPayload.timed_out = true
+      sendJson(res, 400, errPayload)
       return
     }
     // H-1: /api/set 成功で metadata cache invalidate
     //   (metadata 自体は変わらないが、enriched current_value が古くなるため
     //    /api/keys 経由 path でも fresh load させる)
+    //   NEW-C-1: keysValueCache も同期 invalidate (invalidateMetadataCache 経由)
     invalidateMetadataCache()
     sendJson(res, 200, { ok: true, key: body.key, value: body.value })
     return
@@ -913,7 +1136,7 @@ async function handleRequest(req, res) {
     try {
       body = await readJsonBody(req)
     } catch (e) {
-      sendJson(res, 400, { error: 'invalid JSON body', detail: String(e.message) })
+      sendJson(res, 400, { error: 'invalid JSON body', detail: sanitizeErrorMessage(e.message) })
       return
     }
     const skipKeys = Array.isArray(body.skip_keys) ? body.skip_keys : []
@@ -925,6 +1148,14 @@ async function handleRequest(req, res) {
     // H-7: result.ok=false でも部分失敗は 200 (body で client が判定)
     // 完全失敗 (preset 不存在 / history dir エラー等の致命的) のみ 5xx
     if (!result.ok && !result.partial && result.error) {
+      // NF-8: history_write_failed は client に正常に伝えるため 500 ではなく 200 で返却
+      //   (yml は rollback 済、UI 側で「history 不在で復旧不可」を表示できる)
+      if (result.error === 'history_write_failed') {
+        // cache invalidate (yml が rollback されたが念のため)
+        invalidateMetadataCache()
+        sendJson(res, 200, result)
+        return
+      }
       sendJson(res, 500, result)
       return
     }
@@ -942,7 +1173,7 @@ async function handleRequest(req, res) {
     try {
       body = await readJsonBody(req)
     } catch (e) {
-      sendJson(res, 400, { error: 'invalid JSON body', detail: String(e.message) })
+      sendJson(res, 400, { error: 'invalid JSON body', detail: sanitizeErrorMessage(e.message) })
       return
     }
     const result = savePreset(body)
@@ -1060,9 +1291,13 @@ async function main() {
 
   const server = http.createServer((req, res) => {
     handleRequest(req, res).catch((err) => {
-      console.error('handler error:', err)
+      // NF-8: internal abs path leak 防止 (sanitize + stack trace 除外)
+      console.error('handler error:', err && err.stack ? err.stack : err)
       if (!res.headersSent) {
-        sendJson(res, 500, { error: 'internal error', detail: String(err.message) })
+        sendJson(res, 500, {
+          error: 'internal error',
+          detail: sanitizeErrorMessage(err && err.message ? err.message : String(err)),
+        })
       }
     })
   })
@@ -1106,19 +1341,25 @@ if (require.main === module) {
 }
 
 // C-unit-seam: unit テスト用 seam (callHcConfig / loadMetadata / readJsonBody / serveStatic 追加)
+// iter 4 A 追加 seam: hcListAll / invalidateKeysValueCache / nextHistoryStamp / cleanupHistoryFiles /
+//   rollbackAppliedFromSnapshot / sanitizeErrorMessage
 module.exports = {
   PRESETS,
   PRESET_AXES,
   ROLLBACK_TS_REGEX,
+  HISTORY_MAX_FILES,
   callHcConfig,
   hcGet,
   hcSet,
+  hcListAll,
+  invalidateKeysValueCache,
   loadMetadata,
   invalidateMetadataCache,
   getKnownKeys,
   getEffectMap,
   computePresetDiff,
   applyPreset,
+  rollbackAppliedFromSnapshot,
   savePreset,
   listHistory,
   rollbackHistory,
@@ -1126,5 +1367,8 @@ module.exports = {
   serveStatic,
   sendJson,
   sendText,
+  sanitizeErrorMessage,
+  nextHistoryStamp,
+  cleanupHistoryFiles,
   handleRequest,
 }
