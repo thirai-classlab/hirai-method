@@ -1791,19 +1791,33 @@ cmd_interactive() {
   fi
 }
 
-# === task-61 Step 1: Web UI entry placeholder ===
+# === task-61 Step 2: Web UI entry (Node.js HTTP server 起動) ===
 #
-# Step 1 段階では Web UI server (`hc-config-web-server.js`) が未実装のため、warning を
-# stderr に出力した上で task-60 TUI に降格する。Step 2 で以下の logic に置換予定:
-#   1. node binary 探索 (`command -v node`)
-#   2. 空き port 探索 (3060-3070)
-#   3. server.js を `exec node` で起動 + browser auto-open
-#   4. node 不在時のみ TUI fallback
-# legacy env (`HC_HC_CONFIG_TUI_LEGACY=true`) を使えば本 warning なしで TUI 直起動可能。
+# Node.js 標準 module のみで実装された hc-config-web-server.js を起動する。
+# node binary 不在 / server.js 不在の場合は task-60 TUI に降格 (graceful fallback)。
+# legacy env (`HC_HC_CONFIG_TUI_LEGACY=true`) は cmd_interactive 側で TUI 直起動経路を選択。
+#
+# 動作:
+#   1. node binary 探索 (`command -v node`)、不在なら WARN + TUI 降格
+#   2. server.js 存在確認、不在なら WARN + TUI 降格
+#   3. foreground で `node <server.js>` 起動 (Ctrl+C で graceful shutdown)
+#      port 探索 / browser auto-open は server.js 側が担当
 _cmd_interactive_web() {
-  printf 'WARN: hc-config Web UI is not yet implemented (task-61 Step 2 pending).\n' >&2
-  printf '      Falling back to TUI. Set HC_HC_CONFIG_TUI_LEGACY=true to silence this notice.\n' >&2
-  _cmd_interactive_tui
+  if ! command -v node >/dev/null 2>&1; then
+    printf 'WARN: Node.js not installed. Falling back to TUI.\n' >&2
+    printf '      Install Node.js or set HC_HC_CONFIG_TUI_LEGACY=true to silence.\n' >&2
+    _cmd_interactive_tui
+    return $?
+  fi
+
+  local server_js="${SCRIPT_DIR}/lib/hc-config-web-server.js"
+  if [ ! -f "$server_js" ]; then
+    printf 'WARN: Web UI server not found at %s. Falling back to TUI.\n' "$server_js" >&2
+    _cmd_interactive_tui
+    return $?
+  fi
+
+  node "$server_js" "$@"
 }
 
 # === arg parser ===
