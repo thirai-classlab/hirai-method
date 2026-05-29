@@ -1308,6 +1308,51 @@ _tui_render_effect_panel() {
   printf '%s変更効果%s: %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$effect"
 }
 
+# task-60 Step 2 (2026-05-29): category 別 key 数を返す (lib 経由)
+# $1: category 名 (保護パス / ファイル配置 / state_dir / Gate/Confidence / feature_toggle / reviewer_control)
+# 戻り: stdout に key 数 (整数、lib 不在なら 0)
+#
+# `hc_metadata_keys_by_category` (.claude/scripts/lib/hc-config-metadata.sh) は category 完全一致の
+# key 群を改行区切りで返すため `grep -c .` で個数化する。lib 不在環境では guard で 0 を返す
+# (TUI 描画は壊さず "0 keys" 表示で degrade、_meta_* 系と同じ fallback 規律)。
+_meta_count_by_category() {
+  local cat="$1"
+  if command -v hc_metadata_keys_by_category >/dev/null 2>&1; then
+    hc_metadata_keys_by_category "$cat" 2>/dev/null | grep -c '.' || printf '0'
+  else
+    printf '0'
+  fi
+}
+
+# task-60 Step 2 (2026-05-29): 3-state machine の category_menu state 用 menu 描画
+# $1: 現在の category sel index (0-5、default 0)
+# 標準出力:
+#   - 画面クリア + header (=== hc-config TUI ===  (↑/↓ 選択, Enter 決定, q 終了))
+#   - 6 category 一覧 (保護パス / ファイル配置 / state_dir / Gate/Confidence /
+#     feature_toggle / reviewer_control 順、draft §3.2 順拠)
+#   - 選択行は "> " prefix + reverse video、非選択は "  " prefix のみ
+#   - 各 category の key count を "(N keys)" で表示 (_meta_count_by_category 経由)
+#
+# Step 4 で 3-state machine から呼出される。本 Step では関数定義のみ追加、呼出側は未配線。
+# bash 3.2 互換: index array (local -a) のみ使用、連想配列 / declare -g 不使用。
+_tui_render_category_menu() {
+  local sel="${1:-0}"
+  local -a cat_names=("保護パス" "ファイル配置" "state_dir" "Gate/Confidence" "feature_toggle" "reviewer_control")
+  local i=0 cat count
+  printf '%s' "$_TUI_CLEAR"
+  printf '%s=== hc-config TUI ===%s  (↑/↓ 選択, Enter 決定, q 終了)\n\n' "$_TUI_BOLD" "$_TUI_RESET"
+  while [ "$i" -lt 6 ]; do
+    cat="${cat_names[$i]}"
+    count=$(_meta_count_by_category "$cat")
+    if [ "$i" = "$sel" ]; then
+      printf '%s> %-20s (%s keys)%s\n' "$_TUI_REVERSE" "$cat" "$count" "$_TUI_RESET"
+    else
+      printf '  %-20s (%s keys)\n' "$cat" "$count"
+    fi
+    i=$((i + 1))
+  done
+}
+
 # key 一覧の選択画面 + effect panel を描画 (H3: category 境界に区切り行を挿入)
 # $1: category 順に並んだ全 key 改行区切り (1 行 1 key), $2: 選択 index (0-based、key のみ counts)
 # 区切り行 (=== <category> (N keys) ===) は選択対象外。sel は key の連番。
