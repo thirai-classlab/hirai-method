@@ -1,28 +1,29 @@
-// hc-config Web UI — task-63 Step 2+4 (UX redesign: top/edit 2-view + 日本語名 + カスタム保存)
+// hc-config Web UI — task-63 設計簡素化版 (top/edit 2-view、カスタム保存撤去)
 // vanilla JS + Tailwind CDN, fetch API only, no external deps
 //
-// 起源: docs/draft/hc-config-web-ui-ux-redesign.md §3.5 (reducer code) + §3.7 (state machine) + §3.9 (a11y)
+// 起源: docs/draft/hc-config-web-ui-ux-redesign.md §3.5 / §3.7 / §3.9
+//        + user 確定要求「プリセット名保存不要」(task-63 設計簡素化)
 //
-// State machine (task-63):
+// State machine:
 //   view: 'top' | 'edit'
 //   - top   : 起動時の現状確認 view (現在 preset 名 banner + 6 軸 read-only table + 「設定を変更」CTA)
-//   - edit  : 設定編集 view (preset list 日本語名 + 6 軸 drop-down + 「カスタムとして保存」「適用」「キャンセル」)
-//   editMode: 'preset' | 'individual' | null  (edit view 内の sub-mode)
+//   - edit  : 設定編集 view (preset list 日本語名 + 6 軸 drop-down + 「適用」「キャンセル」)
+//   editMode: 'preset' | 'individual'  (edit view 内の sub-mode、初期 'preset'、null 廃止)
 //
 // task-61 から継承:
 //   - WCAG 2.2 AA (iter 2 16 SC 全 closure / iter 4 B 7 件)
 //   - C-U1 / C-U2 / H-U1 / H-U3 / H-U4 / H-XSS / M-U3 / M-U4
-//   - dialog helpers (showConfirmDialog / showPromptDialog with resolved flag)
+//   - dialog helpers (showConfirmDialog with resolved flag)
 //
-// task-63 新規:
-//   - state.view 'top' | 'edit' 排他切替 (legacy 'idle' / 'category' / 'key' / 'preset' は廃止、reducer 拡張)
+// task-63 簡素化版:
+//   - state.view 'top' | 'edit' 排他切替
 //   - state.currentPreset (起動時 /api/current-preset fetch、match_type 3 種: preset/custom/unsaved)
 //   - state.editPresetSelection (編集画面 preset 選択中の英 key)
 //   - state.editAxisChanges (個別 key 変更 in-memory diff)
 //   - reducer(state, action) Pure Function (副作用なし、state 不変更新)
 //   - renderTop(state) / renderEdit(state) (state → DOM)
 //   - getDisplayName(preset) (display_name_ja 優先、fallback name)
-//   - カスタム保存 name regex 拡張 (日本語名 OK、draft §3.1 確定)
+//   - カスタム保存機能撤去 (showPromptDialog / savePresetApi / edit:save_custom action 削除)
 //   - 絵文字なし (user F1 確定要求)
 //
 ;(function () {
@@ -61,7 +62,7 @@
     presets: [], // [{ name, display_name_ja, ... }] (server /api/presets)
     history: [],
     // edit view 内 sub-state
-    editMode: null, // 'preset' | 'individual' | null
+    editMode: 'preset', // 'preset' | 'individual'  (task-63 簡素化: null 廃止、初期 'preset')
     editPresetSelection: null, // 選択中 preset 英 key
     editPresetDiff: null, // diff preview (preset 選択時)
     editAxisChanges: {}, // 個別 key 変更 in-memory diff { axis_key: new_value }
@@ -69,7 +70,6 @@
     // UI flag
     applying: false,
     rollbackInProgress: false,
-    savingCustom: false,
   }
 
   // ============================================================
@@ -95,11 +95,11 @@
         }
       }
       case 'top:enter': {
-        // edit → top 戻り、編集 buffer を破棄
+        // edit → top 戻り、編集 buffer を破棄、editMode は 'preset' に reset
         return {
           ...prevState,
           view: 'top',
-          editMode: null,
+          editMode: 'preset',
           editPresetSelection: null,
           editPresetDiff: null,
           editAxisChanges: {},
@@ -112,7 +112,7 @@
         return {
           ...prevState,
           view: 'edit',
-          editMode: null,
+          editMode: 'preset',
           editPresetSelection: null,
           editPresetDiff: null,
           editAxisChanges: {},
@@ -146,11 +146,11 @@
         return reducer(prevState, { type: 'top:enter' })
       }
       case 'edit:apply': {
-        // 適用後は top 復帰、currentPreset は payload で更新
+        // 適用後は top 復帰、currentPreset は payload で更新、editMode は 'preset' に reset
         return {
           ...prevState,
           view: 'top',
-          editMode: null,
+          editMode: 'preset',
           editPresetSelection: null,
           editPresetDiff: null,
           editAxisChanges: {},
@@ -158,15 +158,8 @@
           currentPreset: action.payload && action.payload.currentPreset ? action.payload.currentPreset : prevState.currentPreset,
         }
       }
-      case 'edit:save_custom': {
-        // カスタム保存後は edit に留まる (user は適用 or キャンセルを選ぶ)
-        return {
-          ...prevState,
-          presets: action.payload && action.payload.presets ? action.payload.presets : prevState.presets,
-        }
-      }
       case 'ui:set_flag': {
-        // payload: { flag: 'applying'|'rollbackInProgress'|'savingCustom', value: bool }
+        // payload: { flag: 'applying'|'rollbackInProgress', value: bool }
         return { ...prevState, [action.payload.flag]: action.payload.value }
       }
       case 'history:update': {
@@ -255,9 +248,6 @@
   }
   const rollbackApi = async (timestamp) => {
     return await api('POST', `/api/preset/rollback/${encodeURIComponent(timestamp)}`)
-  }
-  const savePresetApi = async (name, axes) => {
-    return await api('POST', '/api/preset/save', { name, axes })
   }
   // 現在の yml 6 軸取得 (/api/keys 経由、領域 A endpoint 不在時の fallback として再利用)
   const loadCurrentAxes = async () => {
@@ -400,90 +390,6 @@
       if (typeof dlg.showModal === 'function') dlg.showModal()
       else dlg.setAttribute('open', '')
       setTimeout(() => cancelBtn.focus(), 10)
-    })
-  }
-
-  function showPromptDialog(opts) {
-    return new Promise((resolve) => {
-      const dlg = document.getElementById('prompt-dialog')
-      const titleEl = document.getElementById('prompt-dialog-title')
-      const input = document.getElementById('prompt-dialog-input')
-      const errorEl = document.getElementById('prompt-dialog-error')
-      const okBtn = document.getElementById('prompt-dialog-ok')
-      const cancelBtn = document.getElementById('prompt-dialog-cancel')
-
-      if (opts.title) titleEl.textContent = opts.title
-      input.value = ''
-      input.placeholder = opts.placeholder || ''
-      input.setAttribute('aria-invalid', 'false')
-      if (errorEl) {
-        errorEl.textContent = ''
-        errorEl.classList.add('hidden')
-      }
-
-      let resolved = false
-      const safeResolve = (value) => {
-        if (resolved) return
-        resolved = true
-        cleanup()
-        resolve(value)
-      }
-      const showError = (msg) => {
-        input.setAttribute('aria-invalid', 'true')
-        if (errorEl) {
-          errorEl.textContent = msg
-          errorEl.classList.remove('hidden')
-        }
-        input.focus()
-        input.select()
-      }
-      const clearError = () => {
-        input.setAttribute('aria-invalid', 'false')
-        if (errorEl) {
-          errorEl.textContent = ''
-          errorEl.classList.add('hidden')
-        }
-      }
-      const onOk = () => {
-        const value = input.value.trim()
-        if (opts.validate) {
-          const err = opts.validate(value)
-          if (err) { showError(err); return }
-        }
-        clearError()
-        safeResolve(value)
-      }
-      const onCancel = () => safeResolve(null)
-      const onKey = (ev) => {
-        if (ev.key === 'Enter') { ev.preventDefault(); onOk() }
-      }
-      const onInputChange = () => {
-        if (input.getAttribute('aria-invalid') === 'true') clearError()
-      }
-      const onClose = () => {
-        if (dlg.returnValue !== 'ok') safeResolve(null)
-      }
-
-      function cleanup() {
-        okBtn.removeEventListener('click', okHandler)
-        cancelBtn.removeEventListener('click', cancelHandler)
-        input.removeEventListener('keydown', onKey)
-        input.removeEventListener('input', onInputChange)
-        dlg.removeEventListener('close', onClose)
-        if (dlg.open) {
-          try { dlg.close() } catch (e) { /* noop */ }
-        }
-      }
-      const okHandler = () => { dlg.returnValue = 'ok'; onOk() }
-      const cancelHandler = () => { dlg.returnValue = 'cancel'; onCancel() }
-      okBtn.addEventListener('click', okHandler)
-      cancelBtn.addEventListener('click', cancelHandler)
-      input.addEventListener('keydown', onKey)
-      input.addEventListener('input', onInputChange)
-      dlg.addEventListener('close', onClose)
-      if (typeof dlg.showModal === 'function') dlg.showModal()
-      else dlg.setAttribute('open', '')
-      setTimeout(() => input.focus(), 10)
     })
   }
 
@@ -823,12 +729,11 @@
     }
     box.appendChild(indivSection)
 
-    // ============ アクション buttons ============
+    // ============ アクション buttons (task-63 簡素化: 「キャンセル」「適用」のみ) ============
     const hasChange =
-      currentState.editMode === 'preset' && currentState.editPresetSelection ||
+      (currentState.editMode === 'preset' && currentState.editPresetSelection) ||
       (currentState.editMode === 'individual' && Object.keys(currentState.editAxisChanges).length > 0)
     const applyDisabled = currentState.applying || !hasChange
-    const saveCustomDisabled = currentState.savingCustom
 
     const actions = el(
       'div',
@@ -837,13 +742,11 @@
         'button',
         {
           type: 'button',
-          class: `px-4 py-2 text-sm font-semibold rounded shadow-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-offset-1 ${saveCustomDisabled ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 focus:ring-blue-400'}`,
-          onclick: onClickSaveCustom,
-          disabled: saveCustomDisabled,
-          'aria-label': currentState.savingCustom ? 'カスタム保存処理中' : '現在の編集状態をカスタムプリセットとして保存',
-          'aria-disabled': saveCustomDisabled ? 'true' : 'false',
+          class: 'px-4 py-2 text-sm bg-slate-200 hover:bg-slate-300 text-slate-800 rounded min-h-[44px] focus:outline-none focus:ring-2 focus:ring-slate-400',
+          onclick: onClickCancel,
+          'aria-label': '編集を破棄してトップ画面に戻る',
         },
-        currentState.savingCustom ? '保存中...' : 'カスタムとして保存'
+        'キャンセル'
       ),
       el(
         'button',
@@ -856,16 +759,6 @@
           'aria-disabled': applyDisabled ? 'true' : 'false',
         },
         currentState.applying ? '適用中...' : '適用'
-      ),
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'px-4 py-2 text-sm bg-slate-200 hover:bg-slate-300 text-slate-800 rounded min-h-[44px] focus:outline-none focus:ring-2 focus:ring-slate-400',
-          onclick: onClickCancel,
-          'aria-label': '編集を破棄してトップ画面に戻る',
-        },
-        'キャンセル'
       )
     )
     box.appendChild(actions)
@@ -1120,78 +1013,6 @@
     delete state._axesOptions
     dispatch({ type: 'edit:cancel' })
     setStatus('編集を破棄、トップ画面')
-  }
-
-  // ============================================================
-  // カスタム保存 (draft §3.1 日本語名 OK / regex 拡張)
-  // 拡張 regex: ^[\p{L}\p{N}][\p{L}\p{N}\-_ ]{2,48}$  (Unicode property、現代 browser 対応)
-  //   - 先頭 = 文字 or 数字 (日本語含む)
-  //   - 以降 = 文字 / 数字 / ハイフン / アンダースコア / 空白
-  //   - 長さ 3-49 文字
-  // ※ サーバー側 (server.js) も同 regex 拡張要 (本 task 対象外、別 subagent で対応)
-  // ============================================================
-  async function onClickSaveCustom() {
-    if (state.savingCustom) return
-    const name = await showPromptDialog({
-      title: 'カスタムプリセットとして保存',
-      placeholder: '例: my-preset または 私の設定',
-      validate: (v) => {
-        if (!v) return 'プリセット名を入力してください'
-        // Unicode property regex (日本語名 OK)
-        let re
-        try {
-          re = new RegExp('^[\\p{L}\\p{N}][\\p{L}\\p{N}\\-_ ]{2,48}$', 'u')
-        } catch (e) {
-          // 古い browser fallback: ASCII のみ
-          re = /^[a-z0-9][a-z0-9-]{2,48}$/
-        }
-        if (!re.test(v)) {
-          return '文字 / 数字 / ハイフン / アンダースコア / 空白のみ、先頭は文字 or 数字、3-49 文字 (日本語可)'
-        }
-        return null
-      },
-    })
-    if (!name) return
-
-    dispatch({ type: 'ui:set_flag', payload: { flag: 'savingCustom', value: true } })
-    setStatus(`カスタム『${name}』を保存中...`)
-    try {
-      // 保存する 6 軸 = 編集中の最終値 (個別変更 or preset 選択 を反映)
-      const finalAxes = {}
-      const baseline = state.editCurrentAxes || {}
-      const changes = state.editAxisChanges || {}
-      for (const k of AXIS_KEYS) {
-        if (changes[k] !== undefined) finalAxes[k] = String(changes[k])
-        else if (baseline[k] !== undefined) finalAxes[k] = String(baseline[k])
-      }
-      // preset 選択中なら preset の axes を優先 (個別変更とは排他)
-      if (state.editMode === 'preset' && state.editPresetSelection) {
-        const selected = (state.presets || []).find((p) => p.name === state.editPresetSelection)
-        if (selected && selected.axes) {
-          for (const k of AXIS_KEYS) {
-            if (selected.axes[k] !== undefined) finalAxes[k] = String(selected.axes[k])
-          }
-        }
-      }
-      const missing = AXIS_KEYS.filter((k) => finalAxes[k] === undefined)
-      if (missing.length > 0) {
-        toast(`保存失敗: 6 軸が不完全 (欠落: ${missing.join(', ')})`, 'error')
-        setStatus('エラー')
-        dispatch({ type: 'ui:set_flag', payload: { flag: 'savingCustom', value: false } })
-        return
-      }
-      await savePresetApi(name, finalAxes)
-      toast(`カスタム『${name}』を保存しました`, 'success')
-      const newPresets = await loadPresets()
-      state = reducer(state, { type: 'edit:save_custom', payload: { presets: newPresets } })
-      state = reducer(state, { type: 'ui:set_flag', payload: { flag: 'savingCustom', value: false } })
-      setStatus('保存完了')
-      render()
-    } catch (e) {
-      toast(`保存失敗: ${e.message}`, 'error')
-      setStatus('エラー')
-      dispatch({ type: 'ui:set_flag', payload: { flag: 'savingCustom', value: false } })
-    }
   }
 
   // ============================================================
