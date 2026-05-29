@@ -1525,24 +1525,188 @@ _cmd_interactive_tui_flat() {
   done
 }
 
+# task-60 Step 4 (2026-05-29): 3-state machine ループ (category_menu → key_menu → effect_edit)
+#
+# 2 階層 navigation 本体。Step 2 で追加した `_tui_render_category_menu` と Step 3 で追加した
+# `_tui_render_key_menu` を呼び出し、`_tui_read_key` (UP/DOWN/LEFT/RIGHT/ENTER/QUIT を返す抽象)
+# でキー入力を受ける。既存 flat 実装 (`_cmd_interactive_tui_flat`) と同じ raw mode + trap 復元
+# パターンを踏襲し、effect_edit state では `_tui_handle_enter` の入力 / 確認フローを inline 再現
+# (cmd_set "key=val" 形式必須、L1457 と同様)。
+#
+# state machine 遷移:
+#   category_menu --ENTER--> key_menu
+#   key_menu      --ENTER--> effect_edit
+#   key_menu      --LEFT/QUIT--> category_menu (LEFT は back、QUIT は category 側で再判定)
+#   effect_edit   --完了/skip--> key_menu (自動戻り)
+#   category_menu --QUIT--> 終了
+#   key_menu      --QUIT--> 終了 (LEFT 経路と別扱い、明示 q で全終了)
+#
+# sel 位置記憶 (bash 3.2 互換、scalar 7 var + eval 合成、連想配列 / declare -g 不使用):
+#   _tui_cat_sel        — category sel (0-5)
+#   _tui_key_sel_0..5   — 各 category 配下の key sel (0-based、最終回戻り時に復元)
+_cmd_interactive_tui_2tier() {
+  # sel 位置 (function-local、初期値 0、既存値は session 全体で持続させない)
+  local _tui_cat_sel=0
+  local _tui_key_sel_0=0
+  local _tui_key_sel_1=0
+  local _tui_key_sel_2=0
+  local _tui_key_sel_3=0
+  local _tui_key_sel_4=0
+  local _tui_key_sel_5=0
+
+  # raw mode + trap 復元 (flat 実装 L1499-1503 と同じパターン)
+  local _stty_saved
+  _stty_saved=$(stty -g 2>/dev/null) || _stty_saved=""
+  # shellcheck disable=SC2064
+  trap "[ -n \"$_stty_saved\" ] && stty \"$_stty_saved\" 2>/dev/null; printf '%s' \"$_TUI_RESET\"" EXIT INT TERM
+  stty -icanon -echo min 1 time 0 2>/dev/null || true
+
+  local state="category_menu"
+  local cat_names=("保護パス" "ファイル配置" "state_dir" "Gate/Confidence" "feature_toggle" "reviewer_control")
+  local k cur_key_sel key_max cat selected_key keys_list effect newval confirm
+
+  while :; do
+    case "$state" in
+      category_menu)
+        _tui_render_category_menu "$_tui_cat_sel"
+        k=$(_tui_read_key)
+        case "$k" in
+          UP)    [ "$_tui_cat_sel" -gt 0 ] && _tui_cat_sel=$((_tui_cat_sel - 1)) ;;
+          DOWN)  [ "$_tui_cat_sel" -lt 5 ] && _tui_cat_sel=$((_tui_cat_sel + 1)) ;;
+          ENTER|RIGHT)
+            state="key_menu"
+            ;;
+          QUIT)
+            [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+            trap - EXIT INT TERM
+            printf '%s\n' "$_TUI_RESET"
+            _out "bye."
+            return 0
+            ;;
+          *) : ;;
+        esac
+        ;;
+      key_menu)
+        # 現 category の key sel と key 数を取得 (eval で変数名合成、bash 3.2 互換)
+        eval "cur_key_sel=\${_tui_key_sel_${_tui_cat_sel}:-0}"
+        cat="${cat_names[$_tui_cat_sel]}"
+        key_max=$(_meta_count_by_category "$cat" 2>/dev/null || printf '0')
+        # key_max が空 or 非数値 → 0 に fallback
+        case "$key_max" in
+          ''|*[!0-9]*) key_max=0 ;;
+        esac
+        # sel が range 外なら 0 に reset
+        if [ "$key_max" -eq 0 ]; then
+          # 該当 key なし → category_menu に戻す (描画は key_menu 側で「該当 key なし」表示)
+          _tui_render_key_menu "$_tui_cat_sel" 0
+          k=$(_tui_read_key)
+          case "$k" in
+            LEFT|QUIT)
+              if [ "$k" = "QUIT" ]; then
+                [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+                trap - EXIT INT TERM
+                printf '%s\n' "$_TUI_RESET"
+                _out "bye."
+                return 0
+              fi
+              state="category_menu"
+              ;;
+            *) state="category_menu" ;;  # 任意キーで category へ戻る (進めない state)
+          esac
+          continue
+        fi
+        if [ "$cur_key_sel" -ge "$key_max" ] || [ "$cur_key_sel" -lt 0 ]; then
+          cur_key_sel=0
+          eval "_tui_key_sel_${_tui_cat_sel}=0"
+        fi
+
+        _tui_render_key_menu "$_tui_cat_sel" "$cur_key_sel"
+        k=$(_tui_read_key)
+        case "$k" in
+          UP)
+            [ "$cur_key_sel" -gt 0 ] && cur_key_sel=$((cur_key_sel - 1))
+            eval "_tui_key_sel_${_tui_cat_sel}=\${cur_key_sel}"
+            ;;
+          DOWN)
+            [ "$cur_key_sel" -lt "$((key_max - 1))" ] && cur_key_sel=$((cur_key_sel + 1))
+            eval "_tui_key_sel_${_tui_cat_sel}=\${cur_key_sel}"
+            ;;
+          LEFT)
+            state="category_menu"
+            ;;
+          ENTER|RIGHT)
+            state="effect_edit"
+            ;;
+          QUIT)
+            [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+            trap - EXIT INT TERM
+            printf '%s\n' "$_TUI_RESET"
+            _out "bye."
+            return 0
+            ;;
+          *) : ;;
+        esac
+        ;;
+      effect_edit)
+        # 選択 key 取得 (key_menu と同じ計算)
+        eval "cur_key_sel=\${_tui_key_sel_${_tui_cat_sel}:-0}"
+        cat="${cat_names[$_tui_cat_sel]}"
+        selected_key=""
+        if command -v hc_metadata_keys_by_category >/dev/null 2>&1; then
+          keys_list=$(hc_metadata_keys_by_category "$cat" 2>/dev/null || true)
+          selected_key=$(printf '%s\n' "$keys_list" | sed -n "$((cur_key_sel + 1))p")
+        fi
+        if [ -z "$selected_key" ]; then
+          # key 取得失敗 → key_menu に戻る (description: lib 不在 or category 空)
+          state="key_menu"
+          continue
+        fi
+
+        # canonical mode に戻して行編集可能な入力を受ける (flat _tui_handle_enter L1443 と同じパターン)
+        [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
+        effect=$(_meta_effect "$selected_key" 2>/dev/null || printf '')
+        printf '%s\n\n%s変更効果:%s %s\n新値を入力 (空で skip): ' \
+          "$_TUI_RESET" "$_TUI_BOLD" "$_TUI_RESET" "$effect"
+        newval=""
+        IFS= read -r newval || newval=""
+        if [ -n "$newval" ]; then
+          printf '変更後の効果: %s\n続行? [y/N]: ' "$effect"
+          confirm=""
+          IFS= read -r confirm || confirm=""
+          case "$confirm" in
+            y|Y|yes|YES)
+              cmd_set "${selected_key}=${newval}" && _out "更新しました: ${selected_key}=${newval}"
+              ;;
+            *)
+              _out "skip しました"
+              ;;
+          esac
+          printf '(Enter で menu に戻る) '
+          IFS= read -r _ || true
+        fi
+        # raw mode に復帰して key_menu に戻る
+        stty -icanon -echo min 1 time 0 2>/dev/null || true
+        state="key_menu"
+        ;;
+    esac
+  done
+}
+
 # === task-60 Step 1: flat fallback wrapper ===
 #
 # `_cmd_interactive_tui` は cmd_interactive (TTY menu dispatcher) から呼ばれる entry point。
-# Step 1 段階では env switch を導入のみで動作は旧 flat と完全同一。
-#   - HC_HC_CONFIG_FLAT_NAVIGATION=true  → 明示的に旧 flat 実装を呼出 (fallback 経路の存続保証)
-#   - 上記以外                            → TODO (Step 4 で 3-state machine に置換)、現状は flat
+#   - HC_HC_CONFIG_FLAT_NAVIGATION=true  → 明示的に旧 flat 実装 (`_cmd_interactive_tui_flat`) 起動
+#   - 上記以外                            → Step 4 で配線した `_cmd_interactive_tui_2tier` (3-state machine)
 #
-# Step 4 で本 wrapper を category_menu → key_menu → effect_edit の 3-state machine ループに置換し、
-# `HC_HC_CONFIG_FLAT_NAVIGATION=true` 時のみ旧 flat を fallback 起動する形に切替える。
+# Step 4 (2026-05-29) で TODO comment 部分を `_cmd_interactive_tui_2tier` 呼出に置換完了。
 _cmd_interactive_tui() {
   # task-60 Step 1: env fallback switch
   if [ "${HC_HC_CONFIG_FLAT_NAVIGATION:-}" = "true" ]; then
     _cmd_interactive_tui_flat
     return $?
   fi
-  # TODO (task-60 Step 4): 3-state machine ループ (category_menu → key_menu → effect_edit) に置換
-  # 現状は task-60 Step 4 実装まで旧 flat 動作を維持
-  _cmd_interactive_tui_flat
+  # task-60 Step 4: 3-state machine ループに配線
+  _cmd_interactive_tui_2tier
   return $?
 }
 
