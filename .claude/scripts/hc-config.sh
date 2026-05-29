@@ -1173,6 +1173,15 @@ _TUI_DIM=$'\033[2m'
 _TUI_BOLD=$'\033[1m'
 _TUI_CLEAR=$'\033[2J\033[H'
 
+# task-60 Step 5 iter 2 H2 fix (DRY 解消): category 一覧の SSoT 定数。
+#   `_tui_render_category_menu` / `_tui_render_key_menu` / `_cmd_interactive_tui_2tier` の
+#   3 関数で同じ array を local 宣言していたのを 1 箇所に集約。bash 3.2 では `declare -ar` 不可
+#   かつ scope 外への array 露出を避けるため、`|` 区切り string で持ち、各関数で
+#   `IFS='|' read -r -a cat_names <<< "$_TUI_CAT_NAMES_STR"` で展開する (bash 3.2 互換)。
+#   順序は draft §3.2 の category 順 (保護パス → ファイル配置 → state_dir → Gate/Confidence →
+#   feature_toggle → reviewer_control)。
+_TUI_CAT_NAMES_STR="保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control"
+
 # 1 文字キー入力を読み取り、矢印キーは UP/DOWN/RIGHT/LEFT に正規化して stdout 出力
 # Enter → ENTER、q → QUIT、それ以外は raw 文字。
 #
@@ -1292,15 +1301,27 @@ _tui_render_effect_panel() {
   local cur_key
   cur_key=$(printf '%s' "$all_keys" | sed -n "$((sel + 1))p")
   [ -z "$cur_key" ] && return 0
+  _tui_render_effect_panel_for_key "$cur_key"
+}
+
+# task-60 Step 5 iter 2 H3 fix (DRY 解消): 1 引数版 effect panel 描画 helper。
+# $1: 表示対象 key (空なら no-op)
+# 標準出力: 区切り行 + key/説明/型/現在値/default/変更効果 6 行 (`_tui_render_effect_panel` と同じ描画規約)。
+# Step 3 で `_tui_render_key_menu` 内に inline 完全再実装 (16 LOC) されていた effect panel を
+# 抽出し、`_tui_render_effect_panel` (all_keys+sel 2 引数) からも本 helper を呼ぶ形に揃えた。
+# bash 3.2 互換: local の単純宣言のみ。
+_tui_render_effect_panel_for_key() {
+  local selected_key="$1"
+  [ -z "$selected_key" ] && return 0
   local cur type raw desc effect def
-  raw=$(_yml_get_raw "$CONFIG_PATH" "$cur_key" || printf '')
-  cur=$(_get_current "$cur_key")
-  def=$(_get_default "$cur_key" 2>/dev/null || printf '')
-  type=$(_infer_type "$cur_key" "$raw")
-  desc=$(_meta_desc "$cur_key")
-  effect=$(_meta_effect "$cur_key")
+  raw=$(_yml_get_raw "$CONFIG_PATH" "$selected_key" || printf '')
+  cur=$(_get_current "$selected_key")
+  def=$(_get_default "$selected_key" 2>/dev/null || printf '')
+  type=$(_infer_type "$selected_key" "$raw")
+  desc=$(_meta_desc "$selected_key")
+  effect=$(_meta_effect "$selected_key")
   printf '\n%s---------------------------------------------------------------%s\n' "$_TUI_DIM" "$_TUI_RESET"
-  printf '%skey%s     : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$cur_key"
+  printf '%skey%s     : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$selected_key"
   printf '%s説明%s    : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$desc"
   printf '%s型%s      : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$type"
   printf '%s現在値%s  : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$cur" | tr '\n' ',')"
@@ -1337,7 +1358,9 @@ _meta_count_by_category() {
 # bash 3.2 互換: index array (local -a) のみ使用、連想配列 / declare -g 不使用。
 _tui_render_category_menu() {
   local sel="${1:-0}"
-  local -a cat_names=("保護パス" "ファイル配置" "state_dir" "Gate/Confidence" "feature_toggle" "reviewer_control")
+  # task-60 Step 5 iter 2 H2 fix: cat_names は SSoT 定数 _TUI_CAT_NAMES_STR から展開 (DRY)。
+  local -a cat_names
+  IFS='|' read -r -a cat_names <<< "$_TUI_CAT_NAMES_STR"
   local i=0 cat count
   printf '%s' "$_TUI_CLEAR"
   printf '%s=== hc-config TUI ===%s  (↑/↓ 選択, Enter 決定, q 終了)\n\n' "$_TUI_BOLD" "$_TUI_RESET"
@@ -1368,7 +1391,9 @@ _tui_render_category_menu() {
 _tui_render_key_menu() {
   local cat_idx="${1:-0}"
   local key_sel="${2:-0}"
-  local -a cat_names=("保護パス" "ファイル配置" "state_dir" "Gate/Confidence" "feature_toggle" "reviewer_control")
+  # task-60 Step 5 iter 2 H2 fix: cat_names は SSoT 定数 _TUI_CAT_NAMES_STR から展開 (DRY)。
+  local -a cat_names
+  IFS='|' read -r -a cat_names <<< "$_TUI_CAT_NAMES_STR"
   local cat="${cat_names[$cat_idx]}"
 
   printf '%s' "$_TUI_CLEAR"
@@ -1397,23 +1422,9 @@ _tui_render_key_menu() {
     i=$((i + 1))
   done <<< "$keys"
 
-  # 下部 effect panel (_tui_render_effect_panel と同じ描画規約で inline 実装)
-  if [ -n "$selected_key" ]; then
-    local cur type raw desc effect def
-    raw=$(_yml_get_raw "$CONFIG_PATH" "$selected_key" || printf '')
-    cur=$(_get_current "$selected_key")
-    def=$(_get_default "$selected_key" 2>/dev/null || printf '')
-    type=$(_infer_type "$selected_key" "$raw")
-    desc=$(_meta_desc "$selected_key")
-    effect=$(_meta_effect "$selected_key")
-    printf '\n%s---------------------------------------------------------------%s\n' "$_TUI_DIM" "$_TUI_RESET"
-    printf '%skey%s     : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$selected_key"
-    printf '%s説明%s    : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$desc"
-    printf '%s型%s      : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$type"
-    printf '%s現在値%s  : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$cur" | tr '\n' ',')"
-    printf '%sdefault%s : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$def" | tr '\n' ',')"
-    printf '%s変更効果%s: %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$effect"
-  fi
+  # task-60 Step 5 iter 2 H3 fix (DRY 解消): inline 完全再実装を
+  #   _tui_render_effect_panel_for_key (1 引数版 helper) 呼出 1 行に置換。
+  _tui_render_effect_panel_for_key "$selected_key"
 }
 
 # key 一覧の選択画面 + effect panel を描画 (H3: category 境界に区切り行を挿入)
@@ -1562,8 +1573,21 @@ _cmd_interactive_tui_2tier() {
   stty -icanon -echo min 1 time 0 2>/dev/null || true
 
   local state="category_menu"
-  local cat_names=("保護パス" "ファイル配置" "state_dir" "Gate/Confidence" "feature_toggle" "reviewer_control")
+  # task-60 Step 5 iter 2 H2 fix: cat_names は SSoT 定数 _TUI_CAT_NAMES_STR から展開 (DRY)。
+  local -a cat_names
+  IFS='|' read -r -a cat_names <<< "$_TUI_CAT_NAMES_STR"
   local k cur_key_sel key_max cat selected_key keys_list effect newval confirm
+
+  # task-60 Step 5 iter 2 H4 fix (eval safety): `eval "_tui_key_sel_${_tui_cat_sel}=..."` の
+  #   `_tui_cat_sel` が未定義 / 空文字 / 非数値に化けた場合、`eval "_tui_key_sel_=..."` で global
+  #   var `_tui_key_sel_` を生成し汚染するリスクがある (raw mode + trap race 限定で実害再現可)。
+  #   関数頭で数値 sanitize して 0-5 範囲外なら 0 に reset する。state 入口でも再 sanitize する。
+  case "$_tui_cat_sel" in
+    ''|*[!0-9]*) _tui_cat_sel=0 ;;
+  esac
+  if [ "$_tui_cat_sel" -lt 0 ] || [ "$_tui_cat_sel" -gt 5 ]; then
+    _tui_cat_sel=0
+  fi
 
   while :; do
     case "$state" in
@@ -1587,6 +1611,13 @@ _cmd_interactive_tui_2tier() {
         esac
         ;;
       key_menu)
+        # task-60 Step 5 iter 2 H4 fix (eval safety): state 入口で _tui_cat_sel を再 sanitize。
+        case "$_tui_cat_sel" in
+          ''|*[!0-9]*) _tui_cat_sel=0 ;;
+        esac
+        if [ "$_tui_cat_sel" -lt 0 ] || [ "$_tui_cat_sel" -gt 5 ]; then
+          _tui_cat_sel=0
+        fi
         # 現 category の key sel と key 数を取得 (eval で変数名合成、bash 3.2 互換)
         eval "cur_key_sel=\${_tui_key_sel_${_tui_cat_sel}:-0}"
         cat="${cat_names[$_tui_cat_sel]}"
@@ -1600,19 +1631,9 @@ _cmd_interactive_tui_2tier() {
           # 該当 key なし → category_menu に戻す (描画は key_menu 側で「該当 key なし」表示)
           _tui_render_key_menu "$_tui_cat_sel" 0
           k=$(_tui_read_key)
-          case "$k" in
-            LEFT|QUIT)
-              if [ "$k" = "QUIT" ]; then
-                [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
-                trap - EXIT INT TERM
-                printf '%s\n' "$_TUI_RESET"
-                _out "bye."
-                return 0
-              fi
-              state="category_menu"
-              ;;
-            *) state="category_menu" ;;  # 任意キーで category へ戻る (進めない state)
-          esac
+          # task-60 Step 5 iter 2 H1 fix: 任意キー (LEFT/QUIT/ENTER/RIGHT/その他) で category_menu へ back。
+          #   key_menu state での QUIT は ESC として扱う方針に統一 (key_menu の他経路と同一挙動)。
+          state="category_menu"
           continue
         fi
         if [ "$cur_key_sel" -ge "$key_max" ] || [ "$cur_key_sel" -lt 0 ]; then
@@ -1638,16 +1659,26 @@ _cmd_interactive_tui_2tier() {
             state="effect_edit"
             ;;
           QUIT)
-            [ -n "$_stty_saved" ] && stty "$_stty_saved" 2>/dev/null
-            trap - EXIT INT TERM
-            printf '%s\n' "$_TUI_RESET"
-            _out "bye."
-            return 0
+            # task-60 Step 5 iter 2 H1 fix (ESC back、3 reviewers cross-confirm):
+            #   _tui_read_key は単独 ESC を QUIT に正規化するため、key_menu state での
+            #   QUIT は ESC として扱い category_menu に back する (draft §3.1 + DoD「key 一覧で
+            #   ESC または LEFT で category 一覧に戻る」を満たす)。category_menu state での
+            #   QUIT のみ全終了は既存挙動を維持 (L1579-1585、top level での quit 仕様)。
+            #   trade-off: 真の「q で全終了」は key_menu state では効かなくなるが、
+            #   category_menu に戻ってからの q で実現可能。ESC back が DoD 直結のため優先。
+            state="category_menu"
             ;;
           *) : ;;
         esac
         ;;
       effect_edit)
+        # task-60 Step 5 iter 2 H4 fix (eval safety): state 入口で _tui_cat_sel を再 sanitize。
+        case "$_tui_cat_sel" in
+          ''|*[!0-9]*) _tui_cat_sel=0 ;;
+        esac
+        if [ "$_tui_cat_sel" -lt 0 ] || [ "$_tui_cat_sel" -gt 5 ]; then
+          _tui_cat_sel=0
+        fi
         # 選択 key 取得 (key_menu と同じ計算)
         eval "cur_key_sel=\${_tui_key_sel_${_tui_cat_sel}:-0}"
         cat="${cat_names[$_tui_cat_sel]}"
