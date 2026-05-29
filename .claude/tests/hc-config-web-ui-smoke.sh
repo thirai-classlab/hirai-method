@@ -1891,6 +1891,80 @@ with open(sys.argv[1], encoding='utf-8') as fh:
 )
 
 # ============================================================
+# Case S-42: app.js getElementById('X') が index.html の id="X" と整合する (DOM id 契約 cross-check)
+# task-63 Step 7: app.js render() が 'main-panel' を参照していたが index.html は 'view-container' しか持たず、
+#   view 全体が描画されない CRITICAL bug が Step 2/Step 3 並列実装の id 契約乖離で混入した。
+#   静的 grep だけでは view 描画を確認できない (S-37/S-38 は関数名存在のみの tautological 検証) 盲点を、
+#   「app.js が参照する DOM id が index.html に実在するか」という静的 cross-check で部分的に埋める。
+# 検証方式: app.js の全 getElementById('X') 呼び出しから id を抽出し、各 id が
+#   index.html に id="X" として実在することを grep で確認。1 件でも欠落したら FAIL。
+#   file-only (port 不要)。
+# ============================================================
+_case_s42() (
+  set -uo pipefail
+  local ui_dir="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui"
+  local app_js="${ui_dir}/app.js"
+  local index_html="${ui_dir}/index.html"
+
+  if [ ! -f "$app_js" ]; then
+    printf 'S-42: app.js not found at %s\n' "$app_js" >&2
+    return 1
+  fi
+  if [ ! -f "$index_html" ]; then
+    printf 'S-42: index.html not found at %s\n' "$index_html" >&2
+    return 1
+  fi
+
+  # app.js の getElementById('X') / getElementById("X") から id 文字列を抽出
+  #   (コメント行に混入する文字列は除外したいが、grep -oE で呼び出し形のみを拾う)
+  local app_ids
+  app_ids=$(grep -oE "getElementById\(['\"][a-zA-Z0-9_-]+['\"]\)" "$app_js" 2>/dev/null \
+    | grep -oE "['\"][a-zA-Z0-9_-]+['\"]" \
+    | tr -d "\"'" \
+    | sort -u || true)
+
+  if [ -z "$app_ids" ]; then
+    printf 'S-42: app.js に getElementById 呼び出しが見つからない (抽出失敗の疑い)\n' >&2
+    return 1
+  fi
+
+  # 各 id が index.html に id="X" として実在するか確認
+  local missing=0
+  local missing_ids=""
+  local id
+  for id in $app_ids; do
+    if ! grep -qE "id=[\"']${id}[\"']" "$index_html" 2>/dev/null; then
+      printf 'S-42: app.js が参照する DOM id "%s" が index.html に id="%s" として実在しない (id 契約乖離)\n' "$id" "$id" >&2
+      missing=$((missing + 1))
+      missing_ids="${missing_ids} ${id}"
+    fi
+  done
+
+  if [ $missing -gt 0 ]; then
+    printf 'S-42: id 契約乖離 %d 件 (%s)\n' "$missing" "$missing_ids" >&2
+    return 1
+  fi
+
+  # 主要 id が確かに app.js / index.html 両方に存在することを明示確認 (回帰の anchor)
+  #   view-container は render() の描画 target、これが乖離すると view が描画されない (本 bug の核心)
+  local key
+  for key in view-container status-text history-tbody confirm-dialog; do
+    if ! grep -qE "id=[\"']${key}[\"']" "$index_html" 2>/dev/null; then
+      printf 'S-42: 主要 id "%s" が index.html に存在しない (anchor 確認失敗)\n' "$key" >&2
+      return 1
+    fi
+  done
+
+  # view-container は app.js render() が getElementById で参照していること (本 bug の直接 regression guard)
+  if ! grep -qE "getElementById\(['\"]view-container['\"]\)" "$app_js" 2>/dev/null; then
+    printf 'S-42: app.js render() が getElementById(view-container) を参照していない (main-panel 回帰の疑い)\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -2044,13 +2118,16 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
     else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
     fi
-    # S-40 は shared server 必須なので SKIP、S-41 は file-only なので実行
+    # S-40 は shared server 必須なので SKIP、S-41/S-42 は file-only なので実行
     _record SKIP "S-40" "POST /api/preset/save 404 (shared server not available)"
     _s41_result=0
     _case_s41 2>/dev/null || _s41_result=$?
     if [ $_s41_result -eq 0 ];   then _record PASS "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
     elif [ $_s41_result -eq 2 ]; then _record SKIP "S-41" "絵文字検出 (perl/python3 not available)"
     else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
+    fi
+    if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+    else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
     fi
   else
     _PORT="$SHARED_PORT"
@@ -2215,13 +2292,18 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
     fi
 
+    # task-63 Step 7: DOM id 契約 cross-check (file-only、port 不要)
+    if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+    else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+    fi
+
     _stop_shared_server
   fi
 else
   for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
-  # S-37 / S-38 / S-41 は file-only (port 不要) なので node 不在でも実行
+  # S-37 / S-38 / S-41 / S-42 は file-only (port 不要) なので node 不在でも実行
   if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
   else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
   fi
@@ -2233,6 +2315,9 @@ else
   if [ $_s41_result -eq 0 ];   then _record PASS "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
   elif [ $_s41_result -eq 2 ]; then _record SKIP "S-41" "絵文字検出 (perl/python3 not available)"
   else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
+  fi
+  if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+  else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
   fi
 fi
 

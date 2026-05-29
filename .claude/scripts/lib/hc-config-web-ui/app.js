@@ -773,7 +773,9 @@
   // render: dispatcher (state → DOM)
   // ============================================================
   function render() {
-    const panel = document.getElementById('main-panel')
+    // 描画 target は index.html の <div id="view-container"> (L34、<main id="main"> 内の動的 content div)。
+    // 旧 'main-panel' は index.html に実在しない id で view 全体が描画されない bug の原因だった (task-63 Step 7 修正)。
+    const panel = document.getElementById('view-container')
     if (!panel) return
     clear(panel)
     if (state.view === 'top') {
