@@ -949,18 +949,28 @@
         toast(`適用失敗: ${r.error || 'unknown'}`, 'error')
       }
       // top 復帰 + currentPreset 再取得
-      const newCurrent = await loadCurrentPreset()
-      const newHistory = await loadHistory()
-      state = reducer(state, { type: 'edit:apply', payload: { currentPreset: newCurrent } })
-      state = reducer(state, { type: 'history:update', payload: { history: newHistory } })
-      delete state._axesOptions
-      setStatus('適用完了')
-      render()
+      await _finalizeApply('適用完了')
     } catch (e) {
       toast(`適用失敗: ${e.message}`, 'error')
       setStatus('エラー')
       dispatch({ type: 'ui:set_flag', payload: { flag: 'applying', value: false } })
     }
+  }
+
+  // 適用成功後の共通後処理:
+  //   currentPreset / history を再取得し、state を top 復帰させ render する。
+  //   applyPresetMode / applyIndividualMode 両関数の成功パス末尾で重複していた
+  //   6 行を 1 箇所に集約 (非冗長化)。
+  //   処理順序: reducer(edit:apply) → reducer(history:update) → delete _axesOptions → render()
+  //   この順序を変えると _axesOptions が中間 render に参照されるため変更禁止。
+  async function _finalizeApply(statusText) {
+    const newCurrent = await loadCurrentPreset()
+    const newHistory = await loadHistory()
+    state = reducer(state, { type: 'edit:apply', payload: { currentPreset: newCurrent } })
+    state = reducer(state, { type: 'history:update', payload: { history: newHistory } })
+    delete state._axesOptions
+    setStatus(statusText)
+    render()
   }
 
   async function applyIndividualMode() {
@@ -1000,13 +1010,7 @@
       } else {
         toast(`部分失敗: ${okCount} 成功 / ${failKeys.length} 失敗 (${failKeys.map((f) => f.key).join(', ')})`, 'warning')
       }
-      const newCurrent = await loadCurrentPreset()
-      const newHistory = await loadHistory()
-      state = reducer(state, { type: 'edit:apply', payload: { currentPreset: newCurrent } })
-      state = reducer(state, { type: 'history:update', payload: { history: newHistory } })
-      delete state._axesOptions
-      setStatus('個別変更完了')
-      render()
+      await _finalizeApply('個別変更完了')
     } catch (e) {
       toast(`個別変更失敗: ${e.message}`, 'error')
       setStatus('エラー')
