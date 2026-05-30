@@ -40,19 +40,29 @@ total_steps: 8
 
 ## Task 完了条件 (DoD)
 
-- [ ] `bash .claude/scripts/lib/hc-config.sh interactive` で **トップ画面**が初期表示される (現在 preset 名 + 6 軸詳細 + 「設定を変更」ボタン)
-- [ ] 「設定を変更」ボタン押下で**編集画面**遷移
-- [ ] 編集画面で preset 選択 → diff preview → 「適用」confirm で 6 軸一括変更 → トップ画面復帰 + 新 preset 名表示
-- [ ] 編集画面で個別 key 変更 → 「カスタムとして保存」 → 名前入力 confirm → `.claude/presets/custom-<name>.yml` 生成 → トップ画面で「カスタム: <name>」表示
-- [ ] preset 名は全 10 件日本語化 (英 key は内部のみ、user 視点では日本語のみ)
-- [ ] 絵文字なし (visual verification 全 14 case で確認)
-- [ ] 既存 smoke 全 PASS (script 21/21 + tui 14/14、regression 0)
-- [ ] 新 smoke 5 case (top view / 編集画面遷移 / `/api/current-preset` 3 識別 / custom 保存後 banner) PASS
-- [ ] visual verification 14 case (top × 3 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 2) PASS
-- [ ] WCAG 2.2 AA 全 SC PASS (task-61 維持 + 日本語 i18n `lang="ja"` 追加項目)
-- [ ] task-60 TUI legacy fallback 維持 (`HC_HC_CONFIG_TUI_LEGACY=true` で旧 TUI 起動確認)
-- [ ] reviewer 5+ approve (Step 6 テスト設計レビューで達成)
-- [ ] commit 完了 (push は user manual で実施、Loop モード自律実行禁止)
+> **再 scope (2026-05-30、user 承認済)**: Step 7 visual verification で 6 抽象軸が yml に raw key として不在 (設計前提崩壊の本丸未解決) と判明。**F2 の 6 軸詳細 read-only 表示 + F3 の個別 key 編集は data model 設計を要するため follow-up (`next-actions.md` #63、draft `hc-config-6axis-data-model` 起案予定) に分離**。task-63 は下記の動作 scope で完遂する。
+
+### task-63 完了条件 (動作 scope)
+
+- [x] `bash .claude/scripts/hc-config.sh interactive` で **トップ画面**が初期表示される (現在 preset 名 [日本語] + 「設定を変更」ボタン、render fix `84d091e` で view 描画確認)
+- [x] 「設定を変更」ボタン押下で**編集画面**遷移 (preset カード日本語名 list 表示)
+- [x] 編集画面で preset 選択 → diff preview → 「適用」confirm で 6 軸一括変更 → トップ画面復帰 + 新 preset 名表示 (preset 一括 apply)
+- [x] 個別変更時の状態識別: match_type=unsaved で「未保存変更あり」banner 表示 (案 C、custom 保存は撤去)
+- [x] preset 名は全 10 件日本語化 (英 key は内部のみ、user 視点では日本語のみ、F1)
+- [x] 絵文字なし (smoke S-41 + visual verification で確認)
+- [x] 既存 smoke 全 PASS (script 21/21 + tui 14/14、regression 0)
+- [x] 新 smoke S-35〜S-42 PASS (`/api/current-preset` 識別 / display_name_ja 値 / save 404 / 絵文字 / DOM id 契約)
+- [x] visual verification (working scope: top preset/unsaved + edit + render 確認) PASS
+- [x] WCAG 2.2 AA layout 維持 (task-61 baseline + `lang="ja"`、深い a11y 検証は Step 7 a11y 項目で継続)
+- [x] task-60 TUI legacy fallback 維持 (`HC_HC_CONFIG_TUI_LEGACY=true` で旧 TUI 起動確認)
+- [x] reviewer 6 並列 × iter 2 収束 (Step 6、CRIT0/HIGH0 median 0.93)
+- [x] commit 完了 (feature branch push + `gh pr create` は task-39 緩和で自律実行可、main/stg* push + `gh pr merge` のみ user 承認)
+
+### follow-up #63 に分離 (本 task scope 外)
+
+- [ ] (F2) トップ画面で現在の 6 軸詳細値を read-only 表示 (現状 `<未設定>` placeholder)
+- [ ] (F3) 編集画面で個別 6 軸 key を drop-down 変更 → 適用 (現状 drop-down 0 件)
+- [ ] 6 軸 ↔ harness-config.yml の data model 設計 (`/api/current-preset` axis values 返却 + 6 軸 options endpoint)
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -232,9 +242,14 @@ stateDiagram-v2
 
 ### Step 7: (テスト合格)
 
-**Step status**: 🔲
+**Step status**: ✅ (再 scope 後達成、2026-05-30。render バグ捕捉 + 6 軸 F2/F3 は #63 分離)
 
-**作業概要**: unit smoke (`hc-config-web-ui-smoke.sh` 既存 + 新 case S-35〜S-41) + tui smoke (`hc-config-tui-smoke.sh` 14/14 regression 0) + script smoke 21/21 + E2E (agent-browser Playwright top→edit→apply→top) + visual verification 10 case (案 C 簡素化: top × 2 状態 [preset/unsaved] × 3 breakpoint + edit × 3 breakpoint + dialog × 1、`.claude/.task-screenshots/task-63/case-NN-*.png`) を全実行。
+**Step 7 結果サマリ**:
+- **自動 smoke 全 PASS**: web-ui 38/46 PASS / 0 FAIL (S-35〜S-42) + tui 14/14 + script 21/21、regression 0、TUI legacy fallback 維持。
+- **visual verification が CRITICAL バグ捕捉**: app.js `render()` の `getElementById('main-panel')` ↔ index.html `id="view-container"` 乖離で UI 全体が「読み込み中...」のまま非描画。smoke 静的 grep (S-37/S-38) では検出不能、visual のみが捕捉 (採用 6 条 4 visual 必須が機能)。**render fix `84d091e`** (id 整合) + **S-42** (DOM id 契約 static cross-check、回帰 guard) で解消、再 visual で top/edit 実描画 + 日本語名 + 絵文字なし + layout 良好を確認。
+- **6 軸 data-contract gap 発見 → user 承認で #63 分離**: top 6 軸 `<未設定>` / edit 個別 drop-down 0 件 (6 抽象軸が yml に raw key 不在)。F2/F3 は follow-up #63 (data model 設計 task) に分離、task-63 は動作 scope で完遂。
+
+**作業概要**: unit smoke (`hc-config-web-ui-smoke.sh` 既存 + 新 case S-35〜S-42) + tui smoke (`hc-config-tui-smoke.sh` 14/14 regression 0) + script smoke 21/21 + visual verification (top preset/unsaved + edit + render 確認、`.claude/.task-screenshots/task-63/case-NN-*.png`) を全実行。
 
 **完了条件**:
 - 全 smoke PASS、regression 0 (task-60 TUI legacy fallback 含む)

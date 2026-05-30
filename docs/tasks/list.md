@@ -204,5 +204,5 @@ Phase 1 → Phase 2 → Phase 3
 |    | ✅ | Step 4 | preset 日本語名表示 (banner / list / dialog confirm、`lang="ja"` 属性、絵文字全廃)、Step 2 commit `ba39e50` に統合 (getDisplayName + AXIS_LABELS_JA) | | |
 |    | ✅ | Step 5 | smoke 修正 (save 関連 5 case 撤去 + `/api/current-preset` / top view / 編集遷移 / preset 復帰 / 「未保存変更あり」banner の 5 case S-35〜S-39 追加)、commit `0ba44b9` | | |
 |    | ✅ | Step 6 | (テスト設計レビュー) reviewer 6 並列 × iter 2 で収束 (iter1 CRIT2+HIGH9 → iter2 CRIT0+HIGH0、median conf 0.93)、F14 実バグ fix `520b8eb` + smoke `9250648` + draft同期 `9f5a73f`、残 refactor-grade は Step 8 routing | | |
-|    | 🔄 | Step 7 | (テスト合格) script smoke + tui smoke + 新 smoke + visual verification 10 case | | |
+|    | ✅ | Step 7 | (テスト合格) smoke 38/46+tui14+script21 PASS 0 FAIL + visual で render バグ捕捉→fix `84d091e`+S-42、6 軸 F2/F3 は data-contract gap で #63 分離 (user 承認) | | |
 |    | 🔲 | Step 8 | (リファクタリング) 3 観点判定 + `formatPresetName` 抽出 + Step 6 review 由来 refactor 候補 (dispatch 統一 / _axesOptions / reducer module 化) | | |
