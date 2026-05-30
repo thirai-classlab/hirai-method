@@ -12,7 +12,7 @@ total_steps: 8
 
 # Task #63: hc-config Web UI UX 再設計
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-05-30、全 Step ✅、6 軸 F2/F3 は #63 分離。動作 scope: render / preset 名日本語 / preset 一括 apply / unsaved banner / 絵文字なし / WCAG / TUI legacy)
 > 起案: 2026-05-29
 > 関連: #61 (hc-config Web UI 機能本体), #60 (TUI legacy fallback)
 > 設計起源: [hc-config-web-ui-ux-redesign.md](../draft/hc-config-web-ui-ux-redesign.md) ✅承認済 (approved_at "2026-05-29" / approved_by "takuma.hirai1@gmail.com")
@@ -267,7 +267,15 @@ stateDiagram-v2
 
 ### Step 8: (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出
 
-**Step status**: 🔲
+**Step status**: ✅ (2026-05-30、commit `1edcf49`)
+
+**実施結果**:
+- **非冗長化 改善**: `formatPresetName` は既存 `getDisplayName(preset)` で達成済 (banner/list/dialog 3 箇所呼出) のため重複追加 skip。代わりに apply 成功パスの 12 行重複 (2 箇所) を `_finalizeApply(statusText)` ヘルパーに抽出。
+- **汎用性 維持**: `_finalizeApply` パラメータ化で両モード再利用可。dispatch 直接統一は `_axesOptions` 削除タイミング変化で中間 render 発生のため見送り (behavior-preserving 優先)。
+- **持続可能性 維持**: `_finalizeApply` に処理順序変更禁止 + `_axesOptions` mutation 危険性のコメント明記。
+- **skip 判定記録**: `_axesOptions` reducer 管理化 (state shape 変更で規模大・YAGNI) / S-39 fallback 堅牢化 (PASS 済・未到達) は skip。
+- **別 task 提案**: reducer + state 型定義の DOM 非依存 module 抽出 → S-37/S-38 を純粋 unit test 化 (規模大、`next-actions.md` 候補)。
+- behavior-preserving: smoke 38/46 PASS 0 FAIL、TUI 14/14 regression 0、node --check OK、S-42 で render 回帰なし確認。
 
 **作業概要**: 3 観点 (持続可能性: PRESETS `display_name_ja` 必須化 lint or runtime check / 汎用性: state machine `view` enum 2 値固定で将来 `settings|help` 拡張可能 / 非冗長化: `formatPresetName(preset)` ヘルパー抽出で banner/list/dialog 3 箇所 DRY 化) を判定し、軽量 refactor 1 件 (`formatPresetName` 抽出) のみ実施する。
 
