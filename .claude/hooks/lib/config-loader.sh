@@ -26,14 +26,22 @@
 #   key: "value"                → HC_KEY="value"   (quote 自動 strip)
 #   key: 'value'                → HC_KEY="value"
 #   key: [a, b, c]              → HC_KEY=$'a\nb\nc' (改行区切りリスト)
+#   key: value  # comment       → HC_KEY="value"   (行末コメント strip、task-64 Step 1)
 #   # comment                   → 行頭 # スキップ
 #   (空行)                      → スキップ
+#
+# 行末コメント strip (task-64 Step 1):
+#   `key: value  # comment` の行末コメントを除去する (hc-config.sh _yml_get_raw と同一ロジック)。
+#   前後 `"..."` (double-quote) で囲んだ値は comment strip を skip し値内 `#` を保護する
+#   (例: `key: "https://x/#frag"` → `https://x/#frag`)。これにより hc-config.sh の
+#   read path (comment strip 済) と config-loader の read path の非対称が解消される。
 #
 # 非サポート (やらない):
 #   - ネスト ("  child: value")
 #   - 複数行値 (`|` `>`)
 #   - YAML アンカー / リファレンス
-#   - 行末コメント (例: `key: value # comment` → "value # comment" になる)
+#   - 非 quote 値の mid-value `#` 保護 (例: `key: a#b` → `a` に truncate。
+#     `#` を含む値は `"a#b"` と double-quote する。hc-config.sh の書込挙動と一致)
 #
 # tilde 展開:
 #   `~` および `~/` で始まる値は $HOME に展開する (例: ~/.claude/homunculus → /Users/.../.claude/homunculus)。
@@ -359,6 +367,49 @@ _hc_normalize() {
   printf '%s' "$v"
 }
 
+# --- 行末コメント strip helper (task-64 Step 1) ---
+# yml 単行 value の行末コメント (`value  # comment`) を除去する。
+# hc-config.sh の _yml_get_raw と同一ロジックで実装し、2 read path の非対称
+# (config-loader = comment 込み export / hc-config = comment strip 済) を解消する。
+#
+# 入力前提:
+#   $1 = 前後空白 trim 済の value 文字列 (caller 側で trim 後に渡す)
+#
+# ロジック (_yml_get_raw L293-308 と同一):
+#   1. 前後 `"..."` (double-quote) 形式なら comment strip を skip:
+#      → quote 解除 + `\\`→`\` (先) + `\"`→`"` (後) unescape のみ実施。
+#        (hc-config.sh が HC_ALLOW_HASH_IN_VALUE=1 で # 含む値を double-quote 保存する
+#         round-trip 整合性のため。値内 `#` を保護する唯一の正規 path。)
+#   2. それ以外 (quote なし) は `${val%%#*}` で **最初の `#` 以降を strip** + trailing 空白再 trim。
+#      (非 quote 値が mid-value `#` を含む状況は hc-config.sh 書込時に reject されるため、
+#       inline array `[a, b, c]  # comment` も含めて本 strip で安全に comment 除去できる。)
+#
+# 注意:
+#   - 外側 quote (single/double) の最終 strip は _hc_normalize / 配列 parser 側が担うため、
+#     本 helper は double-quote escape path のみ自前で unquote する (round-trip 値の確定のため)。
+#   - 単一引用符 `'value'  # comment` も非 double-quote path に入り `#` strip される
+#     (_yml_get_raw と同じ。single-quote 内 `#` 保護は元々非対応で挙動一致)。
+_hc_strip_inline_comment() {
+  _hcsic_v="$1"
+  # 前後 `"..."` (double-quote) 形式判定 (length >= 2)
+  if [ "${#_hcsic_v}" -ge 2 ] \
+    && [ "${_hcsic_v:0:1}" = '"' ] \
+    && [ "${_hcsic_v: -1}" = '"' ]; then
+    # double-quote 解除 + unescape (comment strip skip、値内 `#` 保護)
+    _hcsic_v="${_hcsic_v#\"}"
+    _hcsic_v="${_hcsic_v%\"}"
+    _hcsic_v="${_hcsic_v//\\\\/\\}"
+    _hcsic_v="${_hcsic_v//\\\"/\"}"
+    printf '%s' "$_hcsic_v"
+    return 0
+  fi
+  # 通常 path: 最初の `#` 以降を strip + trailing 空白再 trim
+  _hcsic_v="${_hcsic_v%%#*}"
+  _hcsic_v="${_hcsic_v%"${_hcsic_v##*[![:space:]]}"}"
+  printf '%s' "$_hcsic_v"
+  return 0
+}
+
 # --- Step 3 helper: 1 つの YAML file を parse して HC_* に反映 ---
 # _hc_parse_yaml_file <path>
 #   file の各 key: value 行を HC_<UPPER>= に load する。
@@ -395,6 +446,11 @@ _hc_parse_yaml_file() {
     # 値の前後空白 trim
     _hc_val="${_hc_val#"${_hc_val%%[![:space:]]*}"}"
     _hc_val="${_hc_val%"${_hc_val##*[![:space:]]}"}"
+    # 行末コメント strip (task-64 Step 1、hc-config.sh _yml_get_raw と同一ロジック)。
+    # `key: value  # comment` → `value`。前後 `"..."` 値は comment strip skip + unquote
+    # (値内 `#` 保護)。array `[a, b]  # comment` も非 quote path で安全に comment 除去。
+    # 旧挙動 (comment 込み export、L36 制約) を解消し 2 read path の非対称を是正する。
+    _hc_val=$(_hc_strip_inline_comment "$_hc_val")
     # env > file priority guard (task-55 修正):
     # genuine env preset (Step 1b で snapshot した key) のみ上書き skip。
     # 旧実装は `${HC_<KEY>+set}` の live check だったが、Step 2 defaults が
@@ -585,6 +641,8 @@ export HC_REVIEW_ITERATION_MAX
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper
 unset _hc_val _hc_inner _hc_inner_trim _hc_list _hc_items _hc_item _hc_norm _hc_p
+unset _hcsic_v
+unset -f _hc_strip_inline_comment 2>/dev/null || true
 
 # --- is_feature_enabled <feature_name> 共通関数 (task-44 Phase 1) ---
 # 用途: hook 冒頭で `if ! is_feature_enabled <name>; then exit 0; fi` で feature OFF 即 skip
