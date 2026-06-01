@@ -789,7 +789,9 @@ cmd_list() {
   # category 別にグルーピングして出力 (metadata 不在時は単一グループ扱い)
   # iter2 CRIT 同種 leak 予防: for/while 本体内の `local cat_keys` / `local key` / `local cat_count`
   #   宣言を関数頭に集約し、ループ内は素の代入にして bash 3.2 cmdsubst stdout 漏洩を構造的に防ぐ。
-  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  # task-69 Step 2: harness_meta category を追加 (harness_version / stale_harness_markers /
+  #   feature_stale_harness_detect_enabled、task-56 で yml に追加された install.sh 管理 key 群)。
+  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
   local printed_any=0
   local cat cat_keys key cat_count
   for cat in $categories; do
@@ -807,7 +809,26 @@ cmd_list() {
     printed_any=1
   done
 
-  # metadata 不在 / 未分類 key があれば従来通り全 key を 1 グループで出力
+  # task-69 Step 1: 未分類 section — どの category にも一致しない key (metadata 欠落 /
+  #   category drift) を漏れなく出力して --list の key set を yml と完全一致させる。
+  #   key parity smoke (hc-config-key-parity-smoke.sh) が yml==--list を機械強制する。
+  local uncat_keys uncat_count
+  uncat_keys=""
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    case " $categories " in
+      *" $(_meta_category "$key") "*) : ;;  # いずれかの category に分類済
+      *) uncat_keys="${uncat_keys}${key}"$'\n' ;;
+    esac
+  done <<< "$keys"
+  if [ -n "$uncat_keys" ]; then
+    uncat_count=$(printf '%s' "$uncat_keys" | grep -c '.')
+    printf '\n=== 未分類 (%s keys) ===\n' "$uncat_count"
+    printf '%s' "$uncat_keys" | _cmd_list_rows "$show_default" "$show_effect"
+    printed_any=1
+  fi
+
+  # metadata 不在等で 1 件も出力されなかった場合のみ従来通り全 key を 1 グループで出力
   if [ "$printed_any" -eq 0 ]; then
     printf '%s\n' "$keys" | _cmd_list_rows "$show_default" "$show_effect"
   fi
@@ -1180,8 +1201,8 @@ _TUI_CLEAR=$'\033[2J\033[H'
 #   かつ scope 外への array 露出を避けるため、`|` 区切り string で持ち、各関数で
 #   `IFS='|' read -r -a cat_names <<< "$_TUI_CAT_NAMES_STR"` で展開する (bash 3.2 互換)。
 #   順序は draft §3.2 の category 順 (保護パス → ファイル配置 → state_dir → Gate/Confidence →
-#   feature_toggle → reviewer_control)。
-_TUI_CAT_NAMES_STR="保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control"
+#   feature_toggle → reviewer_control → harness_meta [task-69 追加])。
+_TUI_CAT_NAMES_STR="保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control|harness_meta"
 
 # 1 文字キー入力を読み取り、矢印キーは UP/DOWN/RIGHT/LEFT に正規化して stdout 出力
 # Enter → ENTER、q → QUIT、それ以外は raw 文字。
@@ -1227,12 +1248,12 @@ _tui_read_key() {
 
 # 全 key を category 順に並べ替えて改行区切りで stdout 出力 (H3: category グルーピング)
 # metadata category 順 (保護パス → ファイル配置 → state_dir → Gate/Confidence →
-# feature_toggle → reviewer_control) に並べ、未分類 key は末尾に回す。
+# feature_toggle → reviewer_control → harness_meta) に並べ、未分類 key は末尾に回す。
 # metadata 不在時 / 全 key 未分類時は入力順そのまま (fallback)。
 # $1: 全 key 改行区切り (yml 出現順)
 _tui_order_keys_by_category() {
   local all_keys="$1"
-  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
   local ordered="" key cat seen_cat=0
   # iter2 CRIT C-iter2-1 fix (bash 3.2 local+command-substitution leak 予防):
   #   while ループ本体内で `local kc` (代入なし宣言) → 直後に `kc=$(_meta_category)` する構造は
@@ -1254,7 +1275,7 @@ _tui_order_keys_by_category() {
     [ -z "$key" ] && continue
     kc=$(_meta_category "$key")
     case "$kc" in
-      保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control) ;;
+      保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control|harness_meta) ;;
       *) ordered="${ordered}${key}"$'\n' ;;
     esac
   done <<< "$all_keys"

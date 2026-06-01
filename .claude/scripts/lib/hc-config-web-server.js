@@ -95,6 +95,10 @@ const HISTORY_DIR = process.env.HC_HISTORY_DIR_OVERRIDE || path.join(REPO_ROOT, 
 // task-63 Step 4 A1: PRESETS_DIR は撤去済 (custom preset 保存機能廃止)
 // env override (HC_PRESETS_DIR_OVERRIDE) は smoke regression 互換のため定義のみ維持 (実利用なし)
 
+// task-69 Step 3: harness-config.yml path (key parity の SSoT)。
+//   /api/keys の key 集合は metadata ではなく yml top-level key を基準にする (hc-config.sh _yml_list_keys と同一)。
+const HARNESS_CONFIG_PATH = path.join(REPO_ROOT, '.claude', 'harness-config.yml')
+
 const PORT_MIN = 3060
 const PORT_MAX = 3070
 const HOST = '127.0.0.1'
@@ -407,6 +411,41 @@ let _keysValueCache = null
 
 function invalidateKeysValueCache() {
   _keysValueCache = null
+}
+
+// ============================================================
+// task-69 Step 3: yml top-level key 一覧 (key parity の SSoT)
+// ============================================================
+//
+// /api/keys の key 集合は metadata (表示補助) ではなく harness-config.yml の
+// top-level key を基準にする。hc-config.sh の _yml_list_keys (`^[a-z_][a-zA-Z0-9_]*:`)
+// と同一の regex で抽出し、CLI / Web / TUI の key 集合を一致させる。
+//   - 旧 /api/keys は metadata 75 entry 基準で enrich していたため、metadata 未登録 yml key が欠落していた。
+//   - 本 helper は yml を直接 read するため metadata 登録有無に依存しない (= metadata に無くても拾う)。
+// overrides.ymlPath: テスト用 path 差替 seam (default は HARNESS_CONFIG_PATH)
+//
+// 戻り値: yml top-level key の配列 (出現順保持、重複除去)。read 失敗時は []。
+function listYamlKeys(overrides) {
+  overrides = overrides || {}
+  const ymlPath = overrides.ymlPath || HARNESS_CONFIG_PATH
+  let content
+  try {
+    content = fs.readFileSync(ymlPath, 'utf8')
+  } catch (e) {
+    return []
+  }
+  const keys = []
+  const seen = Object.create(null)
+  for (const line of content.split('\n')) {
+    // hc-config.sh _yml_list_keys と同一: 行頭 [a-z_] 始まり + 識別子 + ':'
+    const m = line.match(/^([a-z_][a-zA-Z0-9_]*):/)
+    if (!m) continue
+    const key = m[1]
+    if (seen[key]) continue
+    seen[key] = true
+    keys.push(key)
+  }
+  return keys
 }
 
 function hcListAll(overrides) {
@@ -1077,18 +1116,40 @@ async function handleRequest(req, res) {
     return
   }
 
-  // GET /api/keys (NEW-C-1 fix: hcListAll で 1 spawn に集約、74 spawn 370s block 解消)
+  // GET /api/keys
+  //   task-69 Step 3 (key parity fix): key 集合の SSoT を metadata から yml top-level key に変更。
+  //     旧実装は loadMetadata() (75 entry) を基準に enrich していたため、metadata 未登録の yml key
+  //     (feature_reviewer_count_guard_enabled / feature_stale_harness_detect_enabled /
+  //      harness_version / stale_harness_markers) が response から欠落していた。
+  //     新実装は listYamlKeys() (yml 79 key) を基準に Object.entries 相当の loop を回し、
+  //     metadataMap で left join (metadata 不在 key は category/description/effect を空文字で返す)。
+  //   NEW-C-1 (維持): hcListAll() で全 key 値を 1 spawnSync で取得 (74 → 1)、cache hit で spawn 0 件。
   if (req.method === 'GET' && pathname === '/api/keys') {
     const metadata = loadMetadata()
-    const categoryFilter = reqUrl.searchParams.get('category')
-    const filtered = categoryFilter ? metadata.filter((m) => m.category === categoryFilter) : metadata
-    // NEW-C-1: hcListAll() で全 key 値を 1 spawnSync で取得 (74 → 1)
-    //   旧経路 (個別 hcGet ループ) を削除し、cache hit すれば spawn 0 件で即返却
+    // metadata を key → entry の map に変換 (left join 用、表示補助情報)
+    const metadataMap = Object.create(null)
+    for (const m of metadata) {
+      if (m.key) metadataMap[m.key] = m
+    }
     const allValues = hcListAll()
-    const enriched = filtered.map((m) => {
-      const value = Object.prototype.hasOwnProperty.call(allValues, m.key) ? allValues[m.key] : null
-      return { ...m, current_value: value }
-    })
+    const categoryFilter = reqUrl.searchParams.get('category')
+    // key 集合の SSoT = yml top-level key (metadata 登録有無に依存しない)
+    const ymlKeys = listYamlKeys()
+    const enriched = []
+    for (const key of ymlKeys) {
+      const meta = metadataMap[key]
+      const category = meta ? meta.category || '' : ''
+      // category filter は yml 基準 key の (metadata 由来) category に対して適用
+      if (categoryFilter && category !== categoryFilter) continue
+      const value = Object.prototype.hasOwnProperty.call(allValues, key) ? allValues[key] : null
+      enriched.push({
+        key,
+        category,
+        description: meta ? meta.description || '' : '',
+        effect: meta ? meta.effect || '' : '',
+        current_value: value,
+      })
+    }
     sendJson(res, 200, { keys: enriched, total: enriched.length })
     return
   }

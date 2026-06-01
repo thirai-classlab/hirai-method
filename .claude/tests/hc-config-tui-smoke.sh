@@ -91,28 +91,19 @@ fi
 #   (^[a-z_][a-zA-Z0-9_]*: 行頭アンカー、インデント非許容)。
 # format: KEY1 KEY2 KEY3 ... (改行区切り)
 #
-# task-60 Step 5 iter 2 H5 fix (Case 1/2 exclude list): task-56 で yml に追加された
+# task-69: HC_TUI_SMOKE_EXCLUDE_KEYS 撤廃。task-60 Step 5 iter 2 H5 で暫定 exclude していた
 #   `harness_version` / `stale_harness_markers` / `feature_stale_harness_detect_enabled` の 3 key は
-#   `lib/hc-config-metadata.sh` 未登録 (yml 77 vs metadata 74 差異、Case 1/2 baseline FAIL の根因)。
-#   本 PR scope では暫定 exclude し、別 task `hc-config-metadata-harness-meta-registration`
-#   (next-actions entry 候補) で metadata 正規登録するまで Case 1/2 を緑にする。
-#   exclude 一覧は `HC_TUI_SMOKE_EXCLUDE_KEYS` (`|` 区切り、env 上書き可) で管理。
-HC_TUI_SMOKE_EXCLUDE_KEYS="${HC_TUI_SMOKE_EXCLUDE_KEYS:-harness_version|stale_harness_markers|feature_stale_harness_detect_enabled}"
-
+#   task-69 Step 2 で `lib/hc-config-metadata.sh` に正規登録 (新 category harness_meta) され、
+#   `feature_reviewer_count_guard_enabled` も feature_toggle に追加された。yml 79 == metadata 79 が
+#   素で一致するため exclude 機構は不要になった (Case 1/2 は全 yml key を直接評価する)。
 _get_all_config_keys() {
   grep -E '^[a-z_][a-zA-Z0-9_]*:' "${HC_CONFIG_YML}" \
     | sed -E 's/:.*$//'
 }
 
-# task-60 Step 5 iter 2 H5 fix: exclude 適用版 (Case 1/2 専用)。
-# `HC_TUI_SMOKE_EXCLUDE_KEYS` (`|` 区切り) に該当する key を除外して改行区切りで返す。
-# Case 3 以降 (`_get_all_config_keys` を直接呼ぶ) は exclude を適用しないため挙動変更なし。
+# task-69: exclude 撤廃に伴い filtered 版は素の _get_all_config_keys と同義 (後方互換 alias)。
 _get_all_config_keys_filtered() {
-  if [ -z "${HC_TUI_SMOKE_EXCLUDE_KEYS:-}" ]; then
-    _get_all_config_keys
-    return 0
-  fi
-  _get_all_config_keys | grep -Ev "^(${HC_TUI_SMOKE_EXCLUDE_KEYS})\$"
+  _get_all_config_keys
 }
 
 # hc-config.sh の TUI 関数を非 TTY で呼ぶための sourceable 変種を生成 (H11 render seam 用)。
@@ -126,10 +117,10 @@ _make_sourceable_hcconfig() {
 }
 
 # ============================================================
-# Case 1: metadata 完全性 — 全 74 key に description + effect、双方向一致、最低品質
+# Case 1: metadata 完全性 — 全 79 key に description + effect、双方向一致、最低品質
 # ============================================================
 # H12 + H13: description 最低文字数 / effect != description 先頭 substring /
-#            category 6 分類 / yml key 数 == metadata key 総数。
+#            category 7 分類 (task-69) / yml key 数 == metadata key 総数。
 _case_1() (
   set -uo pipefail
 
@@ -146,8 +137,8 @@ _case_1() (
   local yml_count meta_count missing=0
   yml_count=$(printf '%s\n' "$all_keys" | grep -c .)
 
-  # 有効 category 集合
-  local valid_cats="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  # 有効 category 集合 (task-69 で harness_meta 追加 → 7 分類)
+  local valid_cats="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
 
   while IFS= read -r key; do
     [ -z "$key" ] && continue
@@ -207,7 +198,7 @@ _case_1() (
 )
 
 # ============================================================
-# Case 2: category グルーピング — 6 category 全 key 分類、未分類 key 0
+# Case 2: category グルーピング — 7 category 全 key 分類 (task-69)、未分類 key 0
 # ============================================================
 _case_2() (
   set -uo pipefail
@@ -219,7 +210,7 @@ _case_2() (
   # shellcheck disable=SC1090
   source "${HC_CONFIG_METADATA_LIB}"
 
-  local expected_categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  local expected_categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
   local missing_categories=0
 
   for cat in $expected_categories; do
@@ -556,7 +547,7 @@ _case_11() (
   #   hc_metadata_* 関数を可視化しておく必要がある (順序逆だと category 解決が全て空になる)。
 
   # iter2 CRIT C-iter2-1 regression ガード (stdout 純度):
-  #   _tui_order_keys_by_category の戻りが正確に 74 行 (= yml key 数) かつ
+  #   _tui_order_keys_by_category の戻りが正確に yml key 数 (現状 79) 行 (= yml key 数) かつ
   #   `^[a-z_]+=` ゴミ行 0 を assert。bash 3.2 local+cmdsubst 漏洩で `kc=...` 等が
   #   混入すると total が膨らむ (例: ゴミ 73 行混入で total=147)。
   local order_out yml_key_count order_total order_garbage
@@ -736,12 +727,12 @@ _case_14() (
 
 printf '\n=== hc-config-tui-smoke (task-48: 14 cases, iter1 review fixes) ===\n\n'
 
-if _case_1 2>/dev/null; then _record PASS 1 "metadata 完全性 — 74 key description+effect, 双方向一致, category 6 分類, effect!=desc断片"
-else                         _record FAIL 1 "metadata 完全性 — 74 key description+effect, 双方向一致, category 6 分類, effect!=desc断片"
+if _case_1 2>/dev/null; then _record PASS 1 "metadata 完全性 — 79 key description+effect, 双方向一致, category 7 分類, effect!=desc断片"
+else                         _record FAIL 1 "metadata 完全性 — 79 key description+effect, 双方向一致, category 7 分類, effect!=desc断片"
 fi
 
-if _case_2 2>/dev/null; then _record PASS 2 "category グルーピング — 6 category 全 key 分類、未分類 key 0"
-else                         _record FAIL 2 "category グルーピング — 6 category 全 key 分類、未分類 key 0"
+if _case_2 2>/dev/null; then _record PASS 2 "category グルーピング — 7 category 全 key 分類、未分類 key 0"
+else                         _record FAIL 2 "category グルーピング — 7 category 全 key 分類、未分類 key 0"
 fi
 
 if _case_3 2>/dev/null; then _record PASS 3 "--list 説明列 — 説明 header + 代表 key description 内容"
@@ -776,8 +767,8 @@ if _case_10 2>/dev/null; then _record PASS 10 "番号 menu 編集 path で新値
 else                          _record FAIL 10 "番号 menu 編集 path で新値が persist (H11 代替)"
 fi
 
-if _case_11 2>/dev/null; then _record PASS 11 "TUI render seam — 選択行/区切り行/effect panel + stdout 純度 (order total==74/ゴミ0, render kc=/cat_count= 0) (H11 + iter2 CRIT)"
-else                          _record FAIL 11 "TUI render seam — 選択行/区切り行/effect panel + stdout 純度 (order total==74/ゴミ0, render kc=/cat_count= 0) (H11 + iter2 CRIT)"
+if _case_11 2>/dev/null; then _record PASS 11 "TUI render seam — 選択行/区切り行/effect panel + stdout 純度 (order total==79/ゴミ0, render kc=/cat_count= 0) (H11 + iter2 CRIT)"
+else                          _record FAIL 11 "TUI render seam — 選択行/区切り行/effect panel + stdout 純度 (order total==79/ゴミ0, render kc=/cat_count= 0) (H11 + iter2 CRIT)"
 fi
 
 if _case_12 2>/dev/null; then _record PASS 12 "--show-default で DEFAULT 列 + --verbose --show-default 無害 (MED)"
