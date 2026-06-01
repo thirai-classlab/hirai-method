@@ -348,6 +348,7 @@ feature_confidence_gate_enabled: true             # confidence-gate (F3)
 feature_gateguard_enabled: false
 feature_context_budget_enabled: true              # context-budget
 feature_parallel_subagent_reminder_enabled: true  # parallel-subagent-reminder
+feature_reviewer_count_guard_enabled: true     # reviewer-count-guard (task-64 Step 5)
 feature_autonomous_action_guard_enabled: true     # autonomous-action-guard
 feature_byproduct_discharge_enabled: true         # byproduct-discharge-guard + next-actions-surface
 feature_why_x5_enforcement_enabled: true          # why-x5-reminder + why-x5-violation-detect
