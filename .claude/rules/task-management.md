@@ -146,7 +146,7 @@ UI 変更だが view 影響なし時、Step 完了条件に明示:
 
 **設計なしのタスク追加は禁止**。下記 4 ステップ厳守:
 
-> **Loop モードでも本フローは免除されない** (task-21 W2.2)。`modes.md` 遵守事項 2 例外条項参照。`draft-flow-guard.sh` が機械強制で BLOCK。
+> **Loop モードでも本フローは免除されない** (task-21 W2.2)。`modes.md` 遵守事項 2 例外条項参照。`draft-flow-guard.sh` が **team-default / strict preset では機械強制 BLOCK / harness-dev preset では advisory** (`feature_draft_flow_guard_enabled`、現 effective 状態は `bash .claude/scripts/hc-config.sh --summary` 参照)。
 
 1. **テンプレ初期化** (SessionStart hook で自動、明示は `/init-tasks`)
 2. **設計起こし**: `/new-draft <slug>` で `docs/draft/<slug>.md` 生成 → §1〜9 を埋める
@@ -190,6 +190,8 @@ UI 変更だが view 影響なし時、Step 完了条件に明示:
 - **fail-open**: SessionStart hook 失敗もセッション継続
 
 ### Hook による強制 (PreToolUse、`task-rule-guard.sh`)
+
+> **preset aware (task-70 Phase 2)**: 下表の **BLOCK** は `feature_task_rule_guard_enabled` に依存する。team-default / strict preset では BLOCK、harness-dev preset (本 repo 採用) では advisory (緩和理由: ハーネス自身の task.md / list.md 編集を妨げないため、`enforcement_matrix.task_rule_guard.disabled_reason`)。現 effective 状態は `bash .claude/scripts/hc-config.sh --summary` 参照。
 
 | シナリオ | 動作 |
 |---|---|

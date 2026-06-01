@@ -36,7 +36,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 - `<追加のみ・破壊的変更なしの DB migration 等、プロジェクト固有の自律実行範囲>`
 
 ### chat で必ず確認（クリティカル / 戦略判断 / task-21 W2.5 拡張）
-- **設計文書 (要件 / 基本設計 / 詳細設計 / 機能一覧) の新規追加** — 必ず `docs/draft/<slug>.md` 経由で起こす。`docs/` 直下への直接 Write は `draft-flow-guard.sh` (commit `6ed9337`) で BLOCK
+- **設計文書 (要件 / 基本設計 / 詳細設計 / 機能一覧) の新規追加** — 必ず `docs/draft/<slug>.md` 経由で起こす。`docs/` 直下への直接 Write は `draft-flow-guard.sh` (commit `6ed9337`) が、**team-default / strict preset では BLOCK / harness-dev preset では advisory** (理由: ハーネス自身の設計 draft / docs 編集を妨げないため)。現 effective 状態は `bash .claude/scripts/hc-config.sh --summary` 参照
 - **仕様変更 / scope 拡張** — 承認済 draft の §3 採用案からの逸脱
 - **戦略的判断** — architecture 選択 / 採用技術スタック変更 / 既存 task の優先順入替
 - 承認外の設計変更、破壊的 DB 変更（DROP / 既存 RLS 削除）、データ削除
@@ -94,6 +94,7 @@ user から **タスクと方針の承認**を得た後は、実装・commit・p
 - **保護パス / 配置 / 拡張子は `harness-config.yml` で集中管理**: `protected_paths` / `protected_paths_code` / `task_dir` / `draft_dir` / `bash_whitelist_path` / `code_file_extensions` 等を hook に直接ハードコードしない (`.claude/hooks/lib/config-loader.sh` 経由で `HC_*` env として export)
 - **hook の fail policy 統一**: 全 hook は `set -uo pipefail` (errexit 外し) を default、`set -euo pipefail` は subshell 関数化 (`do_work() ( set -euo pipefail; ... )`) でのみ使用。caller の shell flags への leak と SIGPIPE → exit 141 サイレント死を防ぐ (CLAUDE.md Critical Lessons HIGH)
 - **規範違反は機械強制 hook で防止**: 「ルールに書いて守らせる」ではなく「hook で BLOCK して守らせる」を default。違反検出 → next-actions entry → draft 起こし → 機械強制 hook 実装の閉ループ (task-21 / task-26 が典型例)
+- **enforcement は preset で明示制御 (docs/config 矛盾の禁止、task-70 Phase 2)**: docs / rules が guard を「BLOCK」と説明する一方で feature toggle が false (= モデルには必須と読ませるが実際の境界では止めない) という中間状態を禁止する。`harness-config.yml` の `default_preset` (advisory / team-default / strict / **harness-dev** = 本 repo 採用) と `enforcement_matrix` で各 guard の docs_claim + preset 期待 + `disabled_reason` を宣言し、`hc-config.sh --summary` で現 preset / 有効・無効 guard / docs mismatch を一覧、`.claude/tests/enforcement-mismatch-smoke.sh` で「docs=block かつ実値=false かつ disabled_reason 不在」を機械検出する。**guard を緩和する場合は必ず `disabled_reason` を書く** (理由なき mismatch は smoke fail)。本 repo (harness-dev) では draft-flow / task-rule / workflow / gateguard / review-required を意図的に緩和し全件 disabled_reason 付き。consuming repo は team-default (重要 guard ON) が正しい姿
 - **機能 on/off は yml feature toggle で集中管理**: hook / command の機能群は `harness-config.yml` の **feature toggle** (`feature_<name>_enabled: true|false`) で集中制御する。各 hook 冒頭で `is_feature_enabled <name>` check を入れて false なら即 no-op で抜ける paired 実装を default 規範とする。新 hook / command 追加時は (1) yml に 1 key 追加 (`feature_xxx_enabled: true` + comment で対象 hook 名明示) (2) hook 冒頭で feature check (3) env 上書きは `HC_FEATURE_XXX_ENABLED` で可能、の 3 点 set を必須とする。これにより「特定機能を試験的に OFF」「regression debug 中の局所無効化」「project 単位の feature 取捨選択」が hook source を触らずに完結する。`hc-config.sh --feature <name>=false` で安全に切替可能 (atomic backup + type validation + 復元は `--reset feature_<name>_enabled`)。詳細: `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」
 
 ## Critical Operational Lessons（`<重要操作>`前に必読）

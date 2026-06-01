@@ -52,7 +52,9 @@ paths:
 
 ## workflow-guard.sh による強制機構
 
-`.claude/hooks/workflow-guard.sh` は **PreToolUse(Bash)** で `/finish-task <slug>` 実行直前に発火し、構造化 JSON 解析で 2 判定 (A: `current_stage` が stage 列の最終要素か / B: `pending_findings.module_review` と `system_review` が両方空配列か) を行い、いずれか fail で **exit 2 (BLOCK)** + stderr に「問題 / 推奨アクション / bypass 手順」出力。stage 名で判定 (step 番号 / 順序判定ではない)。state JSON 構造定義は [`SCHEMA.md`](../.workflow-state/SCHEMA.md) が SSoT。
+> **preset aware (task-70 Phase 2)**: 本 § 以下の draft-flow / workflow / task-rule / gateguard / review-required の「BLOCK」記述は **enforcement preset** に依存する。team-default / strict では BLOCK、harness-dev (本 repo 採用) では advisory (緩和理由は `harness-config.yml` の `enforcement_matrix.<guard>.disabled_reason`)。現 effective 状態と docs/config mismatch は `bash .claude/scripts/hc-config.sh --summary`、整合は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
+`.claude/hooks/workflow-guard.sh` は **PreToolUse(Bash)** で `/finish-task <slug>` 実行直前に発火し、構造化 JSON 解析で 2 判定 (A: `current_stage` が stage 列の最終要素か / B: `pending_findings.module_review` と `system_review` が両方空配列か) を行い、いずれか fail で **team-default / strict preset では exit 2 (BLOCK) / harness-dev preset では advisory** (`feature_workflow_enforcement_enabled`、現状は `--summary` 参照) + stderr に「問題 / 推奨アクション / bypass 手順」出力。stage 名で判定 (step 番号 / 順序判定ではない)。state JSON 構造定義は [`SCHEMA.md`](../.workflow-state/SCHEMA.md) が SSoT。
 
 > **判定ロジック詳細手順 (1〜6) / state JSON schema field 表 (型・説明) / bypass.log 集計補足**: [workflow/workflow-guard.md](../rules-details/workflow/workflow-guard.md)
 
@@ -68,7 +70,7 @@ paths:
 
 ## draft-flow-guard.sh による docs/ 直下 block (2026-05-28 緩和後)
 
-`.claude/hooks/draft-flow-guard.sh` は **PreToolUse(Edit/Write)** で `docs/` 直下 (深さ 1) の新規設計文書 Write を、対応 `docs/draft/<basename>.md` 不在で **BLOCK**。`.claude/rules/` 等への新規 Write / Edit は 2026-05-28 緩和で監視対象外 (旧 task-40 拡張撤廃、`ECC_RULE_CHANGE_GUARD_OFF` 等は dead path)。bypass: `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` (env、bypass.log 記録) / `HC_DOCS_APPROVED_DIR=<dir>[,...]` (config)。honor system: bypass 根拠は `docs/tasks/<task-N>.md` 該当 entry に記録。
+`.claude/hooks/draft-flow-guard.sh` は **PreToolUse(Edit/Write)** で `docs/` 直下 (深さ 1) の新規設計文書 Write を、対応 `docs/draft/<basename>.md` 不在で **team-default / strict preset では BLOCK / harness-dev preset では advisory** (`feature_draft_flow_guard_enabled`、現状は `--summary` 参照)。`.claude/rules/` 等への新規 Write / Edit は 2026-05-28 緩和で監視対象外 (旧 task-40 拡張撤廃、`ECC_RULE_CHANGE_GUARD_OFF` 等は dead path)。bypass: `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` (env、bypass.log 記録) / `HC_DOCS_APPROVED_DIR=<dir>[,...]` (config)。honor system: bypass 根拠は `docs/tasks/<task-N>.md` 該当 entry に記録。
 
 > **2026-05-28 緩和の経緯 (task-40 拡張撤廃) / 監視対象 path 表 / 緩和後 hook 役割 / 規範変更 honor system 降格 / 起源**: [workflow/draft-flow-guard.md](../rules-details/workflow/draft-flow-guard.md)
 

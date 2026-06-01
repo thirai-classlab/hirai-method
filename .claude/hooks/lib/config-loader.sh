@@ -328,6 +328,15 @@ HC_FEATURE_TOOL_CALL_SLIP_DETECT_ENABLED="true"
 # config-loader.sh の対称性 + env override snapshot を確保。default false = Web UI 起動)
 HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED="false"
 
+# --- Enforcement Preset (task-70 Phase 2) ---
+# default_preset: 本 repo で適用する preset (advisory/team-default/strict/harness-dev)。
+#   --summary / enforcement-mismatch-smoke が guard の期待 enabled 状態を引く基準。
+#   実 enforcement の on/off は feature_*_enabled が SSoT (本 key は照合用の期待値選択のみ)。
+# enforcement_matrix は nested block のため flat parser では HC_ENFORCEMENT_MATRIX="" になる
+#   (top-level key としてのみ認識)。matrix 内容は yml 直 parse で読む (--summary / smoke)。
+HC_DEFAULT_PRESET="harness-dev"
+HC_ENFORCEMENT_MATRIX=""
+
 # --- Reviewer 制御 (task-44 Phase 1、2026-05-27 追加) ---
 # review_required_* (bool default true、security のみ false): false で当該 review command を skip
 # review_min_count_* (int): reviewer 並列起動最低数 (採用 6 条 4 同期)

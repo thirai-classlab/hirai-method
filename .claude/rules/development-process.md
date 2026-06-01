@@ -101,6 +101,8 @@ context7 fail で loop 停止しない / 「training data で確信あり」で 
 
 操作: `bash .claude/scripts/hc-config.sh --get <key>` / `--set <key>=<value>` (atomic backup + type validation)。詳細は [`workflow.md`](./workflow.md) + [`task-management.md`](./task-management.md) 採用 6 条 4 + `docs/SELF_IMPROVEMENT.md` 参照。
 
+> **preset aware (task-70 Phase 2)**: `review_required_*` が「BLOCK して該当レビューを必須化する」と読める場合、その強制レベルは **enforcement preset** に依存する。team-default / strict preset では required (BLOCK)、harness-dev preset (本 repo 採用) では advisory (緩和理由は `harness-config.yml` の `enforcement_matrix.review_required_<x>.disabled_reason`、ハーネス自体のレビューは手動 fan-out 運用)。同様に **gateguard (F1)** の初回 Edit/Write/破壊的 Bash BLOCK (`self-improvement.md` §F1) も `feature_gateguard_enabled` 依存で harness-dev では advisory。現 effective 状態と docs/config mismatch は `bash .claude/scripts/hc-config.sh --summary`、整合は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## サブエージェント委譲の必須要件 7 件
 
 | # | 要件 | 概要 |
