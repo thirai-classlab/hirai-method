@@ -34,9 +34,18 @@ description: 設計 draft からテスト設計を起こし、MECE 20 カテゴ�
 | 環境変数 | yml key | default | 用途 |
 |---|---|---:|---|
 | `HC_REVIEW_REQUIRED_TEST` | `review_required_test` | `true` | `false` なら本 command を **no-op skip** (理由付きでユーザに報告 + 終了、採用 6 条 4「テスト設計レビュー」step skip 可) |
-| `HC_REVIEW_MIN_COUNT_TEST` | `review_min_count_test` | `5` | reviewer 最低数 (採用 6 条 4 で 5+ 動的選定の default) |
-| `HC_REVIEW_MAX_COUNT_TEST` | `review_max_count_test` | `10` | reviewer 上限 |
-| `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | テスト設計レビュー反復上限 (採用 6 条 4 で 5 回上限、超過時 user escalation、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`) |
+| `HC_REVIEW_MIN_COUNT_TEST` | `review_min_count_test` | `5` | reviewer 範囲下限 (青天井「5+」は task-64 で廃止) |
+| `HC_REVIEW_MAX_COUNT_TEST` | `review_max_count_test` | `10` | reviewer 範囲上限 |
+| `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | テスト設計レビュー反復上限 (超過時 user escalation、bypass `ECC_TEST_DESIGN_REVIEW_OFF=1`) |
+
+**起動前に必ず以下を実行して reviewer 数を確定する (task-64、散文参照でなく実行手順)**:
+
+```bash
+bash .claude/scripts/hc-config.sh --get review_required_test    # false なら本 command を no-op skip
+bash .claude/scripts/hc-config.sh --get review_min_count_test   # 範囲下限
+bash .claude/scripts/hc-config.sh --get review_max_count_test   # 範囲上限
+# → min ≤ 並列起動 reviewer 数 N ≤ max を保証して起動 (青天井禁止)。値解決順 env > harness-config.local.yml > harness-config.yml > default
+```
 
 `HC_REVIEW_REQUIRED_TEST=false` で skip した場合は、bypass.log に記録し、ユーザに「review_required_test=false のため /test-design を skip した、Phase 1 以降を実行しない」と明示。
 

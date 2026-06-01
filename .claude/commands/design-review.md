@@ -37,9 +37,18 @@ description: 設計 draft に対し reviewer-registry の design + security カ�
 | 環境変数 | yml key | default | 用途 |
 |---|---|---:|---|
 | `HC_REVIEW_REQUIRED_DESIGN` | `review_required_design` | `true` | `false` なら本 command を **no-op skip** (理由付きでユーザに報告 + 終了) |
-| `HC_REVIEW_MIN_COUNT_DESIGN` | `review_min_count_design` | `3` | reviewer 最低数 (`--min-reviewers` 未指定時の default、N ≥ 3 必須) |
-| `HC_REVIEW_MAX_COUNT_DESIGN` | `review_max_count_design` | `7` | reviewer 上限 (`--max-reviewers` 未指定時の default) |
+| `HC_REVIEW_MIN_COUNT_DESIGN` | `review_min_count_design` | `3` | reviewer 範囲下限 (`--min-reviewers` 未指定時の default) |
+| `HC_REVIEW_MAX_COUNT_DESIGN` | `review_max_count_design` | `7` | reviewer 範囲上限 (`--max-reviewers` 未指定時の default) |
 | `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | Phase 4 反復ループ上限 (収束まで再 review、超過時 user escalation) |
+
+**起動前に必ず以下を実行して reviewer 数を確定する (task-64、散文参照でなく実行手順)**:
+
+```bash
+bash .claude/scripts/hc-config.sh --get review_required_design   # false なら本 command を no-op skip
+bash .claude/scripts/hc-config.sh --get review_min_count_design  # 範囲下限
+bash .claude/scripts/hc-config.sh --get review_max_count_design  # 範囲上限
+# → min ≤ 並列起動 reviewer 数 N ≤ max を保証して起動 (青天井禁止)。security category は review_required_security / review_min_count_security も別途確認。値解決順 env > harness-config.local.yml > harness-config.yml > default
+```
 
 `HC_REVIEW_REQUIRED_DESIGN=false` で skip した場合は、bypass.log に記録し、ユーザに「review_required_design=false のため /design-review を skip した、Phase 1 以降を実行しない」と明示。
 
