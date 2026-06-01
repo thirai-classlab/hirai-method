@@ -2,7 +2,7 @@
 # .claude/tests/config-feature-toggles-smoke.sh — task-44 Step 3
 #
 # 目的:
-#   config-loader.sh の is_feature_enabled 関数 + 行末コメント strip (task-64 Step 1) を 9 ケースで検証する。
+#   config-loader.sh の is_feature_enabled 関数 + 行末コメント strip (task-64 Step 1) を 10 ケースで検証する。
 #
 #   - Case 1: feature toggle ON (yml default true + env unset) で exit 0
 #   - Case 2: feature toggle OFF (HC_FEATURE_*_ENABLED=false) で exit 1
@@ -13,6 +13,7 @@
 #   - Case 7: 行末コメント strip → clean export (`key: 10  # comment` → HC=10、task-64)
 #   - Case 8: double-quote 値内 `#` 保護 (`key: "url#frag"` → url#frag 保持、task-64)
 #   - Case 9: inline array + 行末コメント strip 不変 (`[a, b]  # c` → a,b、task-64)
+#   - Case 10: stale_harness_detect default true export + env false で disable (task-71 M2)
 #
 # 設計:
 #   - 一時 yml file を /tmp/ に Write してテスト用 yml として使用
@@ -285,6 +286,44 @@ _case_9() (
 )
 
 # ============================================================
+# Case 10 (task-71 M2): stale_harness_detect default + env override
+# config-loader.sh に feature_stale_harness_detect_enabled の default(true)+export を
+# 追加した回帰防止。(a) yml/env 未設定でも HC_FEATURE_STALE_HARNESS_DETECT_ENABLED が
+# default "true" で export され is_feature_enabled stale_harness_detect が exit 0、
+# (b) env HC_FEATURE_STALE_HARNESS_DETECT_ENABLED=false で exit 1 (toggle が効く)。
+# default 不在だと (a) の export が空になり、--summary / bypass 案内が機能しない。
+# ============================================================
+_case_10() (
+  set -uo pipefail
+  _cleanup_feature_envs
+  unset HC_FEATURE_STALE_HARNESS_DETECT_ENABLED 2>/dev/null || true
+  # yml に該当 key 不在 (default に依存させる)
+  _write_tmp_yml "task_dir: docs/tasks"
+  export HC_CONFIG_PATH="$TMP_YML"
+  # shellcheck source=/dev/null
+  . "$CONFIG_LOADER"
+  if ! declare -f is_feature_enabled >/dev/null 2>&1; then
+    printf 'SKIP: is_feature_enabled not found\n' >&2
+    return 1
+  fi
+  # (a) default true が export されていること (空でないこと = M2 の本丸)
+  if [ "${HC_FEATURE_STALE_HARNESS_DETECT_ENABLED:-}" != "true" ]; then
+    printf 'expected default export [true], got [%s]\n' "${HC_FEATURE_STALE_HARNESS_DETECT_ENABLED:-<unset>}" >&2
+    return 1
+  fi
+  if ! is_feature_enabled "stale_harness_detect"; then
+    printf 'default should be ON (exit 0)\n' >&2
+    return 1
+  fi
+  # (b) env false で OFF (exit 1) になること
+  if HC_FEATURE_STALE_HARNESS_DETECT_ENABLED="false" is_feature_enabled "stale_harness_detect"; then
+    printf 'env false should disable (exit 1)\n' >&2
+    return 1
+  fi
+  return 0
+)
+
+# ============================================================
 # テスト実行
 # ============================================================
 
@@ -324,6 +363,10 @@ fi
 
 if _case_9 2>/dev/null; then _record PASS 9 "task-64: inline array + 行末コメント strip 不変"
 else                         _record FAIL 9 "task-64: inline array + 行末コメント strip 不変"
+fi
+
+if _case_10 2>/dev/null; then _record PASS 10 "task-71 M2: stale_harness_detect default true export + env false disables"
+else                          _record FAIL 10 "task-71 M2: stale_harness_detect default true export + env false disables"
 fi
 
 # ============================================================

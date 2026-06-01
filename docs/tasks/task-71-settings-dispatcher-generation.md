@@ -11,7 +11,7 @@ total_steps: 11
 
 # Task #71: settings 生成化 / hook dispatcher 統合 (Phase 3)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了 (2026-06-02)**
 > 起案: 2026-06-01
 > 関連: harness-review-remediation-plan Phase 3 (§4.3)。**最大規模・最高リスク** (settings.json = harness 心臓部)
 > 設計起源: [harness-review-remediation-plan.md](../draft/harness-review-remediation-plan.md) ✅承認済 (approved_at 2026-06-01) §4.3
@@ -40,15 +40,15 @@ total_steps: 11
 
 ## Task 完了条件 (DoD)
 
-- [ ] disabled feature の hook process が起動しない (settings から外れる or dispatcher 1 起動で短絡)
-- [ ] hook command が repo cwd 非依存 (`${CLAUDE_PROJECT_DIR}` / generated wrapper)
-- [ ] PreToolUse / PostToolUse の wildcard hook が必要最小限 + 残す場合は docs に理由
-- [ ] high-frequency event の settings command が原則 1 dispatcher
-- [ ] 通常成功時の hook stdout が context を増やさない (observer は default preset で stdout なし)
-- [ ] **blocker hook の exit code が dispatcher 化前後で同一 (smoke で同一入力に対し検証)**
-- [ ] reviewer approve (テスト設計レビュー)
-- [ ] 全 smoke regression 0 (既存 enforcement BLOCK 全 PASS 不変)
-- [ ] 3 観点 refactor 判定
+- [x] disabled feature の hook process が起動しない (dispatcher 内 is_feature_enabled で子 spawn skip、feature-pruning smoke で実証)
+- [x] hook command が repo cwd 非依存 (`${CLAUDE_PROJECT_DIR}` 採用 + dispatcher 内 resolve_project_root、cwd-robustness smoke)
+- [x] PreToolUse / PostToolUse の wildcard hook は `*` matcher dispatcher 1 本に集約 (observer のみ、現状維持で挙動 1:1)
+- [x] high-frequency event の settings command が原則 1 dispatcher (36 child-hook → 15 dispatcher)
+- [x] 通常成功時の hook stdout が context を増やさない (no-op `{}`/空 drop + success-stdout smoke 7/7)
+- [x] **blocker hook の exit code が dispatcher 化前後で同一** (S-E dispatcher-routed invariance 25/25 = golden 完全一致)
+- [x] reviewer approve (テスト設計レビュー 4 名収束 + design/code レビュー HIGH 解消)
+- [x] 全 smoke regression 0 (既存 enforcement BLOCK 全 PASS 不変、pre-existing FAIL 7 は cutover 前と同一)
+- [x] 3 観点 refactor 判定 (構造健全・子 in-process 化 defer 妥当、cosmetic dedup 2 件は defer)
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -77,17 +77,17 @@ draft §4.3「hook 過多の具体的な修正方法」(4 分類: blocker/adviso
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | settings.json inventory 抽出 (event/matcher/command/timeout/feature flag/output bytes) + hook↔feature flag 対応表 (always/debug/deprecated 分類)、test fixture 保存 | 0.8h | task-70 |
-| 2 | 🔲 | blocker exit code baseline smoke (dispatcher 化前の全 blocker hook の同一入力 exit code を記録) | 0.6h | Step 1 |
-| 3 | 🔲 | settings generator (enabled feature のみ出力 + generated/manual override block 分離) | 1.0h | Step 1 |
-| 4 | 🔲 | PreToolUse dispatcher (Bash / WriteLike / Agent、blocker のみ実行、contract JSON) | 1.0h | Step 3 |
-| 5 | 🔲 | PostToolUse dispatcher (failure のみ処理・成功時無出力) + observer を log/sampled へ移行 | 0.8h | Step 3 |
-| 6 | 🔲 | SessionStart / UserPromptSubmit / Stop dispatcher 統合 (reminder を compact status へ畳む) | 1.0h | Step 3 |
-| 7 | 🔲 | cwd robustness (`${CLAUDE_PROJECT_DIR}` / generated absolute wrapper) + 即時 pruning (wildcard observe 除外、why-x5-detect/parallel-reminder 再配置) | 0.8h | Step 4,5,6 |
-| 8 | 🔲 | stdout budget 適用 (成功 `{}` / warn 1-3 行 / BLOCK 短縮) + 4 smoke (pruning/cwd/sessionstart budget/effective matrix) | 0.8h | Step 7 |
-| 9 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、**blocker exit code 不変 + enforcement regression 0 を最重点 cross-check** | 0.6h | Step 1-8 |
-| 10 | 🔲 | (テスト合格) 全 smoke regression 0 + blocker exit code 化前後一致確認 (Step 2 baseline と照合) | 0.6h | Step 9 |
-| 11 | 🔲 | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — dispatcher の function/library 化で process 数削減 | 0.5h | Step 10 |
+| 1 | ✅ | settings.json inventory 抽出 (event/matcher/command/timeout/feature flag/output bytes) + hook↔feature flag 対応表 (always/debug/deprecated 分類)、test fixture 保存 | 0.8h | task-70 |
+| 2 | ✅ | blocker exit code baseline smoke (dispatcher 化前の全 blocker hook の同一入力 exit code を記録) | 0.6h | Step 1 |
+| 3 | ✅ | settings generator (enabled feature のみ出力 + generated/manual override block 分離) | 1.0h | Step 1 |
+| 4 | ✅ | PreToolUse dispatcher (Bash / WriteLike / Agent、blocker のみ実行、contract JSON) | 1.0h | Step 3 |
+| 5 | ✅ | PostToolUse dispatcher (failure のみ処理・成功時無出力) + observer を log/sampled へ移行 | 0.8h | Step 3 |
+| 6 | ✅ | SessionStart / UserPromptSubmit / Stop dispatcher 統合 (reminder を compact status へ畳む) | 1.0h | Step 3 |
+| 7 | ✅ | cwd robustness (`${CLAUDE_PROJECT_DIR}` / generated absolute wrapper) + 即時 pruning (wildcard observe 除外、why-x5-detect/parallel-reminder 再配置) | 0.8h | Step 4,5,6 |
+| 8 | ✅ | stdout budget 適用 (成功 `{}` / warn 1-3 行 / BLOCK 短縮) + 4 smoke (pruning/cwd/sessionstart budget/effective matrix) | 0.8h | Step 7 |
+| 9 | ✅ | (テスト設計レビュー) reviewer 動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、**blocker exit code 不変 + enforcement regression 0 を最重点 cross-check** | 0.6h | Step 1-8 |
+| 10 | ✅ | (テスト合格) 全 smoke regression 0 + blocker exit code 化前後一致確認 (Step 2 baseline と照合) | 0.6h | Step 9 |
+| 11 | ✅ | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — dispatcher の function/library 化で process 数削減 | 0.5h | Step 10 |
 
 合計: **~9.3h** (draft 目安 4-8h より大、最高リスクのため段階移行で安全側)
 
@@ -99,3 +99,12 @@ draft §4.3「hook 過多の具体的な修正方法」(4 分類: blocker/adviso
 | migration | settings.json を generated artifact 化 (手書き override は別 block / settings.local.json)。**全 consuming repo に install.sh 経由で再配布が必要** |
 | 環境変数 | `HC_HOOK_TRACE=1` / `observer_level=debug` (新、debug 用) |
 | 互換性 | **最重要: blocker BLOCK 挙動は完全不変が DoD**。dispatcher 化は内部構造変更、外部から見た enforcement は同一。settings 生成化で手書き調整が消えるリスク → generated/manual block 分離で緩和 |
+
+## 完了記録 (2026-06-02)
+
+- **成果物**: `dispatcher-manifest.tsv` + `lib/dispatcher-core.sh` (run_dispatch、優先度マージ) + 7 event dispatcher wrapper + `scripts/generate-settings.sh` (manifest+yml→settings.json、`--check`/`--out`/`--stdout`) + settings.json cutover (dispatcher 配線、`${CLAUDE_PROJECT_DIR}`、permissions verbatim、`$generated` meta) + 9 smoke (baseline/invariance/core/success-stdout/merge-matrix/feature-pruning/cwd-robustness/sessionstart-budget/effective-hook-matrix) + install.sh settings.json exclude + 案内 + config-loader stale-harness/slip export + gitignore。
+- **優先度マージ (公式スキーマ準拠)**: exit2 > continue:false > decision:block/permissionDecision:deny (most-restrictive) > additionalContext/systemMessage 連結。生 JSON 連結 (`{...}{...}`) を出さず単一 valid 出力を strict parse で保証。merge-matrix 69 case (D 群 16 で制御フィールド優先度を jq 実値照合)。
+- **検証**: S-E invariance 25/25 (dispatcher 経由 == direct-hook golden)、全 task-71 smoke green、cutover 起因 regression 0。
+- **レビュー**: design (architect) + code (shell 正当性、HIGH=stdout no-op 連結を検出→Fix-A/C で解消) + テスト設計 4 名 (tdd/qa/test-auto/pr-test、CRIT=`_has_block` deny 漏れ+false-positive 検出→golden 21→24 + 修正)。
+- **M3 doc-drift 注記**: 本 task 依存欄は「generator が preset/enforcement_matrix を読む」としたが、実装は **generator/dispatcher とも preset を直接読まず、runtime に `is_feature_enabled` が `feature_*_enabled` (= preset が設定する値) を読んで子を skip** する間接実装。DoD「settings から外れる **or** dispatcher 1 起動で短絡」の後者を採用、機能 DoD は充足。
+- **残 follow-up**: next-actions #67 (consuming repo の settings.json 再生成 workflow、#47 と統合)、#68 (child_timeout 列が metadata-only)、Step 11 cosmetic dedup 2 件 (Proposal A/B、優先度低)。4 リポ install は user manual。

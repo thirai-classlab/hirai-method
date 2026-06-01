@@ -1,0 +1,24 @@
+C01	delegation-guard.sh	Edit protected src path (block)	0	yes
+C02	delegation-guard.sh	Edit README.md (non-protected pass)	0	no
+C03	delegation-guard.sh	Read protected src path (block)	0	yes
+C04	delegation-guard.sh	Bash git reset --hard HEAD (destructive block)	0	yes
+C05	delegation-guard.sh	Bash git status (whitelist pass)	0	no
+C06	gateguard.sh	Edit fresh state (first-edit block, feature ON)	0	yes
+C07	gateguard.sh	Edit feature OFF (no-op)	0	no
+C08	task-rule-guard.sh	Write new task no draft (block, feature ON)	0	yes
+C09	task-rule-guard.sh	Write feature OFF (no-op)	0	no
+C10	draft-flow-guard.sh	Write docs/zzz-new.md no draft (exit 2, feature ON)	2	no
+C11	draft-flow-guard.sh	Write docs/draft/zzz-new.md (draft path pass)	0	no
+C12	draft-flow-guard.sh	Write feature OFF (no-op)	0	no
+C13	autonomous-action-guard.sh	Loop supabase db reset (block)	0	yes
+C14	autonomous-action-guard.sh	Normal supabase db reset (advisory, no block)	0	no
+C15	workflow-guard.sh	/finish-task stage not final (exit 2, feature ON)	2	no
+C16	workflow-guard.sh	/finish-task feature OFF (no-op)	0	no
+C17	check-md-mermaid.sh	Edit .md broken mermaid (block if mermaid avail)	0	yes
+C18	byproduct-discharge-guard.sh	Stop with red entry (exit 2)	2	no
+C19	byproduct-discharge-guard.sh	Stop clean next-actions (exit 0)	0	no
+C20	confidence-gate.sh	SubagentStop confidence 0.3 (block)	0	yes
+C21	confidence-gate.sh	SubagentStop confidence 0.9 (pass)	0	no
+C22	delegation-guard.sh	Grep protected src path (block)	0	yes
+C23	delegation-guard.sh	Glob protected src path (block)	0	yes
+C24	gateguard.sh	Bash first destructive (block, feature ON)	0	yes

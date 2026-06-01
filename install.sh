@@ -183,12 +183,21 @@ RSYNC_EXCLUDES=(
   --exclude=.context-budget-state/
   --exclude=.improvement-proposal-state/
   --exclude=.workflow-state/
+  --exclude=settings.json
   --exclude=settings.local.json
   --exclude=settings.local.example.json
   --exclude=harness-config.local.yml
   --exclude=bash-whitelist-requests/
   --exclude=worktrees/
 )
+
+# NOTE (task-71 H2、2026-06-02): `settings.json` は exclude する。task-71 で settings.json は
+# permissions verbatim 同梱の generated artifact (harness 本体は harness-dev preset の
+# permissions + dispatcher 配線) になったため、rsync で配布すると consuming repo の repo 固有
+# permissions / preset を上書きする回帰になる。dispatcher 機能本体 (wrapper 群 / manifest /
+# generate-settings.sh / dispatcher-core.sh) は `.claude/` 配下なので引き続き配布される。
+# consuming repo は `bash .claude/scripts/generate-settings.sh --out .claude/settings.json` で
+# 自リポの permissions + 配布済 manifest から settings.json を再生成して dispatcher 配線を採用する。
 
 # NOTE (task-51 A 案、2026-05-28): `.claude/rules-details/` (Layer B 詳細規範) は
 # 意図的に exclude していない。Claude Code は `.claude/rules/` のみを startup 注入する
@@ -301,6 +310,7 @@ if [[ -f "$TARGET/.gitignore" ]]; then
 .claude/.improvement-proposal-state/
 .claude/.workflow-state/
 .claude/settings.local.json
+.claude/settings.generated.preview.json
 .claude/worktrees/
 .claude/bash-whitelist-requests/
 GITIGNORE_HARNESS
@@ -502,6 +512,13 @@ Next steps:
   4. mv CLAUDE.md.template CLAUDE.md && \$EDITOR CLAUDE.md   # <...> placeholders を埋める
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
   6. Claude Code session 起動 → /init-tasks → /mode loop
+
+settings.json について (task-71 H2):
+  - settings.json は保護対象 (rsync exclude)。install / --update では consuming repo の
+    settings.json を上書きしない (repo 固有 permissions / preset を守るため)。
+  - dispatcher 配線を採用するには consuming repo で次を実行し、自リポの permissions +
+    配布された manifest から settings.json を再生成する:
+      bash .claude/scripts/generate-settings.sh --out .claude/settings.json
 
 Override precedence (高 → 低):
   env(HC_*) > .claude/harness-config.local.yml > .claude/harness-config.yml (SSoT) > hardcoded default

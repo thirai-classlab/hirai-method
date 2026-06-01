@@ -22,6 +22,8 @@
 .claude/.preset-history/
 .claude/.session-help-shown
 .claude/settings.local.json
+# task-71 M4: generate-settings.sh の preview 出力 (作業 artifact、live settings.json が SSoT)
+.claude/settings.generated.preview.json
 .claude/worktrees/
 .claude/bash-whitelist-requests/
 
