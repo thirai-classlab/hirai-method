@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #67: rule architecture 再構造 (全 6 rule の Layer A 軽量化 + Layer B 断片化)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-06-01 着手、branch `refactor/rule-architecture-restructure`)
 > 起案: 2026-06-01
 > 関連: #66 (advisory 削減、task-68 に吸収), #51 (context-bloat-reduction、静的層)
 > 設計起源: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 (approved_at 2026-06-01) §3.0 + §3.5 Step 1-3
