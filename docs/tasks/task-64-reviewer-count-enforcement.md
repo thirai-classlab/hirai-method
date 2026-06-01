@@ -12,7 +12,7 @@ total_steps: 8
 
 # Task #64: reviewer 数 config 強制実装
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-05-30、全 8 Step ✅。reviewer 数 config が enforce される: config-loader strip + local.yml 移行 + 採用 6 条 4「5+」撤廃 + command Phase 0 実行手順 + PreToolUse(Agent) warn hook)
 > 起案: 2026-05-30
 > 設計起源: [reviewer-count-enforcement.md](../draft/reviewer-count-enforcement.md) ✅承認済 (approved_at "2026-05-30" / approved_by "takuma.hirai1@gmail.com")
 
@@ -55,14 +55,14 @@ reviewer 制御値が動作に影響しない「飾り」状態 (root cause: hon
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | config-loader 行末コメント strip 修正 + 既存 key regression smoke | 1.0h | — |
-| 2 | 🔲 | review_* を harness-config.local.yml 移行 (値現状維持) + 優先順 fallback 確認 | 0.5h | Step 1 |
-| 3 | 🔲 | 採用 6 条 4「5+」→ yml 範囲 規範修正 + details.md drift 同期 | 0.5h | — |
-| 4 | 🔲 | command Phase 0 + 採用 6 条 4 に hc-config.sh --get 実行手順追加 (4 command + rule) | 0.5h | Step 3 |
-| 5 | 🔲 | PreToolUse(Agent) reviewer 数上限 warn hook 新設 + feature toggle + smoke | 1.5h | Step 1 |
-| 6 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (本 task 確定の yml 範囲に従う) + iter cycle | 0.5h | Step 5 |
-| 7 | 🔲 | (テスト合格) 全 smoke + hook 発火検証 + config-loader regression 0 | 0.5h | Step 6 |
-| 8 | 🔲 | (リファクタリング) 3 観点判定 | 0.25h | Step 7 |
+| 1 | ✅ | config-loader 行末コメント strip (`_hc_strip_inline_comment`、`_yml_get_raw` と byte-identical) + smoke Case 7-9、commit `4695a50` | 1.0h | — |
+| 2 | ✅ | review_* 15 key を harness-config.local.yml 移行 (値現状維持、SSoT 残置で --get 同値)、commit `da947ac` | 0.5h | Step 1 |
+| 3 | ✅ | 採用 6 条 4「5+」→ yml 範囲化 (`608ecc3`) + details.md/workflow.md drift 同期 (`d4aff92`) | 0.5h | — |
+| 4 | ✅ | 4 command Phase 0 に hc-config.sh --get 実行手順追加、commit `10bb64c` | 0.5h | Step 3 |
+| 5 | ✅ | reviewer-count-guard hook 新設 (count > max で warn) + settings 配線 + feature toggle + smoke 11/11、commit `d43e9b6` | 1.5h | Step 1 |
+| 6 | ✅ | (テスト設計レビュー) 3 reviewer light review (review_required_test=false 尊重、CRIT0/HIGH0) → iter-2 fix (.gitignore `b05df5b` + prune/smoke `3db6a8b`) | 0.5h | Step 5 |
+| 7 | ✅ | (テスト合格) 全 smoke PASS: config-loader 8 suite + local 8/8 + feature-toggles 9/9 + reviewer-count-guard 14/14 + parallel-subagent 13/13 regression 0。hook live-test (3 reviewer < max で warn なし) 確認。UI なし = visual 不要 | 0.5h | Step 6 |
+| 8 | ✅ | (リファクタリング) 3 観点判定: 非冗長化 = parallel-subagent-reminder pattern 踏襲で新規 dup なし / 汎用性 = category 推定パラメータ化済 / 持続可能性 = subshell 化 + fail-open + 関数 50 行内、3 reviewer で品質確認済。**skip** (新規 + review 済で追加 refactor 不要) | 0.25h | Step 7 |
 
 合計: 約 4.5h
 
