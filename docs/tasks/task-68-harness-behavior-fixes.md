@@ -11,7 +11,7 @@ total_steps: 5
 
 # Task #68: harness 挙動修正 (Workflow 標準化 / why-x5 緩和 / advisory pointer 化 / delegation-guard 修正)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了 (PR #45 merged)** (全 5 Step ✅、enforcement regression 0、advisory token -186/turn 実測。4 リポ install は user manual follow-up)
 > 起案: 2026-06-01
 > 関連: #67 (rule 再構造、対の task), #66 (advisory 削減、本 task に吸収・supersede)
 > 設計起源: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 (approved_at 2026-06-01) §3.1-3.4 + §11 hook 注入判定
@@ -36,13 +36,13 @@ total_steps: 5
 
 ## Task 完了条件 (DoD)
 
-- [ ] 多数 fan-out の Workflow 標準化 + 1 ターン tool block 上限が規範化され、dogfood で markup 崩れが再現しない
-- [ ] why-x5 がターン冒頭 1 回に緩和され、why-x5-reminder smoke regression 0
-- [ ] SessionStart advisory pointer 化で起動時 token 実測削減、mode-enforce 事実文化、enforcement BLOCK smoke 全 PASS (不変)
-- [ ] task-rule-guard status-sync note が session 1 回抑制、task.md 作成 BLOCK 不変 (smoke ※ `feature_task_rule_guard_enabled: false` (task-61 由来) のため本番は dormant、再有効化の意図確認は next-actions #65 で追跡)
-- [ ] delegation-guard の `| head`/`| tail`/`| wc` 等 read-only filter pipe が通り、危険コマンド BLOCK は不変 (smoke)
-- [ ] reviewer approve (Step 4)
-- [ ] commit + 4 リポ install user manual 案内
+- [x] 多数 fan-out の Workflow 標準化 + 1 ターン tool block 上限が規範化され、dogfood で markup 崩れが再現しない
+- [x] why-x5 がターン冒頭 1 回に緩和され、why-x5-reminder smoke regression 0
+- [x] SessionStart advisory pointer 化で起動時 token 実測削減、mode-enforce 事実文化、enforcement BLOCK smoke 全 PASS (不変)
+- [x] task-rule-guard status-sync note が session 1 回抑制、task.md 作成 BLOCK 不変 (smoke ※ `feature_task_rule_guard_enabled: false` (task-61 由来) のため本番は dormant、再有効化の意図確認は next-actions #65 で追跡)
+- [x] delegation-guard の `| head`/`| tail`/`| wc` 等 read-only filter pipe が通り、危険コマンド BLOCK は不変 (smoke)
+- [x] reviewer approve (Step 4)
+- [x] commit (`cfdd76f`) + PR #45 merged。4 リポ install user manual 案内は user follow-up (本 PR scope 外)
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -75,7 +75,7 @@ draft §3.1 (Workflow 標準化) / §3.2 (advisory pointer 化、task-66 吸収)
 | 2 | ✅ | SessionStart advisory pointer 化 + mode-enforce 事実文化 + session-help opt-in + task-rule-guard note 抑制 (task-66 吸収、enforcement 凍結) | 1.0h | — |
 | 3 | ✅ | delegation-guard splitter の改行/pipe read-only filter 誤検知修正 (危険 BLOCK 不変) + smoke 更新 | 0.8h | — |
 | 4 | ✅ | (テスト設計レビュー) reviewer を `review_min_count_test`〜`review_max_count_test` 範囲で動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、enforcement 不変の cross-check 重点。5 reviewer (security/code/qa/test/architect) 完了、enforcement regression 0 を実機 cross-check 確定、smoke coverage findings を Step 5 で反映済 | 0.5h | Step 1-3 |
-| 5 | 🔄 | (テスト合格 + リファクタ) 全 hook smoke regression 0 + 起動時 token 実測 + 1 ターン多数tool dogfood + 3 観点 refactor + 4 リポ install 案内 | 0.7h | Step 4 |
+| 5 | ✅ | (テスト合格 + リファクタ) 全 hook smoke regression 0 + 起動時 token -186/turn・-478 初回 実測 + dogfood (4 tool/1 ターン) markup 崩れ非再現 + refactor 判定 (smoke 追加 + advisory 短縮 + cosmetic guard 中心、§B marker DRY 済、新規冗長ロジック / 汎用化対象なしで大規模 refactor 不要) + commit `cfdd76f` + PR #45。4 リポ install は user manual follow-up | 0.7h | Step 4 |
 
 合計: **~3.7h**
 
