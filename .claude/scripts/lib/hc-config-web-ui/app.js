@@ -6,24 +6,28 @@
 //
 // State machine:
 //   view: 'top' | 'edit'
-//   - top   : 起動時の現状確認 view (現在 preset 名 banner + 6 軸 read-only table + 「設定を変更」CTA)
-//   - edit  : 設定編集 view (preset list 日本語名 + 6 軸 drop-down + 「適用」「キャンセル」)
-//   editMode: 'preset' | 'individual'  (edit view 内の sub-mode、初期 'preset'、null 廃止)
+//   - top   : 起動時の現状確認 view (現在 preset 名 banner + 6 軸 read-only table / unsaved カスタム表示 + 「設定を変更」CTA)
+//   - edit  : 設定編集 view (preset list 日本語名 + 「適用」「キャンセル」)
 //
 // task-61 から継承:
 //   - WCAG 2.2 AA (iter 2 16 SC 全 closure / iter 4 B 7 件)
 //   - C-U1 / C-U2 / H-U1 / H-U3 / H-U4 / H-XSS / M-U3 / M-U4
 //   - dialog helpers (showConfirmDialog with resolved flag)
 //
-// task-63 簡素化版:
+// task-63 簡素化版 + task-65 (6 軸 data model 案 A):
 //   - state.view 'top' | 'edit' 排他切替
-//   - state.currentPreset (起動時 /api/current-preset fetch、match_type 2 種: preset/unsaved。custom は撤去済 draft §8)
+//   - state.currentPreset (起動時 /api/current-preset fetch)。
+//       preset 一致: { match_type:'preset', name, display_name_ja, axes:{6 軸 object} }
+//       unsaved    : { match_type:'unsaved', name:'custom', display_name_ja, axes:null }
 //   - state.editPresetSelection (編集画面 preset 選択中の英 key)
-//   - state.editAxisChanges (個別 key 変更 in-memory diff)
 //   - reducer(state, action) Pure Function (副作用なし、state 不変更新)
 //   - renderTop(state) / renderEdit(state) (state → DOM)
+//   - top view は cp.axes 直接参照 (object→6 軸 table / null→カスタム表示)
 //   - getDisplayName(preset) (display_name_ja 優先、fallback name)
 //   - カスタム保存機能撤去 (showPromptDialog / savePresetApi / edit:save_custom action 削除)
+//   - task-65: 6 軸 dropdown 個別編集撤去 (loadCurrentAxes / loadAxesWithOptions / setKeyApi /
+//     onChangeAxis / applyIndividualMode / editMode / editAxisChanges / edit:change_axis 全削除)。
+//     編集経路は preset 一括変更に一本化。
 //   - 絵文字なし (user F1 確定要求)
 //
 ;(function () {
@@ -58,15 +62,15 @@
   // ============================================================
   const initialState = {
     view: 'top', // 'top' | 'edit'  (task-63 採用、task-61 'idle'/'category'/'key'/'preset' 廃止)
-    currentPreset: null, // { match_type: 'preset'|'unsaved', name, display_name_ja, axes: {6 軸} } (custom 撤去済 draft §8)
+    // task-65: currentPreset.axes は API response 由来。
+    //   preset 一致: { match_type:'preset', name, display_name_ja, axes:{6 軸 object} }
+    //   unsaved    : { match_type:'unsaved', name:'custom', display_name_ja, axes:null }
+    currentPreset: null,
     presets: [], // [{ name, display_name_ja, ... }] (server /api/presets)
     history: [],
-    // edit view 内 sub-state
-    editMode: 'preset', // 'preset' | 'individual'  (task-63 簡素化: null 廃止、初期 'preset')
+    // edit view 内 sub-state (task-65: 6 軸個別編集撤去により preset 選択のみ)
     editPresetSelection: null, // 選択中 preset 英 key
     editPresetDiff: null, // diff preview (preset 選択時)
-    editAxisChanges: {}, // 個別 key 変更 in-memory diff { axis_key: new_value }
-    editCurrentAxes: {}, // edit view 着手時の現在 yml 6 軸 snapshot (個別変更 baseline)
     // UI flag
     applying: false,
     rollbackInProgress: false,
@@ -95,68 +99,43 @@
         }
       }
       case 'top:enter': {
-        // edit → top 戻り、編集 buffer を破棄、editMode は 'preset' に reset
+        // edit → top 戻り、編集 buffer を破棄 (task-65: editMode / 個別変更 state 撤去)
         return {
           ...prevState,
           view: 'top',
-          editMode: 'preset',
           editPresetSelection: null,
           editPresetDiff: null,
-          editAxisChanges: {},
-          editCurrentAxes: {},
         }
       }
       case 'edit:enter': {
-        // top → edit、現在 yml 6 軸を編集 baseline として snapshot
-        const baseline = action.payload && action.payload.currentAxes ? action.payload.currentAxes : {}
+        // top → edit (task-65: preset 選択のみ、6 軸 baseline snapshot 撤去)
         return {
           ...prevState,
           view: 'edit',
-          editMode: 'preset',
           editPresetSelection: null,
           editPresetDiff: null,
-          editAxisChanges: {},
-          editCurrentAxes: { ...baseline },
         }
       }
       case 'edit:select_preset': {
         // payload: { presetName, diff }
         return {
           ...prevState,
-          editMode: 'preset',
           editPresetSelection: action.payload.presetName,
           editPresetDiff: action.payload.diff || null,
-          // preset 選択時は個別変更を破棄 (排他)
-          editAxisChanges: {},
-        }
-      }
-      case 'edit:change_axis': {
-        // payload: { axisKey, newValue }
-        // 個別変更モードに移行、preset 選択は破棄 (排他)
-        const nextChanges = { ...prevState.editAxisChanges, [action.payload.axisKey]: action.payload.newValue }
-        return {
-          ...prevState,
-          editMode: 'individual',
-          editPresetSelection: null,
-          editPresetDiff: null,
-          editAxisChanges: nextChanges,
         }
       }
       case 'edit:cancel': {
         return reducer(prevState, { type: 'top:enter' })
       }
       case 'edit:apply': {
-        // 適用後は top 復帰、currentPreset は payload で更新、editMode は 'preset' に reset
+        // 適用後は top 復帰、currentPreset は payload で更新。
         // applying flag を必ず false に戻す (部分失敗パスでも applying 残留を防ぐ。
         //   catch 節以外の成功/部分失敗パスは明示 reset が無いため、apply 完了 action で集中 reset)
         return {
           ...prevState,
           view: 'top',
-          editMode: 'preset',
           editPresetSelection: null,
           editPresetDiff: null,
-          editAxisChanges: {},
-          editCurrentAxes: {},
           applying: false,
           currentPreset: action.payload && action.payload.currentPreset ? action.payload.currentPreset : prevState.currentPreset,
         }
@@ -234,9 +213,9 @@
       }
       return r
     } catch (e) {
-      // 領域 A 並走中で endpoint 未実装の場合は loadCurrentAxes() で fallback
-      const axes = await loadCurrentAxes()
-      return { match_type: 'unsaved', name: null, display_name_ja: null, axes }
+      // task-65: /api/current-preset 取得失敗時は unsaved 扱い (axes:null)。
+      //   (旧 loadCurrentAxes fallback は 6 軸が yml key でなく常に空を返すため撤去)
+      return { match_type: 'unsaved', name: null, display_name_ja: null, axes: null }
     }
   }
   const loadPresetDiff = async (name) => {
@@ -246,36 +225,14 @@
   const applyPresetApi = async (name, skipKeys) => {
     return await api('POST', `/api/preset/${encodeURIComponent(name)}/apply`, { skip_keys: skipKeys || [] })
   }
-  const setKeyApi = async (key, value) => {
-    return await api('POST', '/api/set', { key, value })
-  }
+  // task-65: setKeyApi (個別 key set) は 6 軸 dropdown 撤去により呼出元消失のため削除。
   const rollbackApi = async (timestamp) => {
     return await api('POST', `/api/preset/rollback/${encodeURIComponent(timestamp)}`)
   }
-  // 現在の yml 6 軸取得 (/api/keys 経由、領域 A endpoint 不在時の fallback として再利用)
-  const loadCurrentAxes = async () => {
-    const r = await api('GET', '/api/keys')
-    const keys = r.keys || []
-    const axes = {}
-    for (const k of AXIS_KEYS) {
-      const entry = keys.find((x) => x.key === k)
-      if (entry && entry.current_value !== null && entry.current_value !== undefined) {
-        axes[k] = String(entry.current_value)
-      }
-    }
-    return axes
-  }
-  // /api/keys から 6 軸 + 各 key の許容値候補 (drop-down 用) を取得
-  const loadAxesWithOptions = async () => {
-    const r = await api('GET', '/api/keys')
-    const keys = r.keys || []
-    const result = []
-    for (const k of AXIS_KEYS) {
-      const entry = keys.find((x) => x.key === k)
-      if (entry) result.push(entry)
-    }
-    return result
-  }
+  // task-65: loadCurrentAxes / loadAxesWithOptions は撤去。
+  //   6 軸 (quality_level 等) は yml raw key ではなく preset metadata のため、/api/keys からの
+  //   軸 key 抽出は常に空を返す dead path だった。top view は /api/current-preset の axes を直接
+  //   参照し、edit view の 6 軸 dropdown は撤去 (編集経路は preset 一括変更に一本化)。
 
   // ============================================================
   // DOM utils (textContent only、innerHTML 禁止 XSS 防止)
@@ -409,56 +366,10 @@
   }
 
   // ============================================================
-  // render: top view (現状確認 + 「設定を変更」CTA)
-  // 起源: draft §3.4 wireframe
-  // a11y: banner region + table read-only + CTA button focus ring
+  // task-65: 6 軸 read-only table builder (preset 一致時)
+  //   axes = matched preset の axes object (6 key)。日本語ラベル (AXIS_LABELS_JA) + 値で表示。
   // ============================================================
-  function renderTop(currentState) {
-    const cp = currentState.currentPreset
-    const box = el('section', {
-      class: 'space-y-4',
-      'aria-labelledby': 'top-view-heading',
-      role: 'region',
-      lang: 'ja',
-    })
-
-    box.appendChild(
-      el('h2', { id: 'top-view-heading', class: 'sr-only' }, '現在の設定')
-    )
-
-    // 現在 preset banner
-    const matchType = cp && cp.match_type ? cp.match_type : 'unsaved'
-    let bannerLabel = ''
-    let bannerValue = ''
-    if (matchType === 'preset') {
-      bannerLabel = 'プリセット'
-      bannerValue = getDisplayName(cp) || '(不明)'
-    } else if (matchType === 'custom') {
-      bannerLabel = 'カスタム'
-      bannerValue = (cp && cp.name) || '(無名)'
-    } else {
-      bannerLabel = '状態'
-      bannerValue = '未保存変更あり (どのプリセット / カスタムにも一致しません)'
-    }
-    const banner = el(
-      'div',
-      {
-        class: 'bg-white rounded-lg border border-slate-200 p-5',
-        role: 'region',
-        'aria-label': '現在の設定状態',
-      },
-      el('h3', { class: 'text-base font-bold text-slate-800 mb-2' }, '現在の設定'),
-      el(
-        'div',
-        { class: 'flex items-baseline gap-3 flex-wrap' },
-        el('span', { class: 'text-sm uppercase text-slate-500 font-semibold' }, bannerLabel),
-        el('span', { class: 'text-lg font-bold text-blue-800', lang: 'ja' }, bannerValue)
-      )
-    )
-    box.appendChild(banner)
-
-    // 6 軸 read-only table
-    const axes = (cp && cp.axes) || {}
+  function renderAxesTable(axes) {
     const tableBox = el('div', { class: 'bg-white rounded-lg border border-slate-200 overflow-hidden' })
     tableBox.appendChild(
       el(
@@ -507,7 +418,96 @@
     }
     table.appendChild(tbody)
     tableBox.appendChild(table)
-    box.appendChild(tableBox)
+    return tableBox
+  }
+
+  // ============================================================
+  // task-65: unsaved (axes:null) 時のカスタム表示 panel
+  //   preset 外 (unsaved) では 6 軸の現在値が一意に定まらないため、6 軸 table の代わりに
+  //   「カスタム設定 (プリセット外)」見出し + 説明を表示。どの設定が preset と異なるかは
+  //   edit view の preset 選択 diff preview で確認する導線に委ねる (top view では一意 diff 不能)。
+  // ============================================================
+  function renderCustomPanel() {
+    return el(
+      'div',
+      {
+        class: 'bg-white rounded-lg border border-slate-200 p-4',
+        role: 'region',
+        'aria-label': 'カスタム設定 (プリセット外)',
+        lang: 'ja',
+      },
+      el('h3', { class: 'text-sm font-semibold text-slate-700 mb-1' }, 'カスタム設定 (プリセット外)'),
+      el(
+        'p',
+        { class: 'text-sm text-slate-600' },
+        '現在の設定はどの組み込みプリセットにも一致しません (未保存変更あり)。'
+      ),
+      el(
+        'p',
+        { class: 'text-xs text-slate-500 mt-1' },
+        'プリセットとの差分は「設定を変更」からプリセットを選ぶと確認できます。'
+      )
+    )
+  }
+
+  // ============================================================
+  // render: top view (現状確認 + 「設定を変更」CTA)
+  // 起源: draft §3.4 wireframe
+  // a11y: banner region + table read-only + CTA button focus ring
+  // ============================================================
+  function renderTop(currentState) {
+    const cp = currentState.currentPreset
+    const box = el('section', {
+      class: 'space-y-4',
+      'aria-labelledby': 'top-view-heading',
+      role: 'region',
+      lang: 'ja',
+    })
+
+    box.appendChild(
+      el('h2', { id: 'top-view-heading', class: 'sr-only' }, '現在の設定')
+    )
+
+    // 現在 preset banner
+    const matchType = cp && cp.match_type ? cp.match_type : 'unsaved'
+    let bannerLabel = ''
+    let bannerValue = ''
+    if (matchType === 'preset') {
+      bannerLabel = 'プリセット'
+      bannerValue = getDisplayName(cp) || '(不明)'
+    } else if (matchType === 'custom') {
+      bannerLabel = 'カスタム'
+      bannerValue = (cp && cp.name) || '(無名)'
+    } else {
+      bannerLabel = '状態'
+      bannerValue = '未保存変更あり (どのプリセット / カスタムにも一致しません)'
+    }
+    const banner = el(
+      'div',
+      {
+        class: 'bg-white rounded-lg border border-slate-200 p-5',
+        role: 'region',
+        'aria-label': '現在の設定状態',
+      },
+      el('h3', { class: 'text-base font-bold text-slate-800 mb-2' }, '現在の設定'),
+      el(
+        'div',
+        { class: 'flex items-baseline gap-3 flex-wrap' },
+        el('span', { class: 'text-sm uppercase text-slate-500 font-semibold' }, bannerLabel),
+        el('span', { class: 'text-lg font-bold text-blue-800', lang: 'ja' }, bannerValue)
+      )
+    )
+    box.appendChild(banner)
+
+    // task-65: cp.axes を直接参照 (API が matched preset の axes を返す)。
+    //   axes が object (preset 一致) → 6 軸 read-only table を表示。
+    //   axes が null/undefined (unsaved) → 「カスタム設定 (プリセット外)」見出しに切替。
+    const axes = cp && cp.axes && typeof cp.axes === 'object' ? cp.axes : null
+    if (axes) {
+      box.appendChild(renderAxesTable(axes))
+    } else {
+      box.appendChild(renderCustomPanel())
+    }
 
     // CTA: 「設定を変更」ボタン
     const actions = el(
@@ -611,7 +611,7 @@
       presetSection.appendChild(presetUl)
 
       // preset 選択時 diff preview
-      if (currentState.editMode === 'preset' && currentState.editPresetDiff) {
+      if (currentState.editPresetDiff) {
         const diff = currentState.editPresetDiff
         const changed = (diff.changes || []).filter((c) => c.changed)
         const previewBox = el(
@@ -645,97 +645,12 @@
     }
     box.appendChild(presetSection)
 
-    // ============ 個別変更 section (6 軸 drop-down) ============
-    const indivSection = el(
-      'div',
-      {
-        class: 'bg-white rounded-lg border border-slate-200 p-4',
-        role: 'region',
-        'aria-labelledby': 'edit-individual-heading',
-      },
-      el('h3', { id: 'edit-individual-heading', class: 'text-base font-semibold text-slate-800 mb-3' }, '個別に変更')
-    )
-
-    // currentState.axesOptions は editAxesOptions として render 時に lazy fetch、初回は loading
-    // ※ 実際のデータは init() / refreshEdit() で state.editCurrentAxes に注入済
-    const currentAxes = currentState.editCurrentAxes || {}
-    const axesOptions = currentState._axesOptions || null // 一時 cache (render 時に decorate)
-
-    if (!axesOptions) {
-      indivSection.appendChild(
-        el('p', { class: 'text-sm text-slate-500' }, '6 軸候補を読み込み中...')
-      )
-    } else {
-      const form = el('div', { class: 'space-y-3' })
-      for (const axisEntry of axesOptions) {
-        const k = axisEntry.key
-        const labelJa = AXIS_LABELS_JA[k] || k
-        const currentVal = currentAxes[k] !== undefined ? String(currentAxes[k]) : ''
-        const changedVal = currentState.editAxisChanges[k]
-        const effectiveVal = changedVal !== undefined ? String(changedVal) : currentVal
-        const selectId = `edit-axis-${k}`
-        const hintId = `edit-axis-${k}-hint`
-
-        const options = Array.isArray(axisEntry.allowed_values) && axisEntry.allowed_values.length > 0
-          ? axisEntry.allowed_values
-          : [currentVal] // fallback: 現在値のみ
-
-        const select = el('select', {
-          id: selectId,
-          class: 'w-full sm:w-auto font-mono text-sm border border-slate-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200 min-h-[44px]',
-          'aria-describedby': axisEntry.effect ? hintId : null,
-          'data-axis-key': k,
-          onchange: (ev) => onChangeAxis(k, ev.target.value),
-        })
-        for (const opt of options) {
-          const optEl = el('option', { value: String(opt) }, String(opt))
-          if (String(opt) === effectiveVal) optEl.setAttribute('selected', '')
-          select.appendChild(optEl)
-        }
-
-        const row = el(
-          'div',
-          { class: 'flex items-start gap-3 flex-wrap sm:flex-nowrap' },
-          el(
-            'label',
-            {
-              htmlFor: selectId,
-              class: 'text-sm font-semibold text-slate-700 sm:w-40 pt-2',
-              lang: 'ja',
-            },
-            labelJa,
-            el('span', { class: 'text-xs text-slate-400 ml-2 font-mono' }, k)
-          ),
-          el(
-            'div',
-            { class: 'flex-1' },
-            select,
-            axisEntry.effect
-              ? el(
-                  'p',
-                  { id: hintId, class: 'text-xs text-slate-500 mt-1', lang: 'ja' },
-                  `説明: ${axisEntry.effect}`
-                )
-              : null,
-            changedVal !== undefined && String(changedVal) !== currentVal
-              ? el(
-                  'p',
-                  { class: 'text-xs text-amber-700 mt-1 font-semibold' },
-                  `変更予定: ${currentVal} → ${changedVal}`
-                )
-              : null
-          )
-        )
-        form.appendChild(row)
-      }
-      indivSection.appendChild(form)
-    }
-    box.appendChild(indivSection)
+    // task-65: 個別変更 section (6 軸 drop-down) は撤去。
+    //   6 軸は yml raw key でなく preset metadata のため、/api/keys からの options 取得元が無く
+    //   常に 0 件 (dead UI) だった。編集経路は preset 一括変更に一本化 (6 軸は top view で read-only 表示専用)。
 
     // ============ アクション buttons (task-63 簡素化: 「キャンセル」「適用」のみ) ============
-    const hasChange =
-      (currentState.editMode === 'preset' && currentState.editPresetSelection) ||
-      (currentState.editMode === 'individual' && Object.keys(currentState.editAxisChanges).length > 0)
+    const hasChange = !!currentState.editPresetSelection
     const applyDisabled = currentState.applying || !hasChange
 
     const actions = el(
@@ -867,22 +782,11 @@
   // ============================================================
   // event handlers (task-63 state machine 適合)
   // ============================================================
-  async function onClickGotoEdit() {
-    setStatus('編集画面を準備中...')
-    try {
-      // 編集 baseline = 現在 yml 6 軸
-      const currentAxes = await loadCurrentAxes()
-      // 6 軸 drop-down 候補を取得 (axes options)
-      const axesOptions = await loadAxesWithOptions()
-      // state.editCurrentAxes に snapshot、_axesOptions に options を一時 inject (render 内で参照)
-      state = reducer(state, { type: 'edit:enter', payload: { currentAxes } })
-      state._axesOptions = axesOptions
-      setStatus('編集画面')
-      render()
-    } catch (e) {
-      toast(`編集画面の準備失敗: ${e.message}`, 'error')
-      setStatus('エラー')
-    }
+  function onClickGotoEdit() {
+    // task-65: 6 軸 dropdown 撤去により編集 baseline (currentAxes) / options fetch は不要。
+    //   edit view は preset list (preset 一括変更経路) のみ。
+    dispatch({ type: 'edit:enter' })
+    setStatus('編集画面')
   }
 
   function onClickBackToTop() {
@@ -902,16 +806,10 @@
     }
   }
 
-  function onChangeAxis(axisKey, newValue) {
-    dispatch({ type: 'edit:change_axis', payload: { axisKey, newValue } })
-  }
-
   async function onClickApply() {
     if (state.applying) return
-    if (state.editMode === 'preset' && state.editPresetSelection) {
+    if (state.editPresetSelection) {
       await applyPresetMode()
-    } else if (state.editMode === 'individual' && Object.keys(state.editAxisChanges).length > 0) {
-      await applyIndividualMode()
     } else {
       toast('適用対象の変更がありません', 'info')
     }
@@ -959,67 +857,19 @@
 
   // 適用成功後の共通後処理:
   //   currentPreset / history を再取得し、state を top 復帰させ render する。
-  //   applyPresetMode / applyIndividualMode 両関数の成功パス末尾で重複していた
-  //   6 行を 1 箇所に集約 (非冗長化)。
-  //   処理順序: reducer(edit:apply) → reducer(history:update) → delete _axesOptions → render()
-  //   この順序を変えると _axesOptions が中間 render に参照されるため変更禁止。
+  //   (task-65: 個別変更経路撤去により呼出元は applyPresetMode のみ)
   async function _finalizeApply(statusText) {
     const newCurrent = await loadCurrentPreset()
     const newHistory = await loadHistory()
     state = reducer(state, { type: 'edit:apply', payload: { currentPreset: newCurrent } })
     state = reducer(state, { type: 'history:update', payload: { history: newHistory } })
-    delete state._axesOptions
     setStatus(statusText)
     render()
   }
 
-  async function applyIndividualMode() {
-    const changes = state.editAxisChanges
-    const changeKeys = Object.keys(changes)
-    const bodyLines = [`${changeKeys.length} 件の軸を個別に変更します。`]
-    for (const k of changeKeys) {
-      const labelJa = AXIS_LABELS_JA[k] || k
-      const before = state.editCurrentAxes[k]
-      const after = changes[k]
-      bodyLines.push(`${labelJa} (${k}): ${before} → ${after}`)
-    }
-    const confirmed = await showConfirmDialog({
-      title: '個別変更の確認',
-      bodyLines,
-      okLabel: '適用する',
-      cancelLabel: 'キャンセル',
-      danger: false,
-    })
-    if (!confirmed) return
-
-    dispatch({ type: 'ui:set_flag', payload: { flag: 'applying', value: true } })
-    setStatus('個別変更を適用中...')
-    try {
-      let okCount = 0
-      let failKeys = []
-      for (const k of changeKeys) {
-        try {
-          await setKeyApi(k, changes[k])
-          okCount += 1
-        } catch (e) {
-          failKeys.push({ key: k, error: e.message })
-        }
-      }
-      if (failKeys.length === 0) {
-        toast(`個別変更成功: ${okCount} 軸を適用しました`, 'success')
-      } else {
-        toast(`部分失敗: ${okCount} 成功 / ${failKeys.length} 失敗 (${failKeys.map((f) => f.key).join(', ')})`, 'warning')
-      }
-      await _finalizeApply('個別変更完了')
-    } catch (e) {
-      toast(`個別変更失敗: ${e.message}`, 'error')
-      setStatus('エラー')
-      dispatch({ type: 'ui:set_flag', payload: { flag: 'applying', value: false } })
-    }
-  }
+  // task-65: applyIndividualMode (6 軸 dropdown 個別変更) は撤去。編集経路は preset 一括変更のみ。
 
   function onClickCancel() {
-    delete state._axesOptions
     dispatch({ type: 'edit:cancel' })
     setStatus('編集を破棄、トップ画面')
   }
