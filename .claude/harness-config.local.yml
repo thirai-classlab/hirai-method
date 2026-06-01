@@ -1,0 +1,48 @@
+# .claude/harness-config.local.yml — project 固有 override 層 (install.sh --update 温存)
+#
+# === 役割 ===
+# 本 file は project 固有の override 値を置く層。install.sh の rsync で除外される
+# (`--exclude=harness-config.local.yml`) ため、`install.sh --update` で SSoT
+# harness-config.yml が harness 最新版に上書きされても、本 file の値は温存される。
+#
+# === 値解決の優先順 (高 → 低) ===
+#   env(HC_*) > harness-config.local.yml (本 file) > harness-config.yml (SSoT) > hardcoded default
+#
+# config-loader.sh は SSoT load 後に本 file を parse するため、同一 key は本 file が
+# SSoT に勝つ (Step 3.5)。genuine env preset には負ける。
+#
+# === 編集方法 ===
+#   bash .claude/scripts/hc-config.sh --set <key>=<value>   # (SSoT 側を書換える点に注意)
+#   または本 file を直接編集 (project override を温存したい値はこちらが正)。
+#
+# === review_* 系 reviewer 制御 (task-64 Step 2 で SSoT yml から移行) ===
+# 採用 6 条 4 reviewer 制御値。SSoT yml では install.sh --update で harness default に
+# 戻されるため、本 file に project 値を移行して温存する。値は移行時点の現状値のまま。
+# 設計起源: docs/draft/reviewer-count-enforcement.md (task-64)、root cause E 解消。
+
+# 設計レビュー (W2 /design-review)
+review_required_design: false
+review_min_count_design: 1
+review_max_count_design: 7
+
+# テスト設計レビュー (W1 /test-design、採用 6 条 4)
+review_required_test: false
+review_min_count_test: 1
+review_max_count_test: 10
+
+# モジュールレビュー (W3 /module-review)
+review_required_module: false
+review_min_count_module: 2
+review_max_count_module: 5
+
+# システムレビュー (W3 /system-review)
+review_required_system: false
+review_min_count_system: 2
+review_max_count_system: 5
+
+# security レビュー (W2 /design-review 内 security category)
+review_required_security: false
+review_min_count_security: 1
+
+# 反復制御
+review_iteration_max: 2
