@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #51: Context Bloat Reduction (2 層構造化)
 
-> Status: **🔄 進行中** (Step 1-4 ✅ / Step 5 token 実測 FAIL → A 案 redesign / Step 5b (Layer B 物理移動) ✅ / Step 6 (back-link verify + install.sh SSoT comment) ✅ / Step 5c token 再実測 ✅ ~100.1K (-45.9K 31.4% 削減、期待 ~91-101K 内、目標 ~80K 未達) / Step 5c 残 6 hook smoke ⏸️ (5/31 API limit reset 待ち))
+> Status: **✅ 完遂** (2026-06-01) (Step 1-4 ✅ / Step 5 token 実測 FAIL → A 案 redesign / Step 5b (Layer B 物理移動) ✅ / Step 6 (back-link verify + install.sh SSoT comment) ✅ / Step 5c token 再実測 ✅ ~100.1K (-45.9K 31.4% 削減、期待 ~91-101K 内、目標 ~80K 未達 = accepted SSoT 優先) / Step 5c 残 hook smoke ✅ 2026-06-01 (7 hook regression 0 + layer-b 8/8、subagent aa4b290c conf 0.95))。残: 4 リポ install は user manual follow-up。
 > 起案: 2026-05-28
 > 承認: 2026-05-28 (user)
 > 関連: harness 健全性 9 task umbrella の最終 2 task の 1 つ (task-51 / task-57)
@@ -191,7 +191,7 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 5 | ⚠️→5b | (テスト合格) token 実測で DoD 未達判明 (153K vs 目標 80K)、`paths: []` 仕様上無効と確定 → A 案 redesign で Step 5b に分岐 | 1.5h | Step 4 |
 | 5b | ✅ | (A 案 redesign) Layer B 6 file を `.claude/rules-details/` へ git mv + Layer A/B 双方の link 更新 + install.sh / README / INVENTORY / smoke 更新 (commit `71c85d2` + `de1e851`、smoke 8/8 PASS conf 0.92) | 0.5d | Step 5 |
 | 6 | ✅ | (リファクタリング) Layer A→B forward-link 34 件 + Layer B→A back-link 10 件 grep 確認 ✅、install.sh `.claude/rules-details/` 同期 SSoT comment 追加 ✅、link reference 規約 2 要素 hard match 維持 (Step 5b 内で同時達成) | 0.5h | Step 5b |
-| 5c | 🔲 | (fresh session 再計測 + 残 smoke) 次 session 起動時に token 再実測 (after 値) + 残 6 hook smoke (delegation-guard / autonomous-action-guard / workflow-guard / loop-confirmation-detector / task-rule-guard / draft-flow-guard / context-budget の各 1 case PASS、layer-b-context-isolation は完了済) | 1h | Step 6 |
+| 5c | ✅ | (fresh session 再計測 + 残 smoke) token 再実測 ✅ ~100.1K (45th) + 残 hook smoke ✅ 2026-06-01 (delegation-guard 75/75 / autonomous-action-guard 14/17 [3 pre-existing task-39] / workflow-guard 5/8 [3 pre-existing toggle OFF] / loop-confirmation-detector 17/17 / task-rule-guard 14/17 [3 pre-existing toggle OFF] / draft-flow-guard 12/12 / context-budget 9/11 [2 pre-existing threshold]、**Layer B 移動起因 regression 0** + layer-b-context-isolation 8/8、subagent aa4b290c conf 0.95) | 1h | Step 6 |
 
 合計工数: **14-18h (2.0-2.5d)**
 
@@ -396,8 +396,8 @@ Step 6 完了後の **4 リポへ `bash install.sh --update <target>` 配布** �
 | 2026-05-28 | Step 5b 完了 | Layer B 6 file を git mv で `.claude/rules-details/` へ移動 + Layer A 34 link + Layer B 10 link 更新 + `.claude/rules-details/README.md` 新設 + install.sh / README / INVENTORY / draft / task-51 / list.md 更新 + smoke 追従 (8/8 PASS conf 0.92) 全完了、commit `71c85d2` + `de1e851` 両 push 済 |
 | 2026-05-28 | Step 6 完了 | Layer A→B forward-link 34 件 + Layer B→A back-link 10 件 grep 確認 ✅、install.sh `.claude/rules-details/` 同期 SSoT comment 追加 ✅ (Step 5b commit 内で同時達成、別途 commit 不要) |
 | 2026-05-28 | Step 5c token 再実測完了 | fresh session 起動 (45th save-state、`/resume-state loop` 経由) で `usage.input_tokens` 抽出: input 5 + cache_creation 100,082 = **合算 100,087 tok (~100.1K)**。before 146K (44th) → after 100.1K = **-45.9K (削減 31.4%)**、期待値 ~91-101K 内達成 (上限近接)、目標 ~80K は未達。subagent aa8dbd4c6341cc386 conf 0.93、JSONL `/Users/t.hirai/.claude/projects/-Users-t-hirai-work-hirai-method/57c1a9fb-8d4e-4dec-8b5b-29f380f1d2f2.jsonl` (timestamp 2026-05-28T12:22:39.513Z) |
-| 5/31 以降 | Step 5c 残 6 hook smoke | API 週次 limit reset 5/31 9:00 JST 以降、delegation-guard / autonomous-action-guard / workflow-guard / loop-confirmation-detector / task-rule-guard / draft-flow-guard / context-budget の各 1 case PASS で完遂 |
-| 5/31 以降 | 完了宣言 | 残 6 hook smoke 完了後に DoD 全 PASS 判定 + list.md task-51 ✅ + commit |
+| 2026-06-01 | Step 5c 残 hook smoke 完了 | `/resume-state loop` 49th 復元 → API limit reset 後の本日実行。subagent aa4b290c (test-automator、conf 0.95) で 7 hook smoke 全件実行: delegation-guard 75/75 / autonomous-action-guard 14/17 / workflow-guard 5/8 / loop-confirmation-detector 17/17 / task-rule-guard 14/17 / draft-flow-guard 12/12 / context-budget 9/11 + layer-b-context-isolation 8/8。**Layer B 移動起因の真の regression 0 件**、全 FAIL (~20) は pre-existing (feature toggle OFF / config threshold 変更 / task-39 緩和 / smoke 仕様古い) で確定 |
+| 2026-06-01 | 完了宣言 | DoD 判定: 機械強制 hook 動作 PASS ✅ / Layer B 非注入実測 (8/8) ✅ / regression 0 ✅ / Layer A↔B link 両方向 ✅ / 起動時 token 31.4% 削減 (44% 目標は未達だが SSoT 無損失優先で accepted、memory `feedback_ssot_priority_over_size_target`) / 4 リポ install は user manual follow-up (cross-repo agent deny)。list.md row 51 ✅ + commit + PR |
 
 ## 派生 task / 次アクション候補
 
