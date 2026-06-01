@@ -82,9 +82,9 @@ pointer 規約: `> 詳細: [rules-details/workflow/workflow-guard.md](../rules-d
 | 1 | ✅ | 命名 / ディレクトリ / pointer 規約確定 + `rules-details/README.md` index 設計 + auto-load 非対象の検証方法確定 | 0.5h | — |
 | 2 | ✅ | 全 6 rule の Layer B 断片化 (`*.details.md` → `rules-details/<rule>/<topic>.md`) + Layer A pointer 直リンク書換 | 2.0h | Step 1 |
 | 3 | ✅ | 全 6 rule の Layer A 軽量化 (full table / 機構詳細を断片へ移送、要約 + pointer、<120 行/file) | 1.5h | Step 2 |
-| 4 | 🔄 | smoke 新規 + 既存更新 (pointer dangling 0 / auto-load 非対象 / 行数上限 / 起動時 token before-after) | 1.0h | Step 3 |
-| 5 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 (上限 `review_max_count_test` 確認)、enforcement 不変 + SSoT 無損失 cross-check 重点 | 0.5h | Step 4 |
-| 6 | 🔲 | (テスト合格) 全 hook / script smoke regression 0 + 起動時 token 削減実測 | 0.5h | Step 5 |
+| 4 | ✅ | smoke 新規 + 既存更新 (pointer dangling 0 / auto-load 非対象 / 行数上限 / 起動時 token before-after) | 1.0h | Step 3 |
+| 5 | ✅ | (テスト設計レビュー) 5 reviewer 動的選定、enforcement 不変 + SSoT 無損失 cross-check 重点。iter1 で全 HIGH/CRIT 修正 (機械検証収束) | 0.5h | Step 4 |
+| 6 | 🔄 | (テスト合格) 全 hook / script smoke regression 0 + 起動時 token 削減実測 | 0.5h | Step 5 |
 | 7 | 🔲 | (リファクタリング) 3 観点 + 4 リポ install user manual 案内 | 0.3h | Step 6 |
 
 合計: **~6.3h**
@@ -124,7 +124,18 @@ pointer 規約: `> 詳細: [rules-details/workflow/workflow-guard.md](../rules-d
 
 ### 義務 (development-process.md §「副産物発生時の即時 draft 起こし義務」準拠)
 
-(実装中・レビュー中に発生した副産物を記入)
+**Step 5 reviewer findings 対応結果 (iter1、commit `ef3844f`)**:
+- ✅ HIGH (SSoT-audit): dev-process Layer A slim で消失した scope 境界規範 4 項目 (worktree deny / 単一 repo staging 可 / cross-repo Phase 明記 / 副産物 user manual 経路) を staging-strategy.md + cross-repo-write.md 断片に復元 (grep 確認)
+- ✅ HIGH (code/architect/qa/pr-test): origin.md 4 件 orphan を Layer A origin pointer 追加で解消、smoke Assert 5 (orphan 検出) で機械防止
+- ✅ HIGH (pr-test/qa): smoke Assert 6 (back-link path 解決) 追加、41 件全解決
+- ✅ MED (qa): docs/INVENTORY.md を断片構造に更新
+- ✅ MED (code/pr-test): back-link §section 修正 (modes/origin, self-improvement/origin)
+
+**defer (🟢 LOW / optional、follow-up 候補)**:
+- architect MED「dev-process を更に slim (harness取込 38 行 + default mapping 13 行を断片移送)」→ **却下** (SSoT 損失が過剰 slim から生じた以上、保守的に保持が正。size より SSoT 優先 = `feedback_ssot_priority_over_size_target`)
+- pr-test LOW: smoke Case 5 行数下限 >5→≥8 / Assert 4 WARN 閾値 280→200 + dense rule 除外リスト / 断片 sentinel keyword (Case 9) / §section 存在検証 (fragile のため WARN 止まり)
+- architect MED: SSoT anchor regression assert (採用 N 条番号 / env 名 / regex の固定 list 突合) — Layer A slim 時の移送漏れを機械検出する将来強化
+- **reviewer-count-guard 誤発火** (本 session で累計 subagent 18 体を「reviewer」誤算入、category 推定が断片化/smoke subagent を含む) → 既知 task-68 scope
 
 ### 関連
 
