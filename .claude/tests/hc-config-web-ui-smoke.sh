@@ -2187,6 +2187,84 @@ _case_s46() (
 )
 
 # ============================================================
+# Case S-47: GET /api/keys が返す key set == yml top-level keys (full parity)
+# task-69 Step 3 (key parity fix):
+#   /api/keys は従来 metadata (75 entry) を基準に enrich していたため、
+#   metadata 未登録の yml key (feature_reviewer_count_guard_enabled /
+#   feature_stale_harness_detect_enabled / harness_version / stale_harness_markers)
+#   が response から欠落していた。本 case は /api/keys の key 集合が
+#   harness-config.yml の top-level key 集合 (79 key) と完全一致することを検証する。
+#   - key source SSoT = yml top-level key (`^[a-z_][a-zA-Z0-9_]*:`)
+#   - metadata 有無に関わらず yml 全 key が返ること (metadata は left join の表示補助)
+# RED→GREEN: 修正前は total=75 (metadata 基準) で fail、修正後は total=yml key 数で green。
+# network: localhost bind が必要なため node + server 起動可能環境のみ。不可なら呼出側で SKIP。
+# ============================================================
+_case_s47() (
+  set -uo pipefail
+  local port="$1"
+
+  # yml top-level key を hc-config.sh と同一 regex で抽出 (SSoT)
+  local yml="${REPO_ROOT}/.claude/harness-config.yml"
+  if [ ! -f "$yml" ]; then
+    printf 'S-47: harness-config.yml not found at %s\n' "$yml" >&2
+    return 1
+  fi
+  local expected_keys
+  expected_keys=$(grep -E "^[a-z_][a-zA-Z0-9_]*:" "$yml" 2>/dev/null | sed -E 's/:.*$//' | sort -u || true)
+  local expected_count
+  expected_count=$(printf '%s\n' "$expected_keys" | grep -c '.' || true)
+
+  if [ "${expected_count:-0}" -lt 1 ]; then
+    printf 'S-47: could not extract yml top-level keys\n' >&2
+    return 1
+  fi
+
+  # /api/keys response から key 名を抽出
+  # task-69 Step 8 M2: grep -oE '"key":"[^"]+" 方式は value 内の偶発文字列で誤カウントする seam があるため
+  # node -e で .keys[].key を読む方式に変更 (node 不在時は grep fallback)。
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/keys")
+  if ! printf '%s' "$body" | grep -q '"keys"'; then
+    printf 'S-47: /api/keys missing .keys field (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  local actual_keys
+  if command -v node >/dev/null 2>&1; then
+    # node で JSON を正確にパース: .keys[].key を抽出
+    actual_keys=$(printf '%s' "$body" | node -e '
+      let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{
+        try{const o=JSON.parse(d);(o.keys||[]).forEach(e=>{if(e&&e.key)console.log(e.key)});}
+        catch(ex){process.exit(1);}
+      });
+    ' 2>/dev/null | sort -u || true)
+  else
+    # node 不在時 fallback: grep -oE (value 混入リスクは残るが環境依存)
+    actual_keys=$(printf '%s' "$body" | grep -oE '"key":"[^"]+"' | sed -E 's/^"key":"//; s/"$//' | sort -u || true)
+  fi
+  local actual_count
+  actual_count=$(printf '%s\n' "$actual_keys" | grep -c '.' || true)
+
+  # key 数の完全一致を検証 (parity)
+  if [ "${actual_count:-0}" != "${expected_count:-0}" ]; then
+    printf 'S-47: key count mismatch (yml=%s, /api/keys=%s)\n' "$expected_count" "$actual_count" >&2
+    printf 'S-47: yml-only keys (欠落): %s\n' "$(comm -23 <(printf '%s\n' "$expected_keys") <(printf '%s\n' "$actual_keys") | tr '\n' ' ')" >&2
+    printf 'S-47: api-only keys (余分): %s\n' "$(comm -13 <(printf '%s\n' "$expected_keys") <(printf '%s\n' "$actual_keys") | tr '\n' ' ')" >&2
+    return 1
+  fi
+
+  # 集合の完全一致 (差分 0)
+  local diff_lines
+  diff_lines=$(comm -3 <(printf '%s\n' "$expected_keys") <(printf '%s\n' "$actual_keys") | grep -c '.' || true)
+  if [ "${diff_lines:-0}" != "0" ]; then
+    printf 'S-47: key set mismatch (差分 %s 件):\n%s\n' "$diff_lines" "$(comm -3 <(printf '%s\n' "$expected_keys") <(printf '%s\n' "$actual_keys"))" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -2554,10 +2632,18 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                           _record FAIL "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
     fi
 
+    # --- task-69 Step 3 新規 case (key parity) ---
+    _s47_result=0
+    _case_s47 "$_PORT" 2>/dev/null || _s47_result=$?
+    if [ $_s47_result -eq 0 ];   then _record PASS "S-47" "GET /api/keys key set == yml top-level keys (full parity)"
+    elif [ $_s47_result -eq 2 ]; then _record SKIP "S-47" "key parity (server 接続不可)"
+    else                              _record FAIL "S-47" "GET /api/keys key set == yml top-level keys (full parity)"
+    fi
+
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
   # S-37 / S-38 / S-41 / S-42 / S-45 / S-46 は file-only (port 不要) なので node 不在でも実行

@@ -159,6 +159,7 @@ FEATURE_NOTIFY_ENABLED \
 FEATURE_CHECK_MD_MERMAID_ENABLED \
 FEATURE_FAILURE_LOOP_DETECT_ENABLED \
 FEATURE_REVIEWER_COUNT_GUARD_ENABLED \
+FEATURE_TOOL_CALL_SLIP_DETECT_ENABLED \
 FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED \
 REVIEW_REQUIRED_DESIGN \
 REVIEW_MIN_COUNT_DESIGN \
@@ -321,6 +322,8 @@ HC_FEATURE_CHECK_MD_MERMAID_ENABLED="true"
 HC_FEATURE_FAILURE_LOOP_DETECT_ENABLED="true"
 # reviewer-count-guard.sh (task-64 Step 5): PreToolUse(Agent) reviewer 数上限 warn hook
 HC_FEATURE_REVIEWER_COUNT_GUARD_ENABLED="true"
+# tool-call-slip-detector.sh (next-actions #66): Stop hook、tool-call markup slip 検出
+HC_FEATURE_TOOL_CALL_SLIP_DETECT_ENABLED="true"
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 4 D、
 # config-loader.sh の対称性 + env override snapshot を確保。default false = Web UI 起動)
 HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED="false"
@@ -531,6 +534,46 @@ fi
 # 不在なら no-op (graceful)。存在すれば SSoT 値を上書き parse。
 _hc_parse_yaml_file "$_hc_local_config"
 export HC_LOCAL_CONFIG_PATH="$_hc_local_config"
+
+# --- Step 3.6: unknown_local_key warning (task-69 Step 4) ---
+# 役割:
+#   local.yml にのみ存在し SSoT yml に無い top-level key を WARN として stderr 出力する。
+#   local override は「既存 SSoT key の値を上書きする層」であり、key 追加の SSoT にはしない
+#   (draft §4.1「local override の扱い」)。local にだけある key は誤字 (typo) の可能性が高いため
+#   検出して operator に知らせる。
+#
+# 設計:
+#   - SSoT yml と local.yml の両方が存在する時のみ実行 (どちらか不在は no-op = graceful)。
+#   - top-level key 抽出は `^[a-z_][a-zA-Z0-9_]*:` (hc-config.sh _yml_list_keys / parity smoke と同一 regex)。
+#   - SSoT key set を space で囲んだ string にして部分一致誤検出を防ぐ membership 判定 (bash 3.2 互換)。
+#   - fail-open: warning のみで export 値や exit code には影響させない (hook を壊さない)。
+#   - 一時無効化: HC_UNKNOWN_LOCAL_KEY_WARN=0 で抑止 (騒がしい環境向け)。
+_hc_list_top_keys() {
+  grep -E '^[a-z_][a-zA-Z0-9_]*:' "$1" 2>/dev/null | sed -E 's/:.*$//' || true
+}
+if [ "${HC_UNKNOWN_LOCAL_KEY_WARN:-1}" != "0" ] \
+  && [ -f "$HC_CONFIG_PATH" ] && [ -f "$_hc_local_config" ]; then
+  _hc_ssot_keyset=" "
+  while IFS= read -r _hc_kk; do
+    [ -z "$_hc_kk" ] && continue
+    _hc_ssot_keyset="${_hc_ssot_keyset}${_hc_kk} "
+  done <<EOF
+$(_hc_list_top_keys "$HC_CONFIG_PATH")
+EOF
+  while IFS= read -r _hc_lk; do
+    [ -z "$_hc_lk" ] && continue
+    case "$_hc_ssot_keyset" in
+      *" $_hc_lk "*) ;;  # SSoT に存在 = 正規 override
+      *) printf '[config-loader] WARN: unknown_local_key: %s (in %s but not in SSoT %s; possible typo)\n' \
+           "$_hc_lk" "$_hc_local_config" "$HC_CONFIG_PATH" >&2 ;;
+    esac
+  done <<EOF
+$(_hc_list_top_keys "$_hc_local_config")
+EOF
+  unset _hc_ssot_keyset _hc_kk _hc_lk
+fi
+unset -f _hc_list_top_keys
+
 unset _hc_local_config
 unset -f _hc_parse_yaml_file
 

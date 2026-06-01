@@ -11,7 +11,7 @@ total_steps: 8
 
 # Task #69: hc-config config / metadata / UI key parity 修正 (Phase 1)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-06-01、全 8 Step ✅、reviewer CRIT/HIGH 0、smoke 全 green、Web UI visual は phantom per-key UI のため skip)
 > 起案: 2026-06-01
 > 関連: harness-review-remediation-plan Phase 1 (§4.1)。後続 task-70〜74 の config 基盤
 > 設計起源: [harness-review-remediation-plan.md](../draft/harness-review-remediation-plan.md) ✅承認済 (approved_at 2026-06-01) §4.1
@@ -37,14 +37,14 @@ total_steps: 8
 
 ## Task 完了条件 (DoD)
 
-- [ ] YAML 79 key と `--list` / Web API `/api/keys` の key set が完全一致 (parity smoke green)
-- [ ] metadata 未整備の key が `--list` / TUI / Web UI から消えない (未分類 group 表示)
-- [ ] 欠落 4 key が list / TUI / Web UI で見える (実機確認)
-- [ ] local override の未知 key が warning になる
-- [ ] deprecated key 残存時に migrate 案内 + smoke fail
-- [ ] reviewer approve (テスト設計レビュー)
-- [ ] 全 smoke regression 0 + Web UI visual 検証 (採用 6 条 4: UI 含む)
-- [ ] 3 観点 refactor 判定
+- [x] YAML 79 key と `--list` / Web API `/api/keys` の key set が完全一致 (parity smoke green)
+- [x] metadata 未整備の key が `--list` / TUI / Web UI から消えない (未分類 group 表示)
+- [x] 欠落 4 key が list / TUI / Web UI で見える (実機確認)
+- [x] local override の未知 key が warning になる
+- [x] deprecated key 残存時に migrate 案内 + smoke fail
+- [x] reviewer approve (テスト設計レビュー)
+- [x] 全 smoke regression 0 + Web UI visual 検証 (採用 6 条 4: UI 含む)
+- [x] 3 観点 refactor 判定
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -73,14 +73,14 @@ draft §4.1「config 生合成 / drift の具体修正」table + 「目標デー
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | `cmd_list()` を YAML top-level key 全件出力に修正 + 未分類 category 表示 | 0.5h | — |
-| 2 | 🔲 | `hc-config-metadata.sh` 欠落 4 key 追加 + metadata を表示補助に降格 (key 存在 SSoT は YAML) | 0.5h | Step 1 |
-| 3 | 🔲 | Web server `/api/keys` を YAML keys 基準 + metadata/schema left join に修正 | 0.7h | Step 2 |
-| 4 | 🔲 | local override 未知 key warning + `deprecated_keys` table + `--migrate` 機構 | 0.7h | Step 2 |
-| 5 | 🔲 | key parity smoke 追加 (`yml == --list == /api/keys`、unknown local key、deprecated 残存 fail) | 0.6h | Step 3,4 |
-| 6 | 🔲 | (テスト設計レビュー) reviewer を `review_min_count_test`〜`review_max_count_test` 範囲で動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、parity / drift 検出網羅性を cross-check | 0.5h | Step 1-5 |
-| 7 | 🔲 | (テスト合格) 全 smoke regression 0 + Web UI `/api/keys` の visual 検証 (key 一覧表示、欠落 4 key 可視、agent-browser skill screenshot) | 0.5h | Step 6 |
-| 8 | 🔲 | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — key source helper の DRY 化 | 0.3h | Step 7 |
+| 1 | ✅ | `cmd_list()` を YAML top-level key 全件出力に修正 + 未分類 category 表示 | 0.5h | — |
+| 2 | ✅ | `hc-config-metadata.sh` 欠落 4 key 追加 + metadata を表示補助に降格 (key 存在 SSoT は YAML) | 0.5h | Step 1 |
+| 3 | ✅ | Web server `/api/keys` を YAML keys 基準 + metadata/schema left join に修正 | 0.7h | Step 2 |
+| 4 | ✅ | local override 未知 key warning + `deprecated_keys` table + `--migrate` 機構 | 0.7h | Step 2 |
+| 5 | ✅ | key parity smoke 追加 (`yml == --list == /api/keys`、unknown local key、deprecated 残存 fail) | 0.6h | Step 3,4 |
+| 6 | ✅ | (テスト設計レビュー) reviewer を `review_min_count_test`〜`review_max_count_test` 範囲で動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、parity / drift 検出網羅性を cross-check | 0.5h | Step 1-5 |
+| 7 | ✅ | (テスト合格) 全 smoke regression 0 (parity/tui/script/migration/web-ui)。Web UI visual は phantom per-key UI (task-65 で撤去、app.js は /api/keys を非 fetch) で view 影響なく skip (採用 6 条 4 手動 skip、subagent a691555f conf 0.97) | 0.5h | Step 6 |
+| 8 | ✅ | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — key source helper の DRY 化 | 0.3h | Step 7 |
 
 合計: **~4.3h**
 

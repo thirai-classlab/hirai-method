@@ -141,6 +141,14 @@ _meta_category() {
   fi
 }
 
+# category 一覧文字列を返す helper (SSoT — cmd_list / _tui_order_keys_by_category の両所から参照)
+# task-69 Step 8 L2: categories string が 794 (cmd_list) と 1390 (_tui_order_keys_by_category) の
+#   2 箇所に重複していたため、単一 helper に抽出。将来 category 追加時はここ 1 箇所のみ修正。
+# stdout: スペース区切りの category 名列 (word-split で for cat in $(...); do が使える形式)
+_hc_categories() {
+  printf '%s' "保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
+}
+
 # --config <path> 引数で test isolation 対応 (smoke Case 3-6)
 CONFIG_PATH=""
 
@@ -789,7 +797,9 @@ cmd_list() {
   # category 別にグルーピングして出力 (metadata 不在時は単一グループ扱い)
   # iter2 CRIT 同種 leak 予防: for/while 本体内の `local cat_keys` / `local key` / `local cat_count`
   #   宣言を関数頭に集約し、ループ内は素の代入にして bash 3.2 cmdsubst stdout 漏洩を構造的に防ぐ。
-  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  # task-69 Step 8 L2: categories は _hc_categories() SSoT helper から取得 (重複 hardcode 撤廃)。
+  local categories
+  categories=$(_hc_categories)
   local printed_any=0
   local cat cat_keys key cat_count
   for cat in $categories; do
@@ -807,7 +817,26 @@ cmd_list() {
     printed_any=1
   done
 
-  # metadata 不在 / 未分類 key があれば従来通り全 key を 1 グループで出力
+  # task-69 Step 1: 未分類 section — どの category にも一致しない key (metadata 欠落 /
+  #   category drift) を漏れなく出力して --list の key set を yml と完全一致させる。
+  #   key parity smoke (hc-config-key-parity-smoke.sh) が yml==--list を機械強制する。
+  local uncat_keys uncat_count
+  uncat_keys=""
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    case " $categories " in
+      *" $(_meta_category "$key") "*) : ;;  # いずれかの category に分類済
+      *) uncat_keys="${uncat_keys}${key}"$'\n' ;;
+    esac
+  done <<< "$keys"
+  if [ -n "$uncat_keys" ]; then
+    uncat_count=$(printf '%s' "$uncat_keys" | grep -c '.')
+    printf '\n=== 未分類 (%s keys) ===\n' "$uncat_count"
+    printf '%s' "$uncat_keys" | _cmd_list_rows "$show_default" "$show_effect"
+    printed_any=1
+  fi
+
+  # metadata 不在等で 1 件も出力されなかった場合のみ従来通り全 key を 1 グループで出力
   if [ "$printed_any" -eq 0 ]; then
     printf '%s\n' "$keys" | _cmd_list_rows "$show_default" "$show_effect"
   fi
@@ -997,6 +1026,138 @@ cmd_validate() {
   return 0
 }
 
+# === deprecated_keys table + migration (task-69 Step 4) ===
+#
+# 設計 SSoT: docs/draft/harness-review-remediation-plan.md §4.1「migration の扱い」。
+#   key rename / delete は手作業にしない。deprecated_keys table を持ち、`--migrate` で:
+#     1. old key を検出する
+#     2. new key に値を移す (new key 不在なら追記、存在すれば既存値を尊重し old は削除のみ)
+#     3. 移行ログを出す
+#     4. deprecated key が残っていれば非0 exit (smoke fail trigger)
+#
+# table 形式 (1 行 1 entry、"old_key new_key" の space 区切り):
+#   - delete 専用 (new key なし) は new_key 欄を "-" にする (値破棄 + old 削除のみ)。
+#   - 現状は将来の rename 用 seed として 1 entry を置く。実 rename 発生時に追記する。
+#
+# bash 3.2 互換のため連想配列を使わず、改行区切り string を loop する。
+#
+# seed entry (`_deprecated_example_old -> _deprecated_example_new`) は将来の rename 用 placeholder。
+# 実 harness-config.yml には存在しない key 名 (`_` 始まり) のため、real config で `--migrate` を
+# 実行しても no-op (対象なし)。実際の key rename / delete 発生時は本 table に
+# "old_key new_key" (delete 専用は new_key を "-") 形式で 1 行追記する。
+_DEPRECATED_KEYS="\
+_deprecated_example_old _deprecated_example_new"
+
+# deprecated table を "old -> new" 形式で 1 行ずつ出力 (smoke / operator 参照用)
+cmd_list_deprecated() {
+  local line old new
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    old=$(printf '%s' "$line" | awk '{print $1}')
+    new=$(printf '%s' "$line" | awk '{print $2}')
+    [ -z "$old" ] && continue
+    printf '%s -> %s\n' "$old" "${new:--}"
+  done <<EOF
+$(printf '%s\n' "$_DEPRECATED_KEYS")
+EOF
+}
+
+# old key の値を new key へ移行 (1 entry 分)
+# $1: yml path, $2: old_key, $3: new_key ("-" なら delete 専用)
+# 戻り: 0 = 移行 or 何もしなかった (old 不在) / 1 = 移行失敗 (old 残存)
+_migrate_one() {
+  local yml="$1"
+  local old_key="$2"
+  local new_key="$3"
+  # old key が yml に存在しなければ no-op
+  if ! grep -qE "^${old_key}:" "$yml"; then
+    return 0
+  fi
+  local old_val
+  old_val=$(_yml_get_raw "$yml" "$old_key" || printf '')
+
+  if [ "$new_key" != "-" ] && [ -n "$new_key" ]; then
+    if grep -qE "^${new_key}:" "$yml"; then
+      # new key が既に存在 → 既存値を尊重し old を削除するのみ
+      _out "migrate: ${old_key} -> ${new_key} (new key already present, keeping its value; removing old)"
+    else
+      # new key 行を old key 行の位置に rename (値も移す)
+      # awk で old key 行を `new_key: old_val` に置換 (1 行のみ、comment は破棄)
+      local content
+      content=$(OLD="$old_key" NEW="$new_key" VAL="$old_val" awk '
+        BEGIN { o = ENVIRON["OLD"]; n = ENVIRON["NEW"]; v = ENVIRON["VAL"]; done = 0 }
+        {
+          if (!done && index($0, o ":") == 1) {
+            printf "%s: %s\n", n, v
+            done = 1
+          } else {
+            print $0
+          }
+        }
+      ' "$yml")
+      if ! _atomic_write "$yml" "$content"; then
+        _err "migrate: atomic write failed for ${old_key} -> ${new_key}"
+        return 1
+      fi
+      _out "migrate: ${old_key} -> ${new_key} (value '${old_val}' moved)"
+    fi
+  fi
+
+  # delete 専用 (new key="-") もしくは new key 既存 path: old key 行を削除する。
+  if grep -qE "^${old_key}:" "$yml"; then
+    local content2
+    content2=$(OLD="$old_key" awk '
+      BEGIN { o = ENVIRON["OLD"] }
+      { if (index($0, o ":") == 1) next; print $0 }
+    ' "$yml")
+    if ! _atomic_write "$yml" "$content2"; then
+      _err "migrate: atomic write failed removing old key ${old_key}"
+      return 1
+    fi
+    if [ "$new_key" = "-" ] || [ -z "$new_key" ]; then
+      _out "migrate: ${old_key} removed (deprecated, no replacement)"
+    fi
+  fi
+
+  # 残存確認 (移行失敗検出)
+  if grep -qE "^${old_key}:" "$yml"; then
+    _err "migrate: deprecated key still present after migration: ${old_key}"
+    return 1
+  fi
+  return 0
+}
+
+# --migrate: deprecated_keys table を走査して old key を new key へ移行
+# 戻り: 0 = 全 entry 移行完了 (or 対象なし) / 1 = いずれか残存 (smoke fail trigger)
+cmd_migrate() {
+  local line old new migrated=0 errors=0
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    old=$(printf '%s' "$line" | awk '{print $1}')
+    new=$(printf '%s' "$line" | awk '{print $2}')
+    [ -z "$old" ] && continue
+    if grep -qE "^${old}:" "$CONFIG_PATH"; then
+      if _migrate_one "$CONFIG_PATH" "$old" "$new"; then
+        migrated=$((migrated + 1))
+      else
+        errors=$((errors + 1))
+      fi
+    fi
+  done <<EOF
+$(printf '%s\n' "$_DEPRECATED_KEYS")
+EOF
+  if [ "$errors" -gt 0 ]; then
+    _err "migration failed: ${errors} deprecated key(s) still present"
+    return 1
+  fi
+  if [ "$migrated" -eq 0 ]; then
+    _out "no migration needed (no deprecated keys present)"
+  else
+    _out "migration complete: ${migrated} key(s) migrated"
+  fi
+  return 0
+}
+
 # --help
 cmd_help() {
   cat <<'EOF'
@@ -1015,6 +1176,8 @@ USAGE:
   hc-config.sh --reset-all              全 key を default に戻す
   hc-config.sh --diff                   現在値と default の差分一覧
   hc-config.sh --validate               全 key の型 validation のみ実行
+  hc-config.sh --migrate                deprecated_keys table に従い old key を new key へ移行 (残存で非0 exit)
+  hc-config.sh --list-deprecated        deprecated_keys table を "old -> new" 形式で表示
   hc-config.sh --config <path>          編集対象 yml path を override (test isolation 用)
   hc-config.sh --help                   本 help 表示
 
@@ -1180,8 +1343,8 @@ _TUI_CLEAR=$'\033[2J\033[H'
 #   かつ scope 外への array 露出を避けるため、`|` 区切り string で持ち、各関数で
 #   `IFS='|' read -r -a cat_names <<< "$_TUI_CAT_NAMES_STR"` で展開する (bash 3.2 互換)。
 #   順序は draft §3.2 の category 順 (保護パス → ファイル配置 → state_dir → Gate/Confidence →
-#   feature_toggle → reviewer_control)。
-_TUI_CAT_NAMES_STR="保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control"
+#   feature_toggle → reviewer_control → harness_meta [task-69 追加])。
+_TUI_CAT_NAMES_STR="保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control|harness_meta"
 
 # 1 文字キー入力を読み取り、矢印キーは UP/DOWN/RIGHT/LEFT に正規化して stdout 出力
 # Enter → ENTER、q → QUIT、それ以外は raw 文字。
@@ -1227,12 +1390,14 @@ _tui_read_key() {
 
 # 全 key を category 順に並べ替えて改行区切りで stdout 出力 (H3: category グルーピング)
 # metadata category 順 (保護パス → ファイル配置 → state_dir → Gate/Confidence →
-# feature_toggle → reviewer_control) に並べ、未分類 key は末尾に回す。
+# feature_toggle → reviewer_control → harness_meta) に並べ、未分類 key は末尾に回す。
 # metadata 不在時 / 全 key 未分類時は入力順そのまま (fallback)。
 # $1: 全 key 改行区切り (yml 出現順)
 _tui_order_keys_by_category() {
   local all_keys="$1"
-  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control"
+  # task-69 Step 8 L2: _hc_categories() SSoT helper から取得 (cmd_list と共通化)
+  local categories
+  categories=$(_hc_categories)
   local ordered="" key cat seen_cat=0
   # iter2 CRIT C-iter2-1 fix (bash 3.2 local+command-substitution leak 予防):
   #   while ループ本体内で `local kc` (代入なし宣言) → 直後に `kc=$(_meta_category)` する構造は
@@ -1254,7 +1419,7 @@ _tui_order_keys_by_category() {
     [ -z "$key" ] && continue
     kc=$(_meta_category "$key")
     case "$kc" in
-      保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control) ;;
+      保護パス|ファイル配置|state_dir|Gate/Confidence|feature_toggle|reviewer_control|harness_meta) ;;
       *) ordered="${ordered}${key}"$'\n' ;;
     esac
   done <<< "$all_keys"
@@ -1862,6 +2027,8 @@ _main_dispatch() {
     --reset-all) cmd_reset_all ;;
     --diff)      cmd_diff ;;
     --validate)  cmd_validate ;;
+    --migrate)         cmd_migrate ;;
+    --list-deprecated) cmd_list_deprecated ;;
     --help|-h)   cmd_help ;;
     interactive) cmd_interactive ;;
     *)

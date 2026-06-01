@@ -29,8 +29,8 @@
 #   - hc_metadata_category <key>         → category を stdout (不在なら空 + return 1)
 #   - hc_metadata_keys_by_category <cat> → category に属する key を改行区切りで stdout
 #
-# category 6 分類 (smoke Case 2 が期待):
-#   保護パス / ファイル配置 / state_dir / Gate/Confidence / feature_toggle / reviewer_control
+# category 7 分類 (smoke Case 2 が期待、task-69 で harness_meta 追加):
+#   保護パス / ファイル配置 / state_dir / Gate/Confidence / feature_toggle / reviewer_control / harness_meta
 #
 # 起源:
 #   task-48 Step 2、設計 draft: docs/draft/config-yml-phase3-hc-config-script.md §3.1 §3.2
@@ -40,7 +40,7 @@
 # metadata table (TSV: KEY<TAB>category<TAB>description<TAB>effect)
 # ============================================================
 # 区切りは TAB。description / effect 内に TAB は使わない (本文に TAB は出ない)。
-# 全 74 key を 6 category のいずれかに漏れなく分類 (未分類 0)。
+# 全 80 key を 7 category のいずれかに漏れなく分類 (未分類 0、task-69 で harness_meta 追加 + 5 key 追加)。
 _hc_metadata_table() {
   cat <<'METADATA_EOF'
 protected_paths	保護パス	委譲ガードがメイン直接操作禁止とみなす path 部分一致リスト (例: src/tests/scripts)	追加すると該当 path が main 直接編集禁止になりサブエージェント委譲が強制される。削除すると委譲ガードが解除される
@@ -118,6 +118,11 @@ review_max_count_system	reviewer_control	default registry 全件、上限指定	
 review_required_security	reviewer_control	default false (security 影響 task のみ)	true にすると security レビューを必須化する。false だと security 影響 task のみで起動される
 review_min_count_security	reviewer_control	default 1 (security-reviewer)	増やすと security レビューの reviewer 下限が上がる。減らすと下限が下がる
 review_iteration_max	reviewer_control	レビュー → 修正 → 再レビューを繰り返す反復の上限回数 (default 5、採用 6 条 4 の収束上限)	増やすと収束まで粘れるが時間とコストが増える。減らすと早期に user escalation し反復が浅くなる
+feature_reviewer_count_guard_enabled	feature_toggle	reviewer-count-guard (test 設計レビュー fan-out 数が review_min/max_count を逸脱した時に warn 注入、task-64 Step 5)	false にすると reviewer-count-guard を OFF にし reviewer 並列起動数の min/max 逸脱 warn が止まる
+feature_tool_call_slip_detect_enabled	feature_toggle	tool-call-slip-detector (Stop hook で tool 呼び出しの markup slip を検出し次 turn 自己是正を注入)	false にすると slip 検出 hook を OFF にし markup slip 時の自己是正注入が止まる
+harness_version	harness_meta	harness 本体のバージョン (install.sh が更新する日付文字列、採用先 project は手動編集しない)	変更すると stale-harness-detect の比較基準が切り替わる。手動編集すると採用先 project の取込判定が崩れる
+stale_harness_markers	harness_meta	stale-harness-detect が consuming repo の取込遅れ検出に使う marker ファイル配列 (CommonRules.md 等)	追加すると stale 検出対象 file が増える。削除すると該当 file の drift が検出されなくなる
+feature_stale_harness_detect_enabled	harness_meta	stale-harness-detect (consuming repo の harness 取込遅れを SessionStart で WARN 通知する hook)	false にすると stale-harness-detect を OFF にし harness 取込遅れの WARN 通知が止まる
 METADATA_EOF
 }
 
