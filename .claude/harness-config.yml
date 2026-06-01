@@ -349,7 +349,7 @@ feature_gateguard_enabled: false
 feature_context_budget_enabled: true              # context-budget
 feature_parallel_subagent_reminder_enabled: true  # parallel-subagent-reminder
 feature_reviewer_count_guard_enabled: true     # reviewer-count-guard (task-64 Step 5)
-feature_tool_call_slip_detect_enabled: true       # tool-call-slip-detector (Stop hook、tool-call markup slip 検出、next-actions #66)
+feature_tool_call_slip_detect_enabled: false      # tool-call-slip-detector OFF (誤検出ループが slip 体験の主因と判明、調査 a90a3d29 conf 0.86、2026-06-01 切り分け)
 feature_autonomous_action_guard_enabled: true     # autonomous-action-guard
 feature_byproduct_discharge_enabled: true         # byproduct-discharge-guard + next-actions-surface
 feature_why_x5_enforcement_enabled: true          # why-x5-reminder + why-x5-violation-detect
