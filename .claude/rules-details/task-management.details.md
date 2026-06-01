@@ -43,7 +43,7 @@ related: task-management.md
 - **API 変更** → api-designer / api-documenter 加味
 - **言語特定** → 言語別 reviewer (python-reviewer / typescript-reviewer / go-reviewer / rust-reviewer 等) 加味
 - **security 影響** → security-reviewer / security-auditor 加味
-- 上記から **5 件以上**を動的選定
+- 上記から **`review_min_count_test`〜`review_max_count_test` の範囲内**で動的選定 (青天井「5+」は task-64 で廃止)。起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_test` で上限を確認し、並列起動数 N が `min ≤ N ≤ max` に収まることを保証する
 
 **ビジュアル検証 (browser/web UI、E2E とは別レイヤ、2026-05-27 採用、draft `ui-visual-verification-mandate.md`)**:
 
@@ -53,7 +53,7 @@ related: task-management.md
 - E2E (機能フロー動作) とは別の品質軸。**両方 PASS で初めて UI Task 完了**、E2E のみ / 型チェックのみでは完了宣言しない
 - 非対話 / CI 環境は Playwright screenshot で代替可。honor-system (機械強制 hook なし)
 
-**yml 値による制御 (task-44/45/46)**: reviewer 動的選定の下限 / 上限 / 反復は `harness-config.yml` の `review_min_count_test` (default 5) / `review_max_count_test` (default 10) / `review_iteration_max` (default 5) で集中制御 (`HC_REVIEW_*` env で override 可、`bash .claude/scripts/hc-config.sh --set review_min_count_test=3` で安全に変更可、atomic backup + type validation)。詳細は `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」参照。
+**yml 値による制御 (task-44/45/46、task-64 で enforcement 化 + local.yml 移行)**: reviewer 動的選定の下限 / 上限 / 反復は `review_min_count_test` / `review_max_count_test` / `review_iteration_max` で集中制御。**具体値は固定 default を散文に hardcode せず、起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_test` (上限) / `--get review_min_count_test` (下限) / `--get review_iteration_max` (反復上限) で現在値を確認する**。値解決順: `env(HC_REVIEW_*)` > `harness-config.local.yml` (project override、`install.sh --update` 温存) > `harness-config.yml` (SSoT) > config-loader default。`bash .claude/scripts/hc-config.sh --set review_min_count_test=3` で安全に変更可 (atomic backup + type validation)。詳細は `docs/SELF_IMPROVEMENT.md` §「hc-config.sh による yml 編集」参照。
 
 ### 条 6 詳細 (list.md 表現規約)
 

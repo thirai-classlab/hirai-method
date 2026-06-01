@@ -40,6 +40,15 @@ description: TDD 完了直後のモジュール単位レビュー + リファク
 | `HC_REVIEW_MAX_COUNT_MODULE` | `review_max_count_module` | `5` | reviewer 上限 (`--max-reviewers` 未指定時の default) |
 | `HC_REVIEW_ITERATION_MAX` | `review_iteration_max` | `5` | findings 修正後の反復ループ上限 |
 
+**起動前に必ず以下を実行して reviewer 数を確定する (task-64、散文参照でなく実行手順)**:
+
+```bash
+bash .claude/scripts/hc-config.sh --get review_required_module   # false なら本 command を no-op skip
+bash .claude/scripts/hc-config.sh --get review_min_count_module  # 範囲下限
+bash .claude/scripts/hc-config.sh --get review_max_count_module  # 範囲上限
+# → min ≤ 並列起動 reviewer 数 N ≤ max を保証して起動 (青天井禁止)。値解決順 env > harness-config.local.yml > harness-config.yml > default
+```
+
 `HC_REVIEW_REQUIRED_MODULE=false` で skip した場合は、bypass.log に記録し、ユーザに「review_required_module=false のため /module-review を skip した、Phase 1 以降を実行しない」と明示。
 
 ### Phase 1: 前提チェック

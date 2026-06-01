@@ -134,6 +134,12 @@
             "command": "bash .claude/hooks/parallel-subagent-reminder.sh",
             "timeout": 5,
             "statusMessage": "並列 subagent / agent type 選定検証中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/reviewer-count-guard.sh",
+            "timeout": 5,
+            "statusMessage": "reviewer 数上限検証中..."
           }
         ]
       },

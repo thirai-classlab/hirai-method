@@ -2,7 +2,7 @@
 # .claude/tests/config-feature-toggles-smoke.sh — task-44 Step 3
 #
 # 目的:
-#   config-loader.sh に追加される is_feature_enabled 関数の動作を 6 ケースで検証する。
+#   config-loader.sh の is_feature_enabled 関数 + 行末コメント strip (task-64 Step 1) を 9 ケースで検証する。
 #
 #   - Case 1: feature toggle ON (yml default true + env unset) で exit 0
 #   - Case 2: feature toggle OFF (HC_FEATURE_*_ENABLED=false) で exit 1
@@ -10,6 +10,9 @@
 #   - Case 4: env override 優先 (yml false + env HC_FEATURE_*_ENABLED=true) で exit 0
 #   - Case 5: case insensitive (HC_FEATURE_FOO_ENABLED=False) で exit 1
 #   - Case 6: 関数存在確認 (declare -f is_feature_enabled で定義を確認)
+#   - Case 7: 行末コメント strip → clean export (`key: 10  # comment` → HC=10、task-64)
+#   - Case 8: double-quote 値内 `#` 保護 (`key: "url#frag"` → url#frag 保持、task-64)
+#   - Case 9: inline array + 行末コメント strip 不変 (`[a, b]  # c` → a,b、task-64)
 #
 # 設計:
 #   - 一時 yml file を /tmp/ に Write してテスト用 yml として使用
@@ -216,6 +219,72 @@ _case_6() (
 )
 
 # ============================================================
+# Case 7 (task-64 Step 1): 行末コメント strip → clean export
+# `review_max_count_test: 10  # comment` を読み HC_REVIEW_MAX_COUNT_TEST が
+# comment なしの clean `10` で export されることを確認 (root cause B 回帰防止)。
+# 旧挙動では "10             # default..." と comment 込みで export され数値比較が壊れた。
+# ============================================================
+_case_7() (
+  set -uo pipefail
+  _cleanup_feature_envs
+  _write_tmp_yml "review_max_count_test: 10             # default registry 全件、上限指定"
+  export HC_CONFIG_PATH="$TMP_YML"
+  unset HC_REVIEW_MAX_COUNT_TEST 2>/dev/null || true
+  # shellcheck source=/dev/null
+  . "$CONFIG_LOADER"
+  # comment が strip され clean `10` であること (前後空白 / # 混入を許さない)
+  if [ "$HC_REVIEW_MAX_COUNT_TEST" != "10" ]; then
+    printf 'expected [10], got [%s]\n' "$HC_REVIEW_MAX_COUNT_TEST" >&2
+    return 1
+  fi
+  return 0
+)
+
+# ============================================================
+# Case 8 (task-64 Step 1): 値内 `#` 保護 (double-quote 値)
+# `key: "https://x/#frag"` を読み HC が `#frag` を保持して export することを確認。
+# double-quote で囲んだ値は comment strip を skip し値内 `#` を保護する
+# (hc-config.sh _yml_get_raw と同一挙動、URL fragment 等の正規ユースケース)。
+# ============================================================
+_case_8() (
+  set -uo pipefail
+  _cleanup_feature_envs
+  unset HC_DOCS_APPROVED_DIR 2>/dev/null || true
+  _write_tmp_yml 'docs_approved_dir: "https://example.com/page#section"'
+  export HC_CONFIG_PATH="$TMP_YML"
+  # shellcheck source=/dev/null
+  . "$CONFIG_LOADER"
+  if [ "$HC_DOCS_APPROVED_DIR" != "https://example.com/page#section" ]; then
+    printf 'expected [https://example.com/page#section], got [%s]\n' "$HC_DOCS_APPROVED_DIR" >&2
+    return 1
+  fi
+  return 0
+)
+
+# ============================================================
+# Case 9 (task-64 Step 1): inline array が行末コメント strip で壊れない
+# `protected_paths: [src, tests, scripts]  # comment` を読み、3 要素 array が
+# comment 除去後も改行区切りで正しく load されることを確認。
+# ============================================================
+_case_9() (
+  set -uo pipefail
+  _cleanup_feature_envs
+  unset HC_PROTECTED_PATHS 2>/dev/null || true
+  _write_tmp_yml "protected_paths: [src, tests, scripts]    # 保護パス comment"
+  export HC_CONFIG_PATH="$TMP_YML"
+  # shellcheck source=/dev/null
+  . "$CONFIG_LOADER"
+  # 期待: $'src\ntests\nscripts' (comment が array 要素に混入しないこと)
+  local expected
+  expected=$'src\ntests\nscripts'
+  if [ "$HC_PROTECTED_PATHS" != "$expected" ]; then
+    printf 'expected [%s], got [%s]\n' "$expected" "$HC_PROTECTED_PATHS" >&2
+    return 1
+  fi
+  return 0
+)
+
+# ============================================================
 # テスト実行
 # ============================================================
 
@@ -243,6 +312,18 @@ fi
 
 if _case_6 2>/dev/null; then _record PASS 6 "is_feature_enabled function exists (declare -f)"
 else                         _record FAIL 6 "is_feature_enabled function exists (declare -f)"
+fi
+
+if _case_7 2>/dev/null; then _record PASS 7 "task-64: 行末コメント strip → clean export (10)"
+else                         _record FAIL 7 "task-64: 行末コメント strip → clean export (10)"
+fi
+
+if _case_8 2>/dev/null; then _record PASS 8 "task-64: double-quote 値内 # 保護 (URL fragment)"
+else                         _record FAIL 8 "task-64: double-quote 値内 # 保護 (URL fragment)"
+fi
+
+if _case_9 2>/dev/null; then _record PASS 9 "task-64: inline array + 行末コメント strip 不変"
+else                         _record FAIL 9 "task-64: inline array + 行末コメント strip 不変"
 fi
 
 # ============================================================

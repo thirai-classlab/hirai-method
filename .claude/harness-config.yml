@@ -348,6 +348,7 @@ feature_confidence_gate_enabled: true             # confidence-gate (F3)
 feature_gateguard_enabled: false
 feature_context_budget_enabled: true              # context-budget
 feature_parallel_subagent_reminder_enabled: true  # parallel-subagent-reminder
+feature_reviewer_count_guard_enabled: true     # reviewer-count-guard (task-64 Step 5)
 feature_autonomous_action_guard_enabled: true     # autonomous-action-guard
 feature_byproduct_discharge_enabled: true         # byproduct-discharge-guard + next-actions-surface
 feature_why_x5_enforcement_enabled: true          # why-x5-reminder + why-x5-violation-detect
@@ -376,6 +377,14 @@ feature_hc_config_tui_legacy_enabled: false
 # /design-review / /test-design / /module-review / /system-review command が消費 (Phase 2)。
 # yml 値 default で動作、env override 可 (HC_REVIEW_*)。
 # 設計起源: docs/draft/config-yml-feature-toggles-and-editor.md §3.1.1 (task-44)
+#
+# === project override は harness-config.local.yml に移行済 (task-64 Step 2) ===
+# 下記 review_* 値は SSoT (本 file) と harness-config.local.yml の両方に存在する。
+# config-loader.sh は local.yml を SSoT より優先 (Step 3.5) するため、hook / command が
+# 消費する実効値は local.yml 由来となる。本 file の値は install.sh --update で harness
+# default に戻されても、local.yml 側 (rsync 除外で温存) が project 値を維持する。
+# project 値を変えたい場合は harness-config.local.yml を編集すること
+# (SSoT の本 file を編集しても --update で上書きされる)。root cause E 解消 (task-64)。
 #
 # Phase 1 (本 commit): yml schema 拡張のみ、各 review command での参照 logic は Phase 2 で追加。
 # 本 Phase では値変更しても review command 動作は変わらない (yml schema 追加のみ)。
