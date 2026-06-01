@@ -1710,14 +1710,15 @@ _case_s38() (
     return 1
   fi
 
-  # editMode が 'preset' | 'individual' の 2 種であること
-  if ! grep -q "editMode: 'preset'" "$app_js"; then
-    printf 'S-38: app.js missing editMode:preset in reducer\n' >&2
+  # task-65: editMode (preset/individual の 2 種) は 6 軸 dropdown 撤去により廃止。
+  #   edit view の遷移は edit:enter / edit:select_preset / edit:cancel / edit:apply action で行う。
+  if ! grep -q "case 'edit:enter'" "$app_js"; then
+    printf 'S-38: app.js missing edit:enter action in reducer (edit view 遷移ロジック)\n' >&2
     return 1
   fi
 
-  if ! grep -q "editMode: 'individual'" "$app_js"; then
-    printf 'S-38: app.js missing editMode:individual in reducer\n' >&2
+  if ! grep -q "case 'edit:select_preset'" "$app_js"; then
+    printf 'S-38: app.js missing edit:select_preset action in reducer (preset 選択経路)\n' >&2
     return 1
   fi
 
@@ -1965,6 +1966,214 @@ _case_s42() (
 )
 
 # ============================================================
+# task-65 新規 case (S-43〜S-46)
+# /api/current-preset axes 返却 (preset/unsaved) + top view 6 軸表示 + edit dropdown 撤去
+# API contract (task-65 SSoT、server/app/smoke 一貫):
+#   preset 一致: { name, display_name_ja, match_type:"preset", axes:{6 key} }
+#   unsaved    : { name:"custom", display_name_ja, match_type:"unsaved", axes:null }
+# ============================================================
+
+# ============================================================
+# Case S-43: preset apply 後 GET /api/current-preset → axes object (6 key) を返す
+# task-65 Step 1: matched preset の axes メタデータ (6 軸) を additive に返却
+# ============================================================
+_case_s43() (
+  set -uo pipefail
+  local port="$1"
+
+  # poc-no-git を apply して既知 preset 状態にする
+  local apply_code
+  apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
+  case "$apply_code" in
+    200|207) : ;;
+    4??|5??)
+      printf 'S-43: preset apply returned HTTP %s (権限エラー/yml 破損の疑い、真の FAIL)\n' "$apply_code" >&2
+      return 1
+      ;;
+    *)
+      printf 'S-43: preset apply returned HTTP %s (server 接続不可等の環境 skip)\n' "$apply_code" >&2
+      return 2
+      ;;
+  esac
+
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+
+  # match_type=preset 前提
+  if ! printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"preset"'; then
+    printf 'S-43: poc-no-git apply 直後に match_type=preset でない (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # axes field が存在すること (additive)
+  if ! printf '%s' "$body" | grep -q '"axes"'; then
+    printf 'S-43: /api/current-preset に axes field が無い (task-65 contract 違反、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # axes が null でないこと (preset 一致時は object)
+  if printf '%s' "$body" | grep -qE '"axes"[[:space:]]*:[[:space:]]*null'; then
+    printf 'S-43: preset 一致なのに axes:null (object であるべき、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # 6 軸 key が全て含まれること
+  local axis
+  for axis in quality_level language_framework git_workflow tdd_policy review_intensity autonomy_level; do
+    if ! printf '%s' "$body" | grep -q "\"${axis}\""; then
+      printf 'S-43: axes に key "%s" が無い (6 軸不完全、body: %s)\n' "$axis" "$body" >&2
+      return 1
+    fi
+  done
+
+  # poc-no-git の既知 axis 値 (quality_level=poc) が含まれること
+  if ! printf '%s' "$body" | grep -qE '"quality_level"[[:space:]]*:[[:space:]]*"poc"'; then
+    printf 'S-43: poc-no-git の quality_level が "poc" でない (axes 値が preset metadata 由来でない疑い、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-44: unsaved 状態で GET /api/current-preset → axes:null を返す
+# task-65 Step 1: preset 外 (unsaved) では axis 値が一意でないため axes:null
+# ============================================================
+_case_s44() (
+  set -uo pipefail
+  local port="$1"
+
+  # poc-no-git を apply して既知 preset 状態 → known key を変更して unsaved 化
+  local apply_code
+  apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
+  case "$apply_code" in
+    200|207) : ;;
+    4??|5??)
+      printf 'S-44: preset apply returned HTTP %s (真の FAIL)\n' "$apply_code" >&2
+      return 1
+      ;;
+    *)
+      printf 'S-44: preset apply returned HTTP %s (環境 skip)\n' "$apply_code" >&2
+      return 2
+      ;;
+  esac
+
+  # confidence_threshold (poc-no-git は '0.5') を 0.99 に set して unsaved 化
+  local set_code
+  set_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/set" \
+    '{"key":"confidence_threshold","value":"0.99"}')
+  if [ "$set_code" != "200" ]; then
+    printf 'S-44: /api/set confidence_threshold=0.99 returned HTTP %s (known key set 失敗、FAIL)\n' "$set_code" >&2
+    return 1
+  fi
+
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+
+  # match_type=unsaved 前提
+  if ! printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
+    printf 'S-44: set 後に match_type=unsaved でない (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # axes が null であること (task-65 contract)
+  if ! printf '%s' "$body" | grep -qE '"axes"[[:space:]]*:[[:space:]]*null'; then
+    printf 'S-44: unsaved なのに axes:null でない (task-65 contract 違反、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-45: app.js top view が API axes を参照 + unsaved カスタム表示分岐を持つ (静的)
+# task-65 Step 2: renderTop は cp.axes 直接参照、axes:null (unsaved) 時はカスタム表示に切替
+# 検証方式: app.js 静的 grep (関数/分岐の存在確認)。実描画は Step 5 visual verification。
+# ============================================================
+_case_s45() (
+  set -uo pipefail
+  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
+
+  if [ ! -f "$app_js" ]; then
+    printf 'S-45: app.js not found at %s\n' "$app_js" >&2
+    return 1
+  fi
+
+  # 撤去 symbol 検出は code 行のみを対象とする (説明 comment 行 // ... は除外)。
+  #   行頭空白後に // で始まる行を除外し、行末コメントは含まれるが symbol が code として
+  #   出現するかの近似 (撤去 symbol は定義/呼出が全て消えているため code 行に残らない)。
+  local app_code
+  app_code=$(grep -vE '^[[:space:]]*//' "$app_js" || true)
+
+  # renderTop が cp.axes を参照すること (API axes 直接参照)
+  if ! printf '%s' "$app_code" | grep -qE 'cp\.axes|cp && cp\.axes'; then
+    printf 'S-45: app.js renderTop が cp.axes を参照していない (API axes 参照に未修正)\n' >&2
+    return 1
+  fi
+
+  # unsaved (axes:null) 時のカスタム表示見出しが存在すること
+  if ! printf '%s' "$app_code" | grep -q 'カスタム設定 (プリセット外)'; then
+    printf 'S-45: app.js に「カスタム設定 (プリセット外)」見出しが無い (unsaved カスタム表示未実装)\n' >&2
+    return 1
+  fi
+
+  # 6 軸 read-only table の日本語ラベル参照 (AXIS_LABELS_JA) が使われること
+  if ! printf '%s' "$app_code" | grep -q 'AXIS_LABELS_JA'; then
+    printf 'S-45: app.js に AXIS_LABELS_JA 参照が無い (6 軸日本語ラベル未使用)\n' >&2
+    return 1
+  fi
+
+  # loadCurrentAxes dead path が code から撤去されていること (comment 行の言及は許容)
+  if printf '%s' "$app_code" | grep -q 'loadCurrentAxes'; then
+    printf 'S-45: app.js code に loadCurrentAxes が残存 (dead path 未撤去、task-65 Step 2 違反)\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-46: edit view から 6 軸 dropdown が撤去されている (静的)
+# task-65 Step 2: 機能不全 6 軸 dropdown 撤去、編集は preset 一括 + 既存 key 個別の 2 経路
+# 検証方式: app.js 静的 grep (撤去された symbol の不在確認 + 残すべき preset 経路の存在確認)。
+# ============================================================
+_case_s46() (
+  set -uo pipefail
+  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
+
+  if [ ! -f "$app_js" ]; then
+    printf 'S-46: app.js not found at %s\n' "$app_js" >&2
+    return 1
+  fi
+
+  # 撤去 symbol 検出は code 行のみを対象 (説明 comment 行 // ... は除外、撤去記録の言及は許容)
+  local app_code
+  app_code=$(grep -vE '^[[:space:]]*//' "$app_js" || true)
+
+  # 6 軸 dropdown 個別編集の symbol が code から撤去されていること
+  #   onChangeAxis / loadAxesWithOptions / _axesOptions / editAxisChanges は dropdown 専用 dead code
+  local sym
+  for sym in onChangeAxis loadAxesWithOptions _axesOptions editAxisChanges 'edit-axis-'; do
+    if printf '%s' "$app_code" | grep -q "$sym"; then
+      printf 'S-46: app.js code に 6 軸 dropdown 関連 symbol "%s" が残存 (撤去未完、task-65 Step 2 違反)\n' "$sym" >&2
+      return 1
+    fi
+  done
+
+  # preset 一括変更経路は残っていること (renderEdit + applyPresetMode)
+  if ! grep -q 'function renderEdit' "$app_js"; then
+    printf 'S-46: app.js に renderEdit が無い (edit view 経路を壊した疑い)\n' >&2
+    return 1
+  fi
+  if ! grep -q 'applyPresetMode' "$app_js"; then
+    printf 'S-46: app.js に applyPresetMode が無い (preset 一括変更経路を壊した疑い)\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -2105,7 +2314,7 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
 
   if [ -z "$SHARED_PORT" ]; then
     printf '  WARN: shared server failed to start, skipping shared-server cases\n'
-    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39; do
+    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44; do
       _record SKIP "$cid" "shared server not available"
     done
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
@@ -2128,6 +2337,15 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     fi
     if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
     else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+    fi
+    # S-43/S-44 は shared server 必須なので SKIP、S-45/S-46 は file-only なので実行
+    _record SKIP "S-43" "preset axes 6 key (shared server not available)"
+    _record SKIP "S-44" "unsaved axes:null (shared server not available)"
+    if _case_s45 2>/dev/null; then _record PASS "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
+    else                           _record FAIL "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
+    fi
+    if _case_s46 2>/dev/null; then _record PASS "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
+    else                           _record FAIL "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
     fi
   else
     _PORT="$SHARED_PORT"
@@ -2297,13 +2515,39 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
     fi
 
+    # --- task-65 新規 case (S-43〜S-46): axes 返却 + top 6 軸 + dropdown 撤去 ---
+    printf '\n%s\n' '--- task-65 新規 case (S-43〜S-46) ---'
+
+    _s43_result=0
+    _case_s43 "$_PORT" 2>/dev/null || _s43_result=$?
+    if [ $_s43_result -eq 0 ];   then _record PASS "S-43" "preset apply 後 /api/current-preset → axes object (6 key)"
+    elif [ $_s43_result -eq 2 ]; then _record SKIP "S-43" "axes 6 key 確認 skip (apply failed)"
+    else                              _record FAIL "S-43" "preset apply 後 /api/current-preset → axes object (6 key)"
+    fi
+
+    _s44_result=0
+    _case_s44 "$_PORT" 2>/dev/null || _s44_result=$?
+    if [ $_s44_result -eq 0 ];   then _record PASS "S-44" "unsaved 状態で /api/current-preset → axes:null"
+    elif [ $_s44_result -eq 2 ]; then _record SKIP "S-44" "axes:null 確認 skip (apply failed)"
+    else                              _record FAIL "S-44" "unsaved 状態で /api/current-preset → axes:null"
+    fi
+
+    # S-45 / S-46 は file-only (port 不要)
+    if _case_s45 2>/dev/null; then _record PASS "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
+    else                           _record FAIL "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
+    fi
+
+    if _case_s46 2>/dev/null; then _record PASS "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
+    else                           _record FAIL "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
+    fi
+
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
-  # S-37 / S-38 / S-41 / S-42 は file-only (port 不要) なので node 不在でも実行
+  # S-37 / S-38 / S-41 / S-42 / S-45 / S-46 は file-only (port 不要) なので node 不在でも実行
   if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
   else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
   fi
@@ -2318,6 +2562,12 @@ else
   fi
   if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
   else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+  fi
+  if _case_s45 2>/dev/null; then _record PASS "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
+  else                           _record FAIL "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
+  fi
+  if _case_s46 2>/dev/null; then _record PASS "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
+  else                           _record FAIL "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
   fi
 fi
 
