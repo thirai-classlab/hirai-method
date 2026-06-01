@@ -2,7 +2,37 @@
 
 # fan-out reviewer-registry 詳細 (Layer B)
 
-`/design-review` の stack heuristic 絞り込み / 集約フォーマット / reviewer 最低数 3 体の理由。reviewer-registry 表・収束条件・並列数制御は Layer A 参照。
+`/design-review` の reviewer-registry 表 / 並列数制御 / 収束条件 / stack heuristic 絞り込み / 集約フォーマット / reviewer 最低数 3 体の理由。Layer A は要約のみ。
+
+## reviewer-registry (`harness-config.yml`)
+
+| キー | 起動対象 agent | 用途 |
+|---|---|---|
+| `reviewer_registry_design` | architect / architect-reviewer / code-architect / api-designer / ui-designer / database-reviewer / harness-optimizer | W2 `/design-review` |
+| `reviewer_registry_security` | security-auditor / security-reviewer / penetration-tester | W2 `/design-review` |
+| `reviewer_registry_test` | tdd-guide / test-automator / qa-expert / pr-test-analyzer | W1 `/test-design` |
+| `reviewer_registry_impl` | code-reviewer / refactoring-specialist / 言語別 reviewer 群 | W3 `/module-review` `/system-review` |
+
+env 上書き例: `export HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer'` (改行区切り) で cost 制御可。
+
+## 並列数 / 反復制御
+
+`review_required_design` (default true) / `review_min_count_design` (default 3) / `review_max_count_design` (default 7) / `review_iteration_max` (default 5) で制御。`hc-config.sh --get review_min_count_design` で現在値確認、`--set` で変更 (atomic backup)。値解決順 `env > harness-config.local.yml > harness-config.yml > default`。
+
+## 収束条件 (反復ループ)
+
+draft レビューは「修正 → 再レビュー」を **CRITICAL + HIGH + MEDIUM = 0** になるまで反復 (LOW は許容、cosmetic finding として記録のみ)。
+
+| 規約 | 内容 |
+|---|---|
+| **reviewer 最低数** | **3 体以上** 並列起動 (default は reviewer-registry 全件 + stack heuristic 絞り込み、`N ≥ 3` 必須、不足で user escalation) |
+| **件数取得 severity** | CRITICAL / HIGH / MEDIUM / LOW の 4 段階 |
+| **収束条件** | CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW は許容) |
+| **反復上限** | 5 回 (default、超過時 user escalation) |
+| **iteration 記録** | 各 iter の reviewer / 件数 / 修正 commit hash を draft §「レビューサイクル」table に append |
+| **bypass** | `ECC_DESIGN_REVIEW_OFF=1` (反復 5 回上限超過時の user escalation 後の継続用) |
+
+CRITICAL / HIGH / MEDIUM 全て 0 件 → draft「承認待ち」へ遷移可、1 件以上 → 「修正待ち」状態を明示し draft 修正 → 再 `/design-review` で round-N+1 review。
 
 ## stack heuristic 絞り込み
 

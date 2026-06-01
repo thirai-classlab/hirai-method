@@ -40,119 +40,45 @@ paths:
 
 ## 新規機能開発フロー (14-stage)
 
-`/new-feature <slug>` で起動。`harness-config.yml` の `workflow_stages_new` (= env `HC_WORKFLOW_STAGES_NEW`) と完全一致する 14 stage を順次進める。
+`/new-feature <slug>` で起動。`requirements` → `basic-design` → `detailed-design` → `test-design` → `design-review` → `user-approval` → `task-creation` → `tdd` → `module-review` → `local-test` → `system-review` → `ci-cd` → `scenario-test` → `finish` の 14 stage を順次進める。stage 名の SSoT は env `HC_WORKFLOW_STAGES_NEW` (= `harness-config.yml` の `workflow_stages_new`)。各 stage 完了時にメインが state JSON の `current_stage` を進める (Stage 7 で初期化)。
 
-| # | stage 名 | 役割 | 起動 command / 連携 |
-|---:|---|---|---|
-| 1 | `requirements` | WHAT / WHY 確定 + draft §1 | `/new-draft <slug>` |
-| 2 | `basic-design` | 解決アプローチ比較 + draft §2 | architect agent |
-| 3 | `detailed-design` | API / データモデル / UI / DB schema を draft §3 | code-architect agent |
-| 4 | `test-design` | MECE 20 カテゴリのテストカタログ + user スコープ承認 | `/test-design <slug>` |
-| 5 | `design-review` | reviewer-registry design + security を並列起動して fan-out | `/design-review <slug>` |
-| 6 | `user-approval` | draft §8 承認履歴に user 承認エントリ追加 (必須、Loop モードでも) | user 対話 |
-| 7 | `task-creation` | `/new-task` + `.claude/.workflow-state/<slug>.json` 初期化 | `/new-task <id> <slug>` |
-| 8 | `tdd` | RED → GREEN → REFACTOR (subagent 経由のみ)。**Task 最終 3 Steps = テスト設計レビュー → テスト合格 → リファクタリング (固定)** ([task-management.md §タスク構造規範](./task-management.md) 採用 6 条 4) | `/start-task <id>` |
-| 9 | `module-review` | モジュール毎に 3 観点レビュー | `/module-review <module>` |
-| 10 | `local-test` | `<slug>.test-design.md` ☑ カテゴリ全実行 + Step 完了条件で検証 | subagent test runner |
-| 11 | `system-review` | 全モジュール統合後に重複 / 設計乖離検出 | `/system-review --slug <slug>` |
-| 12 | `ci-cd` | `.github/workflows/` 更新 (skip 可) | — |
-| 13 | `scenario-test` | E2E / シナリオ実行 (UI 変更含む Task は E2E 必須、検出基準: [task-management.md §UI 変更検出基準](./task-management.md)) | e2e-runner agent |
-| 14 | `finish` | `/finish-task` で完了クローズ。**workflow-guard.sh が state JSON 検証** | `/finish-task <id>` |
-
-各 stage 完了時、メインが `.claude/.workflow-state/<slug>.json` の `current_stage` を次 stage に進め、`completed_stages` に追加。state JSON は Stage 7 で初期化 (Stage 1〜6 完了済として列挙)。stage 名の SSoT は env `HC_WORKFLOW_STAGES_NEW`。
-
-> **Stage 8 TDD の git log 既存 commit 確認義務 / Stage 10 完了条件検証 / Stage 13 UI 必須化 / Stage 12 ci-cd skip 条件**: [workflow/14-stage.md](../rules-details/workflow/14-stage.md)
+> **14-stage full 表 (役割 / 起動 command) + Stage 8 TDD git log 確認義務 / Stage 10 完了条件検証 / Stage 13 UI 必須化 / Stage 12 ci-cd skip 条件**: [workflow/14-stage.md](../rules-details/workflow/14-stage.md)
 
 ## 既存機能修正フロー (10-stage)
 
-`/modify-feature <slug>` で起動。`harness-config.yml` の `workflow_stages_modify` (= env `HC_WORKFLOW_STAGES_MODIFY`) と完全一致する 10 stage を順次進める。
+`/modify-feature <slug>` で起動。`branch-decision` → `checkout` → `recover-design` → `pre-test` → `redesign` → `retest-design` → `tdd` → `module-review` → `full-test` → `system-review` の 10 stage を順次進める。stage 名の SSoT は env `HC_WORKFLOW_STAGES_MODIFY`。`/new-feature` との差分: 要件定義 / `design-review` / `task-creation` / `ci-cd` / `scenario-test` を省略し、`recover-design` / `pre-test` / `retest-design` を追加。
 
-| # | stage 名 | 役割 | 起動 command / 連携 |
-|---:|---|---|---|
-| 1 | `branch-decision` | 影響範囲特定 + branch type (`feat`/`fix`/`refactor`/`hotfix`) 決定 | user 対話 |
-| 2 | `checkout` | branch 切替 (regex 検証: git-workflow.md 規約準拠) | `git switch` |
-| 3 | `recover-design` | 既存 task / draft 探索、不完全なら逆引きで draft 起こし | Glob + Read |
-| 4 | `pre-test` | **修正前** 全テスト PASS を baseline 記録 (regression 検出基準) | test runner |
-| 5 | `redesign` | draft §3 に「変更前 / 変更後」差分追記 | architect agent |
-| 6 | `retest-design` | `/test-design` 再実行で差分部 MECE 再評価 | `/test-design <slug>` |
-| 7 | `tdd` | 新規 test → 最小修正 → refactor (subagent 経由) | TDD ループ |
-| 8 | `module-review` | モジュール毎に 3 観点レビュー | `/module-review <module>` |
-| 9 | `full-test` | 全 test PASS + pre-test baseline regression 検出 | test runner |
-| 10 | `system-review` | 全体整合性レビュー → merge 可否判断 → `/finish-task` 案内 | `/system-review` |
-
-`/new-feature` との主要差分: 要件定義 / `design-review` / `task-creation` / `ci-cd` / `scenario-test` は省略され、代わりに `recover-design` / `pre-test` / `retest-design` が入る。
-
-> **Stage 7 TDD git log 検証 / `/new-feature` との差分詳細**: [workflow/10-stage.md](../rules-details/workflow/10-stage.md) + [`modify-feature.md`](../commands/modify-feature.md)
+> **10-stage full 表 + Stage 7 TDD git log 検証 / `/new-feature` との差分詳細**: [workflow/10-stage.md](../rules-details/workflow/10-stage.md) + [`modify-feature.md`](../commands/modify-feature.md)
 
 ## workflow-guard.sh による強制機構
 
-`.claude/hooks/workflow-guard.sh` は **PreToolUse(Bash)** で `/finish-task <slug>` 実行直前に発火。構造化 JSON 解析で 2 判定を行う:
+`.claude/hooks/workflow-guard.sh` は **PreToolUse(Bash)** で `/finish-task <slug>` 実行直前に発火し、構造化 JSON 解析で 2 判定 (A: `current_stage` が stage 列の最終要素か / B: `pending_findings.module_review` と `system_review` が両方空配列か) を行い、いずれか fail で **exit 2 (BLOCK)** + stderr に「問題 / 推奨アクション / bypass 手順」出力。stage 名で判定 (step 番号 / 順序判定ではない)。state JSON 構造定義は [`SCHEMA.md`](../.workflow-state/SCHEMA.md) が SSoT。
 
-- **判定 A**: `current_stage` が stage 列の **最終要素** (new=`finish` / modify=`system-review`)
-- **判定 B**: `pending_findings.module_review` と `pending_findings.system_review` が **両方とも空配列**
-
-A / B いずれか fail なら **exit 2 (BLOCK)** + stderr に「問題」「推奨アクション」「bypass 手順」出力。stage 名で判定する設計 (step 番号や順序判定ではない)。state JSON (`<slug>.json`) 本体は `.gitignore` 除外、構造定義は [`SCHEMA.md`](../.workflow-state/SCHEMA.md) が SSoT (`slug` / `workflow_type` / `current_stage` / `completed_stages` / `pending_findings` / `skip_log` / `created_at` / `updated_at`)。
-
-> **判定ロジック詳細手順 (1〜6) / state JSON schema field 表 (型・説明)**: [workflow/workflow-guard.md](../rules-details/workflow/workflow-guard.md)
+> **判定ロジック詳細手順 (1〜6) / state JSON schema field 表 (型・説明) / bypass.log 集計補足**: [workflow/workflow-guard.md](../rules-details/workflow/workflow-guard.md)
 
 ## Bypass と audit
 
-### bypass 経路
-
 | 方法 | 系統 | スコープ | 痕跡 |
 |---|---|---|---|
-| `ECC_WORKFLOW_GUARD_OFF=1` | env 系統 | 1 セッション | `.claude/.workflow-state/bypass.log` に append |
+| `ECC_WORKFLOW_GUARD_OFF=1` | env 系統 | 1 セッション | `bypass.log` に append |
 | `HC_WORKFLOW_GUARD_ENABLED=false` | config 系統 | 1 セッション | 同上 |
 | `ECC_BYPASS_REASON='<reason>'` | 補助 | bypass 1 回分の理由を log 列に記録 | bypass.log の最終列 |
 
-両系統併存は env と config から独立に bypass 可能とし、片方が誤って enabled なまま放置される事故を防ぐ。
-
-### bypass.log 集計
-
-`.claude/.workflow-state/bypass.log` は `lib/bypass-logger.sh` 経由で統一フォーマット (`<ISO-8601> | <session_id> | <hook_name> | <env_var> | <reason>`) で append。`harness-audit.py` の `bypass_log_summary()` が集計し `/harness-audit` で最近 N 日の bypass を表示。
-
-honor system: bypass の根拠は CLAUDE.md / docs/tasks/ にも記録 (env 系統だけだと持続的トレース不能)。
+両系統併存は env と config から独立に bypass 可能とし、片方が誤って enabled なまま放置される事故を防ぐ。`.claude/.workflow-state/bypass.log` は `lib/bypass-logger.sh` 経由で統一フォーマット (`<ISO-8601> | <session_id> | <hook_name> | <env_var> | <reason>`) で append、`harness-audit.py` の `bypass_log_summary()` が `/harness-audit` で最近 N 日分を集計表示。honor system: bypass 根拠は CLAUDE.md / docs/tasks/ にも記録 (env 系統だけだと持続的トレース不能)。
 
 ## draft-flow-guard.sh による docs/ 直下 block (2026-05-28 緩和後)
 
-`.claude/hooks/draft-flow-guard.sh` は **PreToolUse(Edit/Write)** で `docs/` 直下の新規設計文書 Write を BLOCK。
+`.claude/hooks/draft-flow-guard.sh` は **PreToolUse(Edit/Write)** で `docs/` 直下 (深さ 1) の新規設計文書 Write を、対応 `docs/draft/<basename>.md` 不在で **BLOCK**。`.claude/rules/` 等への新規 Write / Edit は 2026-05-28 緩和で監視対象外 (旧 task-40 拡張撤廃、`ECC_RULE_CHANGE_GUARD_OFF` 等は dead path)。bypass: `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` (env、bypass.log 記録) / `HC_DOCS_APPROVED_DIR=<dir>[,...]` (config)。honor system: bypass 根拠は `docs/tasks/<task-N>.md` 該当 entry に記録。
 
-### 監視対象 path
-
-| # | path pattern | 動作 |
-|---|---|---|
-| 1 | `<root>/docs/<basename>.md` (深さ 1) | 対応 `docs/draft/<basename>.md` 不在で **BLOCK** (元機能、不変) |
-| — | `<root>/.claude/rules/<basename>.md` 等 (旧 task-40 拡張) | **監視対象外 (2026-05-28 緩和で撤廃)** — 新規 Write / Edit とも PASS |
-
-### bypass 経路
-
-| 方法 | 系統 | スコープ | 痕跡 |
-|---|---|---|---|
-| `ECC_DRAFT_FLOW_GUARD_OVERRIDE=1` | env 系統 (docs/ block を skip) | 1 セッション | `bypass.log` に append |
-| `HC_DOCS_APPROVED_DIR=<dir>[,<dir>...]` | config 系統 | 1 セッション | (記録なし) |
-| `ECC_RULE_CHANGE_GUARD_OFF=1` / `HC_RULE_CHANGE_GUARD_ENABLED=false` | (旧 task-40 用、緩和で **dead path**) | — | hook 参照なし (後方互換で set しても無害) |
-
-honor system: bypass 根拠は `docs/tasks/<task-N>.md` の該当 entry に記録。
-
-> **2026-05-28 緩和の経緯 (task-40 拡張撤廃) / 緩和後 hook 役割 table / 規範変更 honor system 降格 / 起源**: [workflow/draft-flow-guard.md](../rules-details/workflow/draft-flow-guard.md)
+> **2026-05-28 緩和の経緯 (task-40 拡張撤廃) / 監視対象 path 表 / 緩和後 hook 役割 / 規範変更 honor system 降格 / 起源**: [workflow/draft-flow-guard.md](../rules-details/workflow/draft-flow-guard.md)
 
 ## リファクタリング強制 (W3)
 
 `/module-review` と `/system-review` は workflow の **必須 stage**、skip は default 禁止 (workflow-guard.sh が `/finish-task` で BLOCK)。
 
-### 3 観点 (`/module-review`)
+### 観点 (`/module-review` 3 観点 + `/system-review` system-level)
 
-1. **持続可能性 (Sustainability)** — 命名 / 関数 50 行以内 / ファイル 800 行以内 / ネスト 4 階層以内 / magic number 排除 / 副作用局所化 / 型注釈 / silent failure 排除
-2. **汎用性 (Generality)** — 引数化可能性 / 1 callee 特化排除 / idiom 準拠 / 抽象依存 / test seam
-3. **非冗長化 (Deduplication)** — DRY / table-driven 化 / util/helper 再発明排除 / 既存型流用 / over-engineering 排除 (YAGNI)
-
-### system-level 観点 (`/system-review`)
-
-3 観点に加え、system 全体で:
-
-1. **モジュール間重複** — module 横断 DRY (`/module-review` は module 内 DRY のみ)
-2. **横断的責務漏れ** — logging / error handling / observability / rate limiting / authn-authz の一貫性
-3. **設計乖離** — `docs/draft/<slug>.md` §3 採用案からの逸脱 / `<slug>.test-design.md` ☒ テストが誤実装されていないか / §6 DoD 充足
+`/module-review` は **持続可能性 (Sustainability)** / **汎用性 (Generality)** / **非冗長化 (Deduplication)** の 3 観点。`/system-review` はこれに加え system 全体で **モジュール間重複** (module 横断 DRY) / **横断的責務漏れ** (logging / error handling / observability / rate limiting / authn-authz の一貫性) / **設計乖離** (draft §3 採用案逸脱 / test-design ☒ 誤実装 / §6 DoD 充足) を検査。各観点の sub-checklist 各論は fragment 参照。
 
 ### pending_findings 連携
 
@@ -164,24 +90,11 @@ CRITICAL / HIGH findings は state JSON の `pending_findings.module_review` / `
 
 ## テスト設計の MECE 強制 (W1)
 
-`/test-design <slug>` は承認済 draft (`docs/draft/<slug>.md`) を読み、`_TEST_DESIGN_TEMPLATE.md` から **MECE 20 カテゴリ** のテストカタログを `docs/draft/<slug>.test-design.md` に生成。
-
-### 20 MECE カテゴリ
-
-単体 / 統合 / E2E / DB / 境界値 / 異常系 / 回帰 / カバレッジ計測 / 網羅性検証 / 完全性検証 / 性能 (レスポンスタイム) / 負荷 / セキュリティ / 互換性 / アクセシビリティ / i18n / smoke / シナリオ / chaos・障害注入 / 契約テスト の 20 カテゴリ。
+`/test-design <slug>` は承認済 draft (`docs/draft/<slug>.md`) を読み、`_TEST_DESIGN_TEMPLATE.md` から **MECE 20 カテゴリ** (単体 / 統合 / E2E / DB / 境界値 / 異常系 / 回帰 / カバレッジ計測 / 網羅性検証 / 完全性検証 / 性能 / 負荷 / セキュリティ / 互換性 / アクセシビリティ / i18n / smoke / シナリオ / chaos・障害注入 / 契約テスト) のテストカタログを `docs/draft/<slug>.test-design.md` に生成。
 
 ### user スコープ承認の強制
 
-各カテゴリは user が **採用 (☑) / 不採用 (☒)** を全行決定。不採用には必ず理由を 4 種から選ぶ:
-
-- `scope-excluded` — タスクスコープ外
-- `not-applicable` — 機能特性上不要
-- `existing-coverage` — 既存テストで網羅済
-- `accepted-risk` — リスク受容 (user 承認)
-
-W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK (workflow-guard.sh の Stage 4 検証)。
-
-並列起動 agent: `tdd-guide` / `test-automator` / `qa-expert` (`reviewer_registry_test` カテゴリ)。3 agent 中 2 以上が採用推奨ならデフォルト ☑、2 以上が不採用なら ☒、意見割れなら ☐ + コメント「user 判断要」。
+各カテゴリは user が **採用 (☑) / 不採用 (☒)** を全行決定。不採用には必ず理由を 4 種 (`scope-excluded` / `not-applicable` / `existing-coverage` / `accepted-risk`) から選ぶ。W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK (workflow-guard.sh の Stage 4 検証)。並列起動 agent は `tdd-guide` / `test-automator` / `qa-expert` (`reviewer_registry_test`)、3 agent 中 2 以上採用推奨で default ☑ / 2 以上不採用で ☒ / 意見割れで ☐ + 「user 判断要」。
 
 **yml 値による制御**: `review_required_test` / `review_min_count_test` / `review_max_count_test` / `review_iteration_max` で集中制御。**reviewer 並列起動数は固定 default ではなく `min ≤ N ≤ max` の範囲で動的選定**し、起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_test` で上限を確認する (青天井「5+」は task-64 で廃止、値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。
 
@@ -189,93 +102,31 @@ W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK (workfl
 
 ## 設計レビューの fan-out (W2)
 
-`/design-review <slug>` は `reviewer_registry_design` + `reviewer_registry_security` カテゴリ登録 agent を **並列起動** (`run_in_background: true` 必須) し、findings を `docs/draft/<slug>-review.md` に集約。
+`/design-review <slug>` は `reviewer_registry_design` + `reviewer_registry_security` カテゴリ登録 agent を **並列起動** (`run_in_background: true` 必須) し、findings を `docs/draft/<slug>-review.md` に集約。reviewer-registry (design / security / test / impl の 4 キー) と起動対象 agent の対応は `harness-config.yml` が SSoT、env (例: `HC_REVIEWER_REGISTRY_DESIGN`) で改行区切り上書き可。
 
-### reviewer-registry (`harness-config.yml`)
+**並列数 / 反復制御**: `review_required_design` / `review_min_count_design` / `review_max_count_design` / `review_iteration_max` で制御。**具体値は hardcode せず `hc-config.sh --get review_min_count_design` 等で現在値確認** (値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。draft レビューは「修正 → 再レビュー」を **CRITICAL + HIGH + MEDIUM = 0** になるまで反復 (LOW は許容、cosmetic finding として記録のみ)、reviewer は **3 体以上** 並列起動 (不足で user escalation)、反復上限超過時は user escalation (bypass: `ECC_DESIGN_REVIEW_OFF=1`)。各 iter の reviewer / 件数 / 修正 commit hash は draft §「レビューサイクル」table に append。
 
-| キー | 起動対象 agent | 用途 |
-|---|---|---|
-| `reviewer_registry_design` | architect / architect-reviewer / code-architect / api-designer / ui-designer / database-reviewer / harness-optimizer | W2 `/design-review` |
-| `reviewer_registry_security` | security-auditor / security-reviewer / penetration-tester | W2 `/design-review` |
-| `reviewer_registry_test` | tdd-guide / test-automator / qa-expert / pr-test-analyzer | W1 `/test-design` |
-| `reviewer_registry_impl` | code-reviewer / refactoring-specialist / 言語別 reviewer 群 | W3 `/module-review` `/system-review` |
-
-env 上書き例: `export HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer'` (改行区切り) で cost 制御可。
-
-**並列数 / 反復制御**: `review_required_design` (default true) / `review_min_count_design` (default 3) / `review_max_count_design` (default 7) / `review_iteration_max` (default 5) で制御。`hc-config.sh --get review_min_count_design` で現在値確認、`--set` で変更 (atomic backup)。
-
-### 収束条件 (反復ループ)
-
-draft レビューは「修正 → 再レビュー」を **CRITICAL + HIGH + MEDIUM = 0** になるまで反復 (LOW は許容、cosmetic finding として記録のみ)。
-
-| 規約 | 内容 |
-|---|---|
-| **reviewer 最低数** | **3 体以上** 並列起動 (default は reviewer-registry 全件 + stack heuristic 絞り込み、`N ≥ 3` 必須、不足で user escalation) |
-| **件数取得 severity** | CRITICAL / HIGH / MEDIUM / LOW の 4 段階 |
-| **収束条件** | CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW は許容) |
-| **反復上限** | 5 回 (default、超過時 user escalation) |
-| **iteration 記録** | 各 iter の reviewer / 件数 / 修正 commit hash を draft §「レビューサイクル」table に append |
-| **bypass** | `ECC_DESIGN_REVIEW_OFF=1` (反復 5 回上限超過時の user escalation 後の継続用) |
-
-CRITICAL / HIGH / MEDIUM 全て 0 件 → draft「承認待ち」へ遷移可、1 件以上 → 「修正待ち」状態を明示し draft 修正 → 再 `/design-review` で round-N+1 review。
-
-> **stack heuristic 絞り込みロジック詳細 (database / API / UI 検出) / 集約フォーマット / reviewer 最低数 3 体の理由**: [workflow/fan-out.md](../rules-details/workflow/fan-out.md)
+> **reviewer-registry 4 キー全 agent 表 / 並列数・反復制御 yml 値 / 収束条件 table / stack heuristic 絞り込みロジック (database / API / UI 検出) / 集約フォーマット / reviewer 最低数 3 体の理由**: [workflow/fan-out.md](../rules-details/workflow/fan-out.md)
 
 ## reviewer prompt 共通規約 (2026-05-28 追加)
 
-`/design-review` (W2) / `/test-design` (W1) / `/module-review` (W3) / `/system-review` (W3) + 採用 6 条 4「テスト設計レビュー」([`task-management.md`](./task-management.md)) で起動する**全 reviewer subagent prompt**の必須要件。reviewer は単一 draft の inside-out 評価では不十分であり、プロジェクト全体 + 他 task 文脈を踏まえた findings を必ず提示する。
+`/design-review` (W2) / `/test-design` (W1) / `/module-review` (W3) / `/system-review` (W3) + 採用 6 条 4「テスト設計レビュー」([`task-management.md`](./task-management.md)) で起動する**全 reviewer subagent prompt**の必須 5 項目。reviewer は単一 draft の inside-out 評価では不十分であり、プロジェクト全体 + 他 task 文脈を踏まえた findings を必ず提示する。
 
-| # | 項目 | 内容 |
-|---:|---|---|
-| 1 | 対象 artifact Read | 対象 draft / test-design / module / system の全文 Read |
-| 2 | 観点 | reviewer-registry / agent type 固有の観点 (architect / security / qa 等) |
-| 3 | findings format | CRITICAL / HIGH / MEDIUM / LOW の 4 段階 + 具体修正提案 (behavior-preserving、public API 変更禁止) |
-| 4 | 末尾 `confidence: 0.X` | F3 confidence-gate 抽出対象 (閾値 0.6 未満は block) |
-| 5 | **プロジェクト整合性 + 他 task 影響確認** (本 §、2026-05-28 user 直接指示) | `docs/tasks/list.md` (他 task ledger) + 依存先 task.md / draft.md + `docs/tasks/next-actions.md` (副産物 registry) + `.claude/rules/*.md` (既存規範 Layer A) + `README.md` / `docs/INVENTORY.md` (project SSoT) + 既存実装 (Glob/Grep で類似 hook / command / skill 探索) を Read |
+1. **対象 artifact Read** — 対象 draft / test-design / module / system の全文
+2. **観点** — reviewer-registry / agent type 固有 (architect / security / qa 等)
+3. **findings format** — CRITICAL / HIGH / MEDIUM / LOW + 具体修正提案 (behavior-preserving、public API 変更禁止)
+4. **末尾 `confidence: 0.X`** — F3 confidence-gate 抽出対象 (閾値 0.6 未満は block)
+5. **プロジェクト整合性 + 他 task 影響確認** (2026-05-28 user 直接指示) — `docs/tasks/list.md` + 依存先 task.md / draft.md + `next-actions.md` + `.claude/rules/*.md` + `README.md` / `docs/INVENTORY.md` + 既存実装 (Glob/Grep) を Read し、他 task 重複・前提崩壊 / 既存 rule 矛盾 / 副産物 entry 解決機会 / 既存 hook・command・skill 再利用 / SSoT 不整合を findings に含める
 
-### 項目 5 で findings に含めるべき観点 (該当時のみ)
+bypass: `HC_REVIEW_PROJECT_CONTEXT_REQUIRED=false` (項目 5 の project context 確認 skip、typo 1 行修正 / comment-only refactor / 直前 round 確認済 round-N+1 等 cost 過大ケース、honor system)。新規 feature の `/design-review` 初回 / `.claude/rules/` 編集 change / 採用 6 条 4 初回での bypass は NG。
 
-- **他 task #N との重複 / 競合** — list.md / 依存先 task で発見
-- **他 task #M の前提崩壊** — 本変更が他 task の前提を破壊する場合
-- **既存 rule §X と矛盾 / 拡張必要** — `.claude/rules/` 確認で発見
-- **副産物 entry #Y を本対象で解決可能** — `next-actions.md` 確認で機会発見
-- **既存 hook / command / skill 再利用可** — Glob/Grep で発見 (再発明回避)
-- **SSoT 重複 / 矛盾** — README / INVENTORY との不整合発見時
-
-### bypass
-
-| 経路 | env | スコープ | 用途 |
-|---|---|---|---|
-| project context 確認 skip | `HC_REVIEW_PROJECT_CONTEXT_REQUIRED=false` | 1 セッション | typo 1 行修正 / comment-only refactor / 直前 round で確認済 round-N+1 等の cost 過大ケース (honor system) |
-
-honor system: bypass 時は理由を `docs/tasks/<task-N>.md` or `ECC_BYPASS_REASON` env に記録。新規 feature の `/design-review` 初回 / `.claude/rules/` 編集 change / 採用 6 条 4 初回での bypass は NG。
-
-> **起源 (2026-05-28、user 直接指示「設計後,テスト設計後レビューする際プロジェクトの内容や、他のタスクの内容も鑑みてレビューするようにプロンプトを修正してください」) / 必須項目 5 詳細手順 / OK・NG 例 / 既存規約 (behavior-preserving / confidence) との関係 / commands 連携 / 採用 6 条 4 連携 / bypass 運用詳細 / Loop モード時の動作**: [workflow/reviewer-prompt.md](../rules-details/workflow/reviewer-prompt.md)
+> **起源 (2026-05-28 user 直接指示) / 必須項目 5 詳細手順 + findings 観点 / OK・NG 例 / 既存規約 (behavior-preserving / confidence) との関係 / commands 連携 / 採用 6 条 4 連携 / bypass 運用詳細 / Loop モード時の動作**: [workflow/reviewer-prompt.md](../rules-details/workflow/reviewer-prompt.md)
 
 ## 副産物 discharge (5 層強制機構)
 
-タスク実装中・レビュー中・セッション中に発生した「副産物 (byproduct)」を **物理的に消えない設計** で管理。詳細は [`development-process.md`](./development-process.md) §「副産物発生時の即時 draft 起こし義務」参照。
+タスク実装中・レビュー中・セッション中に発生した「副産物 (byproduct)」を **物理的に消えない設計** で管理。詳細は [`development-process.md`](./development-process.md) §「副産物発生時の即時 draft 起こし義務」参照。5 層: (1) `docs/tasks/next-actions.md` registry (entry 追加) (2) `_TASK_TEMPLATE.md` 派生 task セクション (3) `next-actions-surface.sh` (SessionStart で未処理 entry を `<system-reminder>` 強制提示) (4) `byproduct-discharge-guard.sh` (Stop で 🔴 未処理残存なら exit 2 BLOCK) (5) `/discharge-byproduct` (entry → draft / parking-lot / 無視 の移行 helper)。bypass: `ECC_NEXT_ACTIONS_SURFACE_OFF=1` (surface 無効化) / `ECC_BYPASS_DISCHARGE_GUARD=1` (discharge-guard 無効化)、両者 bypass.log 記録。honor system: bypass 理由を next-actions.md 当該 entry コメント列に記録。
 
-### 5 層強制機構
-
-| 層 | 機構 | 発火 | 動作 |
-|---|---|---|---|
-| 1 | `docs/tasks/next-actions.md` registry | 副産物発見時にメインが entry 追加 | informal な「TODO / 次アクション候補」を捕捉する公式 location |
-| 2 | `_TASK_TEMPLATE.md` 派生 task セクション | task 実装中・完了時 | 発生源 task に「派生 task / 次アクション候補」を明示記録 |
-| 3 | `next-actions-surface.sh` (SessionStart) | 毎セッション開始 | 未処理 entry を `<system-reminder>` で stderr 強制提示 (緊急度 🔴 強調) |
-| 4 | `byproduct-discharge-guard.sh` (Stop) | セッション終了時 | 🔴 未処理 entry 残存なら exit 2 で BLOCK + bypass.log 記録 |
-| 5 | `/discharge-byproduct` | user 任意 | entry → draft / parking-lot / 無視 の移行 helper |
-
-### bypass
-
-| 経路 | env | スコープ | 痕跡 |
-|---|---|---|---|
-| surface 無効化 | `ECC_NEXT_ACTIONS_SURFACE_OFF=1` | 1 セッション | bypass.log |
-| discharge-guard 無効化 | `ECC_BYPASS_DISCHARGE_GUARD=1` | 1 セッション | bypass.log (session_id + reason) |
-
-honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry のコメント列に記録。
-
-> **処理フロー (entry → draft / parking-lot / 無視 の判定) / 関連 artifact / 違反パターン**: [workflow/byproduct-discharge.md](../rules-details/workflow/byproduct-discharge.md)
+> **処理フロー (entry → draft / parking-lot / 無視 の判定) / 各層機構 table / 関連 artifact / 違反パターン**: [workflow/byproduct-discharge.md](../rules-details/workflow/byproduct-discharge.md)
 
 ## Loop モード自律規律
 
@@ -283,36 +134,9 @@ honor system: bypass 時は理由を `docs/tasks/next-actions.md` 当該 entry �
 
 ## Session 永続化と PM Orchestration
 
-`/sc:save` `/sc:load` `/sc:pm` (SuperClaude plugin) を `.claude/` 単独で portable な自前実装に置換。Serena MCP 必須化 + SessionStart resume prompt + PDCA cycle memory 永続化を統合。
+`/sc:save` `/sc:load` `/sc:pm` (SuperClaude plugin) を `.claude/` 単独で portable な自前実装 ([`/save-state`](../commands/save-state.md) / [`/resume-state`](../commands/resume-state.md) / [`/pm-start`](../commands/pm-start.md)) に置換。Serena MCP 必須化 + SessionStart resume prompt + PDCA cycle memory 永続化を統合。各 command の Phase 1 で `mcp__serena__activate_project` を必須実行 (onboarding 未済は graceful error で `/onboarding` 案内)、`mode-session-start.sh` が `session/context` memory 存在時に `/resume-state` 提案を自動注入。memory key schema は `session/{context,last,checkpoint}` + PDCA 系 (`plan/` `execution/` `evaluation/` `learning/`) + `project/{context,architecture,conventions}`。
 
-### 自前 command
-
-| command | 役割 | 主要 Serena tool |
-|---|---|---|
-| [`/save-state`](../commands/save-state.md) | session 状態を Serena memory に snapshot 保存 | `write_memory` |
-| [`/resume-state`](../commands/resume-state.md) | 前 session 状態を Serena memory から復元 | `list_memories` / `read_memory` |
-| [`/pm-start`](../commands/pm-start.md) | PM Agent orchestration + PDCA cycle 永続化 | 全 memory API |
-
-### memory key schema
-
-- `session/context` — 完全 snapshot (TaskList / commits / artifact / 次アクション)
-- `session/last` — 1-2 段落要約
-- `session/checkpoint` — 進捗 checkpoint
-- `plan/<feature>/{hypothesis,architecture,rationale}` (PDCA Plan)
-- `execution/<feature>/{do,errors,solutions}` (PDCA Do)
-- `evaluation/<feature>/{check,metrics,lessons}` (PDCA Check)
-- `learning/{patterns,solutions,mistakes}/<name>` (PDCA Act)
-- `project/{context,architecture,conventions}` (project 全体理解)
-
-### Serena 必須化
-
-各 command の Phase 1 で `mcp__serena__activate_project` を必須実行し、戻り値 error に `onboarding` / `not performed` を含む場合は onboarding 未済と判定して graceful error で `/onboarding` 案内 + 終了。
-
-### SessionStart 自動 resume
-
-`mode-session-start.sh` が `.serena/memories/session/context.md` 存在時に `<system-reminder>` で `/resume-state` 提案を自動注入 (W2)。手動入力不要で前 session からの継続が可能。
-
-> **Serena 必須化の設計補足 (旧 check_onboarding_performed tool 不在経緯) / 関連 artifact 完全 list / SessionStart 自動 resume 動作詳細**: [workflow/session-persistence.md](../rules-details/workflow/session-persistence.md)
+> **memory key schema 全列挙 / Serena 必須化の設計補足 (旧 check_onboarding_performed tool 不在経緯) / 関連 artifact 完全 list / SessionStart 自動 resume 動作詳細**: [workflow/session-persistence.md](../rules-details/workflow/session-persistence.md)
 
 ## 関連ルール / skill (代表)
 

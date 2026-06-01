@@ -102,11 +102,21 @@ pointer 規約: `> 詳細: [rules-details/workflow/workflow-guard.md](../rules-d
 
 - 「Layer A/B 2 層化したが Layer B が monolithic で on-demand が surgical でない」問題 → 本 task で「1 断片 = 1 pointer 先 = 1 topic、<100 行」を規約化し、将来の rule 追加でも踏襲
 
+## 進捗 / 次セッション継続メモ (2026-06-01)
+
+- **Step 1 完了** (commit `ddc3058`): 断片化規約確定 (`rules-details/<rule>/<topic>.md`、pointer 直リンク、auto-load 非対象検証方法、README index)。
+- **Step 2 pilot 完了** (commit `e026f94`): workflow を 12 断片に分割 + Layer A pointer 化 (349→327 行)、smoke 8/8 PASS、SSoT 無損失、旧 details.md 削除。
+- **粒度標準 = 積極 (user 決定 2026-06-01)**: Layer A は要約+pointer のみ、**14-stage/10-stage の full 表・workflow-guard 機構等の大表も Layer B 断片へ移送** (Layer A 目標 <120-150 行)。workflow を本標準に再 slim 中 (subagent a856b6eb)。
+- **残り 5 rule (次セッション)**: development-process / modes / task-management / self-improvement / why-x5-output。workflow を template に同手順 (1 rule = 1 subagent、staging、main で grep 検証、commit)。
+- **Step 4-7 (次セッション)**: 全 rule 完了後に rule-architecture-smoke (pointer dangling 0 / auto-load 非対象 / 行数上限) + 起動時 token before-after 実測 + reviewer + refactor + 4 リポ install。
+- branch: `refactor/rule-architecture-restructure` (push 後 PR は user merge)。
+
 ## ステータスログ
 
 | 日付 | 状態 | 備考 |
 |---|---|---|
 | 2026-06-01 | 起案 + 承認 | consolidated draft 承認、2 task 分割の Task-X |
+| 2026-06-01 | Step 1+2 pilot | `ddc3058` 規約 / `e026f94` workflow 12 断片。残り 5 rule は次セッション (積極粒度) |
 
 ## 派生 task / 次アクション候補
 
