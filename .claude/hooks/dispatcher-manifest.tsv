@@ -1,0 +1,37 @@
+event	matcher	order	hook_command	feature_key	channel	child_timeout
+PreToolUse	Edit|Write	1	delegation-guard.sh Edit	delegation_guard	stdout-block	5
+PreToolUse	Edit|Write	2	gateguard.sh Edit	gateguard	stdout-block	5
+PreToolUse	Edit|Write	3	task-rule-guard.sh Edit	task_rule_guard	stdout-block	5
+PreToolUse	Edit|Write	4	draft-flow-guard.sh	draft_flow_guard	exit2	5
+PreToolUse	Read	1	delegation-guard.sh Read	delegation_guard	stdout-block	5
+PreToolUse	Grep	1	delegation-guard.sh Grep	delegation_guard	stdout-block	5
+PreToolUse	Glob	1	delegation-guard.sh Glob	delegation_guard	stdout-block	5
+PreToolUse	Bash	1	autonomous-action-guard.sh	autonomous_action_guard	stdout-block	5
+PreToolUse	Bash	2	delegation-guard.sh Bash	delegation_guard	stdout-block	5
+PreToolUse	Bash	3	gateguard.sh Bash	gateguard	stdout-block	5
+PreToolUse	Bash	4	workflow-guard.sh Bash	workflow_enforcement	exit2	5
+PreToolUse	Agent|Task	1	agent-marker-set.sh		observer	5
+PreToolUse	Agent|Task	2	parallel-subagent-reminder.sh	parallel_subagent_reminder	advisory	5
+PreToolUse	Agent|Task	3	reviewer-count-guard.sh	reviewer_count_guard	advisory	5
+PreToolUse	*	1	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
+PostToolUse	Agent|Task	1	agent-marker-clear.sh		observer	5
+PostToolUse	Edit|Write	1	check-md-mermaid.sh	check_md_mermaid	stdout-block	90
+PostToolUse	*	1	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
+PostToolUse	*	2	failure-loop-detect.sh	failure_loop_detect	advisory	3
+PostToolUse	*	3	why-x5-violation-detect.sh	why_x5_enforcement	advisory	3
+Notification		1	notify.sh	notify	observer	5
+Stop		1	stop.sh	notify	observer	5
+Stop		2	byproduct-discharge-guard.sh	byproduct_discharge	exit2	5
+Stop		3	loop-auto-progress-reminder.sh	loop_mode_enforcement	advisory	5
+Stop		4	loop-confirmation-detector.sh	loop_mode_enforcement	advisory	5
+Stop		5	tool-call-slip-detector.sh	tool_call_slip_detect	advisory	5
+Stop		6	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
+SubagentStop		1	confidence-gate.sh	confidence_gate	stdout-block	10
+SubagentStop		2	loop-auto-progress-reminder.sh	loop_mode_enforcement	advisory	5
+SubagentStop		3	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
+SessionStart		1	session-start-wrapper.sh		bootstrap	15
+SessionStart		2	list-md-plan-first-reminder.sh	task_rule_guard	bootstrap	5
+SessionStart		3	stale-harness-detect.sh	stale_harness_detect	bootstrap	5
+SessionStart		4	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
+UserPromptSubmit		1	context-budget.sh	context_budget	advisory	5
+UserPromptSubmit		2	../skills/continuous-learning-v2/hooks/observe.sh		observer	3

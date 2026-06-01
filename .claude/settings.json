@@ -1,5 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "$generated": {
+    "by": "generate-settings.sh",
+    "source": "harness-config.yml + .claude/hooks/dispatcher-manifest.tsv",
+    "note": "hooks block is generated; permissions block is manual (transcribed from live). Do not edit hooks by hand — edit the manifest + re-run generate-settings.sh."
+  },
   "permissions": {
     "deny": [
       "Read(./.env)",
@@ -34,27 +39,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Edit",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use-dispatcher.sh \"Edit|Write\"",
             "timeout": 5,
-            "statusMessage": "開発プロセスルール確認中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/gateguard.sh Edit",
-            "timeout": 5,
-            "statusMessage": "GateGuard 事実検証中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/task-rule-guard.sh Edit",
-            "timeout": 5,
-            "statusMessage": "タスクルール検証中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/draft-flow-guard.sh",
-            "timeout": 5,
-            "statusMessage": "draft フロー検証中..."
+            "statusMessage": "PreToolUse dispatcher (Edit|Write)"
           }
         ]
       },
@@ -63,9 +50,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Read",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use-dispatcher.sh \"Read\"",
             "timeout": 5,
-            "statusMessage": "サブエージェント委譲ルール確認中..."
+            "statusMessage": "PreToolUse dispatcher (Read)"
           }
         ]
       },
@@ -74,9 +61,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Grep",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use-dispatcher.sh \"Grep\"",
             "timeout": 5,
-            "statusMessage": "サブエージェント委譲ルール確認中..."
+            "statusMessage": "PreToolUse dispatcher (Grep)"
           }
         ]
       },
@@ -85,9 +72,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Glob",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use-dispatcher.sh \"Glob\"",
             "timeout": 5,
-            "statusMessage": "サブエージェント委譲ルール確認中..."
+            "statusMessage": "PreToolUse dispatcher (Glob)"
           }
         ]
       },
@@ -96,27 +83,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/autonomous-action-guard.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use-dispatcher.sh \"Bash\"",
             "timeout": 5,
-            "statusMessage": "Loop モード自律実行可否検証中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/delegation-guard.sh Bash",
-            "timeout": 5,
-            "statusMessage": "サブエージェント委譲ルール確認中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/gateguard.sh Bash",
-            "timeout": 5,
-            "statusMessage": "GateGuard 破壊的コマンド検査中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/workflow-guard.sh Bash",
-            "timeout": 5,
-            "statusMessage": "Workflow 完了条件検証中..."
+            "statusMessage": "PreToolUse dispatcher (Bash)"
           }
         ]
       },
@@ -125,21 +94,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/agent-marker-set.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use-dispatcher.sh \"Agent|Task\"",
             "timeout": 5,
-            "statusMessage": "サブエージェント起動マーカー設定中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/parallel-subagent-reminder.sh",
-            "timeout": 5,
-            "statusMessage": "並列 subagent / agent type 選定検証中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/reviewer-count-guard.sh",
-            "timeout": 5,
-            "statusMessage": "reviewer 数上限検証中..."
+            "statusMessage": "PreToolUse dispatcher (Agent|Task)"
           }
         ]
       },
@@ -148,9 +105,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use-dispatcher.sh \"*\"",
             "timeout": 3,
-            "statusMessage": "観察記録中..."
+            "statusMessage": "PreToolUse dispatcher (*)"
           }
         ]
       }
@@ -161,8 +118,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/agent-marker-clear.sh",
-            "timeout": 5
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/post-tool-use-dispatcher.sh \"Agent|Task\"",
+            "timeout": 5,
+            "statusMessage": "PostToolUse dispatcher (Agent|Task)"
           }
         ]
       },
@@ -171,9 +129,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/check-md-mermaid.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/post-tool-use-dispatcher.sh \"Edit|Write\"",
             "timeout": 90,
-            "statusMessage": "Mermaid 構文チェック中..."
+            "statusMessage": "PostToolUse dispatcher (Edit|Write)"
           }
         ]
       },
@@ -182,21 +140,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/post-tool-use-dispatcher.sh \"*\"",
             "timeout": 3,
-            "statusMessage": "観察記録中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/failure-loop-detect.sh",
-            "timeout": 3,
-            "statusMessage": "失敗ループ検出中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/why-x5-violation-detect.sh",
-            "timeout": 3,
-            "statusMessage": "Why × 5 format 違反検出中..."
+            "statusMessage": "PostToolUse dispatcher (*)"
           }
         ]
       }
@@ -206,8 +152,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/notify.sh",
-            "timeout": 5
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/notification-dispatcher.sh",
+            "timeout": 5,
+            "statusMessage": "Notification dispatcher (*)"
           }
         ]
       }
@@ -217,38 +164,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/stop.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/byproduct-discharge-guard.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-dispatcher.sh",
             "timeout": 5,
-            "statusMessage": "副産物 discharge 検証中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
-            "timeout": 5,
-            "statusMessage": "Loop モード自律進行検証中 (Stop)..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/loop-confirmation-detector.sh",
-            "timeout": 5,
-            "statusMessage": "Loop モード確認質問検出中 (Stop、task-41)..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/tool-call-slip-detector.sh",
-            "timeout": 5,
-            "statusMessage": "tool-call markup slip 検出中 (Stop)..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
-            "timeout": 3,
-            "statusMessage": "観察記録中 (Stop)..."
+            "statusMessage": "Stop dispatcher (*)"
           }
         ]
       }
@@ -258,21 +176,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/confidence-gate.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/subagent-stop-dispatcher.sh",
             "timeout": 10,
-            "statusMessage": "Confidence gate 検証中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/loop-auto-progress-reminder.sh",
-            "timeout": 5,
-            "statusMessage": "Loop モード自律進行検証中 (SubagentStop)..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
-            "timeout": 3,
-            "statusMessage": "観察記録中 (SubagentStop)..."
+            "statusMessage": "SubagentStop dispatcher (*)"
           }
         ]
       }
@@ -282,27 +188,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/session-start-wrapper.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-dispatcher.sh",
             "timeout": 15,
-            "statusMessage": "SessionStart hooks 並列実行中 (task-25 A2)..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/list-md-plan-first-reminder.sh",
-            "timeout": 5,
-            "statusMessage": "list.md plan-first reminder 検証中 (task-35)..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/stale-harness-detect.sh",
-            "timeout": 5,
-            "statusMessage": "stale-harness 検出中 (task-56)..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
-            "timeout": 3,
-            "statusMessage": "観察記録中 (SessionStart)..."
+            "statusMessage": "SessionStart dispatcher (*)"
           }
         ]
       }
@@ -312,15 +200,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/context-budget.sh",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/user-prompt-submit-dispatcher.sh",
             "timeout": 5,
-            "statusMessage": "Context 使用率チェック中..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
-            "timeout": 3,
-            "statusMessage": "観察記録中 (UserPromptSubmit)..."
+            "statusMessage": "UserPromptSubmit dispatcher (*)"
           }
         ]
       }
