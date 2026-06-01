@@ -87,20 +87,20 @@
 | Path | 役割 | 物理配置 | context 注入 |
 |---|---|---|---|
 | `.claude/rules/<rule>.md` | **Layer A** — 要約版 (採用 N 条 / 遵守事項 / table / bypass env 1-2 行 / Layer B link / 起源 1 行) | `.claude/rules/` (Claude Code 再帰 discover 対象) | claudeMd 経由で常時注入 |
-| `.claude/rules-details/<rule>.details.md` | **Layer B** — 詳細版 (OK/NG 例 / history / SUPERSEDED / bypass 詳細 / 起源詳細 / 5 層強制機構詳細 / 関連 artifact 完全 list) | `.claude/rules-details/` (別 dir、Claude Code discover 対象外) | **非注入** (Read tool で明示参照のみ) |
+| `.claude/rules-details/<rule>/<topic>.md` | **Layer B 断片** — topic 別詳細 (OK/NG 例 / history / SUPERSEDED / bypass 詳細 / 起源 / 5 層強制機構詳細 / 関連 artifact 完全 list) | `.claude/rules-details/<rule>/` (別 dir + subdir、Claude Code discover 対象外) | **非注入** (Read tool で明示参照のみ) |
 
 > **設計経緯 (2026-05-28 A 案 redesign)**: 当初は `.claude/rules/<rule>.details.md` + frontmatter `paths: []` で非注入を狙ったが、Claude Code 公式仕様 (code.claude.com/docs/en/memory.md) で「`.claude/rules/*.md` は再帰 discover + startup load」「`paths:` は path match 時の**追加適用** (除外機構ではない)」が確定 (claude-code-guide subagent + 公式 doc、confidence 0.95)。token 実測でも `paths: []` 配置で context は逆に増加 (153K vs before ~146K) したため、Layer B を別 dir へ物理移動して除外を実現。
 
-**現状の 2 層分割対象** (task-51 Step 3+5b 完了、6 file):
+**現状の 2 層分割対象** (task-51 Step 3+5b で 2 層化、task-67 で Layer B を topic 別断片化、6 rule):
 
-| Layer A (`.claude/rules/`) | Layer B (`.claude/rules-details/`) | Layer A 抜粋 keyword |
+| Layer A (`.claude/rules/`) | Layer B 断片 (`.claude/rules-details/<rule>/`) | Layer A 抜粋 keyword |
 |---|---|---|
-| `self-improvement.md` | `self-improvement.details.md` | L1-L5 + F1/F2 規約 / 5 + 3 層 |
-| `development-process.md` | `development-process.details.md` | TDD / 委譲ガード 7 必須要件 / staging 戦略 / cross-repo write 例外 / Confidence Gate (F3) |
-| `task-management.md` | `task-management.details.md` | 採用 6 条 / メイン専任 / 開発開始時必読義務 / parking-lot |
-| `workflow.md` | `workflow.details.md` | 14-stage / 10-stage / W1-W4 / 20 MECE / fan-out reviewer-registry |
-| `modes.md` | `modes.details.md` | Normal/Loop / 9 遵守事項 / 自律実行禁止 11 カテゴリ / 5 層強制機構 |
-| `why-x5-output.md` | `why-x5-output.details.md` | v10 1 行 format (`<何のため> のため、<何をやる> を行う`) |
+| `self-improvement.md` | `self-improvement/` (4 断片) | L1-L5 + F1/F2 規約 / 5 + 3 層 |
+| `development-process.md` | `development-process/` (8 断片) | TDD / 委譲ガード 7 必須要件 / staging 戦略 / cross-repo write 例外 / Confidence Gate (F3) |
+| `task-management.md` | `task-management/` (8 断片) | 採用 6 条 / メイン専任 / 開発開始時必読義務 / parking-lot |
+| `workflow.md` | `workflow/` (12 断片) | 14-stage / 10-stage / W1-W4 / 20 MECE / fan-out reviewer-registry |
+| `modes.md` | `modes/` (5 断片) | Normal/Loop / 9 遵守事項 / 自律実行禁止 11 カテゴリ / 5 層強制機構 |
+| `why-x5-output.md` | `why-x5-output/` (4 断片) | v10 1 行 format (`<何のため> のため、<何をやる> を行う`) |
 
 `git-workflow.md` は ~1K で退避不要 (Layer A のみ)。
 
@@ -112,11 +112,11 @@
 
 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
 
-**規約**: Layer A → Layer B link は **2 要素 hard match** (`details.md` 含む markdown link + section anchor) を満たせば spec compliant (task-51 Step H、iter 2 fix、2026-05-28 緩和)。link path 規約: Layer A → B は `../rules-details/<rule>.details.md`、Layer B → A は `../rules/<rule>.md` (相対参照、深さ同じ sibling dir)。
+**規約** (task-67 断片版): Layer A → Layer B 断片 link は断片ファイル直リンク (`[<rule>/<topic>.md](../rules-details/<rule>/<topic>.md)`、anchor 方式廃止)。Layer B 断片 → A back-link は `../../rules/<rule>.md` (2 階層上り)。dangling 0 は `.claude/tests/rule-architecture-smoke.sh` で機械検証。
 
 **機械強制**:
 - `install.sh` `rsync -a .claude/` で `.claude/rules-details/` 配下も自動同期 (RSYNC_EXCLUDES 不在、4 リポへ配布)
-- `.claude/tests/layer-b-context-isolation-smoke.sh` (8 cases) で Layer B 物理 dir / link 存在 / install.sh sync pattern 等を検証
+- `.claude/tests/layer-b-context-isolation-smoke.sh` (8 cases) + `.claude/tests/rule-architecture-smoke.sh` (3 asserts: dangling 0 / auto-load isolation / back-link 健全性) で Layer B 物理 dir / link 存在 / install.sh sync pattern 等を検証
 
 **起源**: task-51 (context-bloat-reduction、2026-05-28)、設計 draft `docs/draft/context-bloat-reduction.md` §3 (Q2) + A 案 redesign (2026-05-28、smoke 実測で `paths: []` 無効判明 → Layer B 物理移動)。
 

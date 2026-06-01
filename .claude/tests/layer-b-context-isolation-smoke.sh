@@ -1,30 +1,27 @@
 #!/usr/bin/env bash
-# layer-b-context-isolation-smoke.sh — task-51 Step 4 (A 案 redesign 追従)
+# layer-b-context-isolation-smoke.sh — task-51 Step 4 (A 案 redesign) + task-67 (断片化追従)
 #
 # 設計起源: docs/tasks/task-51-context-bloat-reduction.md §TDD 戦略 RED
 # A 案 redesign (2026-05-28): Layer B (`.details.md`) を `.claude/rules/` から
 #   `.claude/rules-details/` (Claude Code discover 対象外の別 dir) へ git mv 移動。
-#   Claude Code 公式仕様 (code.claude.com/docs/en/memory.md) で `.claude/rules/*.md` は
-#   再帰 discover + startup load、`paths:` は除外機構ではないと確定したため。
+# task-67 (2026-06-01): 一部 rule の Layer B を `<rule>.details.md` 単一 file から
+#   `<rule>/<topic>.md` 断片 dir 構造へ分割。本 smoke は両構造 (single-file / fragmented)
+#   を自動判別して検証する。
 #
 # Layer A / Layer B 2 層構造の isolation を 8 cases で検証:
-#   Case 1: 各 .details.md frontmatter "paths: []" (空配列) — 防御深層 (Layer B が
-#           誤って `.claude/rules/` 配下に戻された場合の保険、規約として keep)
-#   Case 2: Layer B 物理 dir `.claude/rules-details/` 存在 + Claude Code discover scope
-#           外確認 (`.claude/rules/` 配下に `.details.md` が 0 件)
-#   Case 3: Layer A→B link 各 file 1 件以上 (../rules-details/<file>.details.md grep)
-#   Case 4: Layer B→A back-link 各 file 1 件以上 ("> Layer A:" grep)
-#   Case 5: Layer B physical readable + 50 行以上
-#   Case 6: Layer A 内 重要 keyword grep (file 別 keyword リスト)
-#   Case 7: install.sh `--exclude=rules-details` **不在** (Layer B も sync 対象) +
-#           SSoT comment (`rules-details` 文字列) 存在
-#   Case 8: Layer A anchor 参照が Layer B heading に存在 (link 切れ 0 件)
+#   Case 1: Layer B frontmatter "paths: []" — single-file rule のみ (断片には frontmatter 不要)
+#   Case 2: Layer B 物理 dir 存在 + `.claude/rules/` 配下に `.details.md` 0 件
+#   Case 3: Layer A→B link 各 file 1 件以上 (../rules-details/ 参照)
+#   Case 4: Layer B→A back-link 各 Layer B file 1 件以上 ("> Layer A:" + ../rules/)
+#   Case 5: Layer B physical readable + 行数下限
+#   Case 6: Layer A 内 重要 keyword grep
+#   Case 7: install.sh `--exclude=rules-details` 不在 + SSoT comment 存在
+#   Case 8: Layer A pointer (forward-link) 先の Layer B file が実在 (dangling 0 件)
 #
 # 実行:
 #   bash .claude/tests/layer-b-context-isolation-smoke.sh
 #
-# 終了コード:
-#   0 = 全 PASS / 1 = 1 件以上 FAIL
+# 終了コード: 0 = 全 PASS / 1 = 1 件以上 FAIL
 #
 # 注意:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs.md 教訓)
@@ -59,30 +56,55 @@ LAYER_A_FILES=(
   modes
 )
 
+# rule が断片化済 (fragmented) か single-file (.details.md) かを判別。
+#   fragmented: `.claude/rules-details/<rule>/` dir が存在
+#   single-file: `.claude/rules-details/<rule>.details.md` が存在
+# echo "fragmented" / "single" / "none"
+_layer_b_kind() {
+  local rule="$1"
+  if [[ -d "${RULES_DETAILS_DIR}/${rule}" ]]; then
+    echo "fragmented"
+  elif [[ -f "${RULES_DETAILS_DIR}/${rule}.details.md" ]]; then
+    echo "single"
+  else
+    echo "none"
+  fi
+}
+
+# rule の Layer B file 群を列挙 (single は 1 file、fragmented は dir 配下全 *.md)
+_layer_b_files() {
+  local rule="$1"
+  local kind
+  kind=$(_layer_b_kind "$rule")
+  if [[ "$kind" == "fragmented" ]]; then
+    find "${RULES_DETAILS_DIR}/${rule}" -maxdepth 1 -name '*.md' 2>/dev/null
+  elif [[ "$kind" == "single" ]]; then
+    echo "${RULES_DETAILS_DIR}/${rule}.details.md"
+  fi
+}
+
 # ============================================================
-# Case 1: 各 .details.md frontmatter "paths: []" (空配列) — 防御深層
+# Case 1: single-file rule の frontmatter "paths: []" (空配列) — 防御深層
 # ============================================================
-# 規約として keep: Layer B が誤って `.claude/rules/` 配下に戻された場合の保険。
-# A 案 redesign では物理 dir 分離 (Case 2) が主防御だが、frontmatter 規約も維持。
+# fragmented rule の断片は frontmatter 不要 (物理 dir 分離 Case 2 が主防御) のため skip。
 case1_layer_b_frontmatter_paths_empty() {
-  local label="Case 1: Layer B frontmatter paths: [] (空配列) — 6/6 (防御深層)"
+  local label="Case 1: single-file Layer B frontmatter paths: [] (空配列) — 防御深層"
   local fail_list=()
+  local checked=0
 
   for f in "${LAYER_A_FILES[@]}"; do
+    local kind
+    kind=$(_layer_b_kind "$f")
+    [[ "$kind" != "single" ]] && continue
+    checked=$((checked + 1))
     local layer_b="${RULES_DETAILS_DIR}/${f}.details.md"
-    if [[ ! -f "$layer_b" ]]; then
-      fail_list+=("${f}.details.md: NOT FOUND")
-      continue
-    fi
-    # frontmatter 内 (--- ブロック) の paths: [] を検証
-    # awk: 最初の --- 以降〜2番目の --- の前まで を出力し grep
     if ! awk '/^---$/{c++; next} c==1' "$layer_b" | grep -qE '^paths:\s*\[\s*\]'; then
       fail_list+=("${f}.details.md: 'paths: []' not found in frontmatter")
     fi
   done
 
   if [[ ${#fail_list[@]} -eq 0 ]]; then
-    _record_pass "$label"
+    _record_pass "$label (${checked} single-file rules checked)"
   else
     _record_fail "$label (failures: ${fail_list[*]})"
   fi
@@ -91,19 +113,14 @@ case1_layer_b_frontmatter_paths_empty() {
 # ============================================================
 # Case 2: Layer B 物理 dir 存在 + Claude Code discover scope 外確認
 # ============================================================
-# A 案 redesign 主防御: `.claude/rules-details/` dir が存在し、`.claude/rules/`
-# 配下に `.details.md` が 0 件であることで Claude Code startup load 対象外を保証。
 case2_layer_b_physical_isolation() {
   local label="Case 2: Layer B 物理 dir 存在 + .claude/rules/ 配下 .details.md 0 件"
   local fail_list=()
 
-  # Subcheck 2a: `.claude/rules-details/` dir 存在
   if [[ ! -d "$RULES_DETAILS_DIR" ]]; then
     fail_list+=("$RULES_DETAILS_DIR: directory not found")
   fi
 
-  # Subcheck 2b: `.claude/rules/` 配下に `.details.md` が 0 件
-  # (find は dir 不在でも非ゼロ exit するため、存在チェック後に実行)
   if [[ -d "$RULES_DIR" ]]; then
     local stray_count
     stray_count=$(find "$RULES_DIR" -maxdepth 2 -name '*.details.md' 2>/dev/null | wc -l | tr -d ' ')
@@ -124,9 +141,8 @@ case2_layer_b_physical_isolation() {
 }
 
 # ============================================================
-# Case 3: Layer A→B link 各 file 1 件以上
+# Case 3: Layer A→B link 各 file 1 件以上 (../rules-details/ 参照)
 # ============================================================
-# A 案では link が `../rules-details/<file>.details.md` 形式に変更
 case3_layer_a_to_b_links() {
   local label="Case 3: Layer A→B link (../rules-details/ 参照) 各 file 1 件以上"
   local fail_list=()
@@ -152,82 +168,98 @@ case3_layer_a_to_b_links() {
 }
 
 # ============================================================
-# Case 4: Layer B→A back-link 各 file 1 件以上
+# Case 4: Layer B→A back-link 各 Layer B file 1 件以上
 # ============================================================
-# A 案では Layer B → Layer A back-link は `../rules/<file>.md` 形式。
-# 検証は "> Layer A:" 行頭 marker で実施 (既存 SSoT format)。
+# single / fragmented 両対応: 該当 rule の全 Layer B file が "> Layer A:" + "../rules/"
+# (fragmented は ../../rules/) を持つことを検証。
 case4_layer_b_to_a_backlinks() {
-  local label="Case 4: Layer B→A back-link (> Layer A: + ../rules/) 各 file 1 件以上"
+  local label="Case 4: Layer B→A back-link (> Layer A: + rules/) 各 file 1 件以上"
   local fail_list=()
+  local checked=0
 
   for f in "${LAYER_A_FILES[@]}"; do
-    local layer_b="${RULES_DETAILS_DIR}/${f}.details.md"
-    if [[ ! -f "$layer_b" ]]; then
-      fail_list+=("${f}.details.md: NOT FOUND")
+    local kind
+    kind=$(_layer_b_kind "$f")
+    if [[ "$kind" == "none" ]]; then
+      fail_list+=("${f}: Layer B 不在 (dir も .details.md も無し)")
       continue
     fi
-    # marker 行 (`> Layer A:`) を count
-    local marker_count
-    marker_count=$(grep '^> Layer A:' "$layer_b" 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "$marker_count" -lt 1 ]]; then
-      fail_list+=("${f}.details.md: 0 '> Layer A:' back-links")
-      continue
-    fi
-    # `../rules/` path が同 file 内に存在することも検証 (path 形式整合)
-    if ! grep -q '\.\./rules/' "$layer_b" 2>/dev/null; then
-      fail_list+=("${f}.details.md: marker found but no '../rules/' path link")
-    fi
+    while IFS= read -r layer_b; do
+      [[ -z "$layer_b" ]] && continue
+      checked=$((checked + 1))
+      local bn
+      bn=$(basename "$layer_b")
+      if ! grep -q '^> Layer A:' "$layer_b" 2>/dev/null; then
+        fail_list+=("${f}/${bn}: 0 '> Layer A:' back-links")
+        continue
+      fi
+      # single は ../rules/ 、fragmented は ../../rules/ 。共通 substring '/rules/' で検証。
+      if ! grep -q '/rules/' "$layer_b" 2>/dev/null; then
+        fail_list+=("${f}/${bn}: marker found but no 'rules/' path link")
+      fi
+    done < <(_layer_b_files "$f")
   done
 
   if [[ ${#fail_list[@]} -eq 0 ]]; then
-    _record_pass "$label"
+    _record_pass "$label (${checked} Layer B files checked)"
   else
     _record_fail "$label (failures: ${fail_list[*]})"
   fi
 }
 
 # ============================================================
-# Case 5: Layer B physical readable + 50 行以上
+# Case 5: Layer B physical readable + 行数下限
 # ============================================================
+# single-file は >50 行、fragmented 断片は >5 行 (断片は小さい、目標 <100 行)。
 case5_layer_b_readable_and_size() {
-  local label="Case 5: Layer B physical readable + 50 行以上 — 6/6"
+  local label="Case 5: Layer B physical readable + 行数下限"
   local fail_list=()
+  local checked=0
 
   for f in "${LAYER_A_FILES[@]}"; do
-    local layer_b="${RULES_DETAILS_DIR}/${f}.details.md"
-    if [[ ! -r "$layer_b" ]]; then
-      fail_list+=("${f}.details.md: not readable")
-      continue
-    fi
-    local lines
-    lines=$(wc -l < "$layer_b")
-    if [[ "$lines" -le 50 ]]; then
-      fail_list+=("${f}.details.md: ${lines} lines (need >50)")
-    fi
+    local kind
+    kind=$(_layer_b_kind "$f")
+    [[ "$kind" == "none" ]] && { fail_list+=("${f}: Layer B 不在"); continue; }
+    local min_lines=50
+    [[ "$kind" == "fragmented" ]] && min_lines=5
+    while IFS= read -r layer_b; do
+      [[ -z "$layer_b" ]] && continue
+      checked=$((checked + 1))
+      local bn
+      bn=$(basename "$layer_b")
+      if [[ ! -r "$layer_b" ]]; then
+        fail_list+=("${f}/${bn}: not readable")
+        continue
+      fi
+      local lines
+      lines=$(wc -l < "$layer_b")
+      if [[ "$lines" -le "$min_lines" ]]; then
+        fail_list+=("${f}/${bn}: ${lines} lines (need >${min_lines})")
+      fi
+    done < <(_layer_b_files "$f")
   done
 
   if [[ ${#fail_list[@]} -eq 0 ]]; then
-    _record_pass "$label"
+    _record_pass "$label (${checked} Layer B files checked)"
   else
     _record_fail "$label (failures: ${fail_list[*]})"
   fi
 }
 
 # ============================================================
-# Case 6: Layer A 内 重要 keyword grep (file 別 keyword リスト)
+# Case 6: Layer A 内 重要 keyword grep
 # ============================================================
 case6_layer_a_important_keywords() {
   local label="Case 6: Layer A 重要 keyword 存在"
   local fail_list=()
 
-  # bash 3.2 compatible: declare -A 不可のため case 文で keyword リストを取得
   _get_keywords() {
     case "$1" in
       task-management)   echo "採用 6 条|plan-first|依存先タスク" ;;
       modes)             echo "遵守事項 2 例外|自律実行禁止|5 層強制" ;;
       workflow)          echo "20 MECE|fan-out" ;;
       why-x5-output)     echo "何のため|何をやる|v10" ;;
-      development-process) echo "staging|委譲必須要件" ;;
+      development-process) echo "staging|委譲の必須要件" ;;
       self-improvement)  echo "L1|L4|F1|F2" ;;
       *)                 echo "" ;;
     esac
@@ -243,11 +275,9 @@ case6_layer_a_important_keywords() {
     kw_list=$(_get_keywords "$f")
     [[ -z "$kw_list" ]] && continue
 
-    # | 区切りの keyword を IFS=| で分割して個別検証
     local OLD_IFS="$IFS"
     IFS='|'
     local kw_array
-    # bash 3.2: read -ra array <<< はサポートしているが念のため安全な方法に
     set -f
     kw_array=($kw_list)
     set +f
@@ -270,9 +300,6 @@ case6_layer_a_important_keywords() {
 # ============================================================
 # Case 7: install.sh `--exclude=rules-details` 不在 + SSoT comment 存在
 # ============================================================
-# A 案 redesign: `.claude/rules-details/` は exclude 対象外 (rsync -a で 4 リポへ
-# 同期される必要あり)。同時に install.sh 内に `rules-details` SSoT comment が存在し、
-# 設計意図が明示されていることも検証。
 case7_install_sh_no_rules_details_exclude() {
   local label="Case 7: install.sh '--exclude=rules-details' 不在 + SSoT comment 存在"
   local install_sh="${REPO_ROOT}/install.sh"
@@ -283,12 +310,10 @@ case7_install_sh_no_rules_details_exclude() {
     return
   fi
 
-  # Subcheck 7a: `--exclude=rules-details` が**不在**であること
   if grep -qE '\-\-exclude=.*rules-details' "$install_sh"; then
     fail_list+=("'--exclude=rules-details' が install.sh に存在 — Layer B が sync 対象外になる")
   fi
 
-  # Subcheck 7b: SSoT comment (`rules-details` 文字列、任意 context) 存在
   if ! grep -q 'rules-details' "$install_sh"; then
     fail_list+=("install.sh に 'rules-details' SSoT comment / 言及不在 — A 案設計意図が未記載")
   fi
@@ -301,67 +326,44 @@ case7_install_sh_no_rules_details_exclude() {
 }
 
 # ============================================================
-# Case 8: Layer A anchor 参照が Layer B heading に存在 (link 切れ 0 件)
+# Case 8: Layer A pointer 先の Layer B file が実在 (dangling 0 件)
 # ============================================================
-# 検証ロジック (2 段階):
-#   Step 1: anchor の最初のハイフン区切りトークンで case-insensitive heading grep
-#   Step 2: 見つからない場合、anchor 内の日本語セグメント(2文字以上)で heading grep
-case8_anchor_to_heading_integrity() {
-  local label="Case 8: Layer A anchor 参照が Layer B heading に存在 (broken 0 件)"
+# 旧 anchor 検証は断片化で廃止 (README link reference 規約: 断片ファイル直リンク)。
+# fragmented rule: `(../rules-details/<rule>/<topic>.md)` 各リンク先実在を assert。
+# single rule:     `(../rules-details/<rule>.details.md...)` リンク先実在を assert。
+case8_pointer_target_exists() {
+  local label="Case 8: Layer A pointer 先 Layer B file 実在 (dangling 0 件)"
   local fail_list=()
-
-  _check_anchor() {
-    local layer_b="$1"
-    local anchor="$2"
-
-    # Step 1: 最初のトークン (最初のハイフン境界まで) で case-insensitive grep
-    local first_token="${anchor%%-*}"
-    if grep -qi "## .*${first_token}" "$layer_b"; then
-      return 0
-    fi
-
-    # Step 2: 日本語セグメント (2文字以上) で grep
-    local jp_segment
-    jp_segment=$(printf '%s' "$anchor" | grep -oE '[ぁ-ん一-龯ァ-ヴー]{2,}' | head -1 || true)
-    if [[ -n "$jp_segment" ]] && grep -q "## .*${jp_segment}" "$layer_b"; then
-      return 0
-    fi
-
-    return 1
-  }
+  local checked=0
 
   for f in "${LAYER_A_FILES[@]}"; do
     local layer_a="${RULES_DIR}/${f}.md"
-    local layer_b="${RULES_DETAILS_DIR}/${f}.details.md"
-
-    if [[ ! -f "$layer_a" || ! -f "$layer_b" ]]; then
-      fail_list+=("${f}: file pair missing")
-      continue
-    fi
-
-    # Layer A から details.md#<anchor> 参照を全件抽出
-    local anchors
-    anchors=$(grep -hoE '\.details\.md#[^)]+' "$layer_a" | sed 's/\.details\.md#//' || true)
-
-    while IFS= read -r anchor; do
-      [[ -z "$anchor" ]] && continue
-      if ! _check_anchor "$layer_b" "$anchor"; then
-        fail_list+=("${f}: broken anchor '#${anchor}'")
+    [[ ! -f "$layer_a" ]] && { fail_list+=("${f}.md: NOT FOUND"); continue; }
+    # ../rules-details/ で始まり .md で終わる相対 path を全抽出 (#anchor は除去)
+    local targets
+    targets=$(grep -oE '\.\./rules-details/[A-Za-z0-9._/-]+\.md' "$layer_a" | sed 's/#.*//' | sort -u || true)
+    while IFS= read -r t; do
+      [[ -z "$t" ]] && continue
+      checked=$((checked + 1))
+      # layer_a は .claude/rules/ 配下、t は ../rules-details/... → .claude/rules-details/...
+      local resolved="${RULES_DIR}/${t}"
+      if [[ ! -f "$resolved" ]]; then
+        fail_list+=("${f}.md: dangling pointer '${t}'")
       fi
-    done <<< "$anchors"
+    done <<< "$targets"
   done
 
   if [[ ${#fail_list[@]} -eq 0 ]]; then
-    _record_pass "$label"
+    _record_pass "$label (${checked} pointers checked)"
   else
-    _record_fail "$label (broken anchors: ${fail_list[*]})"
+    _record_fail "$label (dangling: ${fail_list[*]})"
   fi
 }
 
 # ============================================================
 # main
 # ============================================================
-printf "===== layer-b-context-isolation-smoke (task-51 Step 4, 8 cases, A 案 redesign) =====\n\n"
+printf "===== layer-b-context-isolation-smoke (task-51 Step 4 + task-67 断片化, 8 cases) =====\n\n"
 
 case1_layer_b_frontmatter_paths_empty
 case2_layer_b_physical_isolation
@@ -370,7 +372,7 @@ case4_layer_b_to_a_backlinks
 case5_layer_b_readable_and_size
 case6_layer_a_important_keywords
 case7_install_sh_no_rules_details_exclude
-case8_anchor_to_heading_integrity
+case8_pointer_target_exists
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"

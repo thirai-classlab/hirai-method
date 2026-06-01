@@ -4,6 +4,7 @@ task-39 (2026-05-25): feature branch push + gh pr create 自律実行可へ緩�
 task-41 (2026-05-26): Loop モード確認質問検出 (層 6) 追加。
 task-47 (2026-05-27): 遵守事項 9 (list.md 全 task 連続自律実行) 新設。
 task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
+task-67 (2026-06-01): Layer B を 5 断片に分割、断片直リンク方式へ移行。
 -->
 
 # HIRAI メソッド 動作モード
@@ -17,7 +18,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [modes.details.md](../rules-details/modes.details.md)
+> 詳細: 各 § 末尾 pointer から該当断片を直リンク Read (断片群: [`../rules-details/modes/`](../rules-details/modes/))
 
 ## モード一覧
 
@@ -86,7 +87,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 - タスクの完了
 - 致命的エラー (権限拒否 / 復旧不能 / 重大なデータ破壊リスク)
 
-> **遵守事項 2 例外条項の起源 (recall_poc/docs/01-03 事案 + task-40 規範変更 + 2026-05-28 緩和) / 遵守事項 7 違反例 / 遵守事項 8 緩和 task-39 詳細 / mode-switch bypass log task #9 / 遵守事項 9 起源 task-47**: [modes.details.md §遵守事項-詳細](../rules-details/modes.details.md#遵守事項-詳細)
+> **遵守事項 2 例外条項の起源 / 遵守事項 7 違反例 / 遵守事項 8 緩和経緯 / 遵守事項 9 Phase 6 実装仕様**: [modes/compliance-items.md](../rules-details/modes/compliance-items.md)
 
 ## Loop モード自律規律の 5 層強制機構
 
@@ -122,7 +123,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 
 honor system: bypass 時は理由を `docs/tasks/<task-N>.md` または `ECC_BYPASS_REASON` env に記録。
 
-> **各層の動作 source code 参照 / smoke list 9 ケース完全版 / 層 6 task-41 起源 (user 「Loopモードなのに聞いてきます」指摘)**: [modes.details.md §5-層強制機構-詳細](../rules-details/modes.details.md#5-層強制機構-詳細)
+> **各層の動作 source code 参照 / smoke list 9 ケース完全版 / 層 6 task-41 起源**: [modes/five-layer-enforcement.md](../rules-details/modes/five-layer-enforcement.md)
 
 ## 設定
 
@@ -152,6 +153,8 @@ mode: normal  # または loop
 
 全て `.claude/hooks/lib/mode-loader.sh` で現モードを解決する (Normal モードでは全て no-op)。
 
+> **mode-loader.sh 内部仕様 / mode-session-start.sh / mode-enforce.sh context 注入詳細 / context-budget.sh tier 算出ロジック**: [modes/mode-hooks.md](../rules-details/modes/mode-hooks.md)
+
 ## モードと既存ルールの関係
 
 | ルール | Normal | Loop |
@@ -163,8 +166,6 @@ mode: normal  # または loop
 
 Loop モードでも委譲・事実検証等の安全ガードは無効化されない。**省略するのはユーザ確認のみ**。
 
-> **mode-loader.sh 内部仕様 / mode-session-start.sh / mode-enforce.sh の context 注入詳細 / context-budget.sh tier 算出ロジック**: [modes.details.md §mode-hook-詳細](../rules-details/modes.details.md#mode-hook-詳細)
-
 ## 関連 artifact (代表)
 
 - [`.claude/hooks/loop-auto-progress-reminder.sh`](../hooks/loop-auto-progress-reminder.sh) (層 2)
@@ -172,4 +173,6 @@ Loop モードでも委譲・事実検証等の安全ガードは無効化され
 - [`.claude/hooks/loop-confirmation-detector.sh`](../hooks/loop-confirmation-detector.sh) (層 6)
 - [`.claude/tests/loop-auto-progress-smoke.sh`](../tests/loop-auto-progress-smoke.sh) (層 5)
 
-> **関連 artifact 完全 list (mode 系 hook + 5 層強制機構 + smoke 群 + 設計起源 draft path)**: [modes.details.md §関連-artifact-完全](../rules-details/modes.details.md#関連-artifact-完全)
+> **関連 artifact 完全 list (mode 系 hook + 5 層強制機構 + smoke 群 + 設計起源 draft path)**: [modes/artifacts.md](../rules-details/modes/artifacts.md)
+
+> **各規範の起源 (history 全体、task-21 W0.1 〜 task-51 Step 3 の変更履歴) / commit hash**: [modes/origin.md](../rules-details/modes/origin.md)
