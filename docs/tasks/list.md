@@ -155,31 +155,6 @@
 | 57 | ⏸️ | **Task: confidence-gate 修正 (G)** | regex_no_match storm 解消のため regex 頑健化 + block→WARN 降格するが、F 適用で storm 消失なら不要化 (F 後に定量トリガーで再評価、保留) | task-56 | [分析§9](../draft/harness-health-7items-analysis.md) |
 | 58 | ✅ | **Task: 未 commit drift 対応 (G1)** | 未 commit sync drift 解消のため install.sh --update に分離 commit 案内 + --commit flag を追加し、harness-sync と project 作業が混在しなくなる（完遂 2026-05-28、commit `125f248`、smoke 7/7 + regression 0、`git reset` 不使用 + project file 不変実証） | task-55 | [harness-sync-uncommitted-drift.md](../draft/harness-sync-uncommitted-drift.md) |
 | 59 | ✅ | **Task: sync-workflow proactive 改善 (G2)** | stale 再発防止のため harness 取込チェックリスト規範 + F WARN に取込手順を含め、旧 harness 稼働が proactive に防がれる（完遂 2026-05-28、commit `0a33bb3`、smoke 10/10 + grep 4/4 PASS、G9 横断原則遵守 [CommonRules 1 段落リンクのみ]） | task-56 | [harness-sync-proactive-workflow.md](../draft/harness-sync-proactive-workflow.md) |
-
-<!--
-記入ルール:
-- # は連番。同フェーズ内で複数タスクなら "11.3a" のような sub-id 可
-- ステータス変更時は完了日 + commit hash + 主要 metric を「概要」末尾に追記
-  例: "（W1-W3 完了 @ 2026-04-29、commit `abc1234`、+15 tests=215 PASS）"
-- 依存は "—"（なし）/ "#N" / "Phase N" 形式
-- 詳細は個別ファイルへの相対リンク（無ければ "—"）
--->
-
-## 依存関係図
-
-```
-<!-- 例:
-Phase 1 → Phase 2 → Phase 3
-                 → Phase 4
--->
-```
-
-## ステータス更新ルール
-
-1. **新規追加**: 必ず `_TASK_TEMPLATE.md` から個別ファイルを起こすか、`docs/draft/` の承認済設計から移行する
-2. **🔄 → ✅**: `/finish-task <id>` で完了 3 条件（build / test / docs 反映）を満たしてから更新
-3. **🔄 → ⏸️**: 保留事由を [`parking-lot.md`](parking-lot.md) に転記し、ここの行は削除
-4. **削除**: 不採用の場合も履歴として `parking-lot.md` の `❌` セクションに残す
 | 60 | ✅ | **Task: hc-config-tui-2tier-navigation (legacy 化、user 仕様変更受諾)** | task-48 §3.3 設計乖離 (真の 2 階層 navigation 未実装) を解消するため hc-config.sh TUI を 3-state machine + sel 位置記憶 scalar 7 var + eval + flat fallback + unit smoke で実装した。Step 1-5 完遂 (7 commits、smoke 21/21 + 14/14 PASS、draft §3.1 完全充足)。2026-05-29 user「UX 悪い、Web UI 仕様に変更したい」で仕様変更受諾、TUI は **legacy 維持** (`HC_HC_CONFIG_TUI_LEGACY=true` で fallback)、新 task task-61 で Web UI 実装。Step 6 (smoke Case 15-19) + Step 7 (関数分割 / readonly / cache) は legacy 用 nice-to-have で **skip** (Web UI 移行で重要度低下) | task-48 | [task-60-hc-config-tui-2tier-navigation.md](task-60-hc-config-tui-2tier-navigation.md) ← draft: [`docs/draft/hc-config-tui-2tier-navigation.md`](../draft/hc-config-tui-2tier-navigation.md) ✅承認済 |
 |    | ✅ | Step 1 | 旧 `_cmd_interactive_tui` を `_cmd_interactive_tui_flat` に rename + `HC_HC_CONFIG_FLAT_NAVIGATION=true` で flat fallback env 対応追加 (commit `7de5b9d`、L1370 rename + L1415-1438 wrapper 追加、subagent aa39c2d98aaab70f9 conf 0.93、smoke 21/21 + 12/14 baseline 維持 regression 0) | | |
 |    | ✅ | Step 2 | `_tui_render_category_menu` 実装 (6 category 一覧、sel ハイライト) (commit `21fe83f`、L1311-1351 `_meta_count_by_category` + `_tui_render_category_menu` +45 LOC、subagent a8e4f696cd0939a44 conf 0.95、6 category count 実測 3/7/7/12/26/19=74、smoke regression 0) | | |
@@ -209,5 +184,37 @@ Phase 1 → Phase 2 → Phase 3
 | 64 | ✅ | **Task: reviewer 数 config 強制実装** | reviewer 制御値 (review_*_count_* 等) が動作に影響しない「飾り」状態を解消するため config-loader strip 修正 + local.yml 移行 + 採用 6 条 4「5+」撤廃 + command Phase 0 実行手順化 + PreToolUse(Agent) 強制 hook を実装する。完成すれば hc-config.sh --set した reviewer 数上限が honor step + hook で実効化され --update でも消えなくなる。**完遂 (2026-05-30)**: 全 8 Step ✅、9 commit、smoke 全 PASS (reviewer-count-guard 14/14 + regression 0)、3 reviewer review CRIT0/HIGH0、PR 予定。 | task-44, task-45, task-55 | [task-64-reviewer-count-enforcement.md](task-64-reviewer-count-enforcement.md) ← draft 承認済 |
 | 65 | ✅ | **Task: hc-config Web UI 6 軸 data model** | task-63 Step 7 で 6 軸 table が未設定表示になる data-contract gap 解消のため、/api/current-preset が matched preset の axes を返すよう additive 修正 (案A preset metadata 方式) + app.js top view を API axes 参照修正 + edit view 機能不全 6 軸 dropdown 撤去を行う。完成すれば user が browser で現在 preset の 6 軸詳細を read-only 確認でき、unsaved 時はカスタム + 差分表示に切替わり、yml schema を汚さず (飾り key なし) 6 軸表示が機能する。 **完遂 (2026-06-01)**: 全 6 Step ✅、web-ui smoke 42 PASS/0 FAIL (S-43〜S-46)、script 21/21、visual 6 軸実値描画確認 (`<未設定>` 解消)、task-65 regression 0。 | task-63, task-61 | [task-65-hc-config-6axis-data-model.md](task-65-hc-config-6axis-data-model.md) ← draft: [hc-config-6axis-data-model.md](../draft/hc-config-6axis-data-model.md) ✅承認済 |
 | 66 | ⏸️ | **Task: hook context 注入インベントリ + サイズ縮小** | (⏸️ task-68 に吸収・supersede 2026-06-01) tool-call parse 失敗の頻発と hook 注入過剰を解消するため、SessionStart の advisory reminder (why-x5/mode-enforce/session-help) を pointer 短縮 + opt-in 化し task-rule-guard の status-sync note を session 1 回抑制する (案A、enforcement 完全凍結)。harness 全体見直しで advisory 削減 scope は task-68 §3.2 に統合、単独着手せず。 | task-51 | [task-66-context-injection-inventory-reduction.md](task-66-context-injection-inventory-reduction.md) |
-| 67 | 🔄 | **Task: rule architecture 再構造 (全 6 rule)** | Layer B (*.details.md) が 1 rule = 1 巨大ファイルで on-demand 読込が surgical でない問題を解消するため、全 6 rule を Layer A (概要+pointer のみ <120行) + Layer B (topic 別断片 <100行) に再構造する。完成すれば「必要な時に必要なルール断片だけ Read」になり常時 load の Layer A も軽量化され instruction overload が構造削減される。 | task-51 | [task-67-rule-architecture-restructure.md](task-67-rule-architecture-restructure.md) ← draft: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 |
+| 67 | 🔄 | **Task: rule architecture 再構造 (全 6 rule)** | Layer B (*.details.md) が 1 rule = 1 巨大ファイルで on-demand 読込が surgical でない問題を解消するため、全 6 rule を Layer A (概要+pointer のみ <120行) + Layer B (topic 別断片 <100行) に再構造する。完成すれば「必要な時に必要なルール断片だけ Read」になり常時 load の Layer A も軽量化され instruction overload が構造削減される。**進捗 (2026-06-01、51st)**: Step 1-5 ✅ (全 6 rule = 41 断片化 + Layer A slim、commit `0ffddf2`/`f45018c`/`5211138`/`a362f19`、起動 token -2807 -13.6%、reviewer 5 名 iter1 で SSoT 損失 4 項目復元 + origin orphan 解消 `ef3844f` 機械検証収束)、Step 6 🔄 (全 smoke regression 検証中)、Step 7 🔲 (refactor + PR) | task-51 | [task-67-rule-architecture-restructure.md](task-67-rule-architecture-restructure.md) ← draft: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 |
+|    | ✅ | Step 1 | 断片化規約確定 (rules-details/<rule>/<topic>.md + pointer 直リンク + auto-load 非対象検証方法 + README index、commit `ddc3058`) | | |
+|    | ✅ | Step 2 | 全 6 rule の Layer B 断片化 (旧 *.details.md → 41 断片) + Layer A pointer 直リンク書換 (workflow pilot `e026f94` + 残 5 rule `0ffddf2`/`f45018c`/`5211138`/`a362f19`) | | |
+|    | ✅ | Step 3 | 全 6 rule の Layer A slim (workflow 349→151 / dev-process 324→266 / modes 176 / task-mgmt 253 / self-imp 70 / why-x5 90、dense 操作 rule は SSoT 優先で <120 超過許容) | | |
+|    | ✅ | Step 4 | rule-architecture-smoke.sh 新規 (dangling 0 / auto-load isolation / back-link / orphan / path 解決 = 5 assert) + layer-b 断片対応 + 起動 token -2807 実測 (commit `f604ca6` + iter1 Assert5/6) | | |
+|    | ✅ | Step 5 | (テスト設計レビュー) 5 reviewer (architect/code/qa/pr-test/SSoT-audit) iter1、SSoT 損失 4 項目 + origin orphan 4 件 + INVENTORY stale を修正、機械検証 (smoke 5/5+8/8 PASS) で収束 (commit `ef3844f`/`2580005`) | | |
+|    | 🔄 | Step 6 | (テスト合格) 全 hook/script smoke regression 0 検証 + 起動 token 削減実測 (-2807 -13.6% 済) | | |
+|    | 🔲 | Step 7 | (リファクタリング) 3 観点 + PR create (feature branch) + 4 リポ install user manual 案内 | | |
 | 68 | 🔲 | **Task: harness 挙動修正 (tool-call 信頼性)** | 観測バグ (1 ターン多数 complex tool block で tool-call markup 崩れ→loop) の主犯と寄与要因を構造緩和するため、多数 fan-out の Workflow 標準化 + 1ターン tool block 上限 + why-x5 緩和 + advisory pointer化/事実文化 (task-66 吸収) + delegation-guard 誤検知修正を行う。完成すれば tool-call 信頼性が上がり起動時 context が削減され enforcement を保ったまま過剰 reminder と harness friction が減る。 | task-67, task-66 | [task-68-harness-behavior-fixes.md](task-68-harness-behavior-fixes.md) ← draft: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 |
+
+<!--
+記入ルール:
+- # は連番。同フェーズ内で複数タスクなら "11.3a" のような sub-id 可
+- ステータス変更時は完了日 + commit hash + 主要 metric を「概要」末尾に追記
+  例: "（W1-W3 完了 @ 2026-04-29、commit `abc1234`、+15 tests=215 PASS）"
+- 依存は "—"（なし）/ "#N" / "Phase N" 形式
+- 詳細は個別ファイルへの相対リンク（無ければ "—"）
+-->
+
+## 依存関係図
+
+```
+<!-- 例:
+Phase 1 → Phase 2 → Phase 3
+                 → Phase 4
+-->
+```
+
+## ステータス更新ルール
+
+1. **新規追加**: 必ず `_TASK_TEMPLATE.md` から個別ファイルを起こすか、`docs/draft/` の承認済設計から移行する
+2. **🔄 → ✅**: `/finish-task <id>` で完了 3 条件（build / test / docs 反映）を満たしてから更新
+3. **🔄 → ⏸️**: 保留事由を [`parking-lot.md`](parking-lot.md) に転記し、ここの行は削除
+4. **削除**: 不採用の場合も履歴として `parking-lot.md` の `❌` セクションに残す
