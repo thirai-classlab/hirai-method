@@ -2,31 +2,30 @@
 # session-help-surface.sh — SessionStart hook
 #
 # 役割:
-#   HIRAI ハーネスの主要 slash command 一覧 + onboarding hint を
-#   SessionStart で簡潔に表示し、採用者の初期 UX を改善する。
-#   `Hint や help コマンドについてもセッション開始時に記載してください`
-#   (user ask 2026-05-13) を満たす実装。
+#   HIRAI ハーネスの主要 slash command 一覧 + onboarding hint を SessionStart で表示する。
 #
-#   Wave 1.6 (2026-05-23): 初回 session のみ表示。`.claude/.session-help-shown`
-#   marker で再表示抑止 (attention dilution 削減)。
+#   task-68 §3.2 (opt-in 化, 2026-06-01):
+#     既定 (default) は **1 行 pointer** のみ注入 (attention dilution / context 消費削減)。
+#     詳細な help 全文 (command 一覧 table + onboarding) は **opt-in** —
+#     `HC_SESSION_HELP_FORCE=true` の時のみ表示する。
+#     `HC_SESSION_HELP_VERBOSE=true` は FORCE 時の追加詳細版として従来通り機能。
+#
+#   Wave 1.6 (2026-05-23): 初回 session のみ表示の marker 抑止は維持。
 #   起源: docs/draft/system-reminder-attention-fix.md W1.6
-#   env override:
-#     HC_SESSION_HELP_FORCE=1            ... marker 無視で強制表示
-#     HC_SESSION_HELP_FIRST_ONLY=false   ... 旧挙動 (毎回表示) に戻す
-#     HC_SESSION_HELP_MARKER_PATH=<path> ... marker file path 上書き
+#         docs/draft/harness-design-fundamental-review.md §3.2 (task-68)
 #
 # 失敗時の挙動: 常に exit 0 (fail-open — セッションをブロックしない)。
 #
 # 環境変数:
-#   HC_SESSION_HELP_ENABLED=false   ... 一時無効化
-#   HC_SESSION_HELP_VERBOSE=true    ... 詳細版 (全 command 列挙)、default は要点のみ
-#   HC_SESSION_HELP_FORCE=1         ... marker 無視で常時表示 (test / debug 用)
-#   HC_SESSION_HELP_FIRST_ONLY=false ... 旧 default (毎回表示) に戻す
-#   HC_SESSION_HELP_MARKER_PATH=... ... marker file path 上書き
+#   HC_SESSION_HELP_ENABLED=false    ... 全体無効化 (1 行 pointer も含め silent)
+#   HC_SESSION_HELP_FORCE=1|true     ... 詳細 help 全文を opt-in 表示 (marker も無視)
+#   HC_SESSION_HELP_VERBOSE=true     ... FORCE 時に更に詳細版 (全 command + workflow) を追加
+#   HC_SESSION_HELP_FIRST_ONLY=false ... 旧挙動 (毎回表示) に戻す
+#   HC_SESSION_HELP_MARKER_PATH=...  ... marker file path 上書き
 #
 # Stdin:  SessionStart hook JSON (読み捨て)
-# Stdout: 主要 commands + hint の <system-reminder> ブロック
-# Stderr: 未使用
+# Stdout: default=1 行 pointer / FORCE=詳細 help の <system-reminder>
+# Stderr: FORCE 時のみ terminal banner
 # Exit:   常に 0
 #
 # 制約:
@@ -55,17 +54,18 @@ fi
 
 VERBOSE="${HC_SESSION_HELP_VERBOSE:-false}"
 
+# FORCE 判定 (task-68 §3.2: 詳細 help の opt-in gate を兼ねる)
+FORCE=0
+if [ "${HC_SESSION_HELP_FORCE:-0}" = "1" ] || [ "${HC_SESSION_HELP_FORCE:-}" = "true" ]; then
+  FORCE=1
+fi
+
 # === Wave 1.6: 初回 session のみ表示 (marker check) ===
-# marker file 位置の解決 (env override 可、default は .claude/.session-help-shown)
-# project root: CLAUDE_PROJECT_DIR > script の 2 階層上 (.claude/hooks → repo root)
 _project_root="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 MARKER_PATH="${HC_SESSION_HELP_MARKER_PATH:-${_project_root}/.claude/.session-help-shown}"
-
-# first-only モード判定 (default true、旧挙動は HC_SESSION_HELP_FIRST_ONLY=false で復元)
 FIRST_ONLY="${HC_SESSION_HELP_FIRST_ONLY:-true}"
 
-# HC_SESSION_HELP_FORCE=1 なら marker 無視で強制表示
-if [ "${HC_SESSION_HELP_FORCE:-0}" = "1" ] || [ "${HC_SESSION_HELP_FORCE:-}" = "true" ]; then
+if [ "$FORCE" = "1" ]; then
   : # marker check skip (force 表示)
 elif [ "$FIRST_ONLY" != "false" ]; then
   # first-only モード: marker 存在なら silent skip
@@ -74,10 +74,31 @@ elif [ "$FIRST_ONLY" != "false" ]; then
   fi
 fi
 
-# === stderr: terminal 直接表示 banner (Claude Code が SessionStart stderr を terminal に流す挙動を期待) ===
-# stdout だけだと agent の first response 経由でしか visible にならず、
-# 「何も入力しないと help が見えない」問題が生じる。stderr 経路で session 起動直後の
-# terminal に直接 banner を流すことで、user 入力ゼロでも help が visible になる可能性を確保。
+# === marker 書込ヘルパー (DRY: pointer 経路 / FORCE 経路で共通使用) ===
+# FORCE モード or 旧挙動 (FIRST_ONLY=false) では marker 不要
+_write_marker() {
+  if [ "$FORCE" != "1" ] && [ "$FIRST_ONLY" != "false" ]; then
+    mkdir -p "$(dirname "$MARKER_PATH")" 2>/dev/null || true
+    : > "$MARKER_PATH" 2>/dev/null || true
+  fi
+}
+
+# === task-68 §3.2: default は 1 行 pointer のみ ===
+# 詳細 help 全文は FORCE=true の時だけ opt-in 表示。
+if [ "$FORCE" != "1" ]; then
+  cat <<'EOF'
+<system-reminder>
+HIRAI メソッド: slash command 一覧は `export HC_SESSION_HELP_FORCE=true` で表示できます。詳細は `README.md` Commands table / `docs/INVENTORY.md` 参照。
+</system-reminder>
+EOF
+  # marker 作成 (1 行 pointer も初回のみ — first-only モード)
+  _write_marker
+  exit 0
+fi
+
+# === 以下 FORCE=true の opt-in 詳細 help ===
+
+# === stderr: terminal 直接表示 banner ===
 cat >&2 <<'EOF'
 
 ═══════════════════════════════════════════════════════════════════
@@ -99,14 +120,12 @@ cat >&2 <<'EOF'
   Onboarding     : CLAUDE.md  +  docs/INVENTORY.md  +  .claude/rules/development-process.md
   詳細版         : export HC_SESSION_HELP_VERBOSE=true
   抑制           : export HC_SESSION_HELP_ENABLED=false
-  再表示         : export HC_SESSION_HELP_FORCE=1  (or rm .claude/.session-help-shown)
+  再表示         : export HC_SESSION_HELP_FORCE=true
 ═══════════════════════════════════════════════════════════════════
 
 EOF
 
 # === stdout: agent への context (MANDATORY embed directive 付き) ===
-# stderr が claude-code で表示されない環境向けの fallback。
-# stderr で表示されている場合でも agent が response 内に embed することで再確認可能。
 cat <<'EOF'
 <system-reminder>
 **HIRAI メソッド: 主要 slash commands + onboarding hint (採用者 UX)**
@@ -134,7 +153,6 @@ embed なしの informational 扱いは禁止。再表示は不要。
 > - 詳細は `README.md` Commands table 参照
 > - 詳細版表示: `export HC_SESSION_HELP_VERBOSE=true`
 > - 警告抑制: `export HC_SESSION_HELP_ENABLED=false`
-> - 再表示 (Wave 1.6 以降は初回 session のみ表示): `export HC_SESSION_HELP_FORCE=1` または `rm .claude/.session-help-shown`
 > ---
 
 embed 完了後、user の prompt に通常応答してください。
@@ -169,10 +187,6 @@ EOF
 fi
 
 # === Wave 1.6: marker 作成 (silent 失敗で fail-open) ===
-# force モード or 旧挙動 (FIRST_ONLY=false) では marker 不要
-if [ "${HC_SESSION_HELP_FORCE:-0}" != "1" ] && [ "${HC_SESSION_HELP_FORCE:-}" != "true" ] && [ "$FIRST_ONLY" != "false" ]; then
-  mkdir -p "$(dirname "$MARKER_PATH")" 2>/dev/null || true
-  : > "$MARKER_PATH" 2>/dev/null || true
-fi
+_write_marker
 
 exit 0

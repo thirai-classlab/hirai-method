@@ -59,6 +59,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
    - メインは以下のいずれかを並行進行: (a) 別の独立 task 着手 (b) メイン専任作業 (タスク管理 / list.md sync / task ファイル生成 / draft 起こし) (c) 規範文書化 (d) memory / next-actions.md 整理
    - 並行作業ができない場合 (依存関係 / 既に全 task 着手済) のみターン区切り報告で停止可
    - **「subagent 完了通知後のメイン報告 → 即次タスク自動起動」を default 動作**
+   - **多数 fan-out は構造化** (task-68): 3 件以上の独立 subagent 起動は `Workflow` ツール default 検討 / 手書きは 2 件/ターン上限 (長 prompt は file 経由) で markup 崩れ loop を防ぐ。詳細は [`development-process.md`](./development-process.md) §「多数 fan-out の Workflow 標準化 + 1 ターン tool block 上限」
 8. **自律実行禁止リスト** (必須): Loop モードでも以下 11 カテゴリは **user 明示承認が必要**。準備 (draft / 設計 / ローカル `git commit`) のみ自律可。**2026-05-25 task #39 で緩和**: feature branch (= main / stg* 以外) への `git push` および `gh pr create` を自律実行可とした (main/stg* への push は別 layer `protected-branch-push-deny` に委譲)。
 
    - **remote 反映**: `git push origin main|stg*` のみ (feature branch push は自律可)

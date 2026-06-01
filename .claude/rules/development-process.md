@@ -142,6 +142,18 @@ context7 fail で loop 停止しない / 「training data で確信あり」で 
 >
 > **並列化義務 / agent type 選定の起源 (task-35 / task-34 実例)**: [development-process/parallelization-origin.md](../rules-details/development-process/parallelization-origin.md)
 
+## 多数 fan-out の Workflow 標準化 + 1 ターン tool block 上限 (必須、task-68)
+
+観測バグ「1 アシスタントターンに散文 + 多数 (4-6) の複雑 (長文 / 引用符 / markup 風) tool_use を詰めると invoke/parameter タグ脱落 → 実行されず本文化 → 同 batch リトライ (loop)」(memory [[feedback_multi_tool_block_serialization_failure]]) の構造防止。
+
+| 規範 | 内容 |
+|---|---|
+| **3+ fan-out は Workflow** | 3 件以上の独立 subagent fan-out は `Workflow` ツール (決定論 orchestration) を default 検討。手書き N block は **2 件まで許容**、3 件以上は Workflow 提案 (user opt-in 要件のため「多数時は Workflow を提案」運用とセット) |
+| **1 ターン tool block 上限** | 1 アシスタントターンに emit する tool_use は、**長 prompt (>5 行) を含む場合 最大 1〜2 件**。長 prompt は file 経由 (subagent に Read させる) で payload を軽くする (本 session task-67 で実証: `/tmp/*-instructions.md` に共通指示を書き subagent prompt を短縮) |
+| **enforcement 不変** | 本規範は advisory (BLOCK しない)。Workflow opt-in が無い場合は file-based prompt + 2 件/ターン上限で代替 |
+
+> **起源 / research 根拠 (§11 F1-4 Programmatic Tool Calling 優位 / F2-4 ordering)**: [harness-design-fundamental-review.md](../../docs/draft/harness-design-fundamental-review.md) §3.1
+
 ## サブエージェント `.claude/` 編集の staging 戦略 (必須)
 
 Claude Code permission system は subagent context での `.claude/` 配下への直接 `Write` / `Edit` / `Bash` heredoc redirect を **一律 denied** (sub-agent isolation)。メインからは通過。subagent 委譲時は `/tmp/<file>` に `Write` → `mv` で install する staging 戦略が必須。

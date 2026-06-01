@@ -66,6 +66,12 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
+# === session id (task-68 §3.2: Edit status-sync note を session 1 回に抑制する marker key) ===
+session_id=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)
+if [ -z "$session_id" ] || [ "$session_id" = "null" ]; then
+  session_id="nosess"
+fi
+
 # === tool 取得 ===
 tool=$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null)
 if [ -z "$tool" ] || [ "$tool" = "null" ]; then
@@ -231,9 +237,23 @@ id=$(printf '%s' "$basename" | sed -E 's/^(task|phase)-([A-Za-z0-9.]+)-.+\.md$/\
 slug=$(printf '%s' "$basename" | sed -E 's/^(task|phase)-[A-Za-z0-9.]+-(.+)\.md$/\2/')
 
 # === Edit（既存編集）は status 同期注意のみ ===
+# task-68 §3.2: status-sync note は advisory のため session 1 回に抑制 (2 回目以降 silent)。
+# enforcement (BLOCK) は一切変更しない。marker は taskguard_state_dir 配下に session_id 付きで作成。
 if [ "$tool" = "Edit" ]; then
+  mkdir -p "$HC_TASKGUARD_STATE_DIR" 2>/dev/null
+  editnote_marker="${HC_TASKGUARD_STATE_DIR}/.editnote-shown-${session_id}"
+  if [ -f "$editnote_marker" ]; then
+    # 既に本 session で 1 回注入済 → silent pass
+    echo '{}'
+    exit 0
+  fi
+  # [code MED-1] marker 書込失敗時の stderr leak guard (task-68 §C):
+  # `: > file 2>/dev/null || true` は一部 shell で redirect 失敗メッセージを stderr に leak する。
+  # `if ! ...; then :; fi` 形式で同等の fail-open を実現しつつ leak を抑止。
+  # BLOCK 判定ロジック (line 256 以降) には一切影響しない。
+  if ! : > "$editnote_marker" 2>/dev/null; then :; fi
   jq -n --arg id "$id" --arg t "$HC_TASK_DIR" \
-    '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:("[task-rule-guard] 既存タスク #" + $id + " を編集中。" + $t + "/list.md の同 ID 行と必ず同期更新すること。")}}'
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:("[task-rule-guard] 既存タスク #" + $id + " を編集中。" + $t + "/list.md の同 ID 行と必ず同期更新すること。(本 note は session 1 回のみ)")}}'
   exit 0
 fi
 
