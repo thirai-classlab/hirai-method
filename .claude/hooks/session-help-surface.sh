@@ -74,6 +74,15 @@ elif [ "$FIRST_ONLY" != "false" ]; then
   fi
 fi
 
+# === marker 書込ヘルパー (DRY: pointer 経路 / FORCE 経路で共通使用) ===
+# FORCE モード or 旧挙動 (FIRST_ONLY=false) では marker 不要
+_write_marker() {
+  if [ "$FORCE" != "1" ] && [ "$FIRST_ONLY" != "false" ]; then
+    mkdir -p "$(dirname "$MARKER_PATH")" 2>/dev/null || true
+    : > "$MARKER_PATH" 2>/dev/null || true
+  fi
+}
+
 # === task-68 §3.2: default は 1 行 pointer のみ ===
 # 詳細 help 全文は FORCE=true の時だけ opt-in 表示。
 if [ "$FORCE" != "1" ]; then
@@ -83,10 +92,7 @@ HIRAI メソッド: slash command 一覧は `export HC_SESSION_HELP_FORCE=true` 
 </system-reminder>
 EOF
   # marker 作成 (1 行 pointer も初回のみ — first-only モード)
-  if [ "$FIRST_ONLY" != "false" ]; then
-    mkdir -p "$(dirname "$MARKER_PATH")" 2>/dev/null || true
-    : > "$MARKER_PATH" 2>/dev/null || true
-  fi
+  _write_marker
   exit 0
 fi
 
@@ -114,6 +120,7 @@ cat >&2 <<'EOF'
   Onboarding     : CLAUDE.md  +  docs/INVENTORY.md  +  .claude/rules/development-process.md
   詳細版         : export HC_SESSION_HELP_VERBOSE=true
   抑制           : export HC_SESSION_HELP_ENABLED=false
+  再表示         : export HC_SESSION_HELP_FORCE=true
 ═══════════════════════════════════════════════════════════════════
 
 EOF
@@ -180,10 +187,6 @@ EOF
 fi
 
 # === Wave 1.6: marker 作成 (silent 失敗で fail-open) ===
-# FORCE モード or 旧挙動 (FIRST_ONLY=false) では marker 不要
-if [ "$FORCE" != "1" ] && [ "$FIRST_ONLY" != "false" ]; then
-  mkdir -p "$(dirname "$MARKER_PATH")" 2>/dev/null || true
-  : > "$MARKER_PATH" 2>/dev/null || true
-fi
+_write_marker
 
 exit 0

@@ -341,7 +341,7 @@ parallel_subagent_ttl_sec: 300
 
 feature_loop_mode_enforcement_enabled: true       # loop-confirmation-detector + loop-auto-progress-reminder + mode-enforce
 feature_draft_flow_guard_enabled: false            # draft-flow-guard
-feature_task_rule_guard_enabled: false
+feature_task_rule_guard_enabled: false            # task-rule-guard + list-md-plan-first-reminder (task-61 d12b0f7 で OFF、再有効化の意図確認は next-actions #65)
 feature_delegation_guard_enabled: true            # delegation-guard
 feature_workflow_enforcement_enabled: false
 feature_confidence_gate_enabled: true             # confidence-gate (F3)

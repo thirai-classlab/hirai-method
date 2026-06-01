@@ -39,7 +39,7 @@ total_steps: 5
 - [ ] 多数 fan-out の Workflow 標準化 + 1 ターン tool block 上限が規範化され、dogfood で markup 崩れが再現しない
 - [ ] why-x5 がターン冒頭 1 回に緩和され、why-x5-reminder smoke regression 0
 - [ ] SessionStart advisory pointer 化で起動時 token 実測削減、mode-enforce 事実文化、enforcement BLOCK smoke 全 PASS (不変)
-- [ ] task-rule-guard status-sync note が session 1 回抑制、task.md 作成 BLOCK 不変 (smoke)
+- [ ] task-rule-guard status-sync note が session 1 回抑制、task.md 作成 BLOCK 不変 (smoke ※ `feature_task_rule_guard_enabled: false` (task-61 由来) のため本番は dormant、再有効化の意図確認は next-actions #65 で追跡)
 - [ ] delegation-guard の `| head`/`| tail`/`| wc` 等 read-only filter pipe が通り、危険コマンド BLOCK は不変 (smoke)
 - [ ] reviewer approve (Step 4)
 - [ ] commit + 4 リポ install user manual 案内
@@ -71,11 +71,11 @@ draft §3.1 (Workflow 標準化) / §3.2 (advisory pointer 化、task-66 吸収)
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | Workflow 標準化 + 1 ターン tool block 上限 + why-x5 緩和 (ターン冒頭 1 回) を modes.md / development-process.md / why-x5-output.md に規範化 | 0.7h | — |
-| 2 | 🔲 | SessionStart advisory pointer 化 + mode-enforce 事実文化 + session-help opt-in + task-rule-guard note 抑制 (task-66 吸収、enforcement 凍結) | 1.0h | — |
-| 3 | 🔲 | delegation-guard splitter の改行/pipe read-only filter 誤検知修正 (危険 BLOCK 不変) + smoke 更新 | 0.8h | — |
-| 4 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 (上限確認)、enforcement 不変の cross-check 重点 | 0.5h | Step 1-3 |
-| 5 | 🔲 | (テスト合格 + リファクタ) 全 hook smoke regression 0 + 起動時 token 実測 + 1 ターン多数tool dogfood + 3 観点 refactor + 4 リポ install 案内 | 0.7h | Step 4 |
+| 1 | ✅ | Workflow 標準化 + 1 ターン tool block 上限 + why-x5 緩和 (ターン冒頭 1 回) を modes.md / development-process.md / why-x5-output.md に規範化 | 0.7h | — |
+| 2 | ✅ | SessionStart advisory pointer 化 + mode-enforce 事実文化 + session-help opt-in + task-rule-guard note 抑制 (task-66 吸収、enforcement 凍結) | 1.0h | — |
+| 3 | ✅ | delegation-guard splitter の改行/pipe read-only filter 誤検知修正 (危険 BLOCK 不変) + smoke 更新 | 0.8h | — |
+| 4 | ✅ | (テスト設計レビュー) reviewer を `review_min_count_test`〜`review_max_count_test` 範囲で動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、enforcement 不変の cross-check 重点。5 reviewer (security/code/qa/test/architect) 完了、enforcement regression 0 を実機 cross-check 確定、smoke coverage findings を Step 5 で反映済 | 0.5h | Step 1-3 |
+| 5 | 🔄 | (テスト合格 + リファクタ) 全 hook smoke regression 0 + 起動時 token 実測 + 1 ターン多数tool dogfood + 3 観点 refactor + 4 リポ install 案内 | 0.7h | Step 4 |
 
 合計: **~3.7h**
 

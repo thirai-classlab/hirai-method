@@ -6,6 +6,10 @@
 #                          + task-36 Step 2 iter2 fix で採用 6 条 (Task=Phase=N Step、2026-05-25) 追従 (Case 6/7/9 更新 + Case 13 強化 + Case 14 追加)
 #                          + task-36 Step 2 iter3 fix で F1 regression test (Case 15) + ヘッダ count 修正
 #
+# ※ smoke は `is_feature_enabled` を迂回し hook ロジックを直接検証する。
+#    本番で `feature_task_rule_guard_enabled: false` の場合 hook 全体が no-op になる点に注意
+#    (toggle 状態は next-actions #65 で追跡)。
+#
 # 設計起源:
 #   docs/draft/hook-reliability-uplift.md W3
 #   docs/tasks/task-29-phase-step-task-structure.md Phase 4

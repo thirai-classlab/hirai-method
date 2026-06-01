@@ -105,6 +105,9 @@ case_2() {
 }
 
 # === Case 3: HC_SESSION_HELP_FORCE=true + VERBOSE=true → 詳細版追加 (task-68 §3.2: VERBOSE は FORCE 配下) ===
+# 簡潔版 + 詳細版の 2 つの system-reminder section が出るはず。
+# grep -c '<system-reminder>' で open タグのみカウント (期待値: 2)。
+# grep -c 'system-reminder' は open+close 両タグを合算するため不正確 (qa LOW-8 修正)。
 case_3() {
   local marker
   marker=$(_marker_for 3)
@@ -115,11 +118,11 @@ case_3() {
     printf 'expected "詳細 commands" verbose section, got: %s\n' "$output" >&2
     return 1
   fi
-  # 簡潔版 + 詳細版の 2 つの system-reminder が出るはず
+  # open タグのみカウント: 簡潔版 + 詳細版 = 2 sections
   local reminder_count
-  reminder_count=$(printf '%s' "$output" | grep -c 'system-reminder' || true)
+  reminder_count=$(printf '%s' "$output" | grep -c '<system-reminder>' || true)
   if [ "$reminder_count" -lt 2 ]; then
-    printf 'expected >=2 system-reminder occurrences (open+close tags x2 sections), got: %s\n' "$reminder_count" >&2
+    printf 'expected >=2 <system-reminder> open tags (2 sections), got: %s\n' "$reminder_count" >&2
     return 1
   fi
   return 0
