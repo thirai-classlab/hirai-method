@@ -883,8 +883,11 @@ function rollbackHistory(timestamp, overrides) {
 //   3. 完全一致 (subset): { name: <preset key>, display_name_ja: <日本語名>, match_type: 'preset' }
 //   4. 不一致: { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved' }
 //
-// axes field は返却 response から撤去 (task-63 Step 4 A3、UI 表示不要)。
-// 案 A (6 軸照合) を廃止し案 C 採用 (PRESETS axes 6 軸定義は preset metadata として残るが照合には使わない)。
+// task-65 (案 A): axes field を additive に復活。matched preset の axes メタデータ (6 軸) を返す。
+//   既存 field (name / display_name_ja / match_type) は不変 (後方互換)。
+//   preset 一致時: axes = matched preset の axes object (6 key)。
+//   unsaved 時: axes = null (preset 外では axis 値が一意でないため。UI 側でカスタム表示に切替)。
+//   (task-63 Step 4 A3 で撤去した axes 返却を、6 軸 read-only 表示の data contract gap 解消のため復活)
 //
 // overrides.spawnFn: DI seam (テスト用)
 function getCurrentPreset(overrides) {
@@ -899,12 +902,15 @@ function getCurrentPreset(overrides) {
         name: key,
         display_name_ja: p.display_name_ja || key,
         match_type: 'preset',
+        // task-65 (iter2 M1): 空 axes object が all-`—` table に退化する原 bug 再発を防ぐため、
+        //   axes が空 / 不在なら null を返す (UI 側でカスタム表示に切替、6 軸 table を描かない)。
+        axes: (p.axes && Object.keys(p.axes).length) ? p.axes : null,
       }
     }
   }
 
-  // 3. 一致なし
-  return { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved' }
+  // 3. 一致なし (unsaved): axes は preset 外で一意でない → null (UI 側でカスタム表示)
+  return { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved', axes: null }
 }
 
 // task-63 Step 4 A2: values subset 完全一致判定
@@ -1046,9 +1052,11 @@ async function handleRequest(req, res) {
 
   // GET /api/current-preset (task-63 Step 4 案 C、values subset 完全一致判定)
   //   現在 yml 全 key 値 vs PRESETS (built-in 10) values を subset 完全一致判定し、
-  //   { name, display_name_ja, match_type } を返却 (axes field 撤去、UI 表示不要)。
-  //   - 一致: name=<preset key> + display_name_ja=preset 日本語名 + match_type='preset'
-  //   - 不一致: name='custom' + display_name_ja='未保存変更あり' + match_type='unsaved'
+  //   { name, display_name_ja, match_type, axes } を返却。
+  //   task-65 (案 A) で axes を additive に復活: matched preset の 6 軸メタデータを返す
+  //   (top view の 6 軸 read-only table 描画用)。unsaved 時は axes=null。
+  //   - 一致: name=<preset key> + display_name_ja=preset 日本語名 + match_type='preset' + axes=preset の 6 軸 object
+  //   - 不一致: name='custom' + display_name_ja='未保存変更あり' + match_type='unsaved' + axes=null
   if (req.method === 'GET' && pathname === '/api/current-preset') {
     const result = getCurrentPreset()
     sendJson(res, 200, result)
