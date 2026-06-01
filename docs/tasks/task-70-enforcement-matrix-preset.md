@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #70: enforcement matrix / preset 明文化 (Phase 2)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-06-01、全 7 Step ✅、reviewer CRIT/HIGH 0、default_preset harness-dev で挙動不変、全 smoke regression 0)
 > 起案: 2026-06-01
 > 関連: harness-review-remediation-plan Phase 2 (§4.2)。next-actions #65 (`feature_task_rule_guard_enabled` toggle 意図) を吸収
 > 設計起源: [harness-review-remediation-plan.md](../draft/harness-review-remediation-plan.md) ✅承認済 (approved_at 2026-06-01) §4.2
@@ -37,14 +37,14 @@ total_steps: 7
 
 ## Task 完了条件 (DoD)
 
-- [ ] `enforcement_matrix` + preset 4 種が yml に定義され parity smoke (task-69) を維持
-- [ ] `hc-config --summary` が preset / guard 状態 / docs mismatch を出力
-- [ ] docs で `BLOCK` 説明の guard と effective enabled 状態が一致 (mismatch smoke green)
-- [ ] draft-flow / task-rule / workflow / gateguard / review-required の docs が preset aware に書換
-- [ ] 各 disabled guard に `disabled_reason` がある (next-actions #65 の toggle 含む)
-- [ ] reviewer approve (テスト設計レビュー)
-- [ ] 全 smoke regression 0
-- [ ] 3 観点 refactor 判定
+- [x] `enforcement_matrix` + preset 4 種が yml に定義され parity smoke (task-69) を維持
+- [x] `hc-config --summary` が preset / guard 状態 / docs mismatch を出力
+- [x] docs で `BLOCK` 説明の guard と effective enabled 状態が一致 (mismatch smoke green)
+- [x] draft-flow / task-rule / workflow / gateguard / review-required の docs が preset aware に書換
+- [x] 各 disabled guard に `disabled_reason` がある (next-actions #65 の toggle 含む)
+- [x] reviewer approve (テスト設計レビュー)
+- [x] 全 smoke regression 0
+- [x] 3 観点 refactor 判定
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -73,13 +73,13 @@ draft §4.2「enforcement matrix の具体形」(yaml example: `enforcement_matr
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | `harness-config.yml` に `enforcement_matrix` + preset 4 種を定義 (guard ごとに feature_key/docs_claim/events/presets/disabled_reason) | 0.7h | task-69 |
-| 2 | 🔲 | `hc-config --summary` 実装 (preset / 有効・無効 guard / docs mismatch 件数) | 0.6h | Step 1 |
-| 3 | 🔲 | docs 書換: CommonRules / workflow.md / task-management.md / development-process.md の「常に BLOCK」記述を preset aware 化 (next-actions #65 toggle の disabled_reason 含む) | 0.7h | Step 1 |
-| 4 | 🔲 | mismatch 検出 smoke (mandatory wording vs feature toggle、disabled_reason 不在で fail、対象 draft-flow/task-rule/workflow/gateguard/review-required) | 0.6h | Step 2,3 |
-| 5 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、docs/config 整合の網羅性 + enforcement 緩和漏れを cross-check | 0.5h | Step 1-4 |
-| 6 | 🔲 | (テスト合格) 全 smoke regression 0 (UI なし → unit/integration、`--summary` 出力 + mismatch smoke) | 0.4h | Step 5 |
-| 7 | 🔲 | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — preset 解決と is_feature_enabled の統合 | 0.3h | Step 6 |
+| 1 | ✅ | `harness-config.yml` に `enforcement_matrix` + preset 4 種を定義 (guard ごとに feature_key/docs_claim/events/presets/disabled_reason) | 0.7h | task-69 |
+| 2 | ✅ | `hc-config --summary` 実装 (preset / 有効・無効 guard / docs mismatch 件数) | 0.6h | Step 1 |
+| 3 | ✅ | docs 書換: CommonRules / workflow.md / task-management.md / development-process.md の「常に BLOCK」記述を preset aware 化 (next-actions #65 toggle の disabled_reason 含む) | 0.7h | Step 1 |
+| 4 | ✅ | mismatch 検出 smoke (mandatory wording vs feature toggle、disabled_reason 不在で fail、対象 draft-flow/task-rule/workflow/gateguard/review-required) | 0.6h | Step 2,3 |
+| 5 | ✅ | (テスト設計レビュー) reviewer 動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、docs/config 整合の網羅性 + enforcement 緩和漏れを cross-check | 0.5h | Step 1-4 |
+| 6 | ✅ | (テスト合格) 全 smoke regression 0 (UI なし → unit/integration、`--summary` 出力 + mismatch smoke) | 0.4h | Step 5 |
+| 7 | ✅ | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — preset 解決と is_feature_enabled の統合 | 0.3h | Step 6 |
 
 合計: **~3.8h**
 

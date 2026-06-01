@@ -421,3 +421,90 @@ review_min_count_security: 1          # default 1 (security-reviewer)
 
 # 反復制御
 review_iteration_max: 2               # default 5 (採用 6 条 4 で 5 回上限、現在値: task-61 作業中に変更)
+
+# === Enforcement Preset + Matrix (task-70 Phase 2、draft §4.2) ===
+# docs / rules は guard を「BLOCK」と説明する一方、feature toggle が false の中間状態
+# (= モデルには必須と読ませるが実際の境界では止めない) を解消するための SSoT。
+#
+# default_preset: 本 repo で適用する preset (advisory / team-default / strict / harness-dev)。
+#   - advisory     : 個人実験 / PoC。BLOCK は最小、warn 中心。
+#   - team-default : 通常開発 (consuming repo 向けの正しい姿)。draft/task/workflow の重要 guard は ON。
+#   - strict       : release / production。review / gateguard / workflow を強める。
+#   - harness-dev  : ハーネス自体の開発。一部 guard を緩和するが緩和理由を disabled_reason に明示。
+# 本 repo は harness-dev を採用 (ハーネス設計 draft / task.md / 規範文書を妨げないため)。
+# 実 enforcement の enabled 状態は preset ではなく既存 feature_*_enabled (上記) が SSoT。
+# enforcement_matrix は「docs claim と preset 期待値」を宣言し、mismatch smoke / --summary が
+# feature toggle の実値と照合する (matrix は表示・検証補助、機能 toggle の上書きはしない)。
+#
+# env 上書き例:
+#   export HC_DEFAULT_PRESET=team-default   # 一時的に team-default 期待で --summary を見る
+#
+# 注意 (parser 制約): enforcement_matrix は nested block。config-loader.sh / hc-config.sh の
+#   flat parser は nested 行 (先頭インデント) を skip するため HC_ENFORCEMENT_MATRIX は空文字に
+#   なる (top-level key としてのみ認識)。matrix の内容は hc-config.sh --summary /
+#   enforcement-mismatch-smoke.sh が yml を直接 awk parse して読む。
+default_preset: harness-dev
+
+# enforcement_matrix.<guard>:
+#   feature_key     : 実 enforcement を制御する feature toggle key (SSoT)
+#   docs_claim      : docs が説明する強制レベル (block / advisory)
+#   events          : 発火 event (PreToolUse:Write 等、表示・監査用)
+#   presets         : preset ごとの期待 enabled 状態 (advisory/team-default/strict/harness-dev)
+#   disabled_reason : 当該 preset で false にする場合の理由 (これが無い mismatch は smoke fail)
+enforcement_matrix:
+  draft_flow_guard:
+    feature_key: feature_draft_flow_guard_enabled
+    docs_claim: block
+    events: [PreToolUse:Write, PreToolUse:Edit]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス自身の設計 draft / docs 編集を妨げないため"
+  task_rule_guard:
+    feature_key: feature_task_rule_guard_enabled
+    docs_claim: block
+    events: [PreToolUse:Write, PreToolUse:Edit]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス自身の task.md / list.md 編集を妨げないため (next-actions #65 toggle 意図を吸収)"
+  workflow_guard:
+    feature_key: feature_workflow_enforcement_enabled
+    docs_claim: block
+    events: [PreToolUse:Bash]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス開発では 14/10-stage workflow を full 適用しないため"
+  gateguard:
+    feature_key: feature_gateguard_enabled
+    docs_claim: block
+    events: [PreToolUse:Edit, PreToolUse:Write, PreToolUse:Bash]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス自身の hook / config 反復編集で初回 BLOCK を避けるため"
+  review_required_design:
+    feature_key: review_required_design
+    docs_claim: block
+    events: [Command:/design-review]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス自体の設計レビューは手動 fan-out で運用するため"
+  review_required_test:
+    feature_key: review_required_test
+    docs_claim: block
+    events: [Command:/test-design]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス開発では採用 6 条 4 テスト設計レビューを手動運用するため"
+  review_required_module:
+    feature_key: review_required_module
+    docs_claim: block
+    events: [Command:/module-review]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス開発では module-review を手動運用するため"
+  review_required_system:
+    feature_key: review_required_system
+    docs_claim: block
+    events: [Command:/system-review]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "ハーネス開発では system-review を手動運用するため"
