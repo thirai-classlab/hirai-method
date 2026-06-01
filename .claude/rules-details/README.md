@@ -53,7 +53,7 @@
 | rule | ディレクトリ | 断片 (topic) | 移行状態 |
 |---|---|---|---|
 | workflow | `workflow/` | 14-stage / 10-stage / workflow-guard / draft-flow-guard / refactoring / mece-20 / fan-out / reviewer-prompt / byproduct-discharge / session-persistence / related-skills / origin (12 断片) | ✅ (task-67) |
-| development-process | `development-process/` | (Step 2) | 🔲 |
+| development-process | `development-process/` | research-reuse / delegation-requirements / parallelization-origin / staging-strategy / cross-repo-write / confidence-gate / harness-sync / origin (8 断片) | ✅ (task-67) |
 | modes | `modes/` | compliance-items / five-layer-enforcement / mode-hooks / artifacts / origin (5 断片) | ✅ (task-67) |
 | task-management | `task-management/` | six-articles / mandatory-reading / task-migration / ui-detection / plan-first / hook-enforcement / parking-lot / origin (8 断片) | ✅ (task-67) |
 | self-improvement | `self-improvement/` | when-to-use-layers / l4-mechanics / related-skills / origin (4 断片) | ✅ (task-67) |
