@@ -883,8 +883,11 @@ function rollbackHistory(timestamp, overrides) {
 //   3. 完全一致 (subset): { name: <preset key>, display_name_ja: <日本語名>, match_type: 'preset' }
 //   4. 不一致: { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved' }
 //
-// axes field は返却 response から撤去 (task-63 Step 4 A3、UI 表示不要)。
-// 案 A (6 軸照合) を廃止し案 C 採用 (PRESETS axes 6 軸定義は preset metadata として残るが照合には使わない)。
+// task-65 (案 A): axes field を additive に復活。matched preset の axes メタデータ (6 軸) を返す。
+//   既存 field (name / display_name_ja / match_type) は不変 (後方互換)。
+//   preset 一致時: axes = matched preset の axes object (6 key)。
+//   unsaved 時: axes = null (preset 外では axis 値が一意でないため。UI 側でカスタム表示に切替)。
+//   (task-63 Step 4 A3 で撤去した axes 返却を、6 軸 read-only 表示の data contract gap 解消のため復活)
 //
 // overrides.spawnFn: DI seam (テスト用)
 function getCurrentPreset(overrides) {
@@ -899,12 +902,13 @@ function getCurrentPreset(overrides) {
         name: key,
         display_name_ja: p.display_name_ja || key,
         match_type: 'preset',
+        axes: p.axes || {}, // task-65: matched preset の 6 軸メタデータ (additive)
       }
     }
   }
 
-  // 3. 一致なし
-  return { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved' }
+  // 3. 一致なし (unsaved): axes は preset 外で一意でない → null (UI 側でカスタム表示)
+  return { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved', axes: null }
 }
 
 // task-63 Step 4 A2: values subset 完全一致判定
