@@ -435,10 +435,10 @@
       {
         class: 'bg-white rounded-lg border border-slate-200 p-4',
         role: 'region',
-        'aria-label': 'カスタム設定 (プリセット外)',
+        'aria-labelledby': 'custom-panel-heading',
         lang: 'ja',
       },
-      el('h3', { class: 'text-sm font-semibold text-slate-700 mb-1' }, 'カスタム設定 (プリセット外)'),
+      el('h3', { id: 'custom-panel-heading', class: 'text-sm font-semibold text-slate-700 mb-1' }, 'カスタム設定 (プリセット外)'),
       el(
         'p',
         { class: 'text-sm text-slate-600' },
@@ -522,7 +522,6 @@
           type: 'button',
           class: 'px-5 py-3 text-base bg-blue-700 hover:bg-blue-800 text-white font-bold rounded shadow-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2',
           onclick: onClickGotoEdit,
-          'aria-label': '設定を変更する画面に移動',
           lang: 'ja',
         },
         '設定を変更'
@@ -534,8 +533,8 @@
   }
 
   // ============================================================
-  // render: edit view (preset list + 個別 6 軸 drop-down + 保存 / 適用 / キャンセル)
-  // 起源: draft §3.5 wireframe + §3.9 a11y
+  // render: edit view (preset list + 適用 / キャンセル)
+  // 起源: draft §3.5 / §3.9 a11y。task-65 で 6 軸 dropdown 撤去済 — preset 一括変更のみ。
   // ============================================================
   function renderEdit(currentState) {
     const box = el('section', {
