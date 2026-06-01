@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# mode-enforce.sh — UserPromptSubmit hook
+# mode-enforce.sh — SessionStart wrapper child (session-start-wrapper.sh DEFAULT_HOOKS)
 #
-# 役割: Loop モード稼働中、毎ターンの応答に「停止指示まで AI 推奨で続行」ルールを
-#       <system-reminder> として注入する。Normal モードでは no-op。
-#       task-68 §3.2: 冗長 reminder を「遵守事項見出し + 事実文 (簡潔な箇条書き)」へ圧縮し、
-#       詳細は modes.md pointer 参照に置換。
+# 役割: Loop モード稼働中、session 開始時に「停止指示まで AI 推奨で続行」ルールを
+#       1 行 pointer の <system-reminder> として再宣言する。Normal モードでは no-op。
+#       full 遵守事項は frontmatter-less 常時参照 rule (.claude/rules/modes.md) に委譲。
+#       task-73 案 B: 4 項目箇条書きを 1 行 pointer へ短縮。
 #
 # 失敗時の挙動: exit 0 のみ。失敗してもユーザターンをブロックしない。
 #
@@ -47,15 +47,10 @@ if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled loop_mo
   exit 0
 fi
 
-# task-68 §3.2: 事実文 (簡潔な箇条書き) + pointer 短縮
+# task-73 案 B: 1 行 pointer (full 遵守事項は modes.md in-context)
 cat <<'EOF'
 <system-reminder>
-**Loop モード稼働中** (遵守事項、詳細は `.claude/rules/modes.md`):
-- ユーザ確認質問は禁止 (設計新規追加 / 仕様変更 / 戦略判断 / 規範変更は例外で要確認)
-- AI 推奨方法を即採用、大タスクは自律分解し最後まで通す
-- Why × 5 (1 行) 表示は維持、論理単位ごとに git commit
-- 停止条件は 3 つのみ: 明示停止指示 / タスク完了 / 致命的エラー
-解除: `/mode normal`
+Loop mode 稼働中: AI推奨を即採用 / 確認質問禁止 / 論理単位で commit / 停止=「stop」|完了|致命的error。詳細 .claude/rules/modes.md
 </system-reminder>
 EOF
 

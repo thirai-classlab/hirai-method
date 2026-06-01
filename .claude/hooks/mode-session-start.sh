@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # mode-session-start.sh — SessionStart hook
 #
-# 役割:
-#   - セッション開始時に現在の HIRAI メソッド動作モードを表示
-#   - normal モードのときは「Loop モードに切り替えますか?」をユーザに提案させる
-#   - loop モードのときは loop ルールを再宣言
+# 役割 (task-73 案 B で短文化):
+#   - セッション開始時に harness の compact status 1 行を出力 (mode / preset / guards / resume / next)
+#   - resume 検出時は 1 行で /resume-state 案内
+#   - Loop / Normal モードの詳細は in-context rule (.claude/rules/modes.md) に委譲し、
+#     mode-enforce.sh の 1 行 pointer で再宣言する (full reminder の二重出力を廃止)
 #
-# 失敗時の挙動: exit 0 のみ。失敗してもセッションをブロックしない。
+# behavior-preserving: mode 判定 / context.md 検出 / feature gate / Normal モード挙動は保持、
+#   出力テキストのみ短縮。
+#
+# 失敗時の挙動: exit 0 のみ。失敗してもセッションをブロックしない (全 status 取得は best-effort)。
 
 set -uo pipefail  # task-22 W1: errexit 外し SIGPIPE 141 サイレント死を防止 (CLAUDE.md Critical Lessons HIGH)
 
@@ -36,67 +40,54 @@ if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled mode_se
   exit 0
 fi
 
-# --- Session resume prompt (W2 of task #7) ---
-# Serena memory に session/context が存在する場合、user に /resume-state 実行を提案する。
-# Serena は memory key (slash 区切り) を `.serena/memories/<key>.md` に保存する。
-# 失敗時は silent (hook 全体は exit 0)。
-SESSION_CONTEXT_FILE=".serena/memories/session/context.md"
+# project root 解決 (status 取得用、best-effort)
+ROOT="${HC_PROJECT_ROOT:-}"
+if [ -z "$ROOT" ]; then
+  ROOT="$(cd "$SCRIPT_DIR/../.." 2>/dev/null && pwd || true)"
+fi
+
+# --- compact status 各項目 (best-effort、取得失敗は省略して fail-open) ---
+HC_SCRIPT="$SCRIPT_DIR/../scripts/hc-config.sh"
+PRESET=""
+GUARDS=""
+if [ -f "$HC_SCRIPT" ]; then
+  SUMMARY="$(bash "$HC_SCRIPT" --summary 2>/dev/null || true)"
+  # 失敗時: hc-config --summary 取得不可なら guards=/preset= フィールドを省略 (fail-open)
+  PRESET="$(printf '%s\n' "$SUMMARY" | awk '/^preset:/{print $2; exit}')"
+  GUARDS="$(printf '%s\n' "$SUMMARY" | awk '/^totals:/{print $2"on/"$4"off"; exit}')"
+fi
+
+SESSION_CONTEXT_FILE="${ROOT:-.}/.serena/memories/session/context.md"
 if [ -f "$SESSION_CONTEXT_FILE" ]; then
-  cat <<'EOF'
-<system-reminder>
-**前回セッション状態を検出しました**
-
-`.serena/memories/session/context.md` に前回 session の snapshot が保存されています。
-
-続きから作業する場合は、最初の応答で **必ず以下を 1 度だけ提案** してください:
-
-> 「前回セッション状態が見つかりました。続きから作業しますか?
->   - はい → `/resume-state` (または `/pm-start`) を実行
->   - いいえ → 新規 prompt で作業開始 (前回状態は破棄せず保持)」
-
-ユーザが拒否 / 無視した場合は新規 session として開始してください (再提案は不要)。
-</system-reminder>
-EOF
-fi
-
-if [ "$MODE" = "loop" ]; then
-  cat <<'EOF'
-<system-reminder>
-**HIRAI メソッド: Loop モード 稼働中**
-
-このセッションは Loop モードで動作します。以下を遵守してください:
-
-1. **AI 推奨方法を即採用**: 各ステップで複数選択肢がある場合、ユーザに確認を求めず、Why × 5 で評価した上で推奨方法を直ちに採用して実装を継続する。
-2. **中間確認の停止**: 「進めてもよいですか?」「どちらにしますか?」等の確認質問を出さない。
-3. **継続実装**: タスクが分割できる場合、自律的に分解し最後まで通す。
-4. **停止条件は 3 つのみ**:
-   - ユーザの明示的な停止指示（"stop" / "ストップ" / "止めて" 等）
-   - タスクの完了
-   - 致命的エラー（権限拒否 / 復旧不能な状態 / 重大なデータ破壊リスク）
-5. **Why × 5 表示は維持**: ユーザ確認は省略しても、思考過程の透明性は失わない。
-6. **適切な粒度でコミット**（必須）: 自律実装中も論理単位（1 機能 / 1 修正 / 1 リファクタ）ごとに `git commit` を切る。各コミットは独立動作可能な状態（テスト通過 / build green）を保ち、Conventional Commits 形式のメッセージをつける。問題発生時に `git revert` / `git reset --hard <sha>` で戻せるようにする。巨大コミットは禁止。
-
-Loop モードを終了するには: `/mode normal`
-</system-reminder>
-EOF
+  RESUME="available"
 else
-  cat <<'EOF'
-<system-reminder>
-**HIRAI メソッド: Normal モード（現在）**
-
-本セッションは通常モードで動作します（重要分岐でユーザ確認を取りながら進めます）。
-
-長い実装タスクや一気通貫の作業を予定している場合、**Loop モード**（停止指示まで AI 推奨方法で実装し続ける）への切り替えが選択肢です。
-
-このセッションの最初の応答で、ユーザに **必ず以下を 1 度だけ提案** してください:
-
-> 「現在 Normal モードです。停止指示まで AI 推奨方法で実装し続ける **Loop モード** に切り替えますか?  `/mode loop` で切替可能です。」
-
-ユーザが「loop」「ループ」「切替えて」等で同意した場合、`/mode loop` を実行してモード切替を行ってください。
-
-ユーザが拒否 / 無視した場合、Normal モードを継続してください（再提案は不要）。
-</system-reminder>
-EOF
+  RESUME="none"
 fi
+
+NEXT=""
+LIST_MD="${ROOT:-.}/docs/tasks/list.md"
+if [ -f "$LIST_MD" ]; then
+  NEXT="$(grep -cE '^\|[[:space:]]*[0-9]+[[:space:]]*\|.*(🔲|🔄)' "$LIST_MD" 2>/dev/null || true)"
+fi
+
+# compact status 1 行を組み立て (取得できた項目のみ)
+STATUS="harness: mode=${MODE}"
+[ -n "$PRESET" ] && STATUS="$STATUS preset=${PRESET}"
+[ -n "$GUARDS" ] && STATUS="$STATUS guards=${GUARDS}"
+STATUS="$STATUS resume=${RESUME}"
+[ -n "$NEXT" ] && STATUS="$STATUS next=${NEXT}"
+STATUS="$STATUS help=/resume-state /hc-config /mode"
+
+{
+  printf '<system-reminder>\n'
+  printf '%s\n' "$STATUS"
+  if [ "$RESUME" = "available" ]; then
+    printf '前回 session state あり: /resume-state [loop] で継続、または新規 prompt で開始\n'
+  fi
+  if [ "$MODE" != "loop" ]; then
+    printf 'Normal モード稼働中。長い実装は /mode loop で Loop モードへ切替可 (詳細 .claude/rules/modes.md)。\n'
+  fi
+  printf '</system-reminder>\n'
+}
 
 exit 0

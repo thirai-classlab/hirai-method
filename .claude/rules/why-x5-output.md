@@ -48,7 +48,7 @@ task-67 (2026-06-01): details.md → 断片群 (why-x5-output/) に再構造化�
 
 ## 強制機構
 
-`.claude/hooks/why-x5-reminder.sh` (UserPromptSubmit hook) が、毎ターン本ルールへの遵守を `<system-reminder>` として注入する。
+`.claude/hooks/why-x5-reminder.sh` (SessionStart wrapper child) が **session 開始時に 1 度**本ルールの compact pointer を `<system-reminder>` で提示する。本 rule 全文は frontmatter-less 常時参照として **毎ターン context に load 済**のため、ターン冒頭 1 行の遵守はその in-context rule に基づく (hook の毎ターン注入には依存しない)。
 
 > 起源・規範化経緯: [why-x5-output/origin.md](../rules-details/why-x5-output/origin.md)
 
