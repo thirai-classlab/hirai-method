@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #67: rule architecture 再構造 (全 6 rule の Layer A 軽量化 + Layer B 断片化)
 
-> Status: **🔄 実装完遂 / PR #43 待ち merge** (2026-06-01、branch `refactor/rule-architecture-restructure`、全 7 Step ✅、[PR #43](https://github.com/thirai-classlab/hirai-method/pull/43)。user follow-up: PR merge + 4 リポ install user manual)
+> Status: **✅ 完了** (2026-06-01、[PR #43](https://github.com/thirai-classlab/hirai-method/pull/43) merged、全 7 Step ✅、branch `refactor/rule-architecture-restructure`。残 user follow-up: 4 リポ install user manual `bash install.sh --update <target>`)
 > 起案: 2026-06-01
 > 関連: #66 (advisory 削減、task-68 に吸収), #51 (context-bloat-reduction、静的層)
 > 設計起源: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 (approved_at 2026-06-01) §3.0 + §3.5 Step 1-3
