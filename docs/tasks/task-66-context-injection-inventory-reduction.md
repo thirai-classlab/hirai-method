@@ -11,9 +11,9 @@ total_steps: 7
 
 # Task #66: hook context 注入インベントリ + サイズ縮小 (案A: advisory pointer 化)
 
-> Status: **🔲 未着手**
+> Status: **⏸️ 保留 (task-68 に吸収・supersede、2026-06-01)** — harness 全体見直し ([harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md)) で本 task の advisory 削減 scope は task-68 §3.2 に統合。本 task は単独着手せず task-68 で実施。
 > 起案: 2026-06-01
-> 関連: #51 (context-bloat-reduction、親施策・静的層)
+> 関連: #51 (context-bloat-reduction、親施策・静的層), #68 (吸収先)
 > 設計起源: [context-injection-inventory-reduction.md](../draft/context-injection-inventory-reduction.md) ✅承認済 (approved_at 2026-06-01 / approved_by takuma.hirai1@gmail.com)
 
 ## Task ゴール
