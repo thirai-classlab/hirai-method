@@ -197,13 +197,13 @@ Phase 1 → Phase 2 → Phase 3
 |    | ✅ | Step 6 | (テスト合格) smoke 全 PASS (web-ui 34/38 + script 21/21 + tui 14/14 regression 0) + visual verification 10/10 case `.claude/.task-screenshots/task-61/case-NN-*.png` 撮影、採用 6 条 4「E2E + visual 必須」充足、subagent ab16c51b conf 0.95 | | |
 |    | ✅ | Step 7 | (リファクタリング) 3 観点 acceptable + LOW 2 件 fix (case-03 catDisplayName + case-07 formatHistoryTime) + 大規模 refactor 別 task 提案 (server.js 4 module 分離 5h / app.js reducer 化 3h / smoke helper 抽出 2h)、subagent a0c8e3bc conf 0.93 | | |
 | 62 | 📝 | **Task: Claude Code ステータスラインの構築** | Claude Code の `statusline` 機能の構築。表示内容 / 更新条件 / 視覚仕様は **着手時に user と擦り合わせて確定** | (着手時確定) | (未作成、着手時正規フロー) |
-| 63 | 🔲 | **Task: hc-config Web UI UX 再設計** | task-61 完遂後 user UX フィードバック 4 件 (英 preset 名 / 初期 sidebar 待ち / 動線固定 / 保存経路 unclear) を解消するため、PRESETS に `display_name_ja` 追加 + `/api/current-preset` endpoint 新規 + app.js state machine `top/edit` 2 view 排他化 + index.html sidebar 削除 + layout 再構築を行う。完成すれば user が browser 起動直後に現在 preset 名 + 6 軸詳細を read-only で確認でき、「設定を変更」ボタン経由で preset 一括変更 / 個別 key 変更 / カスタムとして保存 (`.claude/presets/custom-<name>.yml`) を日本語 UI + 絵文字なし + WCAG 2.2 AA で操作できるようになる。 | task-61, task-60 | [task-63-hc-config-web-ui-ux-redesign.md](task-63-hc-config-web-ui-ux-redesign.md) ← draft: [`docs/draft/hc-config-web-ui-ux-redesign.md`](../draft/hc-config-web-ui-ux-redesign.md) ✅承認済 |
-|    | 🔲 | Step 1 | PRESETS に `display_name_ja` 追加 + `/api/current-preset` endpoint 実装 (`hc-config-web-server.js`) | | |
-|    | 🔲 | Step 2 | `app.js` state machine 拡張 (top view + edit view 排他、reducer / actions / state shape) | | |
-|    | 🔲 | Step 3 | `index.html` layout 再構築 (sidebar 削除 + 新 layout) + `style.css` 調整 | | |
-|    | 🔲 | Step 4 | preset 日本語名表示 (list / banner / dialog confirm、`lang="ja"` 属性) | | |
-|    | 🔲 | Step 5 | smoke 新規 5 case 追加 (`/api/current-preset` / top view / 編集画面遷移 / preset 適用後復帰 / カスタム保存) | | |
-|    | 🔲 | Step 6 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (上限 5 回) | | |
-|    | 🔲 | Step 7 | (テスト合格) script smoke + tui smoke + 新 smoke + visual verification 14 case | | |
-|    | 🔲 | Step 8 | (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出 | | |
+| 63 | ✅ | **Task: hc-config Web UI UX 再設計** | task-61 完遂後 user UX フィードバック 4 件 (英 preset 名 / 初期 sidebar 待ち / 動線固定 / 保存経路 unclear) を解消するため、PRESETS に `display_name_ja` 追加 + `/api/current-preset` endpoint 新規 + app.js state machine `top/edit` 2 view 排他化 + index.html sidebar 削除 + layout 再構築を行う。完成すれば user が browser 起動直後に現在 preset 名 + 6 軸詳細を read-only で確認でき、「設定を変更」ボタン経由で preset 一括変更 / 個別 key 変更 / カスタムとして保存 (`.claude/presets/custom-<name>.yml`) を日本語 UI + 絵文字なし + WCAG 2.2 AA で操作できるようになる。 **完遂 (2026-05-30、PR #37 merged 2026-06-01)**: 全 8 Step ✅、visual verification が render バグ (#main-panel↔#view-container id mismatch) 捕捉、6 軸 data-contract gap は follow-up #63 (next-actions) に分離。 | task-61, task-60 | [task-63-hc-config-web-ui-ux-redesign.md](task-63-hc-config-web-ui-ux-redesign.md) ← draft: [`docs/draft/hc-config-web-ui-ux-redesign.md`](../draft/hc-config-web-ui-ux-redesign.md) ✅承認済 |
+|    | ✅ | Step 1 | PRESETS に `display_name_ja` 追加 + `/api/current-preset` endpoint 実装 (`hc-config-web-server.js`) | | |
+|    | ✅ | Step 2 | `app.js` state machine 拡張 (top view + edit view 排他、reducer / actions / state shape) | | |
+|    | ✅ | Step 3 | `index.html` layout 再構築 (sidebar 削除 + 新 layout) + `style.css` 調整 | | |
+|    | ✅ | Step 4 | preset 日本語名表示 (list / banner / dialog confirm、`lang="ja"` 属性) | | |
+|    | ✅ | Step 5 | smoke 新規 5 case 追加 (`/api/current-preset` / top view / 編集画面遷移 / preset 適用後復帰 / カスタム保存) | | |
+|    | ✅ | Step 6 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (上限 5 回) | | |
+|    | ✅ | Step 7 | (テスト合格) script smoke + tui smoke + 新 smoke + visual verification 14 case | | |
+|    | ✅ | Step 8 | (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出 | | |
 | 64 | ✅ | **Task: reviewer 数 config 強制実装** | reviewer 制御値 (review_*_count_* 等) が動作に影響しない「飾り」状態を解消するため config-loader strip 修正 + local.yml 移行 + 採用 6 条 4「5+」撤廃 + command Phase 0 実行手順化 + PreToolUse(Agent) 強制 hook を実装する。完成すれば hc-config.sh --set した reviewer 数上限が honor step + hook で実効化され --update でも消えなくなる。**完遂 (2026-05-30)**: 全 8 Step ✅、9 commit、smoke 全 PASS (reviewer-count-guard 14/14 + regression 0)、3 reviewer review CRIT0/HIGH0、PR 予定。 | task-44, task-45, task-55 | [task-64-reviewer-count-enforcement.md](task-64-reviewer-count-enforcement.md) ← draft 承認済 |
