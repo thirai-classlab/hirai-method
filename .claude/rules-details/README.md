@@ -56,8 +56,8 @@
 | development-process | `development-process/` | (Step 2) | 🔲 |
 | modes | `modes/` | (Step 2) | 🔲 |
 | task-management | `task-management/` | (Step 2) | 🔲 |
-| self-improvement | `self-improvement/` | (Step 2) | 🔲 |
-| why-x5-output | `why-x5-output/` | (Step 2) | 🔲 |
+| self-improvement | `self-improvement/` | when-to-use-layers / l4-mechanics / related-skills / origin (4 断片) | ✅ (task-67) |
+| why-x5-output | `why-x5-output/` | examples / v1-v10-history / feedback-memory / origin (4 断片) | ✅ (task-67) |
 
 > 移行完了した rule は旧 `<rule>.details.md` を削除し、本表の移行状態を ✅ に更新する。
 

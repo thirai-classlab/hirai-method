@@ -1,6 +1,7 @@
 <!--
 2026-05-23 v10 確定: 1 行 format「<何のため> のため、<何をやる> を行う」に集約。
 task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
+task-67 (2026-06-01): details.md → 断片群 (why-x5-output/) に再構造化。
 -->
 
 # 「何のために何をやるのか」1 行出力ルール (v10、2026-05-23)
@@ -14,7 +15,7 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 > 4. **学習 / dogfood**: task 着手前依存先必読 / harness audit / 副産物整理
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
-> 詳細: [why-x5-output.details.md](../rules-details/why-x5-output.details.md)
+> 詳細: 各 § 末尾 pointer から該当断片を直リンク Read (断片群: [`../rules-details/why-x5-output/`](../rules-details/why-x5-output/))
 
 ## format
 
@@ -47,6 +48,8 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 
 `.claude/hooks/why-x5-reminder.sh` (UserPromptSubmit hook) が、毎ターン本ルールへの遵守を `<system-reminder>` として注入する。
 
+> 起源・規範化経緯: [why-x5-output/origin.md](../rules-details/why-x5-output/origin.md)
+
 ## 判定基準 (出力前 self-check)
 
 - [ ] 1 行 format か (改行 / 見出し / 連番セクションが無いか)
@@ -65,7 +68,7 @@ task-51 Step 3 (2026-05-28): Layer A/B 2 層分割。
 - 「何をやる」だけ書いて「何のため」を省略 (例: 「install.sh を smoke test する」 — NG)
 - 1 ステップで 2 行以上書く (例: 改行で目的と作業を分けて書く — NG)
 
-> **例詳細 / 旧 version の format 例**: [why-x5-output.details.md §例詳細](../rules-details/why-x5-output.details.md#例詳細)
+> 拡張例 (廃止 format 4 種詳細): [why-x5-output/examples.md](../rules-details/why-x5-output/examples.md)
 
 ## 一時無効化
 
@@ -83,4 +86,5 @@ export HC_WHY_X5_DISABLE=1
 - `feedback_why_x5_once_per_turn.md` (v10 でも継続有効、ターン冒頭 1 回 / ステップ単位 / 未来時制)
 - `feedback_skip_why_x5_for_mode_command.md` (`/mode` 等 format 省略許可 command 規範、v10 でも有効)
 
-> **v1→v10 経緯 table (full) / SUPERSEDED 履歴 / 起源詳細**: [why-x5-output.details.md §v1-v10-経緯](../rules-details/why-x5-output.details.md#v1v10-経緯)
+> feedback memory 全件 (SUPERSEDED 含む): [why-x5-output/feedback-memory.md](../rules-details/why-x5-output/feedback-memory.md)
+> v1→v10 経緯 table (full): [why-x5-output/v1-v10-history.md](../rules-details/why-x5-output/v1-v10-history.md)
