@@ -251,3 +251,5 @@ UI 変更だが view 影響なし時、Step 完了条件に明示:
 | `/start-task <id>` | 着手 (branch 切替 + status 同期) |
 | `/finish-task <id>` | 完了 (検証 + done 化 + commit 提案) |
 | `/task-bypass <slug>` | task-rule-guard 1 file 分 bypass |
+
+> **各規範の起源 / 採用経緯 (task-21 W1.7 / task-26 W4 / 採用 6 条 supersede 経緯 / plan-first 規範化)**: [task-management/origin.md](../rules-details/task-management/origin.md)

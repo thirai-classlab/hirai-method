@@ -1,4 +1,4 @@
-> Layer A: [`modes.md`](../../rules/modes.md) §(history 全体) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`modes.md`](../../rules/modes.md) §関連 artifact (代表) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 # 起源 (history 全体) (Layer B)
 

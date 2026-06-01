@@ -18,6 +18,12 @@
 - `Edit` tool で `file_path` が `.claude/` 配下 → permission denied
 - `Bash` で `cat > .claude/...` / `tee .claude/...` heredoc redirect → block
 
+## 例外
+
+- **メインからの `.claude/` Write/Edit は通過** (`delegation-guard.sh` がメイン許可)
+- **`worktree` isolation でも同 policy** (foreground / background / worktree いずれも denied、隔離方式に依らず subagent context の `.claude/` 直接 write は deny)
+- **単一 repo 内 (hirai-method 内 `.claude/hooks/` 等の編集) は staging 戦略で subagent から可能** — cross-repo Write のみが完全 deny ([cross-repo-write.md](./cross-repo-write.md) §例外 参照)
+
 ## task #12 dual-mode-portability 由来 (起源)
 
 本規範は task #12 dual-mode-portability 実装中の発見 (2026-05-13) から起こされた。subagent ad80e8f5b63437f01 で以下 3 パターンの permission denied を全件確認:

@@ -68,3 +68,5 @@ PR 直前 → F2 /verify 6 phase → READY なら commit/push
 - F2: `/verify` ([verification-loop](../skills/verification-loop/SKILL.md))
 
 > **全 skill / command 完全 list**: [self-improvement/related-skills.md](../rules-details/self-improvement/related-skills.md)
+
+> **L1-L5 + F1/F2 模倣の起源 (ECC 由来 / skill 移植 provenance) / 規範化経緯**: [self-improvement/origin.md](../rules-details/self-improvement/origin.md)

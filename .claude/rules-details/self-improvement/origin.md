@@ -1,4 +1,4 @@
-> Layer A: [`self-improvement.md`](../../rules/self-improvement.md) §層構造 | 本 file は **明示 Read のみ** (context 自動注入 OFF)
+> Layer A: [`self-improvement.md`](../../rules/self-improvement.md) §関連スキル / コマンド (代表) | 本 file は **明示 Read のみ** (context 自動注入 OFF)
 
 # 起源 詳細 (Layer B)
 

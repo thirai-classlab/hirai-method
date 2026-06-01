@@ -264,3 +264,5 @@ consuming repo は **proactive に harness 最新版を取り込む** 義務を�
 ## Parking Lot (保留タスク)
 
 詳細は [`task-management.md`](./task-management.md) §「Parking Lot（今後検討タスク）」を参照。
+
+> **各規範の起源 / commit hash / 採用判断 (TDD / 委譲必須要件 7 件 / staging / cross-repo / Confidence Gate F3 / harness 取込)**: [development-process/origin.md](../rules-details/development-process/origin.md)

@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# rule-architecture-smoke.sh — task-67 Step 4
+# rule-architecture-smoke.sh — task-67 Step 5
 #
-# 設計起源: docs/tasks/task-67-rule-architecture-restructure.md Step 4
+# 設計起源: docs/tasks/task-67-rule-architecture-restructure.md Step 5
 # Layer A (.claude/rules/*.md) / Layer B (.claude/rules-details/<rule>/<topic>.md) の
-# アーキテクチャ健全性を 4 asserts + 1 informational で検証する。
+# アーキテクチャ健全性を 5 asserts + 1 informational + 1 assert で検証する。
 #
 # Assert 1: dangling 0 — Layer A 内の (../rules-details/...) リンク先が全件実在
 # Assert 2: auto-load isolation — rules-details/ 断片が rules/ 直下に混入していない +
 #                                  旧 monolithic *.details.md が残存していない (全 6 rule 移行完了)
 # Assert 3: back-link 健全性 — 各断片冒頭に "> Layer A: [" back-link header が存在
 # Assert 4 (INFO): Layer A 行数報告 — 参考閾値 280 行超で WARN 出力 (hard-fail なし)
+# Assert 5: orphan fragment 0 — 全断片が Layer A から 1 本以上 forward-link されている
+# Assert 6: back-link path 解決 — 各断片の back-link path が実在するファイルに解決できる
 #
 # 実行:
 #   bash .claude/tests/rule-architecture-smoke.sh
@@ -243,9 +245,145 @@ assert4_layer_a_line_count_report() {
 }
 
 # ============================================================
+# Assert 5: orphan fragment 0
+# ============================================================
+# 全 .claude/rules-details/<rule>/<topic>.md 断片 (README.md 除く) が、
+# 対応する Layer A .claude/rules/<rule>.md から
+# "<rule>/<topic>.md" の形で 1 本以上 forward-link されていることを assert。
+# されていない断片 (orphan) があれば FAIL + 断片 path 列挙。
+#
+# 検索方向: Layer B → Layer A (reverse) で orphan を検出。
+# 補足: Assert 1 は Layer A → Layer B (forward) の dangling を検出。
+#       Assert 5 は逆方向で Layer B に forward-link が当たっていないことを検出。
+assert5_orphan_fragment_zero() {
+  local label="Assert 5: orphan fragment 0 — 全断片が Layer A から 1 本以上 forward-link 済"
+  local fail_list=()
+  local checked=0
+
+  for f in "${LAYER_A_RULES[@]}"; do
+    local frag_dir="${RULES_DETAILS_DIR}/${f}"
+    local layer_a="${RULES_DIR}/${f}.md"
+
+    if [[ ! -d "$frag_dir" ]]; then
+      fail_list+=("${f}/: fragment dir not found")
+      continue
+    fi
+    if [[ ! -f "$layer_a" ]]; then
+      fail_list+=("${f}.md: Layer A file NOT FOUND")
+      continue
+    fi
+
+    while IFS= read -r frag; do
+      [[ -z "$frag" ]] && continue
+      local bn
+      bn=$(basename "$frag")
+      # README.md はインデックスファイルのため forward-link 必須対象外
+      [[ "$bn" == "README.md" ]] && continue
+      checked=$((checked + 1))
+
+      # Layer A 内に "<rule>/<topic>.md" の形でリンクが存在するか確認
+      # パターン: rules-details/<rule>/<topic>.md  (anchor 付き変形も含め grep)
+      local search_pattern="${f}/${bn}"
+      if ! grep -qF "$search_pattern" "$layer_a" 2>/dev/null; then
+        fail_list+=("${f}/${bn}: orphan — '${search_pattern}' が ${f}.md に forward-link されていない")
+      fi
+    done < <(find "$frag_dir" -maxdepth 1 -name '*.md' | sort)
+  done
+
+  if [[ ${#fail_list[@]} -eq 0 ]]; then
+    _record_pass "$label (${checked} fragments checked, orphan: 0)"
+  else
+    printf "  [FAIL] %s\n" "$label"
+    for item in "${fail_list[@]}"; do
+      printf "         - %s\n" "$item"
+    done
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (orphan: ${#fail_list[@]})")
+  fi
+}
+
+# ============================================================
+# Assert 6: back-link path 解決検証
+# ============================================================
+# 全断片冒頭の "> Layer A: [`...`](../../rules/<rule>.md)" の back-link path を
+# 相対解決し、リンク先 file が実在することを assert。
+# README.md は back-link 不要のため対象外。
+# §section 名と Layer A heading の一致検証は追加しない
+# (section rename で fragile + false positive のため)。
+assert6_backlink_path_resolution() {
+  local label="Assert 6: back-link path 解決 — 全断片の back-link が実在 file に解決"
+  local fail_list=()
+  local checked=0
+
+  for f in "${LAYER_A_RULES[@]}"; do
+    local frag_dir="${RULES_DETAILS_DIR}/${f}"
+    if [[ ! -d "$frag_dir" ]]; then
+      fail_list+=("${f}/: fragment dir not found")
+      continue
+    fi
+
+    while IFS= read -r frag; do
+      [[ -z "$frag" ]] && continue
+      local bn
+      bn=$(basename "$frag")
+      # README.md は back-link 不要のため対象外
+      [[ "$bn" == "README.md" ]] && continue
+
+      # 冒頭 10 行から "> Layer A: [...](...)" のパスを抽出
+      # 形式例: > Layer A: [`modes.md`](../../rules/modes.md) §...
+      # grep で (...) 内の path 部分を抽出、anchor (#...) は除去
+      local raw_path
+      raw_path=$(head -10 "$frag" \
+        | grep '^> Layer A: \[' \
+        | grep -oE '\([^)]+\)' \
+        | head -1 \
+        | tr -d '()' \
+        | sed 's/#.*//' \
+        | tr -d ' ' \
+        || true)
+
+      if [[ -z "$raw_path" ]]; then
+        # back-link 行が見つからない (Assert 3 が先に検出するが念のため)
+        fail_list+=("${f}/${bn}: back-link path not found (cannot resolve)")
+        continue
+      fi
+
+      checked=$((checked + 1))
+
+      # 断片は .claude/rules-details/<rule>/<topic>.md に存在
+      # raw_path が ../../rules/<rule>.md の場合:
+      #   frag dir: .claude/rules-details/<rule>/
+      #   ../../ → .claude/ の親の親 = REPO_ROOT
+      #   よって resolved = REPO_ROOT/.claude/rules/<rule>.md ... ではなく
+      #   frag の dirname からの相対解決を行う
+      local frag_dir_abs
+      frag_dir_abs="$(dirname "$frag")"
+      # bash では realpath が使えない場合に備えて cd + pwd で解決
+      local resolved
+      resolved="$(cd "$frag_dir_abs" && cd "$(dirname "$raw_path")" 2>/dev/null && pwd)/$(basename "$raw_path")" 2>/dev/null || true
+
+      if [[ -z "$resolved" ]] || [[ ! -f "$resolved" ]]; then
+        fail_list+=("${f}/${bn}: back-link '${raw_path}' → resolved '${resolved:-<empty>}' — file NOT FOUND")
+      fi
+    done < <(find "$frag_dir" -maxdepth 1 -name '*.md' | sort)
+  done
+
+  if [[ ${#fail_list[@]} -eq 0 ]]; then
+    _record_pass "$label (${checked} back-links resolved, all exist)"
+  else
+    printf "  [FAIL] %s\n" "$label"
+    for item in "${fail_list[@]}"; do
+      printf "         - %s\n" "$item"
+    done
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("$label (unresolvable: ${#fail_list[@]})")
+  fi
+}
+
+# ============================================================
 # main
 # ============================================================
-printf "===== rule-architecture-smoke (task-67 Step 4, 3 asserts + 1 INFO) =====\n\n"
+printf "===== rule-architecture-smoke (task-67 Step 5, 5 asserts + 1 INFO) =====\n\n"
 
 assert1_dangling_zero
 printf "\n"
@@ -254,6 +392,10 @@ printf "\n"
 assert3_backlink_health
 printf "\n"
 assert4_layer_a_line_count_report
+printf "\n"
+assert5_orphan_fragment_zero
+printf "\n"
+assert6_backlink_path_resolution
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"

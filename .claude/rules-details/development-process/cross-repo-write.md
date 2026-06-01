@@ -2,6 +2,18 @@
 
 # cross-repo write 起源 (Layer B)
 
+## 例外 (単一 repo との境界)
+
+- **単一 repo 内 (hirai-method 内 `.claude/hooks/` 等の編集) は staging 戦略で subagent から可能** ([staging-strategy.md](./staging-strategy.md) §例外)
+- **cross-repo Write のみが完全 deny** — 「`.claude/` への subagent write は全部 deny」という誤読を防ぐ境界
+
+## 適用手順 (How to apply)
+
+- 3 リポ反映系 task は `bash install.sh --update <target>` を **user に手動依頼** が default
+- task draft / task file の Phase 計画段で「**Phase N (cross-repo): user manual `bash install.sh --update <target>` 案内**」と最初から明記
+- 副産物 entry 起票時も「**(c) user manual 経路で対応**」を推奨処理に明記
+- 「sandbox deny で進められない」を loop 停止理由にしない
+
 ## 実証経緯
 
 - 2026-05-23 task-24 W1 subagent a174bcef696b54860 confidence 0.85 で実証 (cross-repo Write / cp / mv / heredoc redirect が一律 deny、`dangerouslyDisableSandbox: true` 付き Bash も block)

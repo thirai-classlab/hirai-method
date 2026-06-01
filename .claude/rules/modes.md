@@ -174,3 +174,5 @@ Loop モードでも委譲・事実検証等の安全ガードは無効化され
 - [`.claude/tests/loop-auto-progress-smoke.sh`](../tests/loop-auto-progress-smoke.sh) (層 5)
 
 > **関連 artifact 完全 list (mode 系 hook + 5 層強制機構 + smoke 群 + 設計起源 draft path)**: [modes/artifacts.md](../rules-details/modes/artifacts.md)
+
+> **各規範の起源 (history 全体、task-21 W0.1 〜 task-51 Step 3 の変更履歴) / commit hash**: [modes/origin.md](../rules-details/modes/origin.md)
