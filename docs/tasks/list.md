@@ -206,3 +206,4 @@ Phase 1 → Phase 2 → Phase 3
 |    | 🔲 | Step 6 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (上限 5 回) | | |
 |    | 🔲 | Step 7 | (テスト合格) script smoke + tui smoke + 新 smoke + visual verification 14 case | | |
 |    | 🔲 | Step 8 | (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出 | | |
+| 64 | ✅ | **Task: reviewer 数 config 強制実装** | reviewer 制御値 (review_*_count_* 等) が動作に影響しない「飾り」状態を解消するため config-loader strip 修正 + local.yml 移行 + 採用 6 条 4「5+」撤廃 + command Phase 0 実行手順化 + PreToolUse(Agent) 強制 hook を実装する。完成すれば hc-config.sh --set した reviewer 数上限が honor step + hook で実効化され --update でも消えなくなる。**完遂 (2026-05-30)**: 全 8 Step ✅、9 commit、smoke 全 PASS (reviewer-count-guard 14/14 + regression 0)、3 reviewer review CRIT0/HIGH0、PR 予定。 | task-44, task-45, task-55 | [task-64-reviewer-count-enforcement.md](task-64-reviewer-count-enforcement.md) ← draft 承認済 |
