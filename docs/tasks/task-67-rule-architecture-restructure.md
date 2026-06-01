@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #67: rule architecture 再構造 (全 6 rule の Layer A 軽量化 + Layer B 断片化)
 
-> Status: **🔄 進行中** (2026-06-01 着手、branch `refactor/rule-architecture-restructure`)
+> Status: **✅ 完了** (2026-06-01、[PR #43](https://github.com/thirai-classlab/hirai-method/pull/43) merged、全 7 Step ✅、branch `refactor/rule-architecture-restructure`。残 user follow-up: 4 リポ install user manual `bash install.sh --update <target>`)
 > 起案: 2026-06-01
 > 関連: #66 (advisory 削減、task-68 に吸収), #51 (context-bloat-reduction、静的層)
 > 設計起源: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 (approved_at 2026-06-01) §3.0 + §3.5 Step 1-3
@@ -85,7 +85,7 @@ pointer 規約: `> 詳細: [rules-details/workflow/workflow-guard.md](../rules-d
 | 4 | ✅ | smoke 新規 + 既存更新 (pointer dangling 0 / auto-load 非対象 / 行数上限 / 起動時 token before-after) | 1.0h | Step 3 |
 | 5 | ✅ | (テスト設計レビュー) 5 reviewer 動的選定、enforcement 不変 + SSoT 無損失 cross-check 重点。iter1 で全 HIGH/CRIT 修正 (機械検証収束) | 0.5h | Step 4 |
 | 6 | ✅ | (テスト合格) 全 hook / script smoke regression 0 (39 PASS + 11 既存 FAIL は pre-task-67 同一、新規 regression 0) + 起動 token -2807 (-13.6%) 実測 | 0.5h | Step 5 |
-| 7 | 🔄 | (リファクタリング) 3 観点 + PR create + 4 リポ install user manual 案内 | 0.3h | Step 6 |
+| 7 | ✅ | (リファクタリング) 3 観点 acceptable + PR #43 create 済 + 4 リポ install user manual 案内 | 0.3h | Step 6 |
 
 合計: **~6.3h**
 
