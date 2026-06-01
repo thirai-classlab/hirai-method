@@ -420,7 +420,7 @@ function invalidateKeysValueCache() {
 // /api/keys の key 集合は metadata (表示補助) ではなく harness-config.yml の
 // top-level key を基準にする。hc-config.sh の _yml_list_keys (`^[a-z_][a-zA-Z0-9_]*:`)
 // と同一の regex で抽出し、CLI / Web / TUI の key 集合を一致させる。
-//   - 旧 /api/keys は metadata 75 entry 基準で enrich していたため、metadata 未登録 yml key が欠落していた。
+//   - 旧 /api/keys は metadata entry 数を基準に enrich していたため、metadata 未登録 yml key が欠落していた。
 //   - 本 helper は yml を直接 read するため metadata 登録有無に依存しない (= metadata に無くても拾う)。
 // overrides.ymlPath: テスト用 path 差替 seam (default は HARNESS_CONFIG_PATH)
 //
@@ -1118,10 +1118,10 @@ async function handleRequest(req, res) {
 
   // GET /api/keys
   //   task-69 Step 3 (key parity fix): key 集合の SSoT を metadata から yml top-level key に変更。
-  //     旧実装は loadMetadata() (75 entry) を基準に enrich していたため、metadata 未登録の yml key
+  //     旧実装は loadMetadata() (metadata entry 数) を基準に enrich していたため、metadata 未登録の yml key
   //     (feature_reviewer_count_guard_enabled / feature_stale_harness_detect_enabled /
   //      harness_version / stale_harness_markers) が response から欠落していた。
-  //     新実装は listYamlKeys() (yml 79 key) を基準に Object.entries 相当の loop を回し、
+  //     新実装は listYamlKeys() (yml top-level key) を基準に Object.entries 相当の loop を回し、
   //     metadataMap で left join (metadata 不在 key は category/description/effect を空文字で返す)。
   //   NEW-C-1 (維持): hcListAll() で全 key 値を 1 spawnSync で取得 (74 → 1)、cache hit で spawn 0 件。
   if (req.method === 'GET' && pathname === '/api/keys') {

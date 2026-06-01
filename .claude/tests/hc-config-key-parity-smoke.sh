@@ -9,8 +9,10 @@
 #
 #   現状 (task-69 着手前): metadata 75 key vs yml 79 key の差異で cmd_list() が
 #   未分類 4 key (feature_reviewer_count_guard_enabled / feature_stale_harness_detect_enabled /
-#   harness_version / stale_harness_markers) を出力できず 79 != 75 で fail する。
-#   Step 1 (cmd_list 未分類 section) + Step 2 (metadata 4 key 追加) で 79 == 79 に揃える。
+#   harness_version / stale_harness_markers) を出力できず fail していた (履歴)。
+#   Step 1 (cmd_list 未分類 section) + Step 2 (metadata 4 key 追加) で揃え、
+#   Step 8 (task-69 リファクタリング) でさらに slip key 追加により 80 key へ増加。
+#   本 smoke の検証ロジック自体は yml key 数を動的計算するため hardcode を持たない。
 #
 # 設計:
 #   - subshell 関数 ( set -uo pipefail; ... ) で各 case を隔離

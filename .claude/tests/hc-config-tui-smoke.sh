@@ -94,8 +94,9 @@ fi
 # task-69: HC_TUI_SMOKE_EXCLUDE_KEYS 撤廃。task-60 Step 5 iter 2 H5 で暫定 exclude していた
 #   `harness_version` / `stale_harness_markers` / `feature_stale_harness_detect_enabled` の 3 key は
 #   task-69 Step 2 で `lib/hc-config-metadata.sh` に正規登録 (新 category harness_meta) され、
-#   `feature_reviewer_count_guard_enabled` も feature_toggle に追加された。yml 79 == metadata 79 が
-#   素で一致するため exclude 機構は不要になった (Case 1/2 は全 yml key を直接評価する)。
+#   `feature_reviewer_count_guard_enabled` も feature_toggle に追加された。
+#   yml key 数 == metadata key 数 の双方向一致は Case 1 が動的に検証するため hardcode 不要。
+#   (task-69 Step 8: key 数は _get_all_config_keys で動的計算、fixed count は持たない)
 _get_all_config_keys() {
   grep -E '^[a-z_][a-zA-Z0-9_]*:' "${HC_CONFIG_YML}" \
     | sed -E 's/:.*$//'
@@ -117,7 +118,8 @@ _make_sourceable_hcconfig() {
 }
 
 # ============================================================
-# Case 1: metadata 完全性 — 全 79 key に description + effect、双方向一致、最低品質
+# Case 1: metadata 完全性 — 全 yml key に description + effect、双方向一致、最低品質
+# (key 数は yml から動的取得、hardcode しない)
 # ============================================================
 # H12 + H13: description 最低文字数 / effect != description 先頭 substring /
 #            category 7 分類 (task-69) / yml key 数 == metadata key 総数。
@@ -547,7 +549,7 @@ _case_11() (
   #   hc_metadata_* 関数を可視化しておく必要がある (順序逆だと category 解決が全て空になる)。
 
   # iter2 CRIT C-iter2-1 regression ガード (stdout 純度):
-  #   _tui_order_keys_by_category の戻りが正確に yml key 数 (現状 79) 行 (= yml key 数) かつ
+  #   _tui_order_keys_by_category の戻りが正確に yml key 数 (= yml top-level key の総数、動的) 行 かつ
   #   `^[a-z_]+=` ゴミ行 0 を assert。bash 3.2 local+cmdsubst 漏洩で `kc=...` 等が
   #   混入すると total が膨らむ (例: ゴミ 73 行混入で total=147)。
   local order_out yml_key_count order_total order_garbage

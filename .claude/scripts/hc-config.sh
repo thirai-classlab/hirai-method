@@ -141,6 +141,14 @@ _meta_category() {
   fi
 }
 
+# category 一覧文字列を返す helper (SSoT — cmd_list / _tui_order_keys_by_category の両所から参照)
+# task-69 Step 8 L2: categories string が 794 (cmd_list) と 1390 (_tui_order_keys_by_category) の
+#   2 箇所に重複していたため、単一 helper に抽出。将来 category 追加時はここ 1 箇所のみ修正。
+# stdout: スペース区切りの category 名列 (word-split で for cat in $(...); do が使える形式)
+_hc_categories() {
+  printf '%s' "保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
+}
+
 # --config <path> 引数で test isolation 対応 (smoke Case 3-6)
 CONFIG_PATH=""
 
@@ -789,9 +797,9 @@ cmd_list() {
   # category 別にグルーピングして出力 (metadata 不在時は単一グループ扱い)
   # iter2 CRIT 同種 leak 予防: for/while 本体内の `local cat_keys` / `local key` / `local cat_count`
   #   宣言を関数頭に集約し、ループ内は素の代入にして bash 3.2 cmdsubst stdout 漏洩を構造的に防ぐ。
-  # task-69 Step 2: harness_meta category を追加 (harness_version / stale_harness_markers /
-  #   feature_stale_harness_detect_enabled、task-56 で yml に追加された install.sh 管理 key 群)。
-  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
+  # task-69 Step 8 L2: categories は _hc_categories() SSoT helper から取得 (重複 hardcode 撤廃)。
+  local categories
+  categories=$(_hc_categories)
   local printed_any=0
   local cat cat_keys key cat_count
   for cat in $categories; do
@@ -1387,7 +1395,9 @@ _tui_read_key() {
 # $1: 全 key 改行区切り (yml 出現順)
 _tui_order_keys_by_category() {
   local all_keys="$1"
-  local categories="保護パス ファイル配置 state_dir Gate/Confidence feature_toggle reviewer_control harness_meta"
+  # task-69 Step 8 L2: _hc_categories() SSoT helper から取得 (cmd_list と共通化)
+  local categories
+  categories=$(_hc_categories)
   local ordered="" key cat seen_cat=0
   # iter2 CRIT C-iter2-1 fix (bash 3.2 local+command-substitution leak 予防):
   #   while ループ本体内で `local kc` (代入なし宣言) → 直後に `kc=$(_meta_category)` する構造は

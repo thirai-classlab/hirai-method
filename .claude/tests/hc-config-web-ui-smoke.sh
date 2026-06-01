@@ -2219,7 +2219,9 @@ _case_s47() (
     return 1
   fi
 
-  # /api/keys response から "key":"<name>" を抽出
+  # /api/keys response から key 名を抽出
+  # task-69 Step 8 M2: grep -oE '"key":"[^"]+" 方式は value 内の偶発文字列で誤カウントする seam があるため
+  # node -e で .keys[].key を読む方式に変更 (node 不在時は grep fallback)。
   local body
   body=$(_curl_json "http://127.0.0.1:${port}/api/keys")
   if ! printf '%s' "$body" | grep -q '"keys"'; then
@@ -2228,7 +2230,18 @@ _case_s47() (
   fi
 
   local actual_keys
-  actual_keys=$(printf '%s' "$body" | grep -oE '"key":"[^"]+"' | sed -E 's/^"key":"//; s/"$//' | sort -u || true)
+  if command -v node >/dev/null 2>&1; then
+    # node で JSON を正確にパース: .keys[].key を抽出
+    actual_keys=$(printf '%s' "$body" | node -e '
+      let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{
+        try{const o=JSON.parse(d);(o.keys||[]).forEach(e=>{if(e&&e.key)console.log(e.key)});}
+        catch(ex){process.exit(1);}
+      });
+    ' 2>/dev/null | sort -u || true)
+  else
+    # node 不在時 fallback: grep -oE (value 混入リスクは残るが環境依存)
+    actual_keys=$(printf '%s' "$body" | grep -oE '"key":"[^"]+"' | sed -E 's/^"key":"//; s/"$//' | sort -u || true)
+  fi
   local actual_count
   actual_count=$(printf '%s\n' "$actual_keys" | grep -c '.' || true)
 

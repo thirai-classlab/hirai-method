@@ -221,7 +221,7 @@ assert_same_set "$yml_keys" "$api_keys"
 
 #### 完了条件
 
-- YAML 79 key と `--list` / Web API の key set が一致する。
+- YAML top-level key 全件と `--list` / Web API の key set が一致する (key 数は yml に追従、hardcode しない)。
 - metadata 未整備の key が UI から消えない。
 - 今回欠落した 4 key が list / TUI / Web UI で見える。
 - local override に未知 key があれば warning になる。
