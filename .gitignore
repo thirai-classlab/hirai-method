@@ -17,6 +17,8 @@
 .claude/.agent-markers/
 .claude/.context-budget-state/
 .claude/.improvement-proposal-state/
+.claude/.reviewer-count-state/
+.claude/.parallel-subagent-state/
 .claude/.preset-history/
 .claude/.session-help-shown
 .claude/settings.local.json
