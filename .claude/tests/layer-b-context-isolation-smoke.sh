@@ -259,7 +259,7 @@ case6_layer_a_important_keywords() {
       modes)             echo "遵守事項 2 例外|自律実行禁止|5 層強制" ;;
       workflow)          echo "20 MECE|fan-out" ;;
       why-x5-output)     echo "何のため|何をやる|v10" ;;
-      development-process) echo "staging|委譲必須要件" ;;
+      development-process) echo "staging|委譲の必須要件" ;;
       self-improvement)  echo "L1|L4|F1|F2" ;;
       *)                 echo "" ;;
     esac
