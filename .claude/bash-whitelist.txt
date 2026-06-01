@@ -81,6 +81,29 @@
 ^find( |$)
 ^rg( |$)
 
+# read-only filter コマンド (task-68 Step 3 delegation-guard-splitter-false-positive、2026-06-01)
+# 背景: main の Bash を pipe (`| head`, `| tail`, `| wc`) で segment 分割 → 各 segment を
+#   whitelist 照合する際、pipe 先の read-only filter が whitelist 不在で誤 BLOCK されていた
+#   (例: `git push origin feat/x | tail -5` / `git log --oneline | wc -l` が segment `tail`/`wc`
+#    不在で block)。本セッションでも複数回発火。
+# 方針: read-only filter のみを PATH-RESTRICTED に追加 (= surgical whitelist 追加)。
+#   - PATH-RESTRICTED 配置のため path-leak ガード対象外にならず、`head src/foo.ts` /
+#     `cat src/x | head` 等 src/tests/scripts inspect は引き続き block (委譲原則維持)。
+#   - 危険コマンド deny (git destructive / protected-branch push) は cmd 全体に対して
+#     segment 非依存で先行判定するため不変 (例: `git push --force | head` は依然 block)。
+#   - これらは破壊的 subcommand を持たない pure read-only filter のみに限定
+#     (rm / mv / cp / dd / tee / xargs / sed -i 等の副作用系は意図的に除外)。
+# 申請: .claude/bash-whitelist-requests/2026-06-01-readonly-filters.md
+^head( |$)
+^tail( |$)
+^wc( |$)
+^sort( |$)
+^uniq( |$)
+^nl( |$)
+^cut( |$)
+^tr( |$)
+^column( |$)
+
 # === 自己改善 L4: Continuous Learning v2.1 ===
 # instinct-cli の管理操作（status / projects / evolve / promote / export / import / observe-analyze）
 ^python3 \.claude/skills/continuous-learning-v2/instinct-cli\.py( |$)

@@ -2,15 +2,15 @@
 # session-help-surface-smoke.sh — task #11 + Wave 1.6 smoke test
 #
 # Cases:
-#   Case 1: default (HC_SESSION_HELP_* unset) → 簡潔版が出力される (marker 作成)
+#   Case 1: default (HC_SESSION_HELP_* unset) → 1 行 pointer が出力される (marker 作成、task-68 §3.2 opt-in 化)
 #   Case 2: HC_SESSION_HELP_ENABLED=false → silent (出力なし)
-#   Case 3: HC_SESSION_HELP_VERBOSE=true → 詳細版が追加出力
-#   Case 4: 簡潔版に主要 command (`/save-state`, `/new-task`, `/mode`) が含まれる
+#   Case 3: HC_SESSION_HELP_FORCE=true + VERBOSE=true → 詳細版が追加出力
+#   Case 4: FORCE=true の詳細 help に主要 command (`/save-state`, `/new-task`, `/mode`) が含まれる (task-68 §3.2)
 #
 # Wave 1.6 (2026-05-23) で追加された first-only 動作 + marker:
 #   Case 5: HC_SESSION_HELP_FIRST_ONLY=true (default) + marker 既存 → silent
-#   Case 6: HC_SESSION_HELP_FORCE=1 → marker 無視で強制表示
-#   Case 7: HC_SESSION_HELP_FIRST_ONLY=false (旧挙動) + marker 既存 → 表示
+#   Case 6: HC_SESSION_HELP_FORCE=1 → marker 無視で詳細 help 強制表示
+#   Case 7: HC_SESSION_HELP_FIRST_ONLY=false (旧挙動) + marker 既存 → 1 行 pointer 表示
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs 規範遵守)
@@ -57,21 +57,26 @@ run_case() {
   fi
 }
 
-# === Case 1: default → 簡潔版出力 ===
+# === Case 1: default → 1 行 pointer 出力 (task-68 §3.2 opt-in 化) ===
 case_1() {
   local marker
   marker=$(_marker_for 1)
   rm -f "$marker"
   local output
-  # marker 未存在 + first-only default → 表示される
+  # marker 未存在 + first-only default → 1 行 pointer が表示される
   output=$(unset HC_SESSION_HELP_ENABLED HC_SESSION_HELP_VERBOSE HC_SESSION_HELP_FORCE HC_SESSION_HELP_FIRST_ONLY; \
     HC_SESSION_HELP_MARKER_PATH="$marker" bash "$HOOK" </dev/null 2>/dev/null)
   if [ -z "$output" ]; then
-    printf 'expected non-empty output, got empty\n' >&2
+    printf 'expected non-empty pointer output, got empty\n' >&2
     return 1
   fi
-  if ! printf '%s' "$output" | grep -q '主要 slash commands'; then
-    printf 'expected "主要 slash commands" header, got: %s\n' "$output" >&2
+  # default は詳細 help 全文 (主要 slash commands header) を含まず、pointer (HC_SESSION_HELP_FORCE 案内) を含む
+  if printf '%s' "$output" | grep -q '主要 slash commands'; then
+    printf 'expected pointer-only default (no 主要 slash commands header), got full help: %s\n' "$output" >&2
+    return 1
+  fi
+  if ! printf '%s' "$output" | grep -q 'HC_SESSION_HELP_FORCE'; then
+    printf 'expected pointer mentioning HC_SESSION_HELP_FORCE, got: %s\n' "$output" >&2
     return 1
   fi
   if ! printf '%s' "$output" | grep -q 'system-reminder'; then
@@ -99,13 +104,13 @@ case_2() {
   return 0
 }
 
-# === Case 3: HC_SESSION_HELP_VERBOSE=true → 詳細版追加 ===
+# === Case 3: HC_SESSION_HELP_FORCE=true + VERBOSE=true → 詳細版追加 (task-68 §3.2: VERBOSE は FORCE 配下) ===
 case_3() {
   local marker
   marker=$(_marker_for 3)
   rm -f "$marker"
   local output
-  output=$(HC_SESSION_HELP_VERBOSE=true HC_SESSION_HELP_MARKER_PATH="$marker" bash "$HOOK" </dev/null 2>/dev/null)
+  output=$(HC_SESSION_HELP_FORCE=true HC_SESSION_HELP_VERBOSE=true HC_SESSION_HELP_MARKER_PATH="$marker" bash "$HOOK" </dev/null 2>/dev/null)
   if ! printf '%s' "$output" | grep -q '詳細 commands'; then
     printf 'expected "詳細 commands" verbose section, got: %s\n' "$output" >&2
     return 1
@@ -120,14 +125,13 @@ case_3() {
   return 0
 }
 
-# === Case 4: 簡潔版に主要 command 含む ===
+# === Case 4: FORCE=true 詳細 help に主要 command 含む (task-68 §3.2) ===
 case_4() {
   local marker
   marker=$(_marker_for 4)
   rm -f "$marker"
   local output
-  output=$(unset HC_SESSION_HELP_ENABLED HC_SESSION_HELP_VERBOSE HC_SESSION_HELP_FORCE HC_SESSION_HELP_FIRST_ONLY; \
-    HC_SESSION_HELP_MARKER_PATH="$marker" bash "$HOOK" </dev/null 2>/dev/null)
+  output=$(HC_SESSION_HELP_FORCE=true HC_SESSION_HELP_MARKER_PATH="$marker" bash "$HOOK" </dev/null 2>/dev/null)
   if ! printf '%s' "$output" | grep -q '/save-state'; then
     printf 'missing /save-state\n' >&2
     return 1
@@ -179,6 +183,7 @@ case_6_force_overrides_marker() {
 }
 
 # === Case 7 (W1.6): HC_SESSION_HELP_FIRST_ONLY=false → 旧挙動 (marker 既存でも毎回表示) ===
+# task-68 §3.2: FORCE 未指定なので表示されるのは 1 行 pointer (詳細 help は opt-in)。
 case_7_first_only_false_always_show() {
   local marker
   marker=$(_marker_for 7)
@@ -190,21 +195,21 @@ case_7_first_only_false_always_show() {
     printf 'expected display (FIRST_ONLY=false), got empty\n' >&2
     return 1
   fi
-  if ! printf '%s' "$output" | grep -q '主要 slash commands'; then
-    printf 'expected display content, got: %s\n' "$output" >&2
+  if ! printf '%s' "$output" | grep -q 'HC_SESSION_HELP_FORCE'; then
+    printf 'expected pointer content (HC_SESSION_HELP_FORCE), got: %s\n' "$output" >&2
     return 1
   fi
   return 0
 }
 
 printf '===== task #11 + Wave 1.6 session-help-surface smoke =====\n'
-run_case 1 'default -> 簡潔版出力 + marker 作成' case_1
+run_case 1 'default -> 1 行 pointer 出力 + marker 作成 (§3.2 opt-in)' case_1
 run_case 2 'ENABLED=false -> silent' case_2
-run_case 3 'VERBOSE=true -> 詳細版追加' case_3
-run_case 4 '簡潔版に /save-state /new-task /mode 含む' case_4
+run_case 3 'FORCE+VERBOSE -> 詳細版追加' case_3
+run_case 4 'FORCE 詳細 help に /save-state /new-task /mode 含む' case_4
 run_case 5 'W1.6: marker 既存 + first-only default -> silent' case_5_marker_exists_silent
-run_case 6 'W1.6: FORCE=1 -> marker 無視で表示' case_6_force_overrides_marker
-run_case 7 'W1.6: FIRST_ONLY=false -> 旧挙動 (marker あっても表示)' case_7_first_only_false_always_show
+run_case 6 'W1.6: FORCE=1 -> marker 無視で詳細 help 表示' case_6_force_overrides_marker
+run_case 7 'W1.6: FIRST_ONLY=false -> pointer 表示' case_7_first_only_false_always_show
 
 printf '\n===== Result =====\n'
 printf 'PASS: %d / 7\n' "$PASS"

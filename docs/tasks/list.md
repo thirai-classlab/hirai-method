@@ -192,7 +192,12 @@
 |    | ✅ | Step 5 | (テスト設計レビュー) 5 reviewer (architect/code/qa/pr-test/SSoT-audit) iter1、SSoT 損失 4 項目 + origin orphan 4 件 + INVENTORY stale を修正、機械検証 (smoke 5/5+8/8 PASS) で収束 (commit `ef3844f`/`2580005`) | | |
 |    | ✅ | Step 6 | (テスト合格) 全 smoke regression 0 (39 PASS + 11 既存 FAIL は pre-task-67 同一) + 起動 token -2807 (-13.6%) 実測 | | |
 |    | ✅ | Step 7 | (リファクタリング) 3 観点 acceptable + PR #43 create 済 + 4 リポ install user manual 案内 | | |
-| 68 | 🔲 | **Task: harness 挙動修正 (tool-call 信頼性)** | 観測バグ (1 ターン多数 complex tool block で tool-call markup 崩れ→loop) の主犯と寄与要因を構造緩和するため、多数 fan-out の Workflow 標準化 + 1ターン tool block 上限 + why-x5 緩和 + advisory pointer化/事実文化 (task-66 吸収) + delegation-guard 誤検知修正を行う。完成すれば tool-call 信頼性が上がり起動時 context が削減され enforcement を保ったまま過剰 reminder と harness friction が減る。 | task-67, task-66 | [task-68-harness-behavior-fixes.md](task-68-harness-behavior-fixes.md) ← draft: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 |
+| 68 | 🔄 | **Task: harness 挙動修正 (tool-call 信頼性)** | 観測バグ (1 ターン多数 complex tool block で tool-call markup 崩れ→loop) の主犯と寄与要因を構造緩和するため、多数 fan-out の Workflow 標準化 + 1ターン tool block 上限 + why-x5 緩和 + advisory pointer化/事実文化 (task-66 吸収) + delegation-guard 誤検知修正を行う。完成すれば tool-call 信頼性が上がり起動時 context が削減され enforcement を保ったまま過剰 reminder と harness friction が減る。**着手 (2026-06-01、51st、branch `refactor/harness-behavior-fixes`)** | task-67, task-66 | [task-68-harness-behavior-fixes.md](task-68-harness-behavior-fixes.md) ← draft: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 |
+|    | 🔄 | Step 1 | Workflow 標準化 + 1ターン tool block 上限 + why-x5 緩和 (ターン冒頭1回) を modes.md / development-process.md / why-x5-output.md に規範化 | | |
+|    | ✅ | Step 2 | SessionStart advisory pointer 化 (why-x5-reminder v11短縮 / mode-enforce 事実文化 / session-help opt-in `HC_SESSION_HELP_FORCE` / task-rule-guard note session1回)、enforcement 凍結確認、smoke regression 0 (conf 0.92) | | |
+|    | ✅ | Step 3 | delegation-guard read-only filter (head/tail/wc/sort/uniq/nl/cut/tr/column) whitelist 追加、副作用系除外、新 smoke 28/28 + 危険 BLOCK/path-leak 不変実機確認 (conf 0.96) | | |
+|    | 🔲 | Step 4 | (テスト設計レビュー) 5+ reviewer 動的選定、enforcement 不変 cross-check 重点 | | |
+|    | 🔲 | Step 5 | (テスト合格 + リファクタ) 全 smoke regression 0 + 起動 token 実測 + 1ターン多数 tool dogfood + 3 観点 + 4 リポ install 案内 | | |
 
 <!--
 記入ルール:
