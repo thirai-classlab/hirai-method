@@ -190,8 +190,8 @@
 |    | ✅ | Step 3 | 全 6 rule の Layer A slim (workflow 349→151 / dev-process 324→266 / modes 176 / task-mgmt 253 / self-imp 70 / why-x5 90、dense 操作 rule は SSoT 優先で <120 超過許容) | | |
 |    | ✅ | Step 4 | rule-architecture-smoke.sh 新規 (dangling 0 / auto-load isolation / back-link / orphan / path 解決 = 5 assert) + layer-b 断片対応 + 起動 token -2807 実測 (commit `f604ca6` + iter1 Assert5/6) | | |
 |    | ✅ | Step 5 | (テスト設計レビュー) 5 reviewer (architect/code/qa/pr-test/SSoT-audit) iter1、SSoT 損失 4 項目 + origin orphan 4 件 + INVENTORY stale を修正、機械検証 (smoke 5/5+8/8 PASS) で収束 (commit `ef3844f`/`2580005`) | | |
-|    | 🔄 | Step 6 | (テスト合格) 全 hook/script smoke regression 0 検証 + 起動 token 削減実測 (-2807 -13.6% 済) | | |
-|    | 🔲 | Step 7 | (リファクタリング) 3 観点 + PR create (feature branch) + 4 リポ install user manual 案内 | | |
+|    | ✅ | Step 6 | (テスト合格) 全 smoke regression 0 (39 PASS + 11 既存 FAIL は pre-task-67 同一) + 起動 token -2807 (-13.6%) 実測 | | |
+|    | 🔄 | Step 7 | (リファクタリング) 3 観点 acceptable + PR create (feature branch) + 4 リポ install user manual 案内 | | |
 | 68 | 🔲 | **Task: harness 挙動修正 (tool-call 信頼性)** | 観測バグ (1 ターン多数 complex tool block で tool-call markup 崩れ→loop) の主犯と寄与要因を構造緩和するため、多数 fan-out の Workflow 標準化 + 1ターン tool block 上限 + why-x5 緩和 + advisory pointer化/事実文化 (task-66 吸収) + delegation-guard 誤検知修正を行う。完成すれば tool-call 信頼性が上がり起動時 context が削減され enforcement を保ったまま過剰 reminder と harness friction が減る。 | task-67, task-66 | [task-68-harness-behavior-fixes.md](task-68-harness-behavior-fixes.md) ← draft: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 |
 
 <!--
