@@ -2026,11 +2026,24 @@ _case_s43() (
     fi
   done
 
-  # poc-no-git の既知 axis 値 (quality_level=poc) が含まれること
-  if ! printf '%s' "$body" | grep -qE '"quality_level"[[:space:]]*:[[:space:]]*"poc"'; then
-    printf 'S-43: poc-no-git の quality_level が "poc" でない (axes 値が preset metadata 由来でない疑い、body: %s)\n' "$body" >&2
-    return 1
-  fi
+  # task-65 iter2 (pr-test C2): poc-no-git の全 6 軸既知値を assertion
+  #   (server.js PRESETS['poc-no-git'].axes 定義由来)。quality_level:poc は上で確認済。
+  #   axis_key:expected_value の組を 1 件ずつ照合 (axes 値が preset metadata 由来であることを完全検証)。
+  local axis_kv
+  for axis_kv in \
+    'quality_level:poc' \
+    'language_framework:mixed' \
+    'git_workflow:none' \
+    'tdd_policy:optional' \
+    'review_intensity:minimum' \
+    'autonomy_level:aggressive'; do
+    local a_key="${axis_kv%%:*}"
+    local a_val="${axis_kv#*:}"
+    if ! printf '%s' "$body" | grep -qE "\"${a_key}\"[[:space:]]*:[[:space:]]*\"${a_val}\""; then
+      printf 'S-43: poc-no-git の axis %s が "%s" でない (axes 値が preset metadata 由来でない疑い、body: %s)\n' "$a_key" "$a_val" "$body" >&2
+      return 1
+    fi
+  done
 
   return 0
 )

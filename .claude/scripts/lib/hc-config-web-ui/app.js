@@ -401,14 +401,16 @@
     const tbody = el('tbody', null)
     for (const k of AXIS_KEYS) {
       const labelJa = AXIS_LABELS_JA[k] || k
-      const val = axes[k] !== undefined && axes[k] !== null ? String(axes[k]) : '<未設定>'
+      // task-65 iter2 (ui M-2): HTML タグ風 `<未設定>` 表示の誤解を避け '—' に変更。
+      const val = axes[k] !== undefined && axes[k] !== null ? String(axes[k]) : '—'
       tbody.appendChild(
         el(
           'tr',
           { class: 'border-t border-slate-100' },
+          // task-65 iter2 (ui M-3 / WCAG 1.3.1): 軸名 (ラベル) 列を th scope="row" で row header 化。
           el(
-            'td',
-            { class: 'px-3 py-2', lang: 'ja' },
+            'th',
+            { scope: 'row', class: 'px-3 py-2 text-left font-normal', lang: 'ja' },
             el('span', { class: 'font-semibold text-slate-700' }, labelJa),
             el('span', { class: 'text-xs text-slate-400 ml-2 font-mono' }, k)
           ),
@@ -469,23 +471,24 @@
     )
 
     // 現在 preset banner
-    const matchType = cp && cp.match_type ? cp.match_type : 'unsaved'
+    //   task-65 iter2 (ui H-1 / code-rev M2): server は 'preset'/'unsaved' のみ返す
+    //   ('custom' は task-63 で廃止)。2-state (preset / else=unsaved) に collapse。
+    const matchType = cp && cp.match_type === 'preset' ? 'preset' : 'unsaved'
     let bannerLabel = ''
     let bannerValue = ''
     if (matchType === 'preset') {
       bannerLabel = 'プリセット'
       bannerValue = getDisplayName(cp) || '(不明)'
-    } else if (matchType === 'custom') {
-      bannerLabel = 'カスタム'
-      bannerValue = (cp && cp.name) || '(無名)'
     } else {
       bannerLabel = '状態'
-      bannerValue = '未保存変更あり (どのプリセット / カスタムにも一致しません)'
+      bannerValue = '未保存変更あり (どのプリセットにも一致しません)'
     }
+    // task-65 iter2 (ui H-2): matchType 応じた状態別カラークラス (style.css L133-149 定義済の amber/emerald)。
+    const bannerStateClass = matchType === 'preset' ? 'preset-banner--preset' : 'preset-banner--unsaved'
     const banner = el(
       'div',
       {
-        class: 'bg-white rounded-lg border border-slate-200 p-5',
+        class: `preset-banner ${bannerStateClass} bg-white rounded-lg border border-slate-200 p-5`,
         role: 'region',
         'aria-label': '現在の設定状態',
       },
@@ -957,9 +960,10 @@
       ])
       state = reducer(state, { type: 'load:current', payload: { currentPreset, presets, history } })
       render()
+      // task-65 iter2 (ui H-1 / code-rev M2): 'custom' dead branch 撤去 (server は 'preset'/'unsaved' のみ)。
       const cpName = currentPreset && currentPreset.match_type === 'preset'
         ? getDisplayName(currentPreset)
-        : (currentPreset && currentPreset.match_type === 'custom' ? `カスタム: ${currentPreset.name}` : '未保存変更')
+        : '未保存変更'
       setStatus(`Ready (${cpName} / ${presets.length} presets)`)
     } catch (e) {
       toast(`初期化失敗: ${e.message}`, 'error')
