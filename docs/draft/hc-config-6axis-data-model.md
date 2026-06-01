@@ -45,7 +45,7 @@ flowchart LR
 
 | 案 | 内容 | 工数 | メリット | デメリット |
 |:---:|:---|---:|:---|:---|
-| **A (採用)** | 6 軸を preset metadata と位置づけ、`/api/current-preset` が matched preset の `axes` を返す (A3 の部分 revert)。top view は preset 一致時に 6 軸 read-only 表示、unsaved 時は「カスタム (プリセット外)」+ 差分 values 表示。個別編集は既存 74 key edit + preset 一括変更に一本化し、6 軸 dropdown は撤去 | 1.5 | yml schema 変更なし / 飾り key を作らない (原則遵守) / 工数小 / 6 軸 = 人間向け preset ラベルとして責務明確 | unsaved 状態では 6 軸の現在値を厳密表示できない (preset 外なので axis 値が一意でない) → カスタム表示で割り切る |
+| **A (採用)** | 6 軸を preset metadata と位置づけ、`/api/current-preset` が matched preset の `axes` を返す (A3 の部分 revert)。top view は preset 一致時に 6 軸 read-only 表示、unsaved 時は「カスタム (プリセット外)」パネル表示 (差分は edit view の preset diff preview 経由)。6 軸 dropdown は撤去し、編集は preset 一括変更の 1 経路 (per-key 個別編集 UI は task-63 簡素化で元々不在 = phantom、reviewer code-reviewer H1 で判明) | 1.5 | yml schema 変更なし / 飾り key を作らない (原則遵守) / 工数小 / 6 軸 = 人間向け preset ラベルとして責務明確 | unsaved 状態では 6 軸の現在値を厳密表示できない (preset 外なので axis 値が一意でない) → カスタムパネル表示で割り切る |
 | B | 6 軸を実 yml key 化 (quality_level 等 6 key を harness-config.yml に追加)、各 preset が set、/api/keys 公開、個別 dropdown 編集可 | 3.0+ | unsaved 状態でも個別軸値を保持・編集可 | 6 軸自体は hook 動作を駆動せず「飾り key」化 (feedback_config_value_needs_consumer_and_smoke 違反)、consumer 別設計が必要、--update 上書き等の保護も追加要 |
 | C | 6 軸を実 yml key 群から逆算する関数を定義 (review_intensity = review_min_count_* の組合せ判定等)、個別軸編集 = 該当 values 群一括 set | 4.0+ | 原案最忠実、unsaved でも逆算表示可 | 逆算関数が設計判断 (恣意性) を含む / 実装複雑 / 軸↔values が多対多で逆算が一意にならないケースあり |
 
@@ -64,7 +64,7 @@ flowchart LR
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
 | 1 | 🔲 | server.js `getCurrentPreset` が matched preset の `axes` を返す (A3 部分 revert) + unsaved 時の axes 扱い定義 | 0.3h | — |
-| 2 | 🔲 | app.js top view `renderTop` を API `axes` 参照に修正 + `loadCurrentAxes` fallback 整理/撤去 + edit view 6 軸 dropdown 撤去 (個別編集は 74 key edit に一本化) | 0.5h | Step 1 |
+| 2 | 🔲 | app.js top view `renderTop` を API `axes` 参照に修正 + `loadCurrentAxes` fallback 撤去 + edit view 6 軸 dropdown 撤去 (編集は preset 一括の 1 経路、per-key UI は元々不在) | 0.5h | Step 1 |
 | 3 | 🔲 | smoke 更新 (`/api/current-preset` axes 返却 case + top view 6 軸表示 case + unsaved 時カスタム表示 case) | 0.3h | Step 2 |
 | 4 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 (上限 5 回) | 0.5h | Step 3 |
 | 5 | 🔲 | (テスト合格) script/web-ui smoke + visual verification (top view 6 軸表示 / unsaved 表示 / preset 切替後 / 主要 breakpoint) | 0.5h | Step 4 |
@@ -121,7 +121,7 @@ function getCurrentPreset(overrides) {
 #### 変更内容
 - **top view**: `renderTop` は `cp.axes` を直接参照 (API が返すようになるため fallback 不要)。`axes` が `null` (unsaved) の場合は 6 軸 table を「カスタム設定 (プリセット外)」見出し + `computePresetDiff` 由来の差分 values list 表示に切替
 - **`loadCurrentAxes()` 撤去**: `/api/keys` から軸 key 名で抽出する fallback は 6 軸が yml key でないため常に空 → 削除 (dead path 化)
-- **edit view 6 軸 dropdown 撤去**: 6 軸個別編集 (L670-732) は撤去。編集経路は (a) preset 一括変更 (b) 既存 74 key 個別編集の 2 経路に一本化 (§3.4 wireframe と整合、6 軸は read-only 表示専用)
+- **edit view 6 軸 dropdown 撤去**: 6 軸個別編集 (L670-732) は撤去。編集経路は preset 一括変更の **1 経路** (§3.4 wireframe と整合、6 軸は top view の read-only 表示専用)。**注**: 当初「既存 74 key 個別編集」を 2 経路目と想定していたが、task-63 簡素化で per-key UI は元々不在 (dead 6 軸 dropdown のみ) と reviewer (code-reviewer H1) で判明。`/api/keys`+`/api/set` は server API としてのみ残置し、per-key UI 化は将来 task で検討 (next-actions 候補)
 - app.js state 定義 comment (L61 / L223) を実 API response に同期
 
 #### テスト
@@ -161,8 +161,8 @@ function getCurrentPreset(overrides) {
 
 - [ ] `/api/current-preset` が preset 一致時に `axes` (6 key) を返し、unsaved 時に `axes: null` を返す (smoke 実測)
 - [ ] top view で preset 一致時に 6 軸 read-only table が日本語ラベル + 値で正常表示 (visual 実測、`<未設定>` 解消)
-- [ ] top view で unsaved 時にカスタム設定 + 差分 values 表示
-- [ ] edit view の 6 軸 dropdown 撤去、編集は preset 一括 + 74 key 個別の 2 経路 (smoke 確認)
+- [ ] top view で unsaved 時にカスタム設定パネル表示 (差分は edit view の preset diff preview 経由、top view は一意 diff 不能のため値一覧は出さない)
+- [ ] edit view の 6 軸 dropdown 撤去、編集は preset 一括変更の 1 経路 (per-key UI は task-63 簡素化で元々不在、smoke 確認)
 - [ ] `loadCurrentAxes` dead path 撤去
 - [ ] 新規/更新 smoke PASS + 既存 web-ui/script/tui smoke regression 0
 - [ ] visual verification (top 6 軸 / unsaved / preset 切替 / breakpoint / theme) 撮影

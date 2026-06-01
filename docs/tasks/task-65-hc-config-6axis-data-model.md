@@ -31,7 +31,7 @@ total_steps: 6
 
 - `hc-config-web-server.js` `getCurrentPreset` が matched preset の `axes` (6 key) を返す (A3 部分 revert、additive)、unsaved 時は `axes: null`
 - `app.js` top view `renderTop` を API `axes` 参照に修正 + unsaved 時カスタム表示 + `loadCurrentAxes` fallback 撤去
-- `app.js` edit view 6 軸 dropdown (機能不全 dead UI) 撤去、編集は preset 一括 + 既存 74 key 個別の 2 経路に一本化
+- `app.js` edit view 6 軸 dropdown (機能不全 dead UI) 撤去、編集経路は preset 一括変更の **1 経路** (per-key 個別編集 UI は task-63 簡素化で元々不在 = phantom、`/api/keys`+`/api/set` は server API のみ残置)
 - smoke 更新 (`/api/current-preset` axes 返却 + top view 6 軸表示 + unsaved カスタム + dropdown 撤去確認)
 - §3.4 wireframe ↔ §3.6 API 仕様の矛盾解消同期
 
@@ -39,11 +39,11 @@ total_steps: 6
 
 - [ ] `/api/current-preset` が preset 一致時に `axes` (6 key) を返し、unsaved 時に `axes: null` を返す (smoke 実測)
 - [ ] top view で preset 一致時に 6 軸 read-only table が日本語ラベル + 値で正常表示 (visual 実測、`<未設定>` 解消)
-- [ ] top view で unsaved 時にカスタム設定 + 差分 values 表示
-- [ ] edit view の 6 軸 dropdown 撤去、編集は preset 一括 + 74 key 個別の 2 経路 (smoke 確認)
+- [ ] edit view の 6 軸 dropdown 撤去、編集経路は preset 一括変更の 1 経路 (per-key UI は task-63 簡素化で元々不在、smoke 確認)
+- [ ] top view で unsaved 時にカスタム設定パネル表示 (差分は edit view の preset diff preview 経由、top view は一意 diff 不能のため値一覧は出さない)
 - [ ] `loadCurrentAxes` dead path 撤去
 - [ ] 新規/更新 smoke PASS + 既存 web-ui/script/tui smoke regression 0
-- [ ] reviewer 5+ approve (Step 4 で達成)
+- [ ] reviewer approve (Step 4、required:false で light 3 reviewer、CRITICAL+HIGH=0)
 - [ ] visual verification (top 6 軸 / unsaved / preset 切替 / breakpoint / theme) 撮影
 - [ ] §3.4 ↔ §3.6 矛盾解消
 - [ ] yml schema 変更なし (飾り key を作らない原則遵守の確認)
@@ -75,7 +75,7 @@ preset 外 (unsaved) では axis 値が一意でないため、6 軸 table の�
 
 ### Q3: edit view の 6 軸個別編集
 
-6 軸 dropdown は options 取得元なく機能不全 (dead UI) のため撤去。編集は preset 一括変更 + 既存 74 key 個別編集の 2 経路に一本化 (§3.4 wireframe と整合)。
+6 軸 dropdown は options 取得元なく機能不全 (dead UI) のため撤去。編集経路は preset 一括変更の **1 経路** (per-key 個別編集 UI は task-63 簡素化で元々不在 = reviewer code-reviewer H1 で判明、`/api/keys`+`/api/set` は server API としてのみ残置、per-key UI 化は将来 task で検討)。unsaved 時の差分は edit view の preset diff preview 経由で確認 (top view は一意 diff 不能のため値一覧は出さない)。
 
 ## 設計
 
