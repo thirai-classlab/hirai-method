@@ -1,0 +1,124 @@
+---
+asana_url: ""
+slack_urls: []
+deadline: ""
+requester: ""
+---
+
+<!--
+total_steps: 7
+-->
+
+# Task #67: rule architecture 再構造 (全 6 rule の Layer A 軽量化 + Layer B 断片化)
+
+> Status: **🔲 未着手**
+> 起案: 2026-06-01
+> 関連: #66 (advisory 削減、task-68 に吸収), #51 (context-bloat-reduction、静的層)
+> 設計起源: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 (approved_at 2026-06-01) §3.0 + §3.5 Step 1-3
+
+## Task ゴール
+
+全 6 rule (workflow / development-process / modes / task-management / self-improvement / why-x5-output) が、常時 load される Layer A (`rules/*.md`、目標 <120 行) は概要 + command/key 表 + pointer のみになり、詳細は `rules-details/<rule>/<topic>.md` の topic 別断片 (目標 <100 行) に分割され、Layer A は断片ファイルを直リンク pointer で指す。`rules-details/**` は auto-load されないことが smoke で保証され、enforcement BLOCK ロジックと SSoT 内容は無損失。
+
+## Task 依存先タスク
+
+| 依存先 task | 影響内容 | リンク |
+|---|---|---|
+| task-51 | context-bloat-reduction で Layer A/B 2 層構造を確立。本 task はその「Layer B を topic 別断片化 + Layer A をさらに軽量化」への発展。 | [task-51-context-bloat-reduction.md](task-51-context-bloat-reduction.md) |
+
+## Task 作業概要
+
+- 断片化の命名 / ディレクトリ / pointer 規約確定 + `rules-details/README.md` を index 化
+- 全 6 rule の Layer B 断片化 (各 `*.details.md` → `rules-details/<rule>/<topic>.md`) + Layer A pointer 直リンク書換
+- 全 6 rule の Layer A 軽量化 (full table / 機構詳細を断片へ移送、要約 + pointer 化)
+- smoke (Layer A pointer の断片存在検証 / `rules-details/**` auto-load 非対象 / enforcement 不変 / 起動時 token before-after)
+
+## Task 完了条件 (DoD)
+
+- [ ] 全 6 rule の Layer A が <120 行、詳細は `rules-details/<rule>/<topic>.md` 断片に分割
+- [ ] Layer A の全 pointer が実在する断片ファイルを直リンク (dangling 0、smoke 検証)
+- [ ] `rules-details/**` (subdir 含む) が startup auto-load されない (smoke or 手順で確認)
+- [ ] enforcement hook の BLOCK 動作 smoke 全 PASS (rule 再配置で不変)
+- [ ] SSoT 内容無損失 (採用 N 条 / 規約 / table を欠落させない、reviewer cross-check)
+- [ ] 起動時 token before/after 実測で削減
+- [ ] reviewer approve (Step 5)
+- [ ] commit (push は feature branch 自律可、main merge は user) + 4 リポ install user manual 案内
+
+## Task 概要欄 (list.md 用、3 要素規範)
+
+> Layer B (*.details.md) が 1 rule = 1 巨大ファイルで「1 detail 欲しいだけで全部読む」構造になっている問題を解消するため、全 6 rule を Layer A (概要+pointer のみ) + Layer B (topic 別断片) に再構造する。完成すれば「必要な時に必要なルール断片だけ Read」になり、常時 load の Layer A も軽量化され context 肥大 (instruction overload) が構造的に削減される。
+
+## 背景・目的
+
+詳細は draft §1.2 (C1/C6) + §3.0 を SSoT とする。現状 Layer A は常時 load なのに過大 (workflow 349 / dev-process 323 / task-mgmt 250 行)、Layer B は monolithic (90-388 行) で on-demand 読込が surgical でない。research (§11 F3-3 prompt bloat ~3000 tok / F3-6 / F4-2 skills-on-demand) が裏付け。
+
+## 設計
+
+draft §3.0 を SSoT とする。目標構造:
+
+```
+.claude/rules/<rule>.md          # Layer A: 概要 + command/key 表 + pointer のみ (<120 行)
+.claude/rules-details/<rule>/    # Layer B: topic 別断片 (<100 行/file)
+    <topic>.md ...
+```
+
+pointer 規約: `> 詳細: [rules-details/workflow/workflow-guard.md](../rules-details/workflow/workflow-guard.md)` (anchor 方式廃止)。
+
+## TDD 戦略
+
+### RED
+- smoke `rule-architecture-smoke.sh` (新規): 全 Layer A の pointer path を抽出し断片存在を assert / `rules-details/**` が rules/ 外を assert / Layer A 行数上限 assert。
+
+### GREEN
+- 断片化 + Layer A 軽量化 + pointer 書換。
+
+### REFACTOR
+- 断片の重複統合 / README index 整備。
+
+## Step 計画
+
+| Step | Status | 作業概要 | 工数 | 依存 |
+|:---:|:---:|:---|---:|:---|
+| 1 | 🔲 | 命名 / ディレクトリ / pointer 規約確定 + `rules-details/README.md` index 設計 + auto-load 非対象の検証方法確定 | 0.5h | — |
+| 2 | 🔲 | 全 6 rule の Layer B 断片化 (`*.details.md` → `rules-details/<rule>/<topic>.md`) + Layer A pointer 直リンク書換 | 2.0h | Step 1 |
+| 3 | 🔲 | 全 6 rule の Layer A 軽量化 (full table / 機構詳細を断片へ移送、要約 + pointer、<120 行/file) | 1.5h | Step 2 |
+| 4 | 🔲 | smoke 新規 + 既存更新 (pointer dangling 0 / auto-load 非対象 / 行数上限 / 起動時 token before-after) | 1.0h | Step 3 |
+| 5 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 (上限 `review_max_count_test` 確認)、enforcement 不変 + SSoT 無損失 cross-check 重点 | 0.5h | Step 4 |
+| 6 | 🔲 | (テスト合格) 全 hook / script smoke regression 0 + 起動時 token 削減実測 | 0.5h | Step 5 |
+| 7 | 🔲 | (リファクタリング) 3 観点 + 4 リポ install user manual 案内 | 0.3h | Step 6 |
+
+合計: **~6.3h**
+
+## 影響範囲
+
+| 範囲 | 詳細 |
+|---|---|
+| ファイル | `.claude/rules/*.md` (6) / `.claude/rules-details/**` (断片化) / `.claude/tests/rule-architecture-smoke.sh` (新規) / `install.sh` (再帰 copy 確認) |
+| migration | rule 文書の再配置のみ (コード不変) |
+| 環境変数 | なし |
+| 互換性 | Layer A pointer の参照先変更 (anchor → 断片 file)。enforcement / SSoT 不変 |
+
+## 再発防止
+
+- 「Layer A/B 2 層化したが Layer B が monolithic で on-demand が surgical でない」問題 → 本 task で「1 断片 = 1 pointer 先 = 1 topic、<100 行」を規約化し、将来の rule 追加でも踏襲
+
+## ステータスログ
+
+| 日付 | 状態 | 備考 |
+|---|---|---|
+| 2026-06-01 | 起案 + 承認 | consolidated draft 承認、2 task 分割の Task-X |
+
+## 派生 task / 次アクション候補
+
+### 義務 (development-process.md §「副産物発生時の即時 draft 起こし義務」準拠)
+
+(実装中・レビュー中に発生した副産物を記入)
+
+### 関連
+
+- [`next-actions.md`](next-actions.md)
+
+## 関連
+
+- Draft: [harness-design-fundamental-review.md](../draft/harness-design-fundamental-review.md) ✅承認済 §3.0
+- 対の task: [task-68-harness-behavior-fixes.md](task-68-harness-behavior-fixes.md) (挙動修正)
