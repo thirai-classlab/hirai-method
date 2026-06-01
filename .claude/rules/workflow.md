@@ -179,7 +179,7 @@ honor system: bypass 根拠は `docs/tasks/<task-N>.md` の該当 entry に記�
 
 CRITICAL / HIGH findings は state JSON の `pending_findings.module_review` / `pending_findings.system_review` 配列 (id / severity / summary) に追加。**CRITICAL / HIGH 残存中は `workflow-guard.sh` が `/finish-task` を BLOCK**。MEDIUM / LOW のみ残存は user 承認のうえ `skip_log` 記録で pass 可。
 
-**yml 値による制御**: `/module-review` は `review_required_module` / `review_min_count_module` (default 2) / `review_max_count_module` (default 5)、`/system-review` は `review_required_system` / `review_min_count_system` / `review_max_count_system`。`review_iteration_max` (default 5) は全レビュー共通。`hc-config.sh --set review_required_module=false` で局所無効化可。
+**yml 値による制御**: `/module-review` は `review_required_module` / `review_min_count_module` / `review_max_count_module`、`/system-review` は `review_required_system` / `review_min_count_system` / `review_max_count_system`。`review_iteration_max` は全レビュー共通。**具体値は散文に hardcode せず、起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_module` 等で現在値を確認する** (値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。`hc-config.sh --set review_required_module=false` で局所無効化可。
 
 > **review prompt 規約 (behavior-preserving / 末尾 confidence:0.X) / Layer 詳細 sub-checklist**: [workflow.details.md §リファクタリング 3 観点詳細](../rules-details/workflow.details.md#リファクタリング-3-観点詳細) + [`module-review.md`](../commands/module-review.md) Phase 3
 
@@ -204,7 +204,7 @@ W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK (workfl
 
 並列起動 agent: `tdd-guide` / `test-automator` / `qa-expert` (`reviewer_registry_test` カテゴリ)。3 agent 中 2 以上が採用推奨ならデフォルト ☑、2 以上が不採用なら ☒、意見割れなら ☐ + コメント「user 判断要」。
 
-**yml 値による制御**: `review_required_test` / `review_min_count_test` (default 5、採用 6 条 4 起源) / `review_max_count_test` (default 10) / `review_iteration_max` (default 5) で集中制御。
+**yml 値による制御**: `review_required_test` / `review_min_count_test` / `review_max_count_test` / `review_iteration_max` で集中制御。**reviewer 並列起動数は固定 default ではなく `min ≤ N ≤ max` の範囲で動的選定**し、起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_test` で上限を確認する (青天井「5+」は task-64 で廃止、値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。
 
 > **20 MECE カテゴリ各論 (採用 / 不採用判定例)**: [workflow.details.md §20 MECE 各論](../rules-details/workflow.details.md#20-mece-各論) + [`_TEST_DESIGN_TEMPLATE.md`](../templates/docs/draft/_TEST_DESIGN_TEMPLATE.md)
 
