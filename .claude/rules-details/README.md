@@ -54,7 +54,7 @@
 |---|---|---|---|
 | workflow | `workflow/` | 14-stage / 10-stage / workflow-guard / draft-flow-guard / refactoring / mece-20 / fan-out / reviewer-prompt / byproduct-discharge / session-persistence / related-skills / origin (12 断片) | ✅ (task-67) |
 | development-process | `development-process/` | (Step 2) | 🔲 |
-| modes | `modes/` | (Step 2) | 🔲 |
+| modes | `modes/` | compliance-items / five-layer-enforcement / mode-hooks / artifacts / origin (5 断片) | ✅ (task-67) |
 | task-management | `task-management/` | (Step 2) | 🔲 |
 | self-improvement | `self-improvement/` | when-to-use-layers / l4-mechanics / related-skills / origin (4 断片) | ✅ (task-67) |
 | why-x5-output | `why-x5-output/` | examples / v1-v10-history / feedback-memory / origin (4 断片) | ✅ (task-67) |
