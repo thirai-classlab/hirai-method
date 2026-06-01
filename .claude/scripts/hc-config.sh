@@ -121,6 +121,14 @@ if [ -f "$HC_METADATA_LIB" ]; then
   source "$HC_METADATA_LIB"
 fi
 
+# task-70 Step 7 (LOW-1 DRY): enforcement matrix parse lib を source。
+# 不在でも壊れないよう存在確認後に source する。
+HC_EM_PARSE_LIB="${SCRIPT_DIR}/lib/enforcement-matrix-parse.sh"
+if [ -f "$HC_EM_PARSE_LIB" ]; then
+  # shellcheck disable=SC1090
+  source "$HC_EM_PARSE_LIB"
+fi
+
 # metadata 引き helper (lib 不在でも壊れないよう command -v guard)
 # $1: key → description (不在なら空)
 _meta_desc() {
@@ -459,7 +467,11 @@ _validate_value() {
       if [ -z "$val" ]; then
         return 0
       fi
-      _validate_string_sanity "$key" "$val"
+      _validate_string_sanity "$key" "$val" || return 1
+      # MEDIUM-1: default_preset は allowed-value 4 種のみ (string sanity 通過後に追加 check)
+      if [ "$key" = "default_preset" ]; then
+        _validate_default_preset "$val" || return 1
+      fi
       ;;
     *)
       # 不明な型でも sanity check は通す
@@ -1006,50 +1018,62 @@ cmd_diff() {
 
 # === Enforcement matrix parse helpers (task-70 Phase 2) ===
 # enforcement_matrix は nested block のため flat parser (_yml_get_raw) では読めない。
-# 以下 helper は yml を直接 awk parse して guard 名 / field / disabled_reason を引く
-# (.claude/tests/enforcement-mismatch-smoke.sh と同一ロジック、drift しないよう共通仕様)。
+# task-70 Step 7 (LOW-1 DRY): awk ロジックは lib/enforcement-matrix-parse.sh に SSoT 化。
+# 以下 3 関数は CONFIG_PATH を引き渡す薄いラッパー (lib 不在時は直接 awk に fallback)。
 
-# enforcement_matrix block の guard 名一覧 (2-space インデント `  <guard>:`)。
+# enforcement_matrix block の guard 名一覧。
 _em_guards() {
-  awk '
-    /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
-    in_m && /^[^[:space:]]/ { in_m=0 }
-    in_m && /^  [a-z_][a-zA-Z0-9_]*:[[:space:]]*$/ {
-      line=$0; sub(/^  /,"",line); sub(/:.*$/,"",line); print line
-    }
-  ' "$CONFIG_PATH"
+  if command -v em_guards >/dev/null 2>&1; then
+    em_guards "$CONFIG_PATH"
+  else
+    awk '
+      /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
+      in_m && /^[^[:space:]]/ { in_m=0 }
+      in_m && /^  [a-z_][a-zA-Z0-9_]*:[[:space:]]*$/ {
+        line=$0; sub(/^  /,"",line); sub(/:.*$/,"",line); print line
+      }
+    ' "$CONFIG_PATH"
+  fi
 }
 
-# 指定 guard の指定 field 値 (4-space `    <field>: <value>`)。$1=guard, $2=field
+# 指定 guard の指定 field 値。$1=guard, $2=field
 _em_field() {
-  awk -v g="$1" -v f="$2" '
-    /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
-    in_m && /^[^[:space:]]/ { in_m=0 }
-    in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
-    in_m && in_g && /^  [a-z_]/ { in_g=0 }
-    in_m && in_g && $0 ~ "^    " f ":" {
-      line=$0; sub("^    " f ":[[:space:]]*","",line); print line; exit
-    }
-  ' "$CONFIG_PATH"
+  if command -v em_field >/dev/null 2>&1; then
+    em_field "$CONFIG_PATH" "$1" "$2"
+  else
+    awk -v g="$1" -v f="$2" '
+      /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
+      in_m && /^[^[:space:]]/ { in_m=0 }
+      in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
+      in_m && in_g && /^  [a-z_]/ { in_g=0 }
+      in_m && in_g && $0 ~ "^    " f ":" {
+        line=$0; sub("^    " f ":[[:space:]]*","",line); print line; exit
+      }
+    ' "$CONFIG_PATH"
+  fi
 }
 
 # 指定 guard の disabled_reason に指定 preset の理由文字列を返す (空なら return 1)。
 # $1=guard, $2=preset
 _em_disabled_reason() {
-  awk -v g="$1" -v p="$2" '
-    /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
-    in_m && /^[^[:space:]]/ { in_m=0 }
-    in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
-    in_m && in_g && /^  [a-z_]/ { in_g=0; in_dr=0 }
-    in_m && in_g && /^    disabled_reason:[[:space:]]*$/ { in_dr=1; next }
-    in_m && in_g && /^    [a-z_]/ && !/^    disabled_reason:/ { in_dr=0 }
-    in_m && in_g && in_dr && $0 ~ "^      " p ":" {
-      val=$0; sub("^      " p ":[[:space:]]*","",val)
-      gsub(/^[\"\x27]|[\"\x27][[:space:]]*$/,"",val)
-      if (length(val) > 0) { print val; found=1 }
-    }
-    END { exit (found ? 0 : 1) }
-  ' "$CONFIG_PATH"
+  if command -v em_disabled_reason >/dev/null 2>&1; then
+    em_disabled_reason "$CONFIG_PATH" "$1" "$2"
+  else
+    awk -v g="$1" -v p="$2" '
+      /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
+      in_m && /^[^[:space:]]/ { in_m=0 }
+      in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
+      in_m && in_g && /^  [a-z_]/ { in_g=0; in_dr=0 }
+      in_m && in_g && /^    disabled_reason:[[:space:]]*$/ { in_dr=1; next }
+      in_m && in_g && /^    [a-z_]/ && !/^    disabled_reason:/ { in_dr=0 }
+      in_m && in_g && in_dr && $0 ~ "^      " p ":" {
+        val=$0; sub("^      " p ":[[:space:]]*","",val)
+        gsub(/^[\"\x27]|[\"\x27][[:space:]]*$/,"",val)
+        if (length(val) > 0) { print val; found=1 }
+      }
+      END { exit (found ? 0 : 1) }
+    ' "$CONFIG_PATH"
+  fi
 }
 
 # --summary: 現 preset / 有効 guard / 無効 guard / docs mismatch 件数 (draft §4.2 出力案)
@@ -1057,6 +1081,15 @@ cmd_summary() {
   local preset
   preset=$(_get_current default_preset 2>/dev/null || printf '')
   [ -z "$preset" ] && preset="harness-dev"
+
+  # MEDIUM-1: preset が allowed-value 4 種以外なら UNKNOWN warning を表示
+  case "$preset" in
+    advisory|team-default|strict|harness-dev) ;;
+    *)
+      printf 'WARNING: default_preset="%s" is not one of the known presets (advisory, team-default, strict, harness-dev)\n' \
+        "$preset" >&2
+      ;;
+  esac
 
   printf 'preset: %s\n' "$preset"
   printf 'guards:\n'
@@ -1099,6 +1132,21 @@ cmd_summary() {
 
   # undocumented mismatch があれば非 0 で返す (CI / smoke から検出可能に)
   [ "$undoc_mismatch" -eq 0 ]
+}
+
+# default_preset の allowed-value set (MEDIUM-1: task-70 Step 7)
+# advisory / team-default / strict / harness-dev の 4 種のみ有効。
+# $1: preset 値
+# 戻り: 0 = 有効 / 1 = 無効 (stderr にエラー)
+_validate_default_preset() {
+  local val="$1"
+  case "$val" in
+    advisory|team-default|strict|harness-dev) return 0 ;;
+    *)
+      _err "invalid value for default_preset: '${val}' (must be one of: advisory, team-default, strict, harness-dev)"
+      return 1
+      ;;
+  esac
 }
 
 # --validate: 全 key の型 validation のみ

@@ -29,6 +29,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 HC_CONFIG_SCRIPT="${REPO_ROOT}/.claude/scripts/hc-config.sh"
 HC_CONFIG_YML="${REPO_ROOT}/.claude/harness-config.yml"
 
+# task-70 Step 7 (LOW-1 DRY): enforcement matrix parse lib を source。
+# lib が存在すれば em_guards / em_field / em_disabled_reason を取り込む。
+_EM_PARSE_LIB="${REPO_ROOT}/.claude/scripts/lib/enforcement-matrix-parse.sh"
+if [ -f "$_EM_PARSE_LIB" ]; then
+  # shellcheck disable=SC1090
+  source "$_EM_PARSE_LIB"
+fi
+
 PASS=0
 FAIL=0
 FAILED_CASES=""
@@ -46,52 +54,65 @@ _record() {
 }
 
 # enforcement_matrix block の guard 名一覧を yml から抽出。
-# matrix block は `enforcement_matrix:` 行から、次の top-level key (インデント 0) までの範囲。
-# guard 行は 2-space インデント (`  <guard>:`)。
+# task-70 Step 7 (LOW-1 DRY): awk ロジックは lib/enforcement-matrix-parse.sh に SSoT 化。
+# lib 存在時は em_guards を、不在時は直接 awk に fallback。
 _matrix_guards() {
-  awk '
-    /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
-    in_m && /^[^[:space:]]/ { in_m=0 }
-    in_m && /^  [a-z_][a-zA-Z0-9_]*:[[:space:]]*$/ {
-      line=$0; sub(/^  /,"",line); sub(/:.*$/,"",line); print line
-    }
-  ' "$HC_CONFIG_YML"
+  if command -v em_guards >/dev/null 2>&1; then
+    em_guards "$HC_CONFIG_YML"
+  else
+    awk '
+      /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
+      in_m && /^[^[:space:]]/ { in_m=0 }
+      in_m && /^  [a-z_][a-zA-Z0-9_]*:[[:space:]]*$/ {
+        line=$0; sub(/^  /,"",line); sub(/:.*$/,"",line); print line
+      }
+    ' "$HC_CONFIG_YML"
+  fi
 }
 
 # 指定 guard の指定 field 値を抽出 (4-space インデント `    <field>: <value>`)。
 # $1=guard, $2=field
 _matrix_field() {
-  local guard="$1" field="$2"
-  awk -v g="$guard" -v f="$field" '
-    /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
-    in_m && /^[^[:space:]]/ { in_m=0 }
-    in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
-    in_m && in_g && /^  [a-z_]/ { in_g=0 }
-    in_m && in_g && $0 ~ "^    " f ":" {
-      line=$0; sub("^    " f ":[[:space:]]*","",line); print line; exit
-    }
-  ' "$HC_CONFIG_YML"
+  if command -v em_field >/dev/null 2>&1; then
+    em_field "$HC_CONFIG_YML" "$1" "$2"
+  else
+    local guard="$1" field="$2"
+    awk -v g="$guard" -v f="$field" '
+      /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
+      in_m && /^[^[:space:]]/ { in_m=0 }
+      in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
+      in_m && in_g && /^  [a-z_]/ { in_g=0 }
+      in_m && in_g && $0 ~ "^    " f ":" {
+        line=$0; sub("^    " f ":[[:space:]]*","",line); print line; exit
+      }
+    ' "$HC_CONFIG_YML"
+  fi
 }
 
 # 指定 guard の disabled_reason に指定 preset の理由があるか (0=あり / 1=なし)。
-# disabled_reason は 4-space `    disabled_reason:` + 6-space `      <preset>: "..."`。
 # $1=guard, $2=preset
+# lib の em_disabled_reason は reason string を stdout に print + return 0 (理由あり)。
+# 本関数は exit code のみを使うため stdout を /dev/null に捨てる。
 _matrix_has_disabled_reason() {
-  local guard="$1" preset="$2"
-  awk -v g="$guard" -v p="$preset" '
-    /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
-    in_m && /^[^[:space:]]/ { in_m=0 }
-    in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
-    in_m && in_g && /^  [a-z_]/ { in_g=0; in_dr=0 }
-    in_m && in_g && /^    disabled_reason:[[:space:]]*$/ { in_dr=1; next }
-    in_m && in_g && /^    [a-z_]/ && !/^    disabled_reason:/ { in_dr=0 }
-    in_m && in_g && in_dr && $0 ~ "^      " p ":" {
-      val=$0; sub("^      " p ":[[:space:]]*","",val)
-      gsub(/^[\"\x27]|[\"\x27][[:space:]]*$/,"",val)
-      if (length(val) > 0) { found=1 }
-    }
-    END { exit (found ? 0 : 1) }
-  ' "$HC_CONFIG_YML"
+  if command -v em_disabled_reason >/dev/null 2>&1; then
+    em_disabled_reason "$HC_CONFIG_YML" "$1" "$2" >/dev/null
+  else
+    local guard="$1" preset="$2"
+    awk -v g="$guard" -v p="$preset" '
+      /^enforcement_matrix:[[:space:]]*$/ { in_m=1; next }
+      in_m && /^[^[:space:]]/ { in_m=0 }
+      in_m && $0 ~ "^  " g ":[[:space:]]*$" { in_g=1; next }
+      in_m && in_g && /^  [a-z_]/ { in_g=0; in_dr=0 }
+      in_m && in_g && /^    disabled_reason:[[:space:]]*$/ { in_dr=1; next }
+      in_m && in_g && /^    [a-z_]/ && !/^    disabled_reason:/ { in_dr=0 }
+      in_m && in_g && in_dr && $0 ~ "^      " p ":" {
+        val=$0; sub("^      " p ":[[:space:]]*","",val)
+        gsub(/^[\"\x27]|[\"\x27][[:space:]]*$/,"",val)
+        if (length(val) > 0) { found=1 }
+      }
+      END { exit (found ? 0 : 1) }
+    ' "$HC_CONFIG_YML"
+  fi
 }
 
 # feature toggle の実効値を取得 (env > local.yml > yml > default)。
