@@ -240,6 +240,12 @@
           },
           {
             "type": "command",
+            "command": "bash .claude/hooks/tool-call-slip-detector.sh",
+            "timeout": 5,
+            "statusMessage": "tool-call markup slip 検出中 (Stop)..."
+          },
+          {
+            "type": "command",
             "command": "bash .claude/skills/continuous-learning-v2/hooks/observe.sh",
             "timeout": 3,
             "statusMessage": "観察記録中 (Stop)..."

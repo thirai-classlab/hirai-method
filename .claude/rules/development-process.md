@@ -144,13 +144,15 @@ context7 fail で loop 停止しない / 「training data で確信あり」で 
 
 ## 多数 fan-out の Workflow 標準化 + 1 ターン tool block 上限 (必須、task-68)
 
-観測バグ「1 アシスタントターンに散文 + 多数 (4-6) の複雑 (長文 / 引用符 / markup 風) tool_use を詰めると invoke/parameter タグ脱落 → 実行されず本文化 → 同 batch リトライ (loop)」(memory [[feedback_multi_tool_block_serialization_failure]]) の構造防止。
+観測バグ「1 アシスタントターンに散文 + 多数 (4-6) の複雑 (長文 / 引用符 / markup 風) tool_use を詰めると invoke/parameter タグ脱落 → 実行されず本文化 → 同 batch リトライ (loop)」(memory [[feedback_multi_tool_block_serialization_failure]]) の構造防止。**単発でも複雑 command で誘発する** (2026-06-01 task-69 で実証、下記 **単発複雑 command 回避** 行)。
 
 | 規範 | 内容 |
 |---|---|
 | **3+ fan-out は Workflow** | 3 件以上の独立 subagent fan-out は `Workflow` ツール (決定論 orchestration) を default 検討。手書き N block は **2 件まで許容**、3 件以上は Workflow 提案 (user opt-in 要件のため「多数時は Workflow を提案」運用とセット) |
 | **1 ターン tool block 上限** | 1 アシスタントターンに emit する tool_use は、**長 prompt (>5 行) を含む場合 最大 1〜2 件**。長 prompt は file 経由 (subagent に Read させる) で payload を軽くする (本 session task-67 で実証: `/tmp/*-instructions.md` に共通指示を書き subagent prompt を短縮) |
-| **enforcement 不変** | 本規範は advisory (BLOCK しない)。Workflow opt-in が無い場合は file-based prompt + 2 件/ターン上限で代替 |
+| **単発複雑 command 回避** (2026-06-01 task-69) | 単発 Bash でも **複数 `;`/`|` 連結 + grep の alternation (`A\|B\|C`) + 多数 quote + 日本語混在** の複雑 command は slip を誘発する。検証は **ad-hoc 複合 grep を inline で組まず、既存/専用 smoke script を 1 コマンド実行** するか、目的ごとに 1 command へ分割する。subagent staging 検証 ([[feedback_subagent_staging_mv_silent_fail]]) も専用 smoke or 単一 `grep -n <key> <file>` で行う |
+| **前置き語禁止** | tool 呼び出しの前に `call` 等の前置き語を書かない (slip 残渣 `call` と混同を招く)。「tool 前に `call` と書くと antml: prefix が脱落する」は **誤診断** — `call` は破綻した invoke wrapper の残渣であって原因ではない |
+| **enforcement** | 予防規範は advisory (BLOCK しない)。事後検出は `tool-call-slip-detector.sh` (Stop hook) が最終 assistant `.text` の slip 痕跡 (`^call$` / `<parameter name=` 等) を grep → `{"decision":"block"}` で次 turn 自己是正を注入 (Normal/Loop 両モード、bypass `ECC_TOOL_CALL_SLIP_OFF=1`)。設計: [`tool-call-slip-detector-hook.md`](../../docs/draft/tool-call-slip-detector-hook.md) |
 
 > **起源 / research 根拠 (§11 F1-4 Programmatic Tool Calling 優位 / F2-4 ordering)**: [harness-design-fundamental-review.md](../../docs/draft/harness-design-fundamental-review.md) §3.1
 
