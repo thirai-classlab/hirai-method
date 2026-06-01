@@ -41,6 +41,7 @@
 #   HC_REVIEWER_COUNT_GUARD_ENABLED=false   guard 全停止 (bypass)
 #   ECC_REVIEWER_COUNT_OFF=1                guard 全停止 (env 系統 bypass、bypass.log 記録)
 #   HC_REVIEWER_COUNT_STATE_DIR=<path>     state dir override (test isolation 用)
+#   HC_REVIEWER_COUNT_STATE_TTL_DAYS=<int> state prune 閾値 (日、default 7、<=0 で無効)
 #   HC_REVIEW_MAX_COUNT_<CAT>=<int>        category 上限 override (config-loader 由来)
 #   ECC_BYPASS_REASON=<text>               bypass 理由 (bypass.log に記録)
 #
@@ -52,6 +53,12 @@
 #   .claude/.reviewer-count-state/<session>.json
 #     ... { "<cat>": <count>, ... } の累計 (session 単位、atomic-mkdir lock)
 #   ※ HC_REVIEWER_COUNT_STATE_DIR で隔離可能。
+#
+# State prune (TTL、task-64 Step 6 F1):
+#   session 単位 state file は放置すると無制限に蓄積する。本 hook は発火ごとに
+#   best-effort prune を行う (HC_REVIEWER_COUNT_STATE_TTL_DAYS 日より古い *.json /
+#   stale *.lock.d を削除)。prune 失敗で hook を止めない (fail-open 維持)。
+#   HC_REVIEWER_COUNT_STATE_TTL_DAYS=<int>  prune 閾値 (default 7、0 以下で prune 無効)
 #
 # Stdin:  PreToolUse(Agent) JSON
 # Stdout: 注入する system-reminder ({"hookSpecificOutput":{...,"additionalContext":...}})
@@ -153,6 +160,24 @@ _rcg_main() (
     [ -z "$session_id" ] && session_id="unknown"
     local state_file="${state_dir}/${session_id}.json"
     mkdir -p "$state_dir" 2>/dev/null || { echo '{}'; exit 0; }
+
+    # --- best-effort state prune (task-64 Step 6 F1) ---
+    # session 単位 state file / stale lock を TTL 経過で削除。無制限蓄積を防ぐ。
+    # fail-open: prune 失敗 (find 不在 / permission 等) で hook を止めない。
+    # 現行 session の state_file は本起動で mtime 更新されるため prune されない
+    # (write back が mtime を現在時刻にする。read-only 格下げ時も seed が新しければ残る)。
+    local prune_days="${HC_REVIEWER_COUNT_STATE_TTL_DAYS:-7}"
+    case "$prune_days" in
+        ''|*[!0-9]*) prune_days=7 ;;
+    esac
+    if [ "$prune_days" -gt 0 ]; then
+        # 古い state file (*.json) を削除
+        find "$state_dir" -maxdepth 1 -name '*.json' -type f -mtime "+${prune_days}" -delete 2>/dev/null || true
+        # stale な lock dir (*.lock.d) も古ければ rmdir (best-effort、中身が空のときのみ成功)
+        # find -delete は非空 dir を消せないため、まず内部 file を消してから dir を消す。
+        find "$state_dir" -maxdepth 1 -name '*.lock.d' -type d -mtime "+${prune_days}" \
+            -exec rm -rf {} + 2>/dev/null || true
+    fi
 
     # --- tool_input から description / prompt を抽出して結合 ---
     local description prompt task_desc

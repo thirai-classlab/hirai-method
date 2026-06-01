@@ -16,6 +16,17 @@
 #   Case 5:  review でない Agent 起動 (実装 keyword のみ) → count せず pass (silent)
 #   Case 6:  category 推定 — test / design / module / system 別に正しい max を使う
 #   Case 7:  unknown category (reviewer 一般) → max(全 cat) を緩い上限に
+#   Case 7c: unknown category warn message に review_max_count_unknown key が展開される
+#   Case 8:  誤分類境界 — preview は \breview\b 非マッチ → count されない (silent)
+#   Case 8b: 誤分類境界 — "implementation review" 英語混在 → unknown category に落ちる
+#
+# 検証スコープ (task-64 Step 6 F3、honor-system 部分は smoke 対象外):
+#   本 defect の核心は「hc-config.sh --set review_max_count_test=3 → 次回 review で
+#   main が 3 以内に絞る」。このうち **honor-system 部分 (main agent が起動前に
+#   hc-config.sh --get で上限を確認し、並列起動数を min ≤ N ≤ max に絞り込む)** は
+#   main agent の規律に依存するため本 smoke の対象外 (E2E / 手動検証の責務)。
+#   本 smoke が機械検証するのは hook の「count > max で warn 注入」機械強制 part のみ
+#   (warn 条件 / fail-open / category 推定 / key 名展開)。
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (CLAUDE.md Critical Lesson HIGH)
@@ -334,6 +345,95 @@ case_7_unknown_uses_loose_max() {
   return 0
 }
 
+# -------------------------------------------------------------------
+# Case 7c: unknown category warn message に正しい key 名 review_max_count_unknown
+#   が展開されることを検証 (F4: 誤 key 名バグ検出)。
+#   hook は warn message 内で review_max_count_${cat} を 2 箇所展開する
+#   (「review_max_count_unknown = N を超過」+ 「hc-config.sh --get review_max_count_unknown」)。
+#   cat=unknown のとき key 名が review_max_count_unknown になることを確認。
+# -------------------------------------------------------------------
+case_7c_unknown_key_name_expanded() {
+  local root sid
+  root=$(_root_for 7c); sid="sess7c"
+  mkdir -p "${root}/.claude"
+  _seed_state "$root" "$sid" "unknown" 10
+
+  local out code
+  out=$(_invoke "$root" "$sid" "$(_review_input 'reviewer として一般的なレビューを実施')")
+  code=$?
+
+  [ "$code" -eq 0 ] || { printf 'expected exit 0, got %d\n' "$code" >&2; return 1; }
+  # warn message に正しい key 名 review_max_count_unknown が含まれること
+  if ! printf '%s' "$out" | grep -q "review_max_count_unknown"; then
+    printf 'expected review_max_count_unknown key in warn, got: [%s]\n' "$(printf '%s' "$out" | head -c 300)" >&2
+    return 1
+  fi
+  # 誤 key (例: review_max_count_ で値が空 / review_max_count_test 等の混入) を排除:
+  # unknown cat なのに test/design/module/system の key が出ていないこと
+  if printf '%s' "$out" | grep -qE "review_max_count_(test|design|module|system)"; then
+    printf 'unexpected sibling cat key in unknown warn: [%s]\n' "$(printf '%s' "$out" | head -c 300)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# -------------------------------------------------------------------
+# Case 8: 誤分類境界 — "preview" は \breview\b 非マッチ → count されない (silent)
+#   (F5a) review keyword regex は \breview\b (word boundary)。preview の review 部分は
+#   先頭が 'p' で word boundary 不一致 → 非マッチ。max seed 済でも warn しない +
+#   state が増分されないことを確認。
+# -------------------------------------------------------------------
+case_8_preview_not_counted() {
+  local root sid
+  root=$(_root_for 8); sid="sess8"
+  mkdir -p "${root}/.claude"
+  # unknown に 10 seed しても preview は review 非該当なので無関係 + 増分されない
+  _seed_state "$root" "$sid" "unknown" 10
+
+  local out code
+  out=$(_invoke "$root" "$sid" "$(_review_input 'hc-config.sh の preview 機能を実装')")
+  code=$?
+
+  [ "$code" -eq 0 ] || { printf 'expected exit 0, got %d\n' "$code" >&2; return 1; }
+  if printf '%s' "$out" | grep -q "reviewer 数上限\|超過"; then
+    printf 'expected silent for preview (not review), got warn: [%s]\n' "$(printf '%s' "$out" | head -c 200)" >&2
+    return 1
+  fi
+  # unknown count が 10 のまま (増分されていない) ことを確認
+  local cnt
+  cnt=$(jq -r '.unknown // 0' "${root}/.claude/.reviewer-count-state/${sid}.json" 2>/dev/null || echo "?")
+  if [ "$cnt" != "10" ]; then
+    printf 'expected unknown count unchanged (10), got: %s\n' "$cnt" >&2
+    return 1
+  fi
+  return 0
+}
+
+# -------------------------------------------------------------------
+# Case 8b: 誤分類境界 — "implementation review" 英語混在 → unknown category に落ちる
+#   (F5b) review keyword (\breview\b) には該当するが、test/design/module/system の
+#   具体 category keyword には該当しない → unknown category。
+#   unknown に loose max(=10) seed 済 → 本起動 11 → warn かつ unknown key 展開。
+# -------------------------------------------------------------------
+case_8b_english_review_falls_to_unknown() {
+  local root sid
+  root=$(_root_for 8b); sid="sess8b"
+  mkdir -p "${root}/.claude"
+  _seed_state "$root" "$sid" "unknown" 10
+
+  local out code
+  out=$(_invoke "$root" "$sid" "$(_review_input 'implementation review of the module')")
+  code=$?
+
+  [ "$code" -eq 0 ] || { printf 'expected exit 0, got %d\n' "$code" >&2; return 1; }
+  # 11 > 10 → warn、かつ unknown category (key review_max_count_unknown)
+  if ! printf '%s' "$out" | grep -q "review_max_count_unknown"; then
+    printf 'expected unknown-category warn for english review, got: [%s]\n' "$(printf '%s' "$out" | head -c 300)" >&2
+    return 1
+  fi
+  return 0
+}
+
 # Case 7b: unknown category 10 体目 (= loose max 10) → silent (境界、<=)
 case_7b_unknown_at_max_silent() {
   local root sid
@@ -355,7 +455,9 @@ case_7b_unknown_at_max_silent() {
 }
 
 # ===================================================================
-TOTAL_CASES=11
+# NOTE (F2): TOTAL_CASES は run_case_verbose 呼び出し件数と一致させること。
+#   現行: 1/2/3/4/4b/5/6/6b/6c/7/7b/7c/8/8b = 14 件。
+TOTAL_CASES=14
 
 printf '===== task-64 Step 5 reviewer-count-guard smoke =====\n'
 printf 'HOOK: %s\n' "$HOOK"
@@ -373,6 +475,9 @@ run_case_verbose '6b' 'category module -> uses module max' case_6b_category_modu
 run_case_verbose '6c' 'category system -> uses system max' case_6c_category_system_uses_system_max
 run_case_verbose 7   'unknown category -> loose max(all)' case_7_unknown_uses_loose_max
 run_case_verbose '7b' 'unknown category boundary (==max) -> silent' case_7b_unknown_at_max_silent
+run_case_verbose '7c' 'unknown category -> review_max_count_unknown key expanded' case_7c_unknown_key_name_expanded
+run_case_verbose 8   'preview (not review) -> not counted, silent' case_8_preview_not_counted
+run_case_verbose '8b' 'english "implementation review" -> unknown category' case_8b_english_review_falls_to_unknown
 
 printf '\n===== Result =====\n'
 printf 'PASS: %d / %d\n' "$PASS" "$TOTAL_CASES"
