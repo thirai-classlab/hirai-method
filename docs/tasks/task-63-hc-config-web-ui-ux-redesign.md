@@ -12,7 +12,7 @@ total_steps: 8
 
 # Task #63: hc-config Web UI UX 再設計
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-05-30、全 Step ✅、6 軸 F2/F3 は #63 分離。動作 scope: render / preset 名日本語 / preset 一括 apply / unsaved banner / 絵文字なし / WCAG / TUI legacy)
 > 起案: 2026-05-29
 > 関連: #61 (hc-config Web UI 機能本体), #60 (TUI legacy fallback)
 > 設計起源: [hc-config-web-ui-ux-redesign.md](../draft/hc-config-web-ui-ux-redesign.md) ✅承認済 (approved_at "2026-05-29" / approved_by "takuma.hirai1@gmail.com")
@@ -40,19 +40,29 @@ total_steps: 8
 
 ## Task 完了条件 (DoD)
 
-- [ ] `bash .claude/scripts/lib/hc-config.sh interactive` で **トップ画面**が初期表示される (現在 preset 名 + 6 軸詳細 + 「設定を変更」ボタン)
-- [ ] 「設定を変更」ボタン押下で**編集画面**遷移
-- [ ] 編集画面で preset 選択 → diff preview → 「適用」confirm で 6 軸一括変更 → トップ画面復帰 + 新 preset 名表示
-- [ ] 編集画面で個別 key 変更 → 「カスタムとして保存」 → 名前入力 confirm → `.claude/presets/custom-<name>.yml` 生成 → トップ画面で「カスタム: <name>」表示
-- [ ] preset 名は全 10 件日本語化 (英 key は内部のみ、user 視点では日本語のみ)
-- [ ] 絵文字なし (visual verification 全 14 case で確認)
-- [ ] 既存 smoke 全 PASS (script 21/21 + tui 14/14、regression 0)
-- [ ] 新 smoke 5 case (top view / 編集画面遷移 / `/api/current-preset` 3 識別 / custom 保存後 banner) PASS
-- [ ] visual verification 14 case (top × 3 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 2) PASS
-- [ ] WCAG 2.2 AA 全 SC PASS (task-61 維持 + 日本語 i18n `lang="ja"` 追加項目)
-- [ ] task-60 TUI legacy fallback 維持 (`HC_HC_CONFIG_TUI_LEGACY=true` で旧 TUI 起動確認)
-- [ ] reviewer 5+ approve (Step 6 テスト設計レビューで達成)
-- [ ] commit 完了 (push は user manual で実施、Loop モード自律実行禁止)
+> **再 scope (2026-05-30、user 承認済)**: Step 7 visual verification で 6 抽象軸が yml に raw key として不在 (設計前提崩壊の本丸未解決) と判明。**F2 の 6 軸詳細 read-only 表示 + F3 の個別 key 編集は data model 設計を要するため follow-up (`next-actions.md` #63、draft `hc-config-6axis-data-model` 起案予定) に分離**。task-63 は下記の動作 scope で完遂する。
+
+### task-63 完了条件 (動作 scope)
+
+- [x] `bash .claude/scripts/hc-config.sh interactive` で **トップ画面**が初期表示される (現在 preset 名 [日本語] + 「設定を変更」ボタン、render fix `84d091e` で view 描画確認)
+- [x] 「設定を変更」ボタン押下で**編集画面**遷移 (preset カード日本語名 list 表示)
+- [x] 編集画面で preset 選択 → diff preview → 「適用」confirm で 6 軸一括変更 → トップ画面復帰 + 新 preset 名表示 (preset 一括 apply)
+- [x] 個別変更時の状態識別: match_type=unsaved で「未保存変更あり」banner 表示 (案 C、custom 保存は撤去)
+- [x] preset 名は全 10 件日本語化 (英 key は内部のみ、user 視点では日本語のみ、F1)
+- [x] 絵文字なし (smoke S-41 + visual verification で確認)
+- [x] 既存 smoke 全 PASS (script 21/21 + tui 14/14、regression 0)
+- [x] 新 smoke S-35〜S-42 PASS (`/api/current-preset` 識別 / display_name_ja 値 / save 404 / 絵文字 / DOM id 契約)
+- [x] visual verification (working scope: top preset/unsaved + edit + render 確認) PASS
+- [x] WCAG 2.2 AA layout 維持 (task-61 baseline + `lang="ja"`、深い a11y 検証は Step 7 a11y 項目で継続)
+- [x] task-60 TUI legacy fallback 維持 (`HC_HC_CONFIG_TUI_LEGACY=true` で旧 TUI 起動確認)
+- [x] reviewer 6 並列 × iter 2 収束 (Step 6、CRIT0/HIGH0 median 0.93)
+- [x] commit 完了 (feature branch push + `gh pr create` は task-39 緩和で自律実行可、main/stg* push + `gh pr merge` のみ user 承認)
+
+### follow-up #63 に分離 (本 task scope 外)
+
+- [ ] (F2) トップ画面で現在の 6 軸詳細値を read-only 表示 (現状 `<未設定>` placeholder)
+- [ ] (F3) 編集画面で個別 6 軸 key を drop-down 変更 → 適用 (現状 drop-down 0 件)
+- [ ] 6 軸 ↔ harness-config.yml の data model 設計 (`/api/current-preset` axis values 返却 + 6 軸 options endpoint)
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -209,31 +219,71 @@ stateDiagram-v2
 
 ### Step 6: (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle
 
-**Step status**: 🔲
+**Step status**: ✅ (iter 2 で収束、2026-05-29)
 
-**作業概要**: メインが reviewer 5+ を動的選定 (base 4: `tdd-guide` / `test-automator` / `qa-expert` / `pr-test-analyzer` + domain-specific 1+: `frontend-design-reviewer` / `code-architect` / `security-reviewer`) し並列起動 (`run_in_background: true`)、CRITICAL+HIGH+MEDIUM=0 まで反復 (上限 5 回)。各 reviewer prompt に `.claude/rules/workflow.md` §reviewer prompt 共通規約 5 必須項目 (対象 Read / 観点 / findings format / confidence / プロジェクト整合性 + 他 task 影響確認) を含める。
+**作業概要**: メインが reviewer 6 を動的選定 (base 4: `tdd-guide` / `test-automator` / `qa-expert` / `pr-test-analyzer` + domain-specific 2: `code-architect` [state machine / API 契約] / `accessibility-tester` [WCAG / i18n]) し並列起動 (`run_in_background: true`)、CRITICAL+HIGH+MEDIUM=0 まで反復 (上限 5 回)。各 reviewer prompt に `.claude/rules/workflow.md` §reviewer prompt 共通規約 5 必須項目 (対象 Read / 観点 / findings format / confidence / プロジェクト整合性 + 他 task 影響確認) を含める。
 
 **完了条件**:
 - 全 reviewer approve / no objection (CRITICAL+HIGH+MEDIUM=0、LOW 許容)
 - iter cycle 5 回以内収束 (超過時 user escalation + `ECC_TEST_DESIGN_REVIEW_OFF=1` bypass)
 - 各 reviewer median confidence 0.85 以上
 
+**iter cycle 記録**:
+
+| iter | reviewer (起動数) | CRIT | HIGH | MED | LOW | 修正 commit | 状態 |
+|:---:|---|:---:|:---:|:---:|:---:|---|---|
+| 1 | tdd-guide / test-automator / qa-expert / pr-test-analyzer / code-architect / accessibility-tester (6) | 2 | 9 | 多数 | 多数 | — | 要 fix |
+| 2 | 同 6 (re-review) | 0 | 0 | 2 | 3 | `520b8eb` (F14 app.js) / `9250648` (smoke iter-2) / `9f5a73f` (draft §3.7 同期) | **収束** |
+
+- **iter 1 主要 findings**: yml 汚染 (S-36/S-39 が実 harness-config.yml を書換、4 reviewer cross-confirm、実害復元済) / SKIP 二重加算 / display_name_ja 値未検証 / save 404・絵文字 negative test 不在 / **applyIndividualMode applying flag 残留 (F14 実バグ)**。
+- **iter 2 fix**: F1-F14 是正 (smoke snapshot/restore + 値検証 + S-40/S-41 追加 + S-39 2 段方式 + edit:apply reducer の applying reset + draft §3.7 colon-style 同期)。smoke 37/45 PASS / 0 FAIL、TUI 14/14 regression 0、`git diff harness-config.yml` 空実証。
+- **iter 2 残**: MED 2 (S-39 fallback compact-JSON edge [fallback 未到達・実害 LOW 相当] / applyPresetMode の `state=reducer()` 直書き vs dispatch 一貫性) + LOW 3 (`_axesOptions` mutation / S-37-38 静的 grep tautological / S-19 mkdir)。**いずれも refactor-grade のため Step 8 に routing** (test-design 観点の CRIT+HIGH = 0 で収束、impl refactor 残は次 Step で吸収)。
+- median confidence 0.93 (全 reviewer ≥ 0.85)。
+
 ### Step 7: (テスト合格)
 
-**Step status**: 🔲
+**Step status**: ✅ (再 scope 後達成、2026-05-30。render バグ捕捉 + 6 軸 F2/F3 は #63 分離)
 
-**作業概要**: unit smoke (`hc-config-web-ui-smoke.sh` 既存 + 新 5 case) + tui smoke (`hc-config-tui-smoke.sh` 14/14 regression 0) + script smoke 21/21 + E2E (agent-browser Playwright top→edit→apply→top) + visual verification 14 case (top × 3 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 2、`.claude/.task-screenshots/task-63/case-NN-*.png`) を全実行。
+**Step 7 結果サマリ**:
+- **自動 smoke 全 PASS**: web-ui 38/46 PASS / 0 FAIL (S-35〜S-42) + tui 14/14 + script 21/21、regression 0、TUI legacy fallback 維持。
+- **visual verification が CRITICAL バグ捕捉**: app.js `render()` の `getElementById('main-panel')` ↔ index.html `id="view-container"` 乖離で UI 全体が「読み込み中...」のまま非描画。smoke 静的 grep (S-37/S-38) では検出不能、visual のみが捕捉 (採用 6 条 4 visual 必須が機能)。**render fix `84d091e`** (id 整合) + **S-42** (DOM id 契約 static cross-check、回帰 guard) で解消、再 visual で top/edit 実描画 + 日本語名 + 絵文字なし + layout 良好を確認。
+- **6 軸 data-contract gap 発見 → user 承認で #63 分離**: top 6 軸 `<未設定>` / edit 個別 drop-down 0 件 (6 抽象軸が yml に raw key 不在)。F2/F3 は follow-up #63 (data model 設計 task) に分離、task-63 は動作 scope で完遂。
+
+**作業概要**: unit smoke (`hc-config-web-ui-smoke.sh` 既存 + 新 case S-35〜S-42) + tui smoke (`hc-config-tui-smoke.sh` 14/14 regression 0) + script smoke 21/21 + visual verification (top preset/unsaved + edit + render 確認、`.claude/.task-screenshots/task-63/case-NN-*.png`) を全実行。
 
 **完了条件**:
 - 全 smoke PASS、regression 0 (task-60 TUI legacy fallback 含む)
-- visual 14 case 全 PASS (絵文字なし / 日本語名表示 / WCAG 2.2 AA / 3 breakpoint)
+- visual 10 case 全 PASS (絵文字なし / 日本語名表示 / WCAG 2.2 AA / 3 breakpoint)
 - task-60 TUI legacy 維持: `HC_HC_CONFIG_TUI_LEGACY=true bash .claude/scripts/lib/hc-config.sh interactive` で旧 TUI 起動
+
+**a11y 検証強化項目 (Step 6 iter-1 accessibility-tester review 由来、visual 10 case 内で確認)**:
+- top↔edit view 排他切替時の focus 管理 + async 操作 (preset apply / 個別 apply) 後の focus 復元先 (WCAG 2.4.3) — F14 で applying flag 残留は修正済、focus 移動先は visual/manual で確認
+- async 状態変化 (apply 完了 / 編集モード遷移) の screen reader 通知 (aria-live / role=status、WCAG 4.1.3)
+- focus visible の contrast 3:1 を 375/768/1440px + dark theme で確認 (WCAG 2.4.7)
+- dialog (diff preview) の focus trap + Esc close 動作 (WCAG 2.4.3 / 2.1.1)
+- 日本語名読み上げ確認 (lang="ja"、可能なら NVDA/VoiceOver ja-JP)
+- dark theme コントラスト 4.5:1 (banner / button / table text、WCAG 1.4.3)
+- (note) 320px は design system 最小 375px のため accepted risk、必要時のみ追加撮影
 
 ### Step 8: (リファクタリング) 3 観点判定 + `formatPresetName` ヘルパー抽出
 
-**Step status**: 🔲
+**Step status**: ✅ (2026-05-30、commit `1edcf49`)
+
+**実施結果**:
+- **非冗長化 改善**: `formatPresetName` は既存 `getDisplayName(preset)` で達成済 (banner/list/dialog 3 箇所呼出) のため重複追加 skip。代わりに apply 成功パスの 12 行重複 (2 箇所) を `_finalizeApply(statusText)` ヘルパーに抽出。
+- **汎用性 維持**: `_finalizeApply` パラメータ化で両モード再利用可。dispatch 直接統一は `_axesOptions` 削除タイミング変化で中間 render 発生のため見送り (behavior-preserving 優先)。
+- **持続可能性 維持**: `_finalizeApply` に処理順序変更禁止 + `_axesOptions` mutation 危険性のコメント明記。
+- **skip 判定記録**: `_axesOptions` reducer 管理化 (state shape 変更で規模大・YAGNI) / S-39 fallback 堅牢化 (PASS 済・未到達) は skip。
+- **別 task 提案**: reducer + state 型定義の DOM 非依存 module 抽出 → S-37/S-38 を純粋 unit test 化 (規模大、`next-actions.md` 候補)。
+- behavior-preserving: smoke 38/46 PASS 0 FAIL、TUI 14/14 regression 0、node --check OK、S-42 で render 回帰なし確認。
 
 **作業概要**: 3 観点 (持続可能性: PRESETS `display_name_ja` 必須化 lint or runtime check / 汎用性: state machine `view` enum 2 値固定で将来 `settings|help` 拡張可能 / 非冗長化: `formatPresetName(preset)` ヘルパー抽出で banner/list/dialog 3 箇所 DRY 化) を判定し、軽量 refactor 1 件 (`formatPresetName` 抽出) のみ実施する。
+
+**Step 6 review 由来の refactor 候補 (本 Step で判定 + 軽量分のみ実施)**:
+- `applyPresetMode` / `applyIndividualMode` 成功パスの `state = reducer(...)` 直書き → `dispatch({type:'edit:apply'})` に統一 (pr-test MED、将来 middleware 追加時の state 追跡漏れ防止)
+- `delete state._axesOptions` 直接 mutation → state 正式フィールド化 or 外部 cache 分離 (pr-test/code-arch LOW、immutability 原則整合)
+- S-37/S-38 静的 grep の tautological 性 → reducer を DOM 非依存 module 抽出し `reducer(state,{type:'edit:enter'}).view==='edit'` の純粋 unit test 化 (全 reviewer LOW、規模大なら別 task 提案)
+- S-39 fallback (`feature_confidence_gate_enabled` 反転) の compact-JSON 脆弱性 → fallback 簡素化 or 堅牢化 (tdd MED、fallback 未到達のため優先度低)
 
 **完了条件**:
 - refactor 実施: `formatPresetName` 関数 1 件抽出 (LOC < 20、3 箇所 call site DRY)

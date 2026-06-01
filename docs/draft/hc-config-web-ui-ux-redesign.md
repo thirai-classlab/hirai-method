@@ -42,19 +42,19 @@ task-61 で hc-config Web UI 初版を実装したが、user 動作確認時に 
 | **F1** | preset 名が英語 key 表示 (例: `inner-typescript`) | 「猿でも分かる日本語」要求 |
 | **F2** | 初期表示が sidebar から preset 選択待ち placeholder | 「現在の設定 + プリセット名 or カスタム + 6 軸詳細」要求 (read-only) |
 | **F3** | 動線が「sidebar → preset 選択 → diff → apply」固定 | 「『設定を変更』ボタン → 編集画面 → プリセット選択 (一括) or 個別 key 変更」動線要求 |
-| **F4** | 個別変更時の保存経路が unclear | 「カスタムとして保存」ボタン要求 (`.claude/presets/custom-<name>.yml`) |
+| **F4** | 個別変更時の状態識別 unclear | 「未保存変更あり」banner で識別 (preset 名保存は不要、適用のみ) |
 
 ```mermaid
 flowchart LR
-    A["現状 (task-61)<br/>英語 preset / sidebar 初期 / 動線固定 / 個別変更保存不明"] --> B["UX 違反 4 件<br/>F1-F4"]
-    B --> C["望ましい状態<br/>日本語 preset / トップ view read-only / 設定変更ボタン経由 / カスタム保存"]
+    A["現状 (task-61)<br/>英語 preset / sidebar 初期 / 動線固定 / 個別変更時の状態識別不明"] --> B["UX 違反 4 件<br/>F1-F4"]
+    B --> C["望ましい状態<br/>日本語 preset / トップ view read-only / 設定変更ボタン経由 / 未保存変更あり banner"]
 ```
 
 **真因:** task-61 設計 (`docs/tasks/task-61-hc-config-web-ui.md` §3) で **「sidebar = preset list + main = key 編集」の 1 画面 dashboard** を採用したが、初期 view (現在状態確認) と編集 view (preset 一括 / 個別変更) の責務分離が欠落していた。さらに preset 名は英 key を string そのまま流用しており i18n を考慮していなかった。
 
 **副次:**
 - 絵文字 (✨ 🔥 🎯 等) の使用は task-61 初版で未採用だが、UI redesign 議論中に追加候補として挙がっていた。user は「絵文字不要、シンプル日本語のみ」と明示否定。
-- 「カスタム」と「未保存変更」の状態識別が unclear (両方とも preset 名 mismatch だが意味が異なる)。
+- 個別変更時の状態識別 unclear (preset 6 軸完全一致しない状態を「未保存変更あり」として明示する必要、ただし保存名は不要)。
 
 ---
 
@@ -63,10 +63,10 @@ flowchart LR
 | 案 | 内容 | 工数 | メリット | デメリット |
 |:---:|:---|---:|:---|:---|
 | **A** | task-61 初版を最小修正 (display_name_ja 追加のみ) | 1h | 動線・layout 変更ゼロ、低 risk | F2/F3/F4 未解決、UX 違反 3 件残存 |
-| **B** | 全面 redesign (top view + edit view 2 画面、preset 日本語名、custom 保存) | 9.5h | F1-F4 全解決、責務分離明確、将来拡張容易 | layout 全 build / smoke 全 case 再撮影 / regression risk 中 |
+| **B** | 全面 redesign (top view + edit view 2 画面、preset 日本語名、未保存変更 banner) | 9.0h | F1-F4 全解決、責務分離明確、将来拡張容易 | layout 全 build / smoke 全 case 再撮影 / regression risk 中 |
 | **C ハイブリッド** | top view 追加 + sidebar 維持 (sidebar = preset list 並走) | 4h | F1/F2 解決、F3 部分解決 | 1 画面 2 動線で UX 二重化、user 要求 F3 (「設定を変更」ボタン経由) 不完全 |
 
-→ **B 全面 redesign** を推奨。理由: F1-F4 4 件全解決必須、`/api/current-preset` endpoint 新規 + state machine `top | edit` 2 view 分離で責務明確化。task-61 の Pure Function Reducer pattern と Tailwind 構成は継承するため build 工数は中規模で済む。layout 再構築だが既存 component は流用可。
+→ **B 全面 redesign** を推奨。理由: F1-F4 4 件全解決必須、`/api/current-preset` endpoint 新規 (案 C values 一致判定) + state machine `top | edit` 2 view 分離で責務明確化。task-61 の Pure Function Reducer pattern と Tailwind 構成は継承するため build 工数は中規模で済む。layout 再構築だが既存 component は流用可。プリセット名保存 (custom 保存) は採用せず、個別変更は in-memory → 適用のみ (未保存変更あり banner で識別)。
 
 ---
 
@@ -97,8 +97,8 @@ flowchart LR
 | # | 画面 | 役割 | 主要 component |
 |---|---|---|---|
 | 1 | **トップ画面 (View モード)** | 現状確認 + 編集動線開始 | 現在 preset 名 banner + 6 軸詳細 table (read-only) + 「設定を変更」ボタン (主要 CTA) + 適用履歴 footer |
-| 2 | **編集画面 (Edit モード)** | preset 一括変更 or 個別 key 変更 | preset 選択 list (日本語名) + 6 軸 drop-down form (個別) + 「カスタムとして保存」 + 「適用」 + 「Cancel」 |
-| - | confirm dialog | 破壊的操作確認 | preset 適用前 (diff preview) / カスタム保存前 (名前入力) |
+| 2 | **編集画面 (Edit モード)** | preset 一括変更 or 個別 key 変更 | preset 選択 list (日本語名) + 6 軸 drop-down form (個別) + 「適用」 + 「Cancel」 |
+| - | confirm dialog | 破壊的操作確認 | preset 適用前 (diff preview) |
 
 ### 3.3 状態遷移 (state machine)
 
@@ -109,11 +109,10 @@ stateDiagram-v2
     edit --> diff_dialog: プリセット選択
     diff_dialog --> top: 「適用」 confirm (6 軸一括変更 → server.js POST /api/preset/:name/apply)
     diff_dialog --> edit: 「Cancel」
-    edit --> custom_save_dialog: 「カスタムとして保存」 (個別変更後)
-    custom_save_dialog --> top: 名前入力 + confirm (POST /api/preset/save)
-    custom_save_dialog --> edit: 「Cancel」
-    edit --> top: 「適用」(個別変更 in-memory → 確定) or 「Cancel」(破棄)
+    edit --> top: 「適用」(個別変更を /api/set で 1 件ずつ apply → top 復帰) or 「Cancel」(破棄)
 ```
+
+**個別変更 適用の流れ**: editMode=`individual` で「適用」ボタン押下 → editBuffer の 6 軸を **`POST /api/set` で 1 key ずつ逐次 apply** (task-61 既存 endpoint 再利用、custom 保存は行わない) → top 復帰時 `/api/current-preset` 再取得 → match_type=`unsaved` なら「未保存変更あり」banner 表示。
 
 ### 3.4 トップ画面 layout (text-based wireframe)
 
@@ -124,7 +123,7 @@ stateDiagram-v2
 | 現在の設定                                       |
 | ┌──────────────────────────────────────────┐ |
 | │ プリセット: 社内ツール (TypeScript)              │ |
-| │ (またはカスタム: my-preset / 未保存変更あり)     │ |
+| │ (または 未保存変更あり)                          │ |
 | └──────────────────────────────────────────┘ |
 |                                                  |
 | 設定内容 (6 軸)                                  |
@@ -143,10 +142,11 @@ stateDiagram-v2
 +--------------------------------------------------+
 ```
 
-**状態識別 3 種** (`/api/current-preset` response の `match_type`):
-- `preset`: 現在 yml 6 軸が name preset と完全一致 → 「プリセット: 社内ツール (TypeScript)」
-- `custom`: 現在 yml 6 軸が `.claude/presets/custom-<name>.yml` と完全一致 → 「カスタム: my-preset」
-- `unsaved`: 現在 yml 6 軸がどの preset/custom にも一致しない → 「未保存変更あり」
+**状態識別 2 種** (`/api/current-preset` response の `match_type`、案 C: values 一致判定):
+- `preset`: 現在 yml 6 軸が PRESETS object の **いずれかの preset の values 6 軸と完全一致** → 「プリセット: 社内ツール (TypeScript)」(該当 preset 名 + `display_name_ja` 表示)
+- `unsaved`: 現在 yml 6 軸がどの PRESETS values にも一致しない → 「未保存変更あり」(preset 名なし)
+
+**判定 logic**: server.js が `/api/current-preset` で `.claude/harness-config.yml` を読み、PRESETS 全 10 件と 6 軸 (quality / lang / git / tdd / review / autonomy) を順次比較。完全一致 1 件あれば `{match_type: "preset", name: "<key>", display_name_ja: "<日本語名>"}` を返す。一致 0 件なら `{match_type: "unsaved"}`。`.claude/presets/custom-*.yml` の scan は行わない (custom 保存機能なし)。
 
 ### 3.5 編集画面 layout (text-based wireframe)
 
@@ -160,7 +160,7 @@ stateDiagram-v2
 | │ ○ POC・お試し (Git なし)    [選択]            │ |
 | │ ○ POC・お試し (Git あり)    [選択]            │ |
 | │ ○ 社内ツール (TypeScript)   [選択]            │ |
-| │ ... (10 件 + カスタム保存分)                   │ |
+| │ ... (10 件)                                   │ |
 | └──────────────────────────────────────────┘ |
 |                                                  |
 | 個別に変更                                       |
@@ -174,7 +174,7 @@ stateDiagram-v2
 | │ (各 drop-down 横に tooltip 説明 icon)         │ |
 | └──────────────────────────────────────────┘ |
 |                                                  |
-| [ カスタムとして保存 ]  [ 適用 ]  [ Cancel ]     |
+| [ 適用 ]  [ Cancel ]                             |
 +--------------------------------------------------+
 ```
 
@@ -184,18 +184,21 @@ stateDiagram-v2
 
 | method | path | 役割 |
 |---|---|---|
-| GET | `/api/current-preset` | 現在 yml 6 軸を全 preset と照合し `{ match_type: "preset"\|"custom"\|"unsaved", name: "...", display_name_ja: "..." }` を返す |
+| GET | `/api/current-preset` | 現在 yml 6 軸を PRESETS 全件の values と照合し `{ match_type: "preset"\|"unsaved", name?: "...", display_name_ja?: "..." }` を返す (案 C values 一致判定、axes 個別返却なし、custom scan なし) |
 
 #### 既存 endpoint 維持 (task-61 で実装済、変更なし)
 
 - `GET /api/presets` (response に `display_name_ja` field 追加)
 - `GET /api/preset/:name/diff`
 - `POST /api/preset/:name/apply`
-- `POST /api/preset/save` (custom 保存)
 - `GET /api/keys`
-- `POST /api/set`
+- `POST /api/set` (個別 key 変更時、editMode=individual の「適用」で 1 件ずつ呼び出し)
 - `GET /api/preset/history`
 - `POST /api/preset/rollback/:ts`
+
+#### 撤去 endpoint
+
+- ~~`POST /api/preset/save`~~ — custom 保存機能を撤去 (user 確定要求: プリセット名保存不要、2026-05-29)
 
 #### PRESETS 定義変更 (`hc-config-web-server.js`)
 
@@ -230,38 +233,50 @@ const PRESETS = {
 // state shape
 const initialState = {
   view: 'top',  // 'top' | 'edit'
-  currentPreset: null,  // { match_type, name, display_name_ja, values: {6軸} }
+  currentPreset: null,  // { match_type, name?, display_name_ja?, values: {6軸} }
+  editMode: 'preset',  // 'preset' | 'individual' (edit view のみ、default 'preset')
   editBuffer: null,  // 編集中 6 軸 in-memory copy (edit view のみ)
   pendingPreset: null,  // diff dialog 用 preset name
-  pendingCustomSave: false,  // custom save dialog 開閉
 };
 
-// actions
-const ACTIONS = {
-  LOAD_CURRENT: 'LOAD_CURRENT',  // GET /api/current-preset で初期化
-  GOTO_EDIT: 'GOTO_EDIT',  // top → edit (「設定を変更」)
-  GOTO_TOP: 'GOTO_TOP',  // edit → top (Cancel / 適用後)
-  SELECT_PRESET: 'SELECT_PRESET',  // edit 内で preset 選択 → diff dialog
-  APPLY_PRESET: 'APPLY_PRESET',  // diff dialog confirm → POST /api/preset/:name/apply
-  CHANGE_KEY: 'CHANGE_KEY',  // edit 内で個別 key 変更 (editBuffer 更新)
-  OPEN_CUSTOM_SAVE: 'OPEN_CUSTOM_SAVE',  // 「カスタムとして保存」ボタン
-  SAVE_CUSTOM: 'SAVE_CUSTOM',  // custom save dialog confirm → POST /api/preset/save
-  CANCEL: 'CANCEL',  // 編集破棄 → top
-};
+// actions (実装は colon-style 命名規約を採用、9 件。本 draft §3.7 は実装 SSoT に同期済)
+// 'load:current'      // GET /api/current-preset で初期化
+// 'top:enter'         // edit → top (Cancel / 適用後)
+// 'edit:enter'        // top → edit (「設定を変更」)
+// 'edit:select_preset'// edit 内で preset 選択 → editMode='preset' + diff dialog
+// 'edit:change_axis'  // edit 内で個別 key 変更 (editMode='individual' + editBuffer 更新)
+// 'edit:cancel'       // 編集破棄 → top
+// 'edit:apply'        // preset 一括 (diff dialog confirm) / 個別 (editBuffer を /api/set 逐次) の適用完了 → top 復帰 + applying flag reset
+// 'ui:set_flag'       // applying 等の UI flag 制御
+// 'history:update'    // 適用履歴 footer 更新
 
-// reducer (Pure Function、task-61 から拡張)
+// reducer (Pure Function、task-61 から拡張、抜粋)
 function reducer(state, action) {
   switch (action.type) {
-    case 'LOAD_CURRENT':
+    case 'load:current':
       return { ...state, view: 'top', currentPreset: action.payload };
-    case 'GOTO_EDIT':
-      return { ...state, view: 'edit', editBuffer: { ...state.currentPreset.values } };
-    case 'GOTO_TOP':
-      return { ...state, view: 'top', editBuffer: null, pendingPreset: null, pendingCustomSave: false };
-    // ... 他 actions
+    case 'edit:enter':
+      return { ...state, view: 'edit', editMode: 'preset', editBuffer: { ...state.currentPreset.values } };
+    case 'top:enter':
+    case 'edit:cancel':
+      return { ...state, view: 'top', editMode: 'preset', editBuffer: null, pendingPreset: null };
+    case 'edit:change_axis':
+      return { ...state, editMode: 'individual', editBuffer: { ...state.editBuffer, [action.key]: action.value } };
+    case 'edit:apply':
+      // preset 一括 / 個別いずれの適用完了でも top 復帰 + applying flag を必ず reset (部分失敗時の残留防止、task-63 Step 6 F14 fix)
+      return { ...state, view: 'top', currentPreset: action.payload, editMode: 'preset', editBuffer: null, applying: false };
+    // ... ui:set_flag / history:update
   }
 }
 ```
+
+> **注 (2026-05-29、task-63 Step 6 code-architect review M-02)**: 当初 draft では actions を UPPER_CASE (`LOAD_CURRENT` 等) で記載していたが、実装は colon-style (`load:current` 等) を採用したため、draft を実装 SSoT に同期した。`APPLY_PRESET` / `APPLY_INDIVIDUAL` は実装上 event handler 内で `/api/preset/:name/apply` or `/api/set` 逐次呼出を行った後に単一 `edit:apply` action を dispatch する設計に統合 (action 数 8 → 9、名称 colon 化)。
+
+**editMode 2 種の意味**:
+- `'preset'` — edit view 起動 default / preset 選択中。「適用」は `/api/preset/:name/apply` (6 軸一括) 経路
+- `'individual'` — 個別 drop-down 変更後。「適用」は editBuffer の 6 軸を `/api/set` で 1 件ずつ apply 経路
+
+editMode は `edit:change_axis` で `'individual'` に遷移、`edit:select_preset` / `edit:enter` で `'preset'` に遷移 (排他)。`null` 値は廃止 (常に 2 種いずれか)。
 
 ### 3.8 layout 変更概要
 
@@ -289,13 +304,13 @@ function reducer(state, action) {
 | 1 | 🔲 | PRESETS に `display_name_ja` 追加 + `/api/current-preset` endpoint 実装 (server.js) | 1h | — |
 | 2 | 🔲 | app.js state machine 拡張 (top view + edit view 分離、reducer / actions / state) | 2h | Step 1 |
 | 3 | 🔲 | index.html layout 再構築 (sidebar 削除 + 新 layout) + style.css 調整 | 1.5h | Step 2 |
-| 4 | 🔲 | preset 日本語名表示 (list / banner / dialog confirm、`lang="ja"` 属性) | 0.5h | Step 3 |
-| 5 | 🔲 | smoke 新規 case 追加 (`/api/current-preset` / top view / 編集画面遷移 / preset 適用後復帰 / カスタム保存) | 1h | Step 4 |
+| 4 | 🔲 | 日本語名表示統合 (list / banner / dialog confirm、`lang="ja"` 属性、Unicode regex 不要) | 0.5h | Step 3 |
+| 5 | 🔲 | smoke 新規 case 追加 (`/api/current-preset` / top view / 編集画面遷移 / preset 適用後復帰 / 個別変更後「未保存変更あり」banner 表示) | 1h | Step 4 |
 | 6 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 | 1.5h | Step 5 |
 | 7 | 🔲 | (テスト合格) script smoke + tui smoke + visual verification 10 case 再撮影 | 1.5h | Step 6 |
 | 8 | 🔲 | (リファクタリング) 3 観点判定 or skip | 0.5h | Step 7 |
 
-合計: 9.5h
+合計: 9.0h (custom 保存撤去で -0.5h)
 
 ### Step 1 詳細
 
@@ -320,16 +335,22 @@ const PRESETS = {
   },
 };
 
-// 新規 endpoint
+// 新規 endpoint (案 C values 一致判定)
 app.get('/api/current-preset', (req, res) => {
   const currentYml = loadCurrentYml();  // .claude/harness-config.yml 6 軸読込
-  const match = matchPreset(currentYml, PRESETS);  // 完全一致 preset 探索
-  res.json(match);  // { match_type, name, display_name_ja, values }
+  // PRESETS 全 10 件の values と 6 軸 (quality / lang / git / tdd / review / autonomy) を順次比較
+  for (const [key, preset] of Object.entries(PRESETS)) {
+    if (deepEqual6Axes(currentYml, preset.values)) {
+      return res.json({ match_type: 'preset', name: key, display_name_ja: preset.display_name_ja });
+    }
+  }
+  // 一致 0 件 → unsaved
+  return res.json({ match_type: 'unsaved' });
 });
 ```
 
 #### テスト
-- `hc-config-web-ui-smoke.sh`: `/api/current-preset` 3 case (preset 一致 / custom 一致 / unsaved)
+- `hc-config-web-ui-smoke.sh`: `/api/current-preset` 2 case (preset 一致 / unsaved)
 
 ### Step 2 詳細
 
@@ -375,11 +396,11 @@ state machine 拡張 (§3.7 通り)、view 排他切替 logic 追加。
 
 #### 変更内容
 新規 case 5 件追加:
-1. `GET /api/current-preset` 200 + `match_type` 含む
+1. `GET /api/current-preset` 200 + `match_type` 含む (preset 一致 + unsaved の 2 case)
 2. top view 初期表示で「現在の設定」banner 描画 (DOM check)
 3. 「設定を変更」ボタン押下で edit view 遷移 (`view-edit` 表示 / `view-top` hidden)
-4. preset 適用後 → top view 復帰 + banner 新 preset 名表示
-5. カスタム保存 → top view で「カスタム: <name>」banner 表示
+4. preset 適用後 → top view 復帰 + banner 新 preset 名表示 (match_type=preset)
+5. 個別 key 変更 → 「適用」(editMode=individual で `/api/set` 1 件ずつ apply) → top view で「未保存変更あり」banner 表示 (match_type=unsaved)
 
 #### テスト
 - bash hc-config-web-ui-smoke.sh で全 case PASS
@@ -390,12 +411,12 @@ state machine 拡張 (§3.7 通り)、view 排他切替 logic 追加。
 - **base 4 件**: tdd-guide / test-automator / qa-expert / pr-test-analyzer
 - **domain-specific 1+ 件**:
   - frontend-design-reviewer (UI/UX / WCAG / 日本語 i18n 観点)
-  - code-architect (state machine / API 設計観点)
-  - security-reviewer (custom 保存時の path traversal / 入力 sanitize 観点)
+  - code-architect (state machine / API 設計観点 / values 一致判定 logic)
+  - security-reviewer (`/api/set` 1 件ずつ apply 時の input sanitize / race condition 観点)
 
 #### reviewer prompt 必須項目 (workflow.md §reviewer prompt 共通規約 5 件)
 1. 対象 Read: `docs/draft/hc-config-web-ui-ux-redesign.md` 全文
-2. 観点: state machine 整合性 / API 契約 / WCAG 2.2 AA / 日本語 i18n / smoke 網羅性 / custom 保存 security
+2. 観点: state machine 整合性 (editMode 2 種) / API 契約 (案 C values 一致判定) / WCAG 2.2 AA / 日本語 i18n / smoke 網羅性 / `/api/set` 1 件ずつ apply の race
 3. findings format: CRITICAL / HIGH / MEDIUM / LOW + confidence + 修正提案
 4. confidence: 0.0 - 1.0 (median 0.85 以上を収束目安)
 5. プロジェクト整合性 + 他 task 影響: task-60 TUI legacy fallback と並走確認 / task-61 既存 smoke 21+14 regression 0 / `HC_HC_CONFIG_TUI_LEGACY=true` 経路維持確認
@@ -411,10 +432,10 @@ state machine 拡張 (§3.7 通り)、view 排他切替 logic 追加。
 - **integration**: tui smoke 14/14 PASS 維持 (TUI legacy fallback 影響なし確認)
 - **E2E**: 新 smoke 5 case PASS (Step 5 で追加)
 - **visual verification (UI 必須)**: agent-browser skill + screenshot
-  - top view (3 状態 × 3 breakpoint = 9 case)
+  - top view (2 状態 [preset / unsaved] × 3 breakpoint = 6 case)
   - edit view (preset list + form、3 breakpoint = 3 case)
-  - dialog (diff / custom save、2 case)
-  - 合計 14 case 再撮影 (task-61 10 case を superset で拡充)
+  - dialog (diff preview、1 case)
+  - 合計 10 case 再撮影 (task-61 10 case と同等規模、custom save dialog 撤去で -4 case)
 
 #### WCAG 2.2 AA 全 SC PASS
 - focus visible / contrast 4.5:1 / focus order / aria roles / lang="ja"
@@ -423,7 +444,7 @@ state machine 拡張 (§3.7 通り)、view 排他切替 logic 追加。
 
 #### 3 観点判定
 - **持続可能性 (Sustainability)**: PRESETS object `display_name_ja` field を必須化 → 将来 preset 追加時の漏れ防止 (lint rule or runtime check 提案)
-- **汎用性 (Generality)**: state machine の `view` enum を `top | edit` 2 値固定 → 将来 view 拡張時 (例: `settings | help`) は enum 拡張で対応可
+- **汎用性 (Generality)**: state machine の `view` enum を `top | edit` 2 値固定、`editMode` enum を `preset | individual` 2 値固定 → 将来 view 拡張時 (例: `settings | help`) は enum 拡張で対応可
 - **非冗長化 (Deduplication)**: preset 名表示 logic を `formatPresetName(preset)` ヘルパー化、banner / list / dialog 3 箇所で再利用
 
 skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName` 抽出) のみ実施。
@@ -437,7 +458,7 @@ skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName
 | layout 全 build で既存 visual 10 case regression | M | M | task-61 既存 case + 新 case 計 14 case を全件再撮影 + diff 確認 |
 | state machine 拡張で reducer bug | M | H | Pure Function pattern 維持 + unit test 追加 (state 遷移 7 case) |
 | `/api/current-preset` の 6 軸完全一致判定で edge case (yml 形式差異 / quote 違い) | L | M | 6 軸 normalize 関数 + smoke で全 preset 一致確認 |
-| custom 保存時の path traversal (例: `custom-../../../etc/passwd.yml`) | L | H | name 入力 regex 制限 `^[a-z0-9-]+$` + server.js sanitize |
+| 個別変更で `/api/set` 1 件ずつ apply 中の race / 中断 | L | M | task-61 既存 endpoint の atomic backup 流用、editBuffer の 6 軸を順次同期送信 (Promise chain) |
 | 日本語表示で font fallback 崩れ (system font 依存) | L | L | Tailwind `font-sans` + visual verification で確認 |
 | TUI legacy fallback (HC_HC_CONFIG_TUI_LEGACY=true) との影響 | L | M | TUI 経路は本 task 対象外、tui smoke 14/14 で regression 0 確認 |
 
@@ -447,7 +468,7 @@ skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName
 
 - [ ] Step 1-5 実装 (server.js → app.js → index.html/style.css → 日本語名 → smoke)
 - [ ] Step 6 テスト設計レビュー (5+ reviewer 動的選定、収束まで反復)
-- [ ] Step 7 テスト合格 (script 21/21 + tui 14/14 + new 5 + visual 14 case)
+- [ ] Step 7 テスト合格 (script 21/21 + tui 14/14 + new 5 + visual 10 case)
 - [ ] Step 8 リファクタリング (3 観点判定、`formatPresetName` 抽出のみ)
 - [ ] WCAG 2.2 AA 全 SC PASS 再確認
 - [ ] task-60 TUI legacy fallback 動作確認 (`HC_HC_CONFIG_TUI_LEGACY=true` で旧 TUI 起動)
@@ -461,12 +482,12 @@ skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName
 - [ ] `bash .claude/scripts/lib/hc-config.sh interactive` で **トップ画面**が初期表示される (現在 preset 名 + 6 軸詳細 + 「設定を変更」ボタン)
 - [ ] 「設定を変更」ボタン押下で**編集画面**遷移する
 - [ ] 編集画面で preset 選択 → diff preview → 「適用」 confirm で 6 軸一括変更 → トップ画面復帰 + 新 preset 名表示
-- [ ] 編集画面で個別 key 変更 → 「カスタムとして保存」 → 名前入力 confirm → `.claude/presets/custom-<name>.yml` 生成 → トップ画面で「カスタム: <name>」表示
+- [ ] 編集画面で個別 key 変更 → 「適用」 → `/api/set` で 1 件ずつ apply → トップ画面で「未保存変更あり」banner 表示
 - [ ] preset 名は全 10 件日本語化 (英 key は内部のみ、user 視点では日本語のみ)
-- [ ] 絵文字なし (visual verification 全 14 case で確認)
+- [ ] 絵文字なし (visual verification 全 10 case で確認)
 - [ ] 既存 smoke 全 PASS (script 21/21 + tui 14/14、regression 0)
-- [ ] 新 smoke (top view / 編集画面遷移 / `/api/current-preset` 識別 / custom 保存後 banner 表示) 5/5 PASS
-- [ ] visual verification 14 case (top × 3 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 2) PASS
+- [ ] 新 smoke (top view / 編集画面遷移 / `/api/current-preset` 識別 / 個別変更後「未保存変更あり」banner 表示) 5/5 PASS
+- [ ] visual verification 10 case (top × 2 状態 × 3 breakpoint + edit × 3 breakpoint + dialog × 1) PASS
 - [ ] WCAG 2.2 AA 全 SC PASS (task-61 維持 + 日本語 i18n 追加項目)
 - [ ] task-60 TUI legacy fallback 維持 (`HC_HC_CONFIG_TUI_LEGACY=true` で旧 TUI 起動確認)
 
@@ -476,15 +497,15 @@ skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName
 
 | Step | 工数 |
 |:---:|---:|
-| 1. server.js (PRESETS + `/api/current-preset`) | 1.0h |
-| 2. app.js (state machine 拡張) | 2.0h |
+| 1. server.js (PRESETS + `/api/current-preset`、案 C values 一致判定) | 1.0h |
+| 2. app.js (state machine 拡張、editMode 2 種) | 2.0h |
 | 3. index.html + style.css (layout 再構築) | 1.5h |
-| 4. 日本語名表示 (banner / list / dialog) | 0.5h |
+| 4. 日本語名表示統合 (banner / list / dialog、Unicode regex 不要) | 0.5h |
 | 5. smoke 新規 5 case 追加 | 1.0h |
 | 6. テスト設計レビュー (5+ reviewer 動的) | 1.5h |
-| 7. テスト合格 (smoke + visual 14 case) | 1.5h |
+| 7. テスト合格 (smoke + visual 10 case) | 1.0h |
 | 8. リファクタリング (3 観点 + `formatPresetName`) | 0.5h |
-| **合計** | **9.5h** |
+| **合計** | **9.0h** |
 
 ---
 
@@ -493,10 +514,11 @@ skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName
 - 絵文字を使う (✨ 🔥 🎯 ✅ 等、user 明示禁止 F1 要求と矛盾)
 - sidebar に preset list を直接置く (F3 要求「設定を変更」ボタン経由動線と矛盾)
 - 英語 preset 名を user に見せる (F1 要求、内部 key のみ、表示は日本語)
-- 「カスタム」と「未保存変更」を混同 (別状態 `custom` vs `unsaved` として識別)
 - task-61 の sidebar 280px layout を残したまま top view を main に追加 (1 画面 2 動線で UX 二重化)
-- custom 保存で name 入力 sanitize 怠り (path traversal risk)
 - TUI legacy fallback (`HC_HC_CONFIG_TUI_LEGACY=true`) 経路に影響を与える変更
+- **プリセット名保存機能 (custom 保存) を復活させる** (user 確定要求 2026-05-29 で撤去、preset 名は固定 10 件のみ)
+- `/api/current-preset` で `.claude/presets/custom-*.yml` を scan する (案 C values 一致判定のみ、custom scan なし)
+- 個別変更時に「カスタムとして保存」 button を出す (適用のみ、保存名入力 dialog 不要)
 
 ---
 
@@ -519,7 +541,8 @@ skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName
 | 日付 | 状態 | 備考 |
 |---|---|---|
 | 2026-05-29 | 起案 | task-61 完遂後の user UX フィードバック (絵文字不要 + トップ現状 + 設定変更ボタン + プリセット選択 / 個別 + カスタム保存) を反映、AI 推奨案 B (全面 redesign) で詳細設計、preset 日本語名 mapping 10 件 + 動線 + state machine + API 拡張提案 |
-| 2026-05-29 | 承認待ち | user 確認待ち |
+| 2026-05-29 | 承認 | user 承認 (takuma.hirai1@gmail.com) |
+| 2026-05-29 | 仕様変更受諾 | user 確定要求「プリセット名保存不要」を受諾し設計簡素化 (F4 「カスタムとして保存」要求 → 「未保存変更あり banner で識別」に置換、`/api/preset/save` endpoint 撤去、editMode `null` 廃止、`/api/current-preset` 案 C values 一致判定で 2 種 (preset / unsaved) のみ、Step 4 「カスタム保存日本語名対応」→「日本語名表示統合」rename、Unicode regex 不要、visual 14 case → 10 case に縮減、工数 9.5h → 9.0h。元承認の延長として再承認不要。task-63 と並行実装 (領域 A/B/C/D 並列、本 修正 = 領域 D draft 修正)) |
 
 ---
 
@@ -532,4 +555,4 @@ skip 判定: 適用、上記 3 観点で軽量 refactor 1 件 (`formatPresetName
 - 関連 rule: `.claude/rules/task-management.md` §採用 6 条
 - 関連 rule: `.claude/rules/workflow.md` §「収束条件」
 - 関連 memory: `~/.claude/memory/feedback_ui_visual_verification_mandate.md`
-- 関連 task: #63 (本 draft 対応 task、`/new-task` で生成予定)
+- 関連 task: #63 (本 draft 対応 task、設計簡素化 + 並行実装)

@@ -9,62 +9,35 @@
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
   <!-- skip link (a11y SC 2.4.1) -->
-  <a href="#main-panel" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-blue-700 focus:text-white focus:px-3 focus:py-2 focus:rounded">メインコンテンツへスキップ</a>
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-blue-700 focus:text-white focus:px-3 focus:py-2 focus:rounded">メインコンテンツへスキップ</a>
 
   <!-- Header -->
   <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10" role="banner">
     <div class="px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <h1 class="text-lg font-bold text-slate-800">hc-config Web UI</h1>
-        <span class="text-xs text-slate-500">task-61 / hirai-method harness</span>
+        <h1 class="text-lg font-bold text-slate-800" lang="ja">hc-config Web UI</h1>
+        <span class="text-xs text-slate-500">task-63 / hirai-method harness</span>
       </div>
       <div id="status-banner" class="text-sm text-slate-600" role="status" aria-live="polite" aria-atomic="true">
         <span id="status-text">起動中...</span>
       </div>
     </div>
     <!-- Tailwind CDN offline 警告 -->
-    <div id="cdn-warning" class="hidden bg-amber-100 border-t border-amber-300 text-amber-800 text-sm px-6 py-2" role="alert">
+    <div id="cdn-warning" class="hidden bg-amber-100 border-t border-amber-300 text-amber-800 text-sm px-6 py-2" role="alert" lang="ja">
       Tailwind CDN に接続できません。レイアウトが崩れる可能性があります (ネット接続 / Proxy / CSP を確認)。
     </div>
   </header>
 
-  <!-- Main grid: sidebar + content -->
-  <main class="flex-1 grid grid-cols-[280px_1fr] gap-0 min-h-0" role="main">
-    <!-- Sidebar -->
-    <aside class="bg-white border-r border-slate-200 overflow-y-auto" aria-label="プリセット / カテゴリ一覧">
-      <nav aria-labelledby="preset-heading">
-        <section class="p-4 border-b border-slate-200">
-          <h2 id="preset-heading" class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">プリセット</h2>
-          <!-- H-new-1 iter 4 B: role="listbox" → role="list" (APG Listbox 非完全実装、YAGNI 実態合わせ) -->
-          <ul id="preset-list" class="space-y-1 text-sm" role="list" aria-label="プリセット選択">
-            <li class="text-slate-400">読み込み中...</li>
-          </ul>
-        </section>
-      </nav>
-      <nav aria-labelledby="category-heading">
-        <section class="p-4">
-          <h2 id="category-heading" class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">カテゴリ</h2>
-          <!-- H-new-1 iter 4 B: role="listbox" → role="list" -->
-          <ul id="category-list" class="space-y-1 text-sm" role="list" aria-label="カテゴリ選択">
-            <li class="text-slate-400">読み込み中...</li>
-          </ul>
-        </section>
-      </nav>
-    </aside>
-
-    <!-- Content area -->
-    <section class="overflow-y-auto p-6" aria-labelledby="main-panel-heading">
-      <h2 id="main-panel-heading" class="sr-only">メインパネル</h2>
-      <div id="main-panel" class="space-y-4" tabindex="-1">
-        <div class="bg-white rounded-lg border border-slate-200 p-6">
-          <p class="text-slate-600">左 sidebar から <strong>プリセット</strong> または <strong>カテゴリ</strong> を選択してください。</p>
-        </div>
-      </div>
-    </section>
+  <!-- Main: 2 view 排他切替 (state.view = 'top' | 'edit')、app.js が動的 render で挿入 -->
+  <main id="main" class="flex-1 overflow-y-auto" role="main" tabindex="-1" lang="ja">
+    <!-- view-top + view-edit container は app.js render() で動的注入 -->
+    <div id="view-container" class="max-w-4xl mx-auto px-6 py-8">
+      <div class="bg-white rounded-lg border border-slate-200 p-6 text-slate-500">読み込み中...</div>
+    </div>
   </main>
 
   <!-- Footer: history -->
-  <footer class="bg-white border-t border-slate-200 px-6 py-3 max-h-80 overflow-y-auto" role="contentinfo">
+  <footer class="bg-white border-t border-slate-200 px-6 py-3 max-h-80 overflow-y-auto" role="contentinfo" lang="ja">
     <section role="region" aria-labelledby="history-heading">
       <h2 id="history-heading" class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">プリセット適用履歴</h2>
       <table id="history-table" class="w-full text-sm" aria-describedby="history-heading">
@@ -87,8 +60,8 @@
     </section>
   </footer>
 
-  <!-- confirm dialog (custom) -->
-  <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" class="rounded-lg shadow-xl p-0 backdrop:bg-slate-900/40">
+  <!-- confirm dialog (custom、diff preview + 適用 confirm) -->
+  <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" class="rounded-lg shadow-xl p-0 backdrop:bg-slate-900/40" lang="ja">
     <div class="bg-white rounded-lg max-w-lg">
       <header class="px-5 py-3 border-b border-slate-200">
         <h2 id="confirm-dialog-title" class="text-base font-bold text-slate-800">確認</h2>
@@ -97,30 +70,6 @@
       <footer class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2 bg-slate-50 rounded-b-lg">
         <button id="confirm-dialog-cancel" type="button" class="px-4 py-2 text-sm bg-slate-200 hover:bg-slate-300 rounded text-slate-800 min-h-[44px]">キャンセル</button>
         <button id="confirm-dialog-ok" type="button" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded min-h-[44px]">実行</button>
-      </footer>
-    </div>
-  </dialog>
-
-  <!-- prompt dialog (Save as Custom Preset) -->
-  <dialog id="prompt-dialog" aria-labelledby="prompt-dialog-title" aria-describedby="prompt-dialog-body" class="rounded-lg shadow-xl p-0 backdrop:bg-slate-900/40">
-    <div class="bg-white rounded-lg max-w-lg w-[28rem]">
-      <header class="px-5 py-3 border-b border-slate-200">
-        <h2 id="prompt-dialog-title" class="text-base font-bold text-slate-800">カスタムプリセットとして保存</h2>
-      </header>
-      <div id="prompt-dialog-body" class="px-5 py-4 text-sm text-slate-700 space-y-3">
-        <p>現在の 6 軸状態を新しいカスタムプリセットとして保存します。</p>
-        <div>
-          <label for="prompt-dialog-input" class="block text-xs uppercase text-slate-500 font-semibold mb-1">プリセット名</label>
-          <!-- M-new-2 iter 4 B: aria-describedby で hint + error 関連付け、aria-invalid 初期 false -->
-          <input id="prompt-dialog-input" type="text" class="w-full font-mono text-sm border border-slate-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200" placeholder="my-preset" autocomplete="off" aria-describedby="prompt-dialog-hint prompt-dialog-error" aria-invalid="false" />
-          <p id="prompt-dialog-hint" class="text-xs text-slate-500 mt-1">英数字 / ハイフンのみ、先頭は英数字、3-49 文字 (例: <code>my-preset-2026</code>)</p>
-          <!-- M-new-2 iter 4 B: validation error 用 output (aria-live="assertive" で SR 即時通知) -->
-          <output id="prompt-dialog-error" class="hidden text-xs text-red-700 mt-1 font-semibold" aria-live="assertive"></output>
-        </div>
-      </div>
-      <footer class="px-5 py-3 border-t border-slate-200 flex justify-end gap-2 bg-slate-50 rounded-b-lg">
-        <button id="prompt-dialog-cancel" type="button" class="px-4 py-2 text-sm bg-slate-200 hover:bg-slate-300 rounded text-slate-800 min-h-[44px]">キャンセル</button>
-        <button id="prompt-dialog-ok" type="button" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded min-h-[44px]">保存</button>
       </footer>
     </div>
   </dialog>

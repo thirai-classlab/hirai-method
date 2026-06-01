@@ -1,5 +1,22 @@
 #!/usr/bin/env node
-// .claude/scripts/lib/hc-config-web-server.js — task-61 Step 5 iter 6 領域 A (iter 4 + 5 iter 6 hot fix)
+// .claude/scripts/lib/hc-config-web-server.js — task-63 Step 4 領域 A (設計簡素化、案 C values 完全一致判定)
+//
+// task-63 Step 4 領域 A 修正項目 (4 件、user 確定要求「プリセット名保存不要」2026-05-29):
+//   A1. 撤去: /api/preset/save endpoint + savePreset() + scanCustomPresets() + isTestPollutionName() +
+//             TEST_POLLUTION_PATTERNS const + /api/presets / /api/preset/:name/diff / /api/preset/:name/apply
+//             の custom preset merge ロジック (~80-100 LOC 削減)
+//   A2. 案 C 採用: getCurrentPreset() を values field 完全一致判定 (subset) に書換、
+//                axesEqual() → valuesSubsetEqual() に rename + logic 変更、PRESETS axes 6 軸照合は廃止
+//   A3. response 簡素化: /api/presets から axes_values 撤去、/api/current-preset は { name, display_name_ja, match_type }
+//   A4. module.exports 整理: savePreset / scanCustomPresets / isTestPollutionName / axesEqual 撤去、
+//                            getCurrentPreset / valuesSubsetEqual 追加
+//
+// task-63 Step 1 修正項目 (継承、UX 再設計の API 基盤):
+//   1. PRESETS 全 10 件に display_name_ja field 追加 (draft §3.1 mapping、日本語表示専用、絵文字なし)
+//   2. /api/presets response 各 entry に display_name_ja field 追加
+//   3. /api/current-preset 新規 endpoint (現在 yml 全 key 値 vs PRESETS values 完全一致 subset 判定)
+//   4. router に /api/current-preset GET 分岐追加
+//   5. module.exports に getCurrentPreset / valuesSubsetEqual 追加
 //
 // iter 6 A 修正項目 (5 件 = HIGH×2 + MED×2 + 補強):
 //   item 1 (HIGH 3-rev): HC_HISTORY_DIR_OVERRIDE + HC_PRESETS_DIR_OVERRIDE env override (test isolation)
@@ -41,14 +58,17 @@
 //   GET  /static/*                  → static file serve (index.html / app.js / style.css)
 //   GET  /api/keys                  → 74 key + metadata (現在値含む、bulk hcListAll = 1 spawn)
 //   GET  /api/categories            → 6 category 一覧
+//   GET  /api/current-preset        → 現在 yml 全 key 値 vs PRESETS values 完全一致 subset 判定 (task-63 Step 4 案 C)
 //   GET  /api/value/:key            → 単一 key 現在値
 //   POST /api/set                   → {key,value} → hc-config.sh --set
-//   GET  /api/presets               → 10 preset 一覧 (6 軸 + 説明)
+//   GET  /api/presets               → 10 preset 一覧 (display_name_ja + use_case + affected_key_count)
 //   GET  /api/preset/:name/diff     → preset 適用差分 (effect 列含む)
 //   POST /api/preset/:name/apply    → batch hc-config.sh --set + history 保存 (atomic)
-//   POST /api/preset/save           → {name, axes} → .claude/presets/custom-<name>.yml 保存
 //   GET  /api/preset/history        → 適用履歴一覧
 //   POST /api/preset/rollback/:ts   → history rollback (chain 修復 + traversal 防止)
+//
+// task-63 Step 4 撤去 (user 確定要求「プリセット名保存不要」):
+//   POST /api/preset/save (404 fallback で応答、savePreset/scanCustomPresets/isTestPollutionName 全て撤去)
 //
 // 起源: docs/draft/hc-config-web-ui.md §3.1 §3.2 §3.4 §6 / docs/tasks/task-61-hc-config-web-ui.md Step 5
 
@@ -69,10 +89,11 @@ const HC_CONFIG_SCRIPT = path.resolve(SCRIPT_DIR, '..', 'hc-config.sh')
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..')
 const STATIC_DIR = path.join(SCRIPT_DIR, 'hc-config-web-ui')
 // iter 6 A item 1 (HIGH 3-rev): env override で test isolation を可能化
-//   smoke が HC_HISTORY_DIR_OVERRIDE / HC_PRESETS_DIR_OVERRIDE を渡しても
-//   server.js が読まなかった bug (server boot で常に repo root の .claude/ を参照)
+//   smoke が HC_HISTORY_DIR_OVERRIDE を渡しても server.js が読まなかった bug
+//   (server boot で常に repo root の .claude/.preset-history を参照)
 const HISTORY_DIR = process.env.HC_HISTORY_DIR_OVERRIDE || path.join(REPO_ROOT, '.claude', '.preset-history')
-const PRESETS_DIR = process.env.HC_PRESETS_DIR_OVERRIDE || path.join(REPO_ROOT, '.claude', 'presets')
+// task-63 Step 4 A1: PRESETS_DIR は撤去済 (custom preset 保存機能廃止)
+// env override (HC_PRESETS_DIR_OVERRIDE) は smoke regression 互換のため定義のみ維持 (実利用なし)
 
 const PORT_MIN = 3060
 const PORT_MAX = 3070
@@ -116,6 +137,7 @@ const PRESET_AXES = [
 
 const PRESETS = {
   'poc-no-git': {
+    display_name_ja: 'POC・お試し (Git なし)',
     axes: { quality_level: 'poc', language_framework: 'mixed', git_workflow: 'none', tdd_policy: 'optional', review_intensity: 'minimum', autonomy_level: 'aggressive' },
     use_case: '実験 / 一時試作 (1 日以内、捨てる予定)',
     values: {
@@ -137,6 +159,7 @@ const PRESETS = {
     },
   },
   'poc-with-git': {
+    display_name_ja: 'POC・お試し (Git あり)',
     axes: { quality_level: 'poc', language_framework: 'mixed', git_workflow: 'unrestricted', tdd_policy: 'optional', review_intensity: 'minimum', autonomy_level: 'aggressive' },
     use_case: '個人 spike / 軽量 POC (Git 管理あり)',
     values: {
@@ -154,6 +177,7 @@ const PRESETS = {
     },
   },
   'inner-typescript': {
+    display_name_ja: '社内ツール (TypeScript)',
     axes: { quality_level: 'inner_system', language_framework: 'typescript', git_workflow: 'main_protected', tdd_policy: 'recommended', review_intensity: 'standard', autonomy_level: 'moderate' },
     use_case: '内部 tool TypeScript (社内利用、main protected)',
     values: {
@@ -172,6 +196,7 @@ const PRESETS = {
     },
   },
   'inner-python': {
+    display_name_ja: '社内ツール (Python)',
     axes: { quality_level: 'inner_system', language_framework: 'python', git_workflow: 'main_protected', tdd_policy: 'recommended', review_intensity: 'standard', autonomy_level: 'moderate' },
     use_case: '内部 tool Python (社内利用、main protected)',
     values: {
@@ -190,6 +215,7 @@ const PRESETS = {
     },
   },
   'production-typescript-personal': {
+    display_name_ja: '本番運用・個人 (TypeScript)',
     axes: { quality_level: 'production_service', language_framework: 'typescript', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'standard', autonomy_level: 'moderate' },
     use_case: '個人 production (classlab 等、main/stg protected)',
     values: {
@@ -211,6 +237,7 @@ const PRESETS = {
     },
   },
   'production-typescript-enterprise': {
+    display_name_ja: '本番運用・企業 (TypeScript)',
     axes: { quality_level: 'production_service', language_framework: 'typescript', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production TypeScript (strict review + conservative autonomy)',
     values: {
@@ -234,6 +261,7 @@ const PRESETS = {
     },
   },
   'production-python': {
+    display_name_ja: '本番運用 (Python)',
     axes: { quality_level: 'production_service', language_framework: 'python', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production Python (strict + conservative)',
     values: {
@@ -255,6 +283,7 @@ const PRESETS = {
     },
   },
   'production-rust': {
+    display_name_ja: '本番運用 (Rust)',
     axes: { quality_level: 'production_service', language_framework: 'rust', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production Rust (strict + conservative)',
     values: {
@@ -276,6 +305,7 @@ const PRESETS = {
     },
   },
   'production-go': {
+    display_name_ja: '本番運用 (Go)',
     axes: { quality_level: 'production_service', language_framework: 'go', git_workflow: 'main_stg_protected', tdd_policy: 'mandatory', review_intensity: 'strict', autonomy_level: 'conservative' },
     use_case: '企業 production Go (strict + conservative)',
     values: {
@@ -297,6 +327,7 @@ const PRESETS = {
     },
   },
   'harness-development': {
+    display_name_ja: 'ハーネス開発専用',
     axes: { quality_level: 'inner_system', language_framework: 'mixed', git_workflow: 'main_protected', tdd_policy: 'recommended', review_intensity: 'strict', autonomy_level: 'moderate' },
     use_case: 'hirai-method 自体の開発 (dogfooding)',
     values: {
@@ -841,166 +872,55 @@ function rollbackHistory(timestamp, overrides) {
 }
 
 // ============================================================
-// custom preset save (M-Q2 / draft §3.2)
+// task-63 Step 4 案 C: getCurrentPreset (values field 完全一致 subset 判定)
 // ============================================================
-
-// POST /api/preset/save { name, axes } で .claude/presets/custom-<name>.yml を保存。
-// 軽量 YAML 形式 (key: value、コメント先頭) で書出。
 //
-// 設計乖離 fix: name regex を ^[a-z0-9][a-z0-9-]{2,48}$ (3-49 char) に統一 (app.js と同一)
-//              axes は 6 軸完全必須 (whitelist)、invalid 軸 reject、欠落 reject
-// HIGH-Q3 fix: invalidateMetadataCache() 追加 (一貫性確保)
-function savePreset(body) {
-  if (!body || typeof body !== 'object') return { ok: false, error: 'body required' }
-  const name = body.name
-  const axes = body.axes
-  if (!name || typeof name !== 'string') return { ok: false, error: 'name required (string)' }
-  // 設計乖離 fix: app.js と完全統一 (^[a-z0-9][a-z0-9-]{2,48}$ = 3-49 char)
-  if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(name)) {
-    return { ok: false, error: 'name must match ^[a-z0-9][a-z0-9-]{2,48}$ (3-49 chars, lowercase + digit + hyphen)' }
-  }
-  if (!axes || typeof axes !== 'object') return { ok: false, error: 'axes required (object)' }
-  // 設計乖離 fix: 6 軸 完全必須 + whitelist 厳格化
-  const axesByKey = {}
-  for (const a of PRESET_AXES) axesByKey[a.key] = new Set(a.values)
-  // (1) unknown axis 拒否
-  for (const k of Object.keys(axes)) {
-    if (!axesByKey[k]) return { ok: false, error: `unknown axis: ${k}` }
-  }
-  // (2) 6 軸全必須 (欠落拒否)
-  for (const a of PRESET_AXES) {
-    if (axes[a.key] === undefined || axes[a.key] === null || axes[a.key] === '') {
-      return { ok: false, error: `axis missing: ${a.key} (all 6 axes required)` }
+// 仕様 (task-63 Step 4 spec、user 確定要求「プリセット名保存不要」2026-05-29):
+//   1. 現在 yml の全 key 値を hcListAll() で取得 (1 spawn、cache hit で 0 spawn)
+//   2. PRESETS (built-in 10 件) の各 preset values と current yml を subset 一致判定
+//      - 各 preset の values 全 entry について current yml と一致するかを確認
+//      - preset values は yml の部分集合 (subset)、yml の他 key は無視
+//   3. 完全一致 (subset): { name: <preset key>, display_name_ja: <日本語名>, match_type: 'preset' }
+//   4. 不一致: { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved' }
+//
+// axes field は返却 response から撤去 (task-63 Step 4 A3、UI 表示不要)。
+// 案 A (6 軸照合) を廃止し案 C 採用 (PRESETS axes 6 軸定義は preset metadata として残るが照合には使わない)。
+//
+// overrides.spawnFn: DI seam (テスト用)
+function getCurrentPreset(overrides) {
+  overrides = overrides || {}
+  // 1. 現在 yml 全 key 値を取得 (hcListAll 経由、cache hit で 0 spawn)
+  const allValues = hcListAll(overrides)
+
+  // 2. PRESETS (built-in only、custom-* は廃止) を順次照合
+  for (const [key, p] of Object.entries(PRESETS)) {
+    if (valuesSubsetEqual(p.values, allValues)) {
+      return {
+        name: key,
+        display_name_ja: p.display_name_ja || key,
+        match_type: 'preset',
+      }
     }
   }
-  // (3) value whitelist
-  for (const [k, v] of Object.entries(axes)) {
-    if (!axesByKey[k].has(v)) return { ok: false, error: `invalid value for ${k}: ${v}` }
-  }
-  try {
-    if (!fs.existsSync(PRESETS_DIR)) {
-      fs.mkdirSync(PRESETS_DIR, { recursive: true })
-    }
-    const filePath = path.join(PRESETS_DIR, `custom-${name}.yml`)
-    // M-Q2: path traversal 二重防御
-    const normalized = path.normalize(filePath)
-    if (!normalized.startsWith(PRESETS_DIR + path.sep)) {
-      return { ok: false, error: 'path traversal detected' }
-    }
-    const lines = [
-      `# .claude/presets/custom-${name}.yml`,
-      `# preset: custom-${name}`,
-      `# saved_at: ${new Date().toISOString()}`,
-      `# axes:`,
-    ]
-    for (const a of PRESET_AXES) {
-      const v = axes[a.key]
-      if (v !== undefined) lines.push(`#   ${a.key}: ${v}`)
-    }
-    lines.push('')
-    // axes を yml に展開
-    for (const a of PRESET_AXES) {
-      const v = axes[a.key]
-      if (v !== undefined) lines.push(`${a.key}: ${v}`)
-    }
-    const content = lines.join('\n') + '\n'
-    const tmpFile = `${normalized}.tmp`
-    fs.writeFileSync(tmpFile, content)
-    fs.renameSync(tmpFile, normalized)
-    // HIGH-Q3 fix: invalidate cache (apply preset と同等の一貫性)
-    invalidateMetadataCache()
-    // iter 6 A item 2 (HIGH 2-rev / MED-N3 実 HIGH): in-memory PRESETS に登録
-    //   保存後 diff/apply が 404 にならないよう、PRESETS map に正規 entry を追加。
-    //   key 名は `custom-<name>` (file stem と同一、/api/presets 一覧と整合)。
-    //   values は 6 軸 yml 1 行ずつのみ (preset の named values は持たない)、
-    //   diff 計算は PRESETS[name].values の Object.entries で動くため空 {} でも 404 にはならず
-    //   "no changed key" として通る。draft §6 DoD 完全達成。
-    const customKey = `custom-${name}`
-    PRESETS[customKey] = {
-      axes: { ...axes },
-      use_case: `custom preset (${customKey})`,
-      values: { ...axes }, // 6 軸自体を yml key として apply 対象に含める
-    }
-    return { ok: true, name: customKey, path: path.relative(REPO_ROOT, normalized) }
-  } catch (e) {
-    return { ok: false, error: 'write failed: ' + e.message }
-  }
+
+  // 3. 一致なし
+  return { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved' }
 }
 
-// iter 6 A item 2 (HIGH 2-rev): PRESETS_DIR から custom-*.yml を dynamic scan
-//   起動後に他プロセスや過去 session で保存された custom preset を /api/presets で
-//   発見可能にする。Read 専用、parse 軽量 (key: value 形式のみ、コメント無視)。
-//   失敗時 silent skip (本流 /api/presets 動作を壊さない)。
-//
-// fix/preset-test-pollution-cleanup (2026-05-29):
-//   smoke / manual test 由来の意味なし name (test-* / aaaaaa / 数字のみ / 同一文字 6 連
-//   以上 / *invalid*) を sidebar 表示から除外する blacklist regex を追加。
-//   user manual 保存の意味ある name (英数 hyphen 自由組み合わせ) は引き続き通過。
-//   削除ではなく非表示なので、user が意図せず regex に該当する name で保存しても
-//   yml file 自体は残り、後で regex 緩和すれば復活可能。
-const TEST_POLLUTION_PATTERNS = [
-  /^test-/,            // smoke 由来 (test-<timestamp> 等)
-  /^(.)\1{5,}$/,       // 同一文字 6 連以上 (aaaaaa, bbbbbb, ----- 等)
-  /^\d+$/,             // 数字のみ (123, 456 等の意味なし name)
-  /invalid/i,          // *invalid* 含む (test 失敗試験由来明示語)
-]
-
-function isTestPollutionName(name) {
-  for (const re of TEST_POLLUTION_PATTERNS) {
-    if (re.test(name)) return true
+// task-63 Step 4 A2: values subset 完全一致判定
+//   presetValues の全 key について currentValues に同 key + 同 value が存在するかを check。
+//   currentValues に preset 不在 key があっても OK (subset 関係のみ確認)。
+//   string 比較、yml 形式差異吸収のため trim。
+function valuesSubsetEqual(presetValues, currentValues) {
+  if (!presetValues || typeof presetValues !== 'object') return false
+  if (!currentValues || typeof currentValues !== 'object') return false
+  for (const [k, pv] of Object.entries(presetValues)) {
+    if (!Object.prototype.hasOwnProperty.call(currentValues, k)) return false
+    const cv = currentValues[k]
+    if (cv === undefined || cv === null) return false
+    if (String(pv).trim() !== String(cv).trim()) return false
   }
-  return false
-}
-
-function scanCustomPresets() {
-  const result = {}
-  try {
-    if (!fs.existsSync(PRESETS_DIR)) return result
-    const files = fs.readdirSync(PRESETS_DIR).filter((f) => f.startsWith('custom-') && f.endsWith('.yml'))
-    for (const f of files) {
-      const name = f.replace(/^custom-/, '').replace(/\.yml$/, '')
-      // file name validation (savePreset と同一 regex で防御的二重 check)
-      if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(name)) continue
-      // test pollution name (smoke / manual test 残骸) は sidebar 表示から除外
-      if (isTestPollutionName(name)) continue
-      const customKey = `custom-${name}`
-      // 既に PRESETS に in-memory 登録済 (今 session で save) ならスキップ
-      if (PRESETS[customKey]) continue
-      // 軽量 yml parse: コメント / 空行を除き、`key: value` のみ取り出す
-      let content
-      try {
-        content = fs.readFileSync(path.join(PRESETS_DIR, f), 'utf8')
-      } catch (_) {
-        continue
-      }
-      const axes = {}
-      for (const rawLine of content.split('\n')) {
-        const line = rawLine.trim()
-        if (line.length === 0 || line.startsWith('#')) continue
-        const m = line.match(/^([a-z_][a-z0-9_]*)\s*:\s*(\S.*?)\s*$/)
-        if (m) axes[m[1]] = m[2]
-      }
-      // 6 軸 whitelist でフィルタ (yml 内の他 key は無視)
-      const axesByKey = {}
-      for (const a of PRESET_AXES) axesByKey[a.key] = new Set(a.values)
-      const safeAxes = {}
-      for (const a of PRESET_AXES) {
-        if (axes[a.key] !== undefined && axesByKey[a.key].has(axes[a.key])) {
-          safeAxes[a.key] = axes[a.key]
-        }
-      }
-      // 6 軸全揃わない preset は entry スキップ (corrupt file 防御)
-      if (Object.keys(safeAxes).length !== PRESET_AXES.length) continue
-      result[customKey] = {
-        axes: safeAxes,
-        use_case: `custom preset (${customKey})`,
-        values: { ...safeAxes },
-      }
-    }
-  } catch (_) {
-    // scan 失敗は silent (本流 /api/presets を壊さない)
-  }
-  return result
+  return true
 }
 
 // ============================================================
@@ -1124,6 +1044,17 @@ async function handleRequest(req, res) {
     return
   }
 
+  // GET /api/current-preset (task-63 Step 4 案 C、values subset 完全一致判定)
+  //   現在 yml 全 key 値 vs PRESETS (built-in 10) values を subset 完全一致判定し、
+  //   { name, display_name_ja, match_type } を返却 (axes field 撤去、UI 表示不要)。
+  //   - 一致: name=<preset key> + display_name_ja=preset 日本語名 + match_type='preset'
+  //   - 不一致: name='custom' + display_name_ja='未保存変更あり' + match_type='unsaved'
+  if (req.method === 'GET' && pathname === '/api/current-preset') {
+    const result = getCurrentPreset()
+    sendJson(res, 200, result)
+    return
+  }
+
   // GET /api/categories
   if (req.method === 'GET' && pathname === '/api/categories') {
     const metadata = loadMetadata()
@@ -1208,17 +1139,12 @@ async function handleRequest(req, res) {
     return
   }
 
-  // GET /api/presets
-  // iter 6 A item 2 (HIGH 2-rev): PRESETS_DIR から custom-*.yml を dynamic scan して merge
+  // GET /api/presets (task-63 Step 4 A3: axes_values 撤去、display_name_ja + use_case + affected_key_count のみ)
+  //   custom preset 機能は task-63 Step 4 A1 で撤去済 (scanCustomPresets 呼出なし、PRESETS は built-in 10 件固定)
   if (req.method === 'GET' && pathname === '/api/presets') {
-    const customMap = scanCustomPresets()
-    // PRESETS (in-memory) を起点に、未登録 custom を merge (in-memory 優先 = 同 session save 優先)
-    for (const [k, v] of Object.entries(customMap)) {
-      if (!PRESETS[k]) PRESETS[k] = v
-    }
     const list = Object.entries(PRESETS).map(([name, p]) => ({
       name,
-      axes: p.axes,
+      display_name_ja: p.display_name_ja || name,
       use_case: p.use_case,
       affected_key_count: Object.keys(p.values).length,
     }))
@@ -1226,15 +1152,10 @@ async function handleRequest(req, res) {
     return
   }
 
-  // GET /api/preset/:name/diff
-  // iter 6 A item 2 (HIGH 2-rev): custom-* preset は直前に scan して PRESETS に merge
+  // GET /api/preset/:name/diff (task-63 Step 4 A1: custom preset merge ロジック撤去、built-in 10 件のみ)
   const diffMatch = pathname.match(/^\/api\/preset\/([^/]+)\/diff$/)
   if (req.method === 'GET' && diffMatch) {
     const name = decodeURIComponent(diffMatch[1])
-    if (!PRESETS[name] && name.startsWith('custom-')) {
-      const customMap = scanCustomPresets()
-      if (customMap[name]) PRESETS[name] = customMap[name]
-    }
     const diff = computePresetDiff(name)
     if (!diff) {
       sendJson(res, 404, { error: 'unknown preset', preset: name })
@@ -1245,14 +1166,10 @@ async function handleRequest(req, res) {
   }
 
   // POST /api/preset/:name/apply (H-7: partial failure は 200 OK + body.ok:false)
-  // iter 6 A item 2 (HIGH 2-rev): custom-* preset は直前に scan して PRESETS に merge
+  // task-63 Step 4 A1: custom preset merge ロジック撤去 (built-in 10 件のみ)
   const applyMatch = pathname.match(/^\/api\/preset\/([^/]+)\/apply$/)
   if (req.method === 'POST' && applyMatch) {
     const name = decodeURIComponent(applyMatch[1])
-    if (!PRESETS[name] && name.startsWith('custom-')) {
-      const customMap = scanCustomPresets()
-      if (customMap[name]) PRESETS[name] = customMap[name]
-    }
     let body
     try {
       body = await readJsonBody(req)
@@ -1288,19 +1205,8 @@ async function handleRequest(req, res) {
     return
   }
 
-  // POST /api/preset/save (M-Q2 / draft §3.2)
-  if (req.method === 'POST' && pathname === '/api/preset/save') {
-    let body
-    try {
-      body = await readJsonBody(req)
-    } catch (e) {
-      sendJson(res, 400, { error: 'invalid JSON body', detail: sanitizeErrorMessage(e.message) })
-      return
-    }
-    const result = savePreset(body)
-    sendJson(res, result.ok ? 200 : 400, result)
-    return
-  }
+  // task-63 Step 4 A1: POST /api/preset/save endpoint 撤去 (user 確定要求「プリセット名保存不要」2026-05-29)
+  //   404 fallback で応答 (本 endpoint への request は handleRequest 末尾で 404 not found を返す)
 
   // GET /api/preset/history
   if (req.method === 'GET' && pathname === '/api/preset/history') {
@@ -1464,6 +1370,8 @@ if (require.main === module) {
 // C-unit-seam: unit テスト用 seam (callHcConfig / loadMetadata / readJsonBody / serveStatic 追加)
 // iter 4 A 追加 seam: hcListAll / invalidateKeysValueCache / nextHistoryStamp / cleanupHistoryFiles /
 //   rollbackAppliedFromSnapshot / sanitizeErrorMessage
+// task-63 Step 4 A4: savePreset / scanCustomPresets / isTestPollutionName / axesEqual 撤去、
+//                    getCurrentPreset / valuesSubsetEqual を保持 (axesEqual → valuesSubsetEqual に rename)
 module.exports = {
   PRESETS,
   PRESET_AXES,
@@ -1481,9 +1389,8 @@ module.exports = {
   computePresetDiff,
   applyPreset,
   rollbackAppliedFromSnapshot,
-  savePreset,
-  scanCustomPresets,
-  isTestPollutionName,
+  getCurrentPreset,    // task-63 Step 4 案 C
+  valuesSubsetEqual,   // task-63 Step 4 案 C (helper、test seam)
   listHistory,
   rollbackHistory,
   readJsonBody,
