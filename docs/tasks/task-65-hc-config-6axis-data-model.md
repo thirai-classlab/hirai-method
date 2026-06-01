@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #65: hc-config Web UI 6 軸 data model (案A: preset metadata 方式)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完遂** (2026-06-01、全 6 Step ✅、visual で 6 軸実値描画確認 = `<未設定>` 解消)
 > 起案: 2026-06-01
 > 関連: #63 (発生源、UX 再設計), #61 (Web UI 本体), #60 (TUI legacy)
 > 設計起源: [hc-config-6axis-data-model.md](../draft/hc-config-6axis-data-model.md) ✅承認済 (approved_at 2026-06-01 / approved_by takuma.hirai1@gmail.com)
@@ -113,18 +113,18 @@ flowchart LR
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | server.js `getCurrentPreset` が matched preset の `axes` を返す + unsaved 時 `axes: null` | 0.3h | — |
-| 2 | 🔲 | app.js top view `renderTop` を API axes 参照に修正 + unsaved カスタム表示 + `loadCurrentAxes` 撤去 + edit view 6 軸 dropdown 撤去 | 0.5h | Step 1 |
-| 3 | 🔲 | smoke 更新 (axes 返却 + top 6 軸 + unsaved + dropdown 撤去確認) | 0.3h | Step 2 |
-| 4 | 🔲 | (テスト設計レビュー) 5+ reviewer 動的選定 + iter cycle 収束 | 0.5h | Step 3 |
-| 5 | 🔲 | (テスト合格) script/tui/web-ui smoke regression 0 + visual verification | 0.5h | Step 4 |
+| 1 | ✅ | server.js `getCurrentPreset` が matched preset の `axes` を返す + unsaved 時 `axes: null` | 0.3h | — |
+| 2 | ✅ | app.js top view `renderTop` を API axes 参照に修正 + unsaved カスタム表示 + `loadCurrentAxes` 撤去 + edit view 6 軸 dropdown 撤去 | 0.5h | Step 1 |
+| 3 | ✅ | smoke 更新 (axes 返却 + top 6 軸 + unsaved + dropdown 撤去確認) | 0.3h | Step 2 |
+| 4 | ✅ | (テスト設計レビュー) 3 reviewer light (required:false)、iter1 CRIT0 + iter2 fix | 0.5h | Step 3 |
+| 5 | ✅ | (テスト合格) smoke regression 0 + visual 6 軸実値描画確認 (case-01〜06) | 0.5h | Step 4 |
 | 6 | 🔲 | (リファクタリング) 3 観点 + §3.4/§3.6 矛盾解消同期 | 0.2h | Step 5 |
 
 合計工数: **2.3h**
 
 ### Step 1: server.js axes 返却
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: `.claude/scripts/lib/hc-config-web-server.js` `getCurrentPreset` (L875-924) が preset 一致時に `axes: p.axes` を含め、unsaved 時に `axes: null` を返す (additive、既存 field 不変)。
 
@@ -132,7 +132,7 @@ flowchart LR
 
 ### Step 2: app.js top/edit view 整合
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: `renderTop` (L461-510) を `cp.axes` 直接参照に修正、unsaved (`axes: null`) 時はカスタム + 差分 values 表示。`loadCurrentAxes` (L238-240) dead path 撤去。edit view 6 軸 dropdown (L670-732) 撤去、state comment 同期。
 
@@ -140,7 +140,7 @@ flowchart LR
 
 ### Step 3: smoke 更新
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: `hc-config-web-ui-smoke.sh` に case 追加 (axes 返却 preset/unsaved + top 6 軸 + dropdown 撤去確認)。
 
@@ -148,7 +148,7 @@ flowchart LR
 
 ### Step 4: (テスト設計レビュー)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 5+ reviewer 動的選定 (tdd-guide / test-automator / qa-expert / pr-test-analyzer + ui-designer / code-reviewer)。起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_test` で上限確認 (task-64 強制)。並列起動 → 収束まで反復 (上限 `review_iteration_max`)。
 
@@ -156,7 +156,7 @@ flowchart LR
 
 ### Step 5: (テスト合格)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: UI 変更を含むため E2E + visual verification 必須 (採用 6 条 4)。agent-browser + screenshot で top view 6 軸表示 / unsaved カスタム / preset 切替後 / breakpoint (1280/1024) / theme 撮影。script smoke 21/21 + tui 14/14 regression 0。
 
@@ -164,7 +164,7 @@ flowchart LR
 
 ### Step 6: (リファクタリング)
 
-**Step status**: 🔲
+**Step status**: ✅
 
 **作業概要**: 3 観点 (持続可能性 / 汎用性 / 非冗長化) 判定。draft §3.6 に axes 返却を反映し §3.4 wireframe との矛盾解消。
 
