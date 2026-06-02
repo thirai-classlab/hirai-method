@@ -80,10 +80,10 @@ task-63 案 C の過剰簡素化で「個別値編集 = custom」導線が失わ
 |:---:|:---:|:---|---:|:---|
 | 1 | ✅ | diff「Failed to fetch」実機再現 → `computePresetDiff` を hcListAll キャッシュ参照化 + RED smoke (commit 4d990b8、diff 0.4s→0.006s、S-48/S-49 追加、未再現も構造改善+回帰anchor) | 0.5h | — |
 | 2 | ✅ | server.js API 拡張 (commit 7df441e: /api/presets group=quality_level 3群 / match_type unsaved→custom / 実7category 確定 / batch=client loop / S-50,S-51) | 0.8h | Step 1 |
-| 3 | 🔲 | app.js (上部タブ 設定/履歴 + 左 preset / 右 accordion 同時1開 / 編集→custom / 履歴タブ分離) | 1.1h | Step 2 |
-| 4 | 🔲 | style.css 2 分割 + accordion + no-scroll 100vh + responsive | 0.5h | Step 3 |
-| 5 | 🔲 | dead code 削除 + 旧 docstring 圧縮 | 0.2h | Step 3 |
-| 6 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (min≤N≤max、上限 hc-config.sh --get で確認)、収束まで反復 | 0.5h | Step 5 |
+| 3 | ✅ | app.js (上部タブ 設定/履歴 + 左 preset / 右 accordion 同時1開 / 編集→custom / 履歴タブ分離) commit d58d2f7、browser 自己検証 (a)-(f) PASS | 1.1h | Step 2 |
+| 4 | ✅ | style.css 2 分割 + accordion + no-scroll 100vh + responsive (d58d2f7、1280/1024 scrollHeight==clientHeight) | 0.5h | Step 3 |
+| 5 | ✅ | dead code 削除 + 旧 docstring 圧縮 (d58d2f7、3 file 全面書換で sidebar 残骸除去) | 0.2h | Step 3 |
+| 6 | 🔄 | (テスト設計レビュー) iter1: code-reviewer + frontend-developer 2体 (max10内)、HIGH4 (stale smoke 6FAIL/S-42 guard空振り/isCustom reset/iOS overflow) + MED/LOW、security APPROVED。Step6-fix で対応中 | 0.5h | Step 5 |
 | 7 | 🔲 | (テスト合格) smoke 更新 + E2E + visual 必須 (初期/preset選択/編集→custom/accordion/タブ切替/no-scroll/responsive/toast) | 0.6h | Step 6 |
 | 8 | 🔲 | (リファクタリング) 3 観点判定 or skip | 0.3h | Step 7 |
 

@@ -195,7 +195,9 @@ flowchart LR
 
 | iter | 日付 | reviewer (起動数) | CRITICAL | HIGH | MEDIUM | LOW | 修正 commit | 状態 |
 |:---:|---|---|:---:|:---:|:---:|:---:|---|---|
-| 1 | — | — | — | — | — | — | — | 未実施 |
+| 1 | 2026-06-03 | code-reviewer, frontend-developer (2) | 0 (frontend C1 は実質 cleanup) | 4 (smoke regression / S-42 guard / isCustom reset / iOS overflow 他) | 多数 | 多数 | (Step6-fix subagent 修正中) | 修正中 |
+
+> harness-dev preset で `review_required_test: false` のため focused 2 reviewer (correctness+security / UX+a11y+no-scroll)。security は APPROVED (no defect)。確定 HIGH: (1) app.js 全面書換で旧UI assert の stale smoke 6 FAIL = DoD regression (2) S-42 id-contract guard が `$()` wrapper で空振り (3) isCustom reset bug (4) iOS Safari details overflow 保険。
 
 **収束判定**: CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW 許容)
 
