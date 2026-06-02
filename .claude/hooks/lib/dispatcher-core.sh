@@ -42,11 +42,20 @@
 #
 # plain text stdout の扱い (event 不問、behavior-preserving):
 #   plain text を出す子 (system-reminder 等) は全 event で verbatim 連結して出力する。
-#   plain のみなら verbatim 連結を stdout へ、JSON 混在時は additionalContext へ畳む
-#   (混在で {..} + plain を出すと M-INV-1 を破るため正規化)。
+#   plain のみなら verbatim 連結を stdout へ、JSON 混在時は systemMessage / additionalContext へ
+#   畳む (混在で {..} + plain を出すと M-INV-1 を破るため正規化)。畳む先は event 別 (denylist):
+#     - additionalContext 対応 event (= 非対応 denylist 以外の全 event:
+#       PreToolUse / PostToolUse / PostToolBatch / UserPromptSubmit / SessionStart 等)
+#       → hookSpecificOutput.additionalContext
+#     - additionalContext 非対応 event (Stop / SubagentStop / Notification の 3 つのみ)
+#       → systemMessage (top-level、全 event 対応)。hookSpecificOutput.additionalContext は
+#         これら 3 event では invalid のため絶対に出さない (task-71 1eace29 回帰 fix)。
+#   注意: PreToolUse / SessionStart は additionalContext 対応 (本番 task-rule-guard 等が依存)。
+#   iter1 allowlist 案 ({UserPromptSubmit/PostToolUse/PostToolBatch} のみ対応) は両者を誤って
+#   非対応に分類し本番 PreToolUse hook の additionalContext を systemMessage に化けさせたため反転。
 #   旧 Fix-C の「不可視 event で plain drop」案は既存契約 (core / success-stdout smoke が
-#   全 event で plain passthrough を前提) と衝突するため採用しない。Claude 不可視 event でも
-#   debug-log には残るので drop しても無害だが、契約維持を優先し verbatim を保つ。
+#   全 event で plain passthrough を前提) と衝突するため採用しない。契約維持のため verbatim を
+#   保ち、JSON 混在時のみ event 別 route で正規化する。
 #
 # 最終 stdout 不変 (M-INV-1): 常に「空 / 単一 valid JSON / plain text のみ」。
 #   生 JSON object 連結 (`{...}{...}`) を絶対に出さない。
@@ -277,11 +286,16 @@ EOF
   # JSON 群 (_dc_jsonbuf) と plain text 群 (_dc_textbuf) を event 別方針で単一出力へ畳む。
   #
   # 方針 (確定スキーマ §event 別 merge):
-  #   - 可視 event (SessionStart / UserPromptSubmit): plain text 連結が Claude に届く。
-  #     JSON が無ければ plain 連結を出す。JSON があれば JSON merge を優先し、
-  #     plain は additionalContext へ畳む (混在で {..}{..} を出さない = M-INV-1)。
-  #   - 不可視 event (PreToolUse / PostToolUse / Stop / SubagentStop): plain text は届かない。
-  #     → JSON のみ merge して出力。plain は drop (純 debug 扱い、stderr へは既に流れている)。
+  #   - JSON が無ければ plain 連結をそのまま stdout へ (event 不問、behavior-preserving)。
+  #   - JSON があれば JSON merge を優先し、plain (additionalContext 候補) は event 別に畳む
+  #     (混在で {..}{..} を出さない = M-INV-1)。判定は denylist (非対応 3 event のみ列挙):
+  #       - additionalContext 対応 event (denylist 以外の全 event:
+  #         PreToolUse / PostToolUse / PostToolBatch / UserPromptSubmit / SessionStart 等)
+  #         → hookSpecificOutput.additionalContext へ畳む。
+  #       - additionalContext 非対応 event (Stop / SubagentStop / Notification の 3 つのみ)
+  #         → systemMessage へ route (top-level、全 event 対応)。これら 3 event で
+  #           hookSpecificOutput.additionalContext を出すと invalid (task-71 1eace29 回帰) のため
+  #           絶対に出さない。decision:block / permissionDecision は従来どおり保持。
   #
   # merge する制御フィールド (公式優先順、M-INV-2..6):
   #   continue:false (最優先) > decision:"block" / permissionDecision severity (deny>ask>allow/defer)
@@ -310,7 +324,7 @@ EOF
 
   # (c) JSON あり (+ 任意 plain) → jq で event 別 priority merge して単一 object を emit。
   #   JSON が 1 件以上ある時点で出力は単一 JSON object へ正規化されるため、plain はそのまま
-  #   出すと {..} + plain で M-INV-1 を破る。よって plain は additionalContext へ畳む (全 event)。
+  #   出すと {..} + plain で M-INV-1 を破る。よって plain は event 別に additionalContext / systemMessage へ畳む (l.365-410 の denylist 参照: Stop/SubagentStop/Notification は additionalContext 非対応のため systemMessage、他 event は hookSpecificOutput.additionalContext)。
   _dc_merge_text=""
   if [ "$_dc_no_text" -eq 0 ]; then
     _dc_merge_text="$(printf '%s' "$_dc_textbuf" | tr -d "$_dc_GS")"
@@ -348,14 +362,28 @@ EOF
               | .hookSpecificOutput.permissionDecisionReason // empty
               | select(. != "") ] | join("\n")) as $pdReason
 
-        # --- additionalContext 全連結 (manifest order)。可視 event は extratext も末尾連結 ---
+        # --- additionalContext 非対応 event 判定 (denylist、公式 snapshot 準拠) ---
+        #   hookSpecificOutput.additionalContext を出せない event は {Stop, SubagentStop, Notification}
+        #   のみ。他全 event (PreToolUse / PostToolUse / PostToolBatch / UserPromptSubmit /
+        #   SessionStart 等) は additionalContext 対応 (本番 task-rule-guard.sh:191/211/231/256 /
+        #   autonomous-action-guard.sh:239 / parallel-subagent-reminder.sh:347 の PreToolUse advisory
+        #   additionalContext / SessionStart bootstrap context が依存。公式 snapshot
+        #   claude-code-07-hooks/v3/snapshot.html L67/76 = PreToolUse、L139/147 = SessionStart 例)。
+        #   非対応 event の場合のみ additionalContext 候補を systemMessage (全 event 対応の top-level)
+        #   へ route する。allowlist 案 (iter1) は PreToolUse / SessionStart を誤って非対応に分類し
+        #   本番 PreToolUse hook の additionalContext を systemMessage に化けさせる回帰を生むため不採用。
+        # NOTE: 非対応 event 集合は claude-code-07-hooks/v3 snapshot 準拠。将来 Claude Code が Stop に additionalContext 対応した場合は本 denylist 見直し要。
+        | (($ev == "Stop") or ($ev == "SubagentStop") or ($ev == "Notification")) as $acUnsupported
+
+        # --- additionalContext 候補 全連結 (manifest order)。extratext (plain advisory) も末尾連結 ---
         | ([ $objs[]
               | (.hookSpecificOutput.additionalContext // .additionalContext // empty)
               | select(. != null and . != "") ]
             + (if ($extratext | length) > 0 then [$extratext] else [] end)) as $ctxs
 
-        # --- systemMessage 全連結 ---
-        | ([ $objs[] | .systemMessage // empty | select(. != "") ]
+        # --- systemMessage 全連結。additionalContext 非対応 event では ctx 群も systemMessage へ合流 ---
+        | (([ $objs[] | .systemMessage // empty | select(. != "") ])
+            + (if ($acUnsupported and ($ctxs | length) > 0) then $ctxs else [] end)
             | join("\n")) as $sysmsgs
 
         # --- suppressOutput OR ---
@@ -366,7 +394,10 @@ EOF
           | (if $halt then (.continue = false
               | (if ($stopReason // "") != "" then .stopReason = $stopReason else . end))
              else . end)
-          | (if ($ctxs | length) > 0 then
+          # additionalContext 対応 event ($acUnsupported == false) のみ
+          # hookSpecificOutput.additionalContext に載せる。非対応 event (Stop/SubagentStop/
+          # Notification) は上で $sysmsgs に合流済 (= systemMessage へ route)、ここでは出さない。
+          | (if (($acUnsupported | not) and ($ctxs | length) > 0) then
                .hookSpecificOutput = { hookEventName: $ev,
                                        additionalContext: ($ctxs | join("\n")) }
              else . end)
