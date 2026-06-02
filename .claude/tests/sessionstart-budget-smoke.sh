@@ -7,11 +7,22 @@
 #   SessionStart は Claude Code に context (system-reminder 等) を戻す event で、
 #   出力が過大だと LLM の有効 context window を圧迫する。
 #
+# task-74 Step 3 統合判断 (2026-06-02):
+#   sessionstart-footprint-smoke.sh (task-73) と SessionStart bytes を二重計測している。
+#   footprint-smoke が hard cap 800B を担当 (正本)。本 smoke は以下の役割で残す:
+#     - SC-1: dispatcher exit 0 確認 (footprint に無い独自 assert)
+#     - SC-2: warn 800 + hard-fail 5000 の 2 段構成 (footprint の hard 800 とは閾値が異なる)
+#     - SC-3: stdout 非空 assert (footprint に無い独自 assert)
+#     - SC-4: NUL bytes チェック (footprint に無い独自 assert)
+#   SC-1/SC-3/SC-4 の独自 assert により本 smoke は廃止せず残す。
+#   SessionStart bytes の hard cap (800B) は sessionstart-footprint-smoke.sh を SSoT とする。
+#
 # 計測内容:
 #   SC-1: session-start-dispatcher を 隔離環境 (/dev/null stdin) で実行し stdout バイト数を取得。
 #         H4: 固定 mode.yml=normal + 空 list.md + HOME 隔離 で決定論化 (実 project 状態依存排除)。
 #   SC-2: 現状値を記録し、800 超過で WARN (fail にしない)。
 #         H4: hard-fail 上限 5000 chars 追加 (WARN 800 + HARD_FAIL 5000 の 2 段構成)。
+#         注: hard cap 800 は sessionstart-footprint-smoke.sh が担当 (SSoT)。
 #   SC-3: bootstrap 出力が非空であること を FAIL 検出 (session-start-wrapper 無音化を回帰検出)。
 #         H4: 旧実装は空出力を warn-pass にしていたが、非空を hard assert に変更。
 #   SC-4: 出力が有効 UTF-8 / printable であることを確認 (制御文字注入チェック)。

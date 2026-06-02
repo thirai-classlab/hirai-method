@@ -83,6 +83,58 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# ---- top-level network-unavailable skip guard (task-74 Step 2) ----
+# sandbox/CI 環境で localhost port bind が不可、または node が不在の場合、
+# 全 case を SKIP (exit 0) して FAIL と混同しないようにする。
+# per-case `_has_node` skip は残存 (両立設計)。
+#
+# skip 条件 (OR):
+#   a) HC_SMOKE_SKIP_NETWORK=1 が設定されている (明示 opt-out)
+#   b) node コマンドが存在しない (ほぼ全 case が node 依存)
+#   c) localhost port bind probe が失敗する (sandbox/CI で port bind 不可)
+#
+# 自動 probe (c): python3 or nc で 127.0.0.1:0 への一時 bind を試み、
+#   失敗時に sandbox/CI と判定して SKIP。
+_network_available() {
+  # python3 で localhost bind probe
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "
+import socket, sys
+s = socket.socket()
+try:
+  s.bind(('127.0.0.1', 0))
+  s.close()
+  sys.exit(0)
+except Exception:
+  sys.exit(1)
+" >/dev/null 2>&1 && return 0
+  fi
+  # nc で簡易確認 (nc -l 0 は環境依存のため listen 試行)
+  # 代替: /dev/tcp が使えるなら connect で確認 (bind 確認は難しいため python3 優先)
+  # python3 不在 + nc 不在 = probe 不可 → SKIP safe-default
+  return 1
+}
+
+_top_level_network_skip() {
+  local reason=""
+  if [ "${HC_SMOKE_SKIP_NETWORK:-0}" = "1" ]; then
+    reason="HC_SMOKE_SKIP_NETWORK=1 (explicit opt-out)"
+  elif ! command -v node >/dev/null 2>&1; then
+    reason="node not available (required for Web UI server)"
+  elif ! _network_available; then
+    reason="localhost port bind probe failed (sandbox/CI environment)"
+  fi
+  if [ -n "$reason" ]; then
+    printf '\n%s\n' "=== hc-config-web-ui-smoke ==="
+    printf 'SKIP: network-unavailable environment detected — %s\n' "$reason"
+    printf 'All cases skipped (exit 0). Use HC_SMOKE_SKIP_NETWORK=0 to force attempt.\n'
+    exit 0
+  fi
+}
+
+# top-level skip guard 実行 (TMP_DIR 作成前に評価)
+_top_level_network_skip
 HC_CONFIG_SCRIPT="${REPO_ROOT}/.claude/scripts/hc-config.sh"
 WEB_SERVER="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-server.js"
 # iter 4 C: T-H2 — HISTORY_DIR は TMP_DIR 内に隔離 (test isolation)

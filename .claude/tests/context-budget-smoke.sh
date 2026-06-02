@@ -95,8 +95,10 @@ run_case() {
 }
 
 # 1. 60% tier: ratio 60.5% (605K / 1M) ≥ 0.60 → fire tier 60
-run_case "60pct fires at default threshold (loop mode)" "fire" "60" \
-  HC_MODE=loop -- "$FIXTURES/transcript-60pct.jsonl" "case-60"
+# task-74: repo の context_budget_threshold=0.66 に依存せず HC_CONTEXT_BUDGET_THRESHOLD=0.60 を
+# 明示 set して決定論化 (Case 10 の env override パターン踏襲、spec-drift 修正)。
+run_case "60pct fires at threshold 0.60 (loop mode)" "fire" "60" \
+  HC_MODE=loop HC_CONTEXT_BUDGET_THRESHOLD=0.60 -- "$FIXTURES/transcript-60pct.jsonl" "case-60"
 
 # 2. 80% tier: ratio 81.0% (810K / 1M) ≥ 0.80 → fire tier 80
 run_case "80pct fires (loop mode)" "fire" "80" \
@@ -115,15 +117,17 @@ run_case "Normal mode silent even at 95pct" "silent" "" \
   HC_MODE=normal -- "$FIXTURES/transcript-95pct.jsonl" "case-normal"
 
 # 6. spam 防止: 同一 session で 60% を 2 回呼ぶ → 1 回目 fire / 2 回目 silent
+# task-74: 60pct fixture (0.605) は repo threshold 0.66 未満で silent になるため、
+# HC_CONTEXT_BUDGET_THRESHOLD=0.60 を明示 set して決定論化 (Case 1 と同じ spec-drift 修正)。
 {
   STATE_DIR="$STATE_BASE/case-spam"
   mkdir -p "$STATE_DIR"
   INPUT=$(_make_input "$FIXTURES/transcript-60pct.jsonl" "case-spam")
 
   # 1st call: must fire
-  out1=$(echo "$INPUT" | env HC_MODE=loop HC_CONTEXT_BUDGET_STATE_DIR="$STATE_DIR" bash "$HOOK" 2>&1)
+  out1=$(echo "$INPUT" | env HC_MODE=loop HC_CONTEXT_BUDGET_THRESHOLD=0.60 HC_CONTEXT_BUDGET_STATE_DIR="$STATE_DIR" bash "$HOOK" 2>&1)
   # 2nd call: must NOT fire (already warned for tier 60)
-  out2=$(echo "$INPUT" | env HC_MODE=loop HC_CONTEXT_BUDGET_STATE_DIR="$STATE_DIR" bash "$HOOK" 2>&1)
+  out2=$(echo "$INPUT" | env HC_MODE=loop HC_CONTEXT_BUDGET_THRESHOLD=0.60 HC_CONTEXT_BUDGET_STATE_DIR="$STATE_DIR" bash "$HOOK" 2>&1)
 
   fire1="no"; fire2="no"
   printf '%s' "$out1" | grep -q "system-reminder" && fire1="yes"
