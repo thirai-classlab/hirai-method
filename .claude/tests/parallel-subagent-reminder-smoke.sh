@@ -18,6 +18,10 @@
 #            + parallel warning は solo の場合でも独立して出ることを確認
 #   Case 9:  TTL 境界条件 (TTL 超過 → 単発扱い warning / TTL 内 → silent)
 #   Case 10: subagent_type 不在 / null → general-purpose mapping 対象外、exit 0
+#   Case 13 (task-75): streak=1 (連続単発 1) → tier1 hint (既存文言「並列性 hint」維持)
+#   Case 14 (task-75): streak=2 (連続単発 2) → tier2 強 reminder 文字列 present
+#   Case 15 (task-75): streak>=3 (連続単発 3) → tier3「Workflow ツール」+「task-68」present
+#   Case 16 (task-75): 並列 batch (近接 ts 2 entry) 後の単発 → streak リセット → tier1
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (CLAUDE.md Critical Lesson HIGH 遵守)
@@ -680,9 +684,162 @@ case_12_code_reviewer_compound_word_valid_output() {
 }
 
 # ===================================================================
+# task-75: escalating streak tier cases (13-16)
+# ===================================================================
+# streak state helper: write N solo entries (distinct ts beyond batch window).
+# entries are ts = now - gap*(N..1) so each is its own batch (single-entry cluster).
+# 本起動 (append) で streak は N+1 になる前提で tier 閾値を狙う。
+_setup_solo_streak() {
+  local root="$1"
+  local n="$2"
+  local state_dir="${root}/.claude/.parallel-subagent-state"
+  mkdir -p "$state_dir"
+  local ts_now
+  ts_now="$(date +%s)"
+  local gap=30  # batch window (5s default) より十分離す = 各 entry 独立 batch
+  local json="["
+  local i
+  for (( i=n; i>=1; i-- )); do
+    local ts=$(( ts_now - gap * i ))
+    json+="{\"ts\":${ts},\"type\":\"general-purpose\"}"
+    [ "$i" -gt 1 ] && json+=","
+  done
+  json+="]"
+  printf '%s\n' "$json" > "${state_dir}/recent.json"
+}
+
+# 並列 batch リセット用: 最新側に近接 ts 2 entry (= 1 並列 batch) を置く。
+# その後の本起動 (単発) で streak は打ち切られ tier1 に戻ること。
+_setup_parallel_batch_then_solo() {
+  local root="$1"
+  local state_dir="${root}/.claude/.parallel-subagent-state"
+  mkdir -p "$state_dir"
+  local ts_now
+  ts_now="$(date +%s)"
+  # 古い側に連続単発 (streak を稼ぐ) → 直近に並列 batch 2 件 (近接 ts)
+  # 本起動はさらに後 (now) の単発。並列 batch が最新側 cluster の打ち切りになる。
+  local solo1=$(( ts_now - 120 ))
+  local solo2=$(( ts_now - 90 ))
+  local par1=$(( ts_now - 3 ))
+  local par2=$(( ts_now - 2 ))
+  printf '[{"ts":%s,"type":"general-purpose"},{"ts":%s,"type":"general-purpose"},{"ts":%s,"type":"general-purpose"},{"ts":%s,"type":"general-purpose"}]\n' \
+    "$solo1" "$solo2" "$par1" "$par2" > "${state_dir}/recent.json"
+}
+
+# Case 13: streak=1 → tier1 (現状 hint「並列性 hint」維持)
+case_13_streak1_tier1() {
+  local root
+  root=$(_root_for 13)
+  mkdir -p "${root}/.claude"
+  _setup_state_dir "$root" "empty"
+
+  local input_json
+  input_json=$(printf '{"tool_name":"Agent","tool_input":{"description":"新 hook 実装を行う","run_in_background":true,"subagent_type":"general-purpose"}}')
+
+  local out code
+  out=$(CLAUDE_PROJECT_DIR="$root" bash "$HOOK" <<< "$input_json" 2>&1)
+  code=$?
+  if [ "$code" -ne 0 ]; then printf 'expected exit 0, got %d\n' "$code" >&2; return 1; fi
+
+  # tier1: 既存「並列性 hint」文言が present、tier2/3 文言は absent
+  if ! printf '%s' "$out" | grep -q "並列性 hint"; then
+    printf 'expected tier1 (並列性 hint), got: [%s]\n' "$(printf '%s' "$out" | head -c 300)" >&2
+    return 1
+  fi
+  if printf '%s' "$out" | grep -qi "Workflow\|連続で単発"; then
+    printf 'expected NO tier2/3 escalation at streak=1, got: [%s]\n' "$(printf '%s' "$out" | head -c 300)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Case 14: streak=2 → tier2 強 reminder
+case_14_streak2_tier2() {
+  local root
+  root=$(_root_for 14)
+  mkdir -p "${root}/.claude"
+  _setup_solo_streak "$root" 1  # 既存 1 solo + 本起動 = streak 2
+
+  local input_json
+  input_json=$(printf '{"tool_name":"Agent","tool_input":{"description":"新 hook 実装を行う","run_in_background":true,"subagent_type":"general-purpose"}}')
+
+  local out code
+  out=$(CLAUDE_PROJECT_DIR="$root" bash "$HOOK" <<< "$input_json" 2>&1)
+  code=$?
+  if [ "$code" -ne 0 ]; then printf 'expected exit 0, got %d\n' "$code" >&2; return 1; fi
+
+  # tier2: 「同一 message 内で複数 Agent を並列起動」相当 + 「連続で単発」文言
+  if ! printf '%s' "$out" | grep -q "同一 message 内で複数 Agent を並列起動"; then
+    printf 'expected tier2 (同一 message 内で並列起動), got: [%s]\n' "$(printf '%s' "$out" | head -c 400)" >&2
+    return 1
+  fi
+  if ! printf '%s' "$out" | grep -q "連続で単発"; then
+    printf 'expected tier2 streak count phrase (連続で単発), got: [%s]\n' "$(printf '%s' "$out" | head -c 400)" >&2
+    return 1
+  fi
+  # tier3 文言はまだ出ない
+  if printf '%s' "$out" | grep -q "Workflow"; then
+    printf 'expected NO tier3 (Workflow) at streak=2, got: [%s]\n' "$(printf '%s' "$out" | head -c 400)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Case 15: streak>=3 → tier3 最強 (Workflow + task-68)
+case_15_streak3_tier3() {
+  local root
+  root=$(_root_for 15)
+  mkdir -p "${root}/.claude"
+  _setup_solo_streak "$root" 2  # 既存 2 solo + 本起動 = streak 3
+
+  local input_json
+  input_json=$(printf '{"tool_name":"Agent","tool_input":{"description":"新 hook 実装を行う","run_in_background":true,"subagent_type":"general-purpose"}}')
+
+  local out code
+  out=$(CLAUDE_PROJECT_DIR="$root" bash "$HOOK" <<< "$input_json" 2>&1)
+  code=$?
+  if [ "$code" -ne 0 ]; then printf 'expected exit 0, got %d\n' "$code" >&2; return 1; fi
+
+  if ! printf '%s' "$out" | grep -q "Workflow"; then
+    printf 'expected tier3 (Workflow tool), got: [%s]\n' "$(printf '%s' "$out" | head -c 400)" >&2
+    return 1
+  fi
+  if ! printf '%s' "$out" | grep -q "task-68"; then
+    printf 'expected tier3 (task-68 reference), got: [%s]\n' "$(printf '%s' "$out" | head -c 400)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Case 16: 並列 batch → streak リセット → 本起動 tier1
+case_16_parallel_batch_resets_streak() {
+  local root
+  root=$(_root_for 16)
+  mkdir -p "${root}/.claude"
+  _setup_parallel_batch_then_solo "$root"
+
+  local input_json
+  input_json=$(printf '{"tool_name":"Agent","tool_input":{"description":"新 hook 実装を行う","run_in_background":true,"subagent_type":"general-purpose"}}')
+
+  # TTL を十分大きく (全 entry 残す) して streak 算出だけを検証
+  local out code
+  out=$(HC_PARALLEL_SUBAGENT_TTL_SEC=3600 CLAUDE_PROJECT_DIR="$root" bash "$HOOK" <<< "$input_json" 2>&1)
+  code=$?
+  if [ "$code" -ne 0 ]; then printf 'expected exit 0, got %d\n' "$code" >&2; return 1; fi
+
+  # 最新側に並列 batch があるので streak は打ち切られ tier1 (本起動 = streak 1)
+  # tier2/3 escalation 文言が出ないこと
+  if printf '%s' "$out" | grep -qi "Workflow\|連続で単発"; then
+    printf 'expected streak reset to tier1 after parallel batch, got escalation: [%s]\n' "$(printf '%s' "$out" | head -c 400)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# ===================================================================
 # main
 # ===================================================================
-TOTAL_CASES=13  # Case 9 は sub-case A+B で 2 件扱い、Case 11/12 追加 (R4-H2 regression)
+TOTAL_CASES=17  # Case 9 は sub-case A+B で 2 件、Case 11/12 (R4-H2), Case 13-16 (task-75 escalation)
 
 printf '===== task #38 parallel-subagent-reminder smoke =====\n'
 printf 'HOOK: %s\n' "$HOOK"
@@ -736,6 +893,19 @@ run_case_verbose 11 'preview substring -> not excluded as review -> parallel war
 
 run_case_verbose 12 'code-reviewer compound word -> valid JSON + no error [R4-H2]' \
   case_12_code_reviewer_compound_word_valid_output
+
+# Case 13-16: task-75 escalating streak tiers
+run_case_verbose 13 'streak=1 -> tier1 hint (existing 並列性 hint) [task-75]' \
+  case_13_streak1_tier1
+
+run_case_verbose 14 'streak=2 -> tier2 strong reminder (同一 message 内で並列起動) [task-75]' \
+  case_14_streak2_tier2
+
+run_case_verbose 15 'streak>=3 -> tier3 (Workflow ツール + task-68) [task-75]' \
+  case_15_streak3_tier3
+
+run_case_verbose 16 'parallel batch -> streak reset -> tier1 [task-75]' \
+  case_16_parallel_batch_resets_streak
 
 printf '\n===== Result =====\n'
 printf 'PASS: %d / %d\n' "$PASS" "$TOTAL_CASES"
