@@ -592,19 +592,28 @@ function cleanupHistoryFiles() {
 // preset diff 計算 / apply (atomic) / rollback (chain repair)
 // ============================================================
 
-// H-12 + draft §3: diff の changed 判定は hcGet 成功 + 値差分の AND
-//   hcGet が null (get 失敗) なら changed: false に降格 (apply 対象から除外)
+// H-12 + draft §3: diff の changed 判定は現在値取得成功 + 値差分の AND
+//   現在値が取得できない (key 不在) なら changed: false に降格 (apply 対象から除外)
 //   effect: metadata から lookup
+// task-76 Step 1 (diff「Failed to fetch」修復): key ごとの hcGet ループ
+//   (= N 回の spawnSync で Node event loop を同期ブロック、ブラウザ keep-alive
+//    並列接続で hung connection → TypeError: Failed to fetch) を、hcListAll() で
+//   全 key 値を 1 回だけ取得し cache 参照する形に変更。これで 2 回目以降の diff
+//   request の event loop ブロックが 0ms 化する。key 不在は null フォールバック
+//   (旧 hcGet 失敗時と同義: current='<unknown>' + changed:false + error 注記)。
+//   API response 構造 (changes 配列の各要素 key/current/new/changed/effect) は不変。
 function computePresetDiff(presetName, overrides) {
   const preset = PRESETS[presetName]
   if (!preset) return null
   const effectMap = getEffectMap(overrides)
+  // 全 key 値を 1 spawn で一括取得 (cache hit で 0 spawn)。key ごとの hcGet を排除。
+  const allValues = hcListAll(overrides)
   const changes = []
   for (const [key, newVal] of Object.entries(preset.values)) {
-    const currentVal = hcGet(key, overrides)
+    const currentVal = Object.prototype.hasOwnProperty.call(allValues, key) ? allValues[key] : null
     const effect = effectMap[key] || ''
-    if (currentVal === null) {
-      // hcGet 失敗 → changed: false に降格 + error 注記 (UI 側で skip 表示)
+    if (currentVal === null || currentVal === undefined) {
+      // 現在値取得不可 (key 不在) → changed: false に降格 + error 注記 (UI 側で skip 表示)
       changes.push({
         key,
         current: '<unknown>',

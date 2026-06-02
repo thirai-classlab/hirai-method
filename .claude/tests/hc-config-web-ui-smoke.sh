@@ -2317,6 +2317,128 @@ _case_s47() (
 )
 
 # ============================================================
+# task-76 Step 1 新規 case (S-48 / S-49)
+# diff「Failed to fetch」バグ修復 (computePresetDiff の hcGet N 回ループ →
+#   hcListAll() cache 参照 1 回。N×spawnSync の Node event loop 同期ブロックが
+#   ブラウザ keep-alive 並列接続で hung connection → Failed to fetch を起こす真因)。
+# API response 後方互換 (changes[].key/current/new/changed/effect) を維持しつつ、
+#   (a) 正常 JSON 応答 (b) 連続/並列呼び出しでの応答性 を検証する。
+# ============================================================
+
+# ============================================================
+# Case S-48: GET /api/preset/:name/diff 正常 JSON 応答 + changed field 後方互換
+#   複数 preset (key 数の多い production-typescript-enterprise 含む) で diff を取得し、
+#   .changes 配列の各要素が key/current/new/changed/effect を持つことを検証。
+#   修正前は per-key hcGet で同じ JSON 構造を返すため本 case 単体では緑だが、
+#   S-49 (連続/並列応答性) と対で「N spawn ブロック解消」を担保する回帰 anchor。
+# ============================================================
+_case_s48() (
+  set -uo pipefail
+  local port="$1"
+
+  local p
+  for p in poc-no-git production-typescript-enterprise harness-development; do
+    local body
+    body=$(_curl_json "http://127.0.0.1:${port}/api/preset/${p}/diff")
+
+    # 正常 JSON: .changes + .preset
+    if ! printf '%s' "$body" | grep -q '"changes"'; then
+      printf 'S-48: /api/preset/%s/diff missing .changes field (body: %s)\n' "$p" "$body" >&2
+      return 1
+    fi
+    if ! printf '%s' "$body" | grep -q "\"preset\""; then
+      printf 'S-48: /api/preset/%s/diff missing .preset field\n' "$p" >&2
+      return 1
+    fi
+
+    # 各 changes 要素の後方互換 field (key/current/new/changed/effect)
+    local field
+    for field in '"key"' '"current"' '"new"' '"changed"' '"effect"'; do
+      if ! printf '%s' "$body" | grep -q "$field"; then
+        printf 'S-48: /api/preset/%s/diff .changes missing field %s (後方互換違反、body: %s)\n' "$p" "$field" "$body" >&2
+        return 1
+      fi
+    done
+  done
+
+  return 0
+)
+
+# ============================================================
+# Case S-49: diff endpoint 連続/並列呼び出しの応答性 (Failed to fetch 回帰防止)
+#   真因: computePresetDiff が key ごとに hcGet (= spawnSync) を呼び Node event loop を
+#   同期ブロック。連続/並列 diff request で hung connection → TypeError: Failed to fetch。
+#   検証: 同一 server に対し diff request を 6 連続実行し、全て 200 + .changes を返すこと、
+#   かつ全体が応答性閾値内 (timeout なし) で完了することを確認する。
+#   修正後 (hcListAll cache 参照) は 2 回目以降 spawn 0 で高速応答する。
+#   curl --max-time を 5s に絞り、1 件でも timeout/非 200 なら FAIL (hung connection 検出)。
+# ============================================================
+_case_s49() (
+  set -uo pipefail
+  local port="$1"
+
+  # cache を温める意図はなく、連続 request 全ての健全性を検証する。
+  # key 数の多い production-typescript-enterprise を含め 6 回連続実行。
+  local presets="production-typescript-enterprise production-python production-rust production-go harness-development inner-typescript"
+  local i=0
+  local p
+  for p in $presets; do
+    i=$((i + 1))
+    # --max-time 5: hung connection なら timeout → 空応答/非 200 で FAIL
+    local http_code
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 \
+      "http://127.0.0.1:${port}/api/preset/${p}/diff" 2>/dev/null || true)
+    if [ "$http_code" != "200" ]; then
+      printf 'S-49: diff #%d (%s) returned HTTP %s (expected 200; hung connection/timeout の疑い)\n' "$i" "$p" "$http_code" >&2
+      return 1
+    fi
+    # body に .changes があること (空応答でないこと = hung でない)
+    local body
+    body=$(_curl_json "http://127.0.0.1:${port}/api/preset/${p}/diff")
+    if ! printf '%s' "$body" | grep -q '"changes"'; then
+      printf 'S-49: diff #%d (%s) body に .changes が無い (hung/部分応答の疑い、body: %s)\n' "$i" "$p" "$body" >&2
+      return 1
+    fi
+  done
+
+  # 並列 diff 4 本同時 + current-preset (hcListAll 2s spawn) を背景で流して全件健全か確認。
+  # event loop が N spawn でブロックされていると並列接続が hung → 一部が空/非 200 になる。
+  curl -s -o /dev/null --connect-timeout 3 --max-time 8 \
+    "http://127.0.0.1:${port}/api/current-preset" &
+  local cp_pid=$!
+  local par_fail=0
+  local par_pids=""
+  local par_out_prefix="${TMP_DIR}/s49-par"
+  local idx=0
+  for p in production-typescript-enterprise production-python production-rust production-go; do
+    idx=$((idx + 1))
+    ( curl -s --connect-timeout 3 --max-time 6 \
+        "http://127.0.0.1:${port}/api/preset/${p}/diff" > "${par_out_prefix}-${idx}.json" 2>/dev/null || true ) &
+    par_pids="${par_pids} $!"
+  done
+  for pid in $par_pids; do
+    wait "$pid" 2>/dev/null || true
+  done
+  wait "$cp_pid" 2>/dev/null || true
+
+  idx=0
+  for p in production-typescript-enterprise production-python production-rust production-go; do
+    idx=$((idx + 1))
+    if ! grep -q '"changes"' "${par_out_prefix}-${idx}.json" 2>/dev/null; then
+      printf 'S-49: 並列 diff #%d (%s) が .changes を返さなかった (hung connection = Failed to fetch 再現)\n' "$idx" "$p" >&2
+      par_fail=$((par_fail + 1))
+    fi
+  done
+
+  if [ $par_fail -gt 0 ]; then
+    printf 'S-49: 並列 diff %d 件が hung (Failed to fetch 真因 = N spawn event loop block の疑い)\n' "$par_fail" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -2457,7 +2579,7 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
 
   if [ -z "$SHARED_PORT" ]; then
     printf '  WARN: shared server failed to start, skipping shared-server cases\n'
-    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44; do
+    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49; do
       _record SKIP "$cid" "shared server not available"
     done
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
@@ -2692,10 +2814,21 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-47" "GET /api/keys key set == yml top-level keys (full parity)"
     fi
 
+    # --- task-76 Step 1 新規 case (S-48 / S-49): diff Failed to fetch 修復 ---
+    printf '\n%s\n' '--- task-76 Step 1 新規 case (S-48 / S-49) ---'
+
+    if _case_s48 "$_PORT" 2>/dev/null; then _record PASS "S-48" "GET /api/preset/:name/diff 正常 JSON + changed field 後方互換"
+    else                                     _record FAIL "S-48" "GET /api/preset/:name/diff 正常 JSON + changed field 後方互換"
+    fi
+
+    if _case_s49 "$_PORT" 2>/dev/null; then _record PASS "S-49" "diff 連続/並列呼び出しの応答性 (Failed to fetch 回帰防止)"
+    else                                     _record FAIL "S-49" "diff 連続/並列呼び出しの応答性 (Failed to fetch 回帰防止)"
+    fi
+
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
   # S-37 / S-38 / S-41 / S-42 / S-45 / S-46 は file-only (port 不要) なので node 不在でも実行
