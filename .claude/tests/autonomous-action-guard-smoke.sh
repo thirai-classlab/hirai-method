@@ -52,6 +52,7 @@ BYPASS_LOG="$REPO_ROOT/.claude/.workflow-state/bypass.log"
 
 PASS=0
 FAIL=0
+SKIP=0
 FAILED_CASES=()
 
 # Bash JSON input
@@ -86,39 +87,21 @@ except Exception:
 }
 
 # === Case 1: Loop + git push origin main → BLOCK ===
+# [OBSOLETE: task-39 2026-05-25] git push origin main は自律実行可となり BLOCK されなくなった
+# (modes.md 遵守事項 8 緩和)。旧 BLOCK 期待は stale につき skip。
 case1_loop_git_push_block() {
-  local label="Case 1: Loop + 'git push origin main' → BLOCK"
-  local cmd="git push origin main"
-  local out decision
-  out=$(json_bash_input "$cmd" | HC_MODE=loop env "${COMMON_ENV[@]}" bash "$HOOK" 2>/dev/null)
-  decision=$(extract_decision "$out")
-
-  if [ "$decision" = "block" ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (decision=$decision)")
-    printf "  FAIL: %s\n    decision: %s\n    out: %s\n" "$label" "$decision" "$out"
-  fi
+  local label="Case 1: Loop + 'git push origin main' → BLOCK [OBSOLETE: task-39]"
+  SKIP=$((SKIP + 1))
+  printf "  SKIP (obsolete): %s\n" "$label"
 }
 
 # === Case 2: Loop + gh pr create → BLOCK ===
+# [OBSOLETE: task-39 2026-05-25] gh pr create は自律実行可となり BLOCK されなくなった
+# (modes.md 遵守事項 8 緩和)。旧 BLOCK 期待は stale につき skip。
 case2_loop_gh_pr_create_block() {
-  local label="Case 2: Loop + 'gh pr create' → BLOCK"
-  local cmd="gh pr create --title test --body body"
-  local out decision
-  out=$(json_bash_input "$cmd" | HC_MODE=loop env "${COMMON_ENV[@]}" bash "$HOOK" 2>/dev/null)
-  decision=$(extract_decision "$out")
-
-  if [ "$decision" = "block" ]; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (decision=$decision)")
-    printf "  FAIL: %s\n    decision: %s\n    out: %s\n" "$label" "$decision" "$out"
-  fi
+  local label="Case 2: Loop + 'gh pr create' → BLOCK [OBSOLETE: task-39]"
+  SKIP=$((SKIP + 1))
+  printf "  SKIP (obsolete): %s\n" "$label"
 }
 
 # === Case 3: Loop + vercel --prod → BLOCK ===
@@ -140,24 +123,13 @@ case3_loop_vercel_prod_block() {
 }
 
 # === Case 4: Normal + git push origin main → PASS + additionalContext warning ===
+# [OBSOLETE: task-39 2026-05-25] git push origin main が緩和され、Normal モードでも
+# autonomous-action-guard が当該コマンドに warning context を出さなくなった。
+# 旧「Normal で warning context 付与」期待は stale につき skip。
 case4_normal_git_push_context_warning() {
-  local label="Case 4: Normal + 'git push origin main' → PASS w/ additionalContext"
-  local cmd="git push origin main"
-  local out decision ctx
-  # HC_AUTONOMOUS_LOG_NORMAL_RESTRICTED=false で bypass.log 記録を抑止
-  # (smoke で live log を変更したくない)
-  out=$(json_bash_input "$cmd" | HC_MODE=normal HC_AUTONOMOUS_LOG_NORMAL_RESTRICTED=false env "${COMMON_ENV[@]}" bash "$HOOK" 2>/dev/null)
-  decision=$(extract_decision "$out")
-  ctx=$(extract_additional_context "$out")
-
-  if [ "$decision" != "block" ] && printf '%s' "$ctx" | grep -q "autonomous-action-guard"; then
-    PASS=$((PASS + 1))
-    printf "  PASS: %s\n" "$label"
-  else
-    FAIL=$((FAIL + 1))
-    FAILED_CASES+=("$label (decision=$decision ctx_present=$([ -n "$ctx" ] && echo yes || echo no))")
-    printf "  FAIL: %s\n    decision: %s\n    ctx: %s\n    out: %s\n" "$label" "$decision" "$ctx" "$out"
-  fi
+  local label="Case 4: Normal + 'git push origin main' → PASS w/ additionalContext [OBSOLETE: task-39]"
+  SKIP=$((SKIP + 1))
+  printf "  SKIP (obsolete): %s\n" "$label"
 }
 
 # === Case 5: Loop + ECC_AUTONOMOUS_ACTION_OVERRIDE=1 → PASS + bypass.log 記録 ===
@@ -196,10 +168,11 @@ case3_loop_vercel_prod_block
 case4_normal_git_push_context_warning
 case5_loop_bypass_env_with_log
 
-TOTAL=$((PASS + FAIL))
+TOTAL=$((PASS + FAIL + SKIP))
 printf "\n===== Result =====\n"
 printf "PASS: %d / %d\n" "$PASS" "$TOTAL"
 printf "FAIL: %d / %d\n" "$FAIL" "$TOTAL"
+printf "SKIP: %d / %d (obsolete: task-39)\n" "$SKIP" "$TOTAL"
 
 if [ "$FAIL" -gt 0 ]; then
   printf "Failed cases:\n"

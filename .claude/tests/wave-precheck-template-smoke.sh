@@ -32,6 +32,10 @@ REPO_ROOT="$(pwd)"
 
 TEMPLATE_FILE="${REPO_ROOT}/.claude/templates/docs/tasks/_TASK_TEMPLATE.md"
 WORKFLOW_RULE="${REPO_ROOT}/.claude/rules/workflow.md"
+# task-74: task-51 Layer A/B 再構造で "git log --grep" 記述が workflow.md (Layer A) から
+# rules-details/workflow/14-stage.md (Stage 8) + 10-stage.md (Stage 7) (Layer B) へ移動。
+WORKFLOW_LAYERB_NEW="${REPO_ROOT}/.claude/rules-details/workflow/14-stage.md"
+WORKFLOW_LAYERB_MODIFY="${REPO_ROOT}/.claude/rules-details/workflow/10-stage.md"
 NEW_FEATURE_CMD="${REPO_ROOT}/.claude/commands/new-feature.md"
 MODIFY_FEATURE_CMD="${REPO_ROOT}/.claude/commands/modify-feature.md"
 
@@ -73,19 +77,29 @@ case1() {
   fi
 }
 
-# Case 2: workflow.md Stage 8 / 7 周辺に "git log --grep" 最低 2 hit (W2)
+# Case 2: Layer B (14-stage Stage 8 / 10-stage Stage 7) に "git log --grep" が各 1 hit 以上、
+#         かつ Layer A workflow.md が両 Layer B file への pointer を保持 (W2、task-74 spec-drift 修正)
 case2() {
-  local label="Case 2: workflow.md Stage 8 (new) and Stage 7 (modify) reference 'git log --grep'"
-  if [ ! -f "$WORKFLOW_RULE" ]; then
-    _record "$label" "FAIL" "file missing: $WORKFLOW_RULE"
+  local label="Case 2: Layer B 14-stage(Stage 8)/10-stage(Stage 7) reference 'git log --grep' + Layer A pointer"
+  if [ ! -f "$WORKFLOW_LAYERB_NEW" ] || [ ! -f "$WORKFLOW_LAYERB_MODIFY" ]; then
+    _record "$label" "FAIL" "Layer B file missing (14-stage or 10-stage)"
     return
   fi
-  local hit_count
-  hit_count=$(grep -E "git log.*--grep" "$WORKFLOW_RULE" | wc -l | tr -d ' ')
-  if [ "$hit_count" -ge 2 ]; then
-    _record "$label" "PASS" "hit count: $hit_count (need >= 2)"
+  if [ ! -f "$WORKFLOW_RULE" ]; then
+    _record "$label" "FAIL" "Layer A file missing: $WORKFLOW_RULE"
+    return
+  fi
+  local new_hit modify_hit
+  new_hit=$(grep -E "git log.*--grep" "$WORKFLOW_LAYERB_NEW" | wc -l | tr -d ' ')
+  modify_hit=$(grep -E "git log.*--grep" "$WORKFLOW_LAYERB_MODIFY" | wc -l | tr -d ' ')
+  # Layer A pointer: workflow.md が両 Layer B file への参照を保持
+  local ptr_new ptr_modify
+  if grep -q "workflow/14-stage.md" "$WORKFLOW_RULE"; then ptr_new=1; else ptr_new=0; fi
+  if grep -q "workflow/10-stage.md" "$WORKFLOW_RULE"; then ptr_modify=1; else ptr_modify=0; fi
+  if [ "$new_hit" -ge 1 ] && [ "$modify_hit" -ge 1 ] && [ "$ptr_new" = "1" ] && [ "$ptr_modify" = "1" ]; then
+    _record "$label" "PASS" "14-stage=$new_hit 10-stage=$modify_hit ptr(new=$ptr_new,modify=$ptr_modify)"
   else
-    _record "$label" "FAIL" "hit count: $hit_count (need >= 2)"
+    _record "$label" "FAIL" "14-stage=$new_hit 10-stage=$modify_hit ptr(new=$ptr_new,modify=$ptr_modify)"
   fi
 }
 

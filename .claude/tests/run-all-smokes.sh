@@ -84,22 +84,30 @@ _get_smoke_category() {
 
 # ============================================================
 # expected-fail manifest (bash 3.2 対応: case 文ベース)
+#
+# task-74 iter-1: manifest を「正当な expected fail」のみに縮小。
+#   - environmental (preset 緩和): harness-dev preset で feature toggle OFF により
+#     guard が advisory 化 / no-op 化する。team-default/strict では BLOCK/WARN する。
+#     恒久 expected (preset 設計上の正常 fail)。
+#   - flaky (quarantine): port contention / worktree timing 由来の間欠 fail。
+#     恒久 expected ではなく next-actions #72 で root-cause 追跡対象。
+#
+# 削除済 (iter-1 で本来処理して PASS 化):
+#   - stale-harness-detect-smoke: config-loader real bug fix (修正 1)
+#   - autonomous-action-guard/audit-followups/loop-auto-progress: obsolete case skip 化 (修正 2)
+#   - context-budget/wave-precheck-template/custom-pm-commands: spec-drift 決定論修正 (修正 3)
 # ============================================================
 _is_expected_fail() {
   local name="$1"
+  # environmental (preset 緩和、恒久 expected): gateguard / workflow-guard /
+  #   task-rule-guard / list-md-plan-first-reminder / tool-call-slip-detector
+  # flaky (quarantine、next-actions #72 で根本追跡): hc-config-web-ui / install-sh-sync-drift
   case "$name" in
     gateguard-smoke|\
     workflow-guard-smoke|\
     task-rule-guard-smoke|\
     list-md-plan-first-reminder-smoke|\
-    autonomous-action-guard-smoke|\
-    audit-followups-smoke|\
-    loop-auto-progress-smoke|\
-    context-budget-smoke|\
     tool-call-slip-detector-smoke|\
-    stale-harness-detect-smoke|\
-    wave-precheck-template-smoke|\
-    custom-pm-commands-smoke|\
     hc-config-web-ui-smoke|\
     install-sh-sync-drift-smoke)
       return 0 ;;
@@ -108,37 +116,28 @@ _is_expected_fail() {
   esac
 }
 
+# NB (fix 5, case 単位 parse の限界): 下記 reason の "Case N/M" は当該 smoke が
+# fail する想定 case。現 runner は smoke 単位 (exit code) で EXPECTED-FAIL 判定するため、
+# 列挙 case 以外が新たに fail しても smoke 全体 exit 1 として同じく EXPECTED-FAIL に
+# 吸収され UNEXPLAINED にならない。本来は列挙 case 以外の fail を UNEXPLAINED 扱い
+# すべきだが case 単位 parse は別 task。SMOKE-CLASSIFICATION.md §limitation に記録。
 _get_expected_reason() {
   local name="$1"
   case "$name" in
     gateguard-smoke)
-      printf '[environmental] harness-dev preset で gateguard が advisory 化 (feature_gateguard_enabled を OFF 設定)。team-default/strict では BLOCK される。enforcement_matrix.gateguard.disabled_reason 参照。Case 1/3 が fail するのは正常。' ;;
+      printf '[environmental] harness-dev preset で gateguard が advisory 化 (feature_gateguard_enabled を OFF 設定)。team-default/strict では BLOCK される。enforcement_matrix.gateguard.disabled_reason 参照。expected fail case は Case 1/3 のみ。' ;;
     workflow-guard-smoke)
-      printf '[environmental] harness-dev preset で workflow_guard が advisory 化 (feature_workflow_guard_enabled=false)。team-default/strict では BLOCK される。Case 2/3/5 が fail するのは正常。' ;;
+      printf '[environmental] harness-dev preset で workflow_guard が advisory 化 (feature_workflow_guard_enabled=false)。team-default/strict では BLOCK される。expected fail case は Case 2/3/5 のみ。' ;;
     task-rule-guard-smoke)
-      printf '[environmental] harness-dev preset で task_rule_guard が advisory 化 (feature_task_rule_guard_enabled=false)。Case 1/4 は BLOCK 期待だが advisory で素通り。Case 12 は list-md-plan-first-reminder が同 feature で no-op。' ;;
+      printf '[environmental] harness-dev preset で task_rule_guard が advisory 化 (feature_task_rule_guard_enabled=false)。Case 1/4 は BLOCK 期待だが advisory で素通り。Case 12 は list-md-plan-first-reminder が同 feature で no-op。expected fail case は Case 1/4/12 のみ。' ;;
     list-md-plan-first-reminder-smoke)
-      printf '[environmental] feature_task_rule_guard_enabled=false により list-md-plan-first-reminder も no-op (同 feature group)。Case 1/7 が silent になるのは正常。team-default/strict では WARN が発火する。' ;;
-    autonomous-action-guard-smoke)
-      printf '[obsolete] task-39 緩和 (2026-05-25) で git push origin main/gh pr create が自律実行可となり BLOCK されなくなった。Case 1/2/4 は旧 BLOCK 期待のため fail が正常。next-actions #25/#31 既知。' ;;
-    audit-followups-smoke)
-      printf '[obsolete+spec-drift] Case 2: confidence gate が general-purpose を現在 block しない (実装変更)。Case 3/4: task-39 緩和で git push origin main が Normal/Loop ともに block されなくなった。next-actions #44 既知。' ;;
-    loop-auto-progress-smoke)
-      printf '[obsolete] task-39 緩和 (2026-05-25) で git push feature branch/gh pr create が自律実行可。Case 4 (git push) / Case 5 (gh pr create) / Case 9 (normal push context) が旧 BLOCK 期待のため fail が正常。' ;;
-    context-budget-smoke)
-      printf '[spec-drift] harness-config.yml の context_budget_threshold=0.66 (リポジトリ固有設定)。smoke は default 0.60 前提で 60pct fixture を fire 期待するが、0.66 未満のため silent。spam prevention も同様。' ;;
+      printf '[environmental] feature_task_rule_guard_enabled=false により list-md-plan-first-reminder も no-op (同 feature group)。Case 1/7 が silent になるのは正常。team-default/strict では WARN が発火する。expected fail case は Case 1/7 のみ。' ;;
     tool-call-slip-detector-smoke)
-      printf '[spec-drift] feature_tool_call_slip_detect_enabled=false (harness-config.yml) により hook が no-op。Case 1/2 の detection 期待は feature 有効時前提の stale 期待値。feature ON 環境 (consuming repo) では PASS する。' ;;
-    stale-harness-detect-smoke)
-      printf '[spec-drift] Case 6: HC_FEATURE_STALE_HARNESS_DETECT_ENABLED=false env override が config-loader 経由の is_feature_enabled に負けて no-op にならない。yml の feature_stale_harness_detect_enabled=true が優先され WARN が出続ける。' ;;
-    wave-precheck-template-smoke)
-      printf '[spec-drift] Case 2: workflow.md に "git log --grep" の記述が存在しない (0 hit)。task-56 当時に想定した Stage 8/7 の記述が workflow.md から削除または未追加。' ;;
-    custom-pm-commands-smoke)
-      printf '[spec-drift] Case 5: grep /sc:(save|load|pm) で allowed 外ファイルに残存 hit がある。除外パターンの更新漏れ。' ;;
+      printf '[environmental] feature_tool_call_slip_detect_enabled=false (harness-config.yml、誤検出ループが主因と判明し 2026-06-01 切り分けで意図的 OFF) により hook が no-op。Case 1/2 の detection 期待は feature 有効時前提。feature ON 環境 (consuming repo) では PASS する。expected fail case は Case 1/2 のみ。' ;;
     hc-config-web-ui-smoke)
-      printf '[environmental] ポート競合/サーバ起動タイミングによる間欠的 fail (flaky)。同一 run で異なる case (S-02/S-39/S-45 等) が不定期 fail する。CI sandbox のネットワーク制約または並列 run の port contention が原因。単独再実行では PASS する場合が多い。' ;;
+      printf '[flaky-quarantine] port contention / サーバ起動タイミングによる間欠 fail。同一 run で異なる case (S-02/S-39/S-45 等) が不定期 fail。単独再実行では PASS する場合が多い。恒久 expected ではなく next-actions #72 で root-cause 追跡 (web-ui port contention skip 強化)。' ;;
     install-sh-sync-drift-smoke)
-      printf '[environmental] Case C/E が特定タイミングで fail (git worktree 状態・rsync の動作タイミング依存)。単独実行では通常 PASS。parallel runner 実行時または dirty worktree 状態で間欠的に fail。' ;;
+      printf '[flaky-quarantine] git worktree 状態・rsync タイミング依存の間欠 fail (Case C/E)。単独実行では通常 PASS、parallel runner 実行時または dirty worktree で間欠 fail。恒久 expected ではなく next-actions #72 で root-cause 追跡 (install-sync sequential 実行化)。' ;;
     *)
       printf '(no reason recorded)' ;;
   esac
@@ -191,12 +190,9 @@ if [ "$LIST_ONLY" = "1" ]; then
     done
     printf '\n'
   done
-  printf '=== Expected-fail manifest ===\n\n'
+  printf '=== Expected-fail manifest (task-74 iter-1: environmental 5 + flaky 2) ===\n\n'
   for name in gateguard-smoke workflow-guard-smoke task-rule-guard-smoke \
-              list-md-plan-first-reminder-smoke autonomous-action-guard-smoke \
-              audit-followups-smoke loop-auto-progress-smoke context-budget-smoke \
-              tool-call-slip-detector-smoke stale-harness-detect-smoke \
-              wave-precheck-template-smoke custom-pm-commands-smoke \
+              list-md-plan-first-reminder-smoke tool-call-slip-detector-smoke \
               hc-config-web-ui-smoke install-sh-sync-drift-smoke; do
     reason=$(_get_expected_reason "$name")
     printf '[%s]\n  %s\n\n' "$name" "$reason"

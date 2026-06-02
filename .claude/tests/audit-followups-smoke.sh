@@ -21,7 +21,17 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 PASS=0
 FAIL=0
+SKIP=0
 FAILED_CASES=()
+
+# skip_case <id> <desc> <reason> — obsolete case を実行せず SKIP 計上
+skip_case() {
+  local case_id="$1"
+  local desc="$2"
+  local reason="$3"
+  printf '  SKIP (obsolete)  Case %s: %s [%s]\n' "$case_id" "$desc" "$reason"
+  SKIP=$((SKIP+1))
+}
 
 # run_case <id> <desc> <test_fn>
 run_case() {
@@ -58,14 +68,23 @@ case_1() {
 
 # === Case 2: F3 block 維持 (general-purpose で confidence 不在) ===
 # 期待: major subagent allowlist match のため block (現状動作維持)
+#
+# env-sensitive (NOT obsolete): confidence-gate の block ロジックは task #9 (bb38bc9)
+# 以降不変。harness-dev preset の `confidence_required: false` default で hook が即 `{}`
+# 返却するため repo default では fail するだけ。HC_CONFIDENCE_REQUIRED=true を明示 set して
+# block ロジックを決定論的に active assert する (context-budget Case 1 と同クラス)。
+# 副作用回避のため HC_CONFIDENCE_STATE_DIR も isolated tmp に向ける。
 case_2() {
   local transcript="$TMP_DIR/transcript-c2.jsonl"
   printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"completed task without confidence"}]}}' > "$transcript"
   local input
   input=$(jq -nc --arg t "$transcript" '{transcript_path:$t, agent_type:"general-purpose"}')
   local output
-  output=$(printf '%s' "$input" | bash "$CONFIDENCE_HOOK" 2>/dev/null)
-  # 期待: block (general-purpose は major subagent で confidence 必須)
+  output=$(printf '%s' "$input" | \
+    HC_CONFIDENCE_REQUIRED=true \
+    HC_CONFIDENCE_STATE_DIR="$TMP_DIR/gateguard-state-c2" \
+    bash "$CONFIDENCE_HOOK" 2>/dev/null)
+  # 期待: block (general-purpose は major subagent で confidence 必須、env で決定論化)
   printf '%s' "$output" | grep -q '"decision":[[:space:]]*"block"'
 }
 
@@ -118,13 +137,20 @@ case_4() {
 
 printf '===== task #9 audit-followups smoke =====\n'
 run_case 1 "F3 fail-open for minor sidechain (agent_type empty)" case_1
-run_case 2 "F3 block maintained for general-purpose" case_2
-run_case 3 "autonomous-action-guard Normal logs restricted cmd" case_3
-run_case 4 "autonomous-action-guard Loop blocks restricted cmd" case_4
+# Case 2 は env-sensitive (NOT obsolete): block ロジックは不変、preset default
+# `confidence_required: false` を HC_CONFIDENCE_REQUIRED=true で打ち消し active assert。
+run_case 2 "F3 block maintained for general-purpose (HC_CONFIDENCE_REQUIRED=true)" case_2
+# [OBSOLETE: task-39 2026-05-25] git push origin main 緩和で Normal モードでも
+# restricted-cmd として bypass.log に記録されなくなった。
+skip_case 3 "autonomous-action-guard Normal logs restricted cmd" "OBSOLETE: task-39"
+# [OBSOLETE: task-39 2026-05-25] git push origin main 緩和で Loop モードでも block されない。
+skip_case 4 "autonomous-action-guard Loop blocks restricted cmd" "OBSOLETE: task-39"
 
+TOTAL=$((PASS + FAIL + SKIP))
 printf '\n===== Result =====\n'
-printf 'PASS: %d / 4\n' "$PASS"
-printf 'FAIL: %d / 4\n' "$FAIL"
+printf 'PASS: %d / %d\n' "$PASS" "$TOTAL"
+printf 'FAIL: %d / %d\n' "$FAIL" "$TOTAL"
+printf 'SKIP: %d / %d (obsolete: task-39 push 緩和、Case 3/4)\n' "$SKIP" "$TOTAL"
 if [ "$FAIL" -gt 0 ]; then
   printf 'Failed cases: %s\n' "${FAILED_CASES[*]}"
   exit 1

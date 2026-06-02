@@ -76,6 +76,7 @@ fi
 
 PASS=0
 FAIL=0
+SKIP=0
 FAIL_CASES=""
 RESULTS=""
 
@@ -175,6 +176,13 @@ _record() {
   fi
 }
 
+# obsolete case を実行せず SKIP 計上 (FAIL に数えない)
+_skip_record() {
+  local label="$1" reason="$2"
+  RESULTS="${RESULTS}SKIP|${label}|obsolete|${reason}"$'\n'
+  SKIP=$((SKIP + 1))
+}
+
 # tests ------------------------------------------------------------------------
 #
 # 注意: task-21 W0.1 (2026-05-23) で reminder hook の event が
@@ -247,39 +255,17 @@ case3() {
 }
 
 # Case 4: Loop + git push → block JSON
+# [OBSOLETE: task-39 2026-05-25] feature branch への git push は自律実行可となり
+# BLOCK されなくなった (modes.md 遵守事項 8 緩和)。旧 BLOCK 期待は stale につき skip。
 case4() {
-  _reset_state_dir
-  _set_mode "loop"
-  local stdin_json='{"tool_name":"Bash","tool_input":{"command":"git push origin foo"}}'
-
-  _run_hook "$GUARD_HOOK" "$stdin_json"
-
-  local expected='exit=0, stdout~"decision":"block"'
-  local actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 80)'"
-
-  if [ "$LAST_CODE" = "0" ] && printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
-    _record "Case 4: Loop+git push → block" "PASS" "$expected" "$actual"
-  else
-    _record "Case 4: Loop+git push → block" "FAIL" "$expected" "$actual"
-  fi
+  _skip_record "Case 4: Loop+git push → block [OBSOLETE: task-39]" "git push feature branch 緩和"
 }
 
 # Case 5: Loop + gh pr create → block JSON
+# [OBSOLETE: task-39 2026-05-25] gh pr create は自律実行可となり BLOCK されなくなった
+# (modes.md 遵守事項 8 緩和)。旧 BLOCK 期待は stale につき skip。
 case5() {
-  _reset_state_dir
-  _set_mode "loop"
-  local stdin_json='{"tool_name":"Bash","tool_input":{"command":"gh pr create --base main --head feat/x"}}'
-
-  _run_hook "$GUARD_HOOK" "$stdin_json"
-
-  local expected='exit=0, stdout~"decision":"block"'
-  local actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 80)'"
-
-  if [ "$LAST_CODE" = "0" ] && printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
-    _record "Case 5: Loop+gh pr create → block" "PASS" "$expected" "$actual"
-  else
-    _record "Case 5: Loop+gh pr create → block" "FAIL" "$expected" "$actual"
-  fi
+  _skip_record "Case 5: Loop+gh pr create → block [OBSOLETE: task-39]" "gh pr create 緩和"
 }
 
 # Case 6: Loop + vercel deploy --prod → block JSON
@@ -355,23 +341,10 @@ case8() {
 }
 
 # Case 9: Normal + git push → exit 0 + stdout に hookSpecificOutput (block しない)
+# [OBSOLETE: task-39 2026-05-25] git push 緩和で Normal モードでも当該コマンドに
+# hookSpecificOutput (warning context) を出さなくなった。旧期待は stale につき skip。
 case9() {
-  _reset_state_dir
-  _set_mode "normal"
-  local stdin_json='{"tool_name":"Bash","tool_input":{"command":"git push"}}'
-
-  _run_hook "$GUARD_HOOK" "$stdin_json"
-
-  local expected='exit=0, stdout~"hookSpecificOutput" (no block)'
-  local actual="exit=${LAST_CODE} stdout_head='$(printf '%s' "$LAST_OUT" | head -c 80)'"
-
-  if [ "$LAST_CODE" = "0" ] \
-     && printf '%s' "$LAST_OUT" | grep -q "hookSpecificOutput" \
-     && ! printf '%s' "$LAST_OUT" | grep -q '"decision":[[:space:]]*"block"'; then
-    _record "Case 9: Normal+git push → context inject, no block" "PASS" "$expected" "$actual"
-  else
-    _record "Case 9: Normal+git push → context inject, no block" "FAIL" "$expected" "$actual"
-  fi
+  _skip_record "Case 9: Normal+git push → context inject, no block [OBSOLETE: task-39]" "git push 緩和 (warning context 廃止)"
 }
 
 # === run all ===
@@ -390,7 +363,7 @@ printf '\n=== loop-auto-progress smoke results ===\n'
 printf 'Status | Case | Expected | Actual\n'
 printf -- '-------+------+----------+-------\n'
 printf '%s' "$RESULTS"
-printf '\n=== summary: %d passed, %d failed ===\n' "$PASS" "$FAIL"
+printf '\n=== summary: %d passed, %d failed, %d skipped (obsolete: task-39) ===\n' "$PASS" "$FAIL" "$SKIP"
 
 if [ "$FAIL" -ne 0 ]; then
   printf 'FAIL cases:%s\n' "$FAIL_CASES" >&2
