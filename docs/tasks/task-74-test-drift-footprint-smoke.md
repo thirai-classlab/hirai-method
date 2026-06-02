@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #74: test drift 修正 + context footprint / parity smoke 統合 (Phase 6)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了 (2026-06-02)** — harness-review-remediation-plan 全 6 Phase (task-69〜74) 完了
 > 起案: 2026-06-01
 > 関連: harness-review-remediation-plan Phase 6 (§4.6) + §5 順序 7。**全 Phase (69-73) の回帰 budget を統合検証する最終 task**
 > 設計起源: [harness-review-remediation-plan.md](../draft/harness-review-remediation-plan.md) ✅承認済 (approved_at 2026-06-01) §4.6
@@ -41,14 +41,14 @@ total_steps: 7
 
 ## Task 完了条件 (DoD)
 
-- [ ] `hook-frequency-tweaks-smoke.sh` Case 7 fail が解消 (session-help 現仕様に期待値更新)
-- [ ] Web UI smoke が sandbox / CI network 条件を明示し environmental skip 整備
-- [ ] context footprint smoke (SessionStart bytes / agents / skills count) が追加され統合実行できる
-- [ ] test が 5 種別に整理され、古い test が 4 分類で処理 (放置 fail 0)
-- [ ] draft §6 受け入れ条件 (必須 6 + 軽量化 3 + 検証 4) が全項目チェック
-- [ ] reviewer approve (テスト設計レビュー)
-- [ ] **全 Phase (69-73) の smoke を束ねた統合実行で regression 0**
-- [ ] 3 観点 refactor 判定
+- [x] `hook-frequency-tweaks-smoke.sh` Case 7 fail が解消 (session-help opt-in 仕様に期待値更新、8/8 PASS)
+- [x] Web UI smoke が sandbox / CI network 条件を明示し environmental skip 整備 (`HC_SMOKE_SKIP_NETWORK` + bind probe)
+- [x] context footprint smoke (SessionStart bytes / agents / skills count) が追加され統合実行できる (`run-all-smokes.sh` runner)
+- [x] test が 5 種別に整理され、古い test が 4 分類で処理 (放置 fail 0) — **SMOKE-CLASSIFICATION.md + manifest、UNEXPLAINED-FAIL 0**。obsolete は skip 化 / spec-drift は決定論 PASS 化 / flaky は quarantine 分離 (manifest 14→7、review で manifest-everything shortcut を本来処理に是正)
+- [x] draft §6 受け入れ条件 (必須 6 + 軽量化 3 + 検証 4) が全項目チェック (qa review が §6 mapping、全 met)
+- [x] reviewer approve (テスト設計レビュー) — **Step 5 qa-expert + pr-test-analyzer で CRITICAL (config-loader real bug 隠蔽) + HIGH (flaky/obsolete) 検出 → iter-1 全件修正 → iter-2 code-reviewer 再 review APPROVE (No CRITICAL/HIGH) + MEDIUM-1 (audit Case 2 誤ラベル) 修正**
+- [x] **全 Phase (69-73) の smoke を束ねた統合実行で regression 0** — run-all-smokes EXIT 0 / 67 run / 62 PASS / 5 EXPECTED-FAIL (preset 緩和 environmental) / 0 UNEXPLAINED / 0 SKIP
+- [x] 3 観点 refactor 判定 — **`run-all-smokes.sh` の種別一括実行 runner 新設自体が smoke 実行の非冗長化 (持続可能性=種別 navigation / 汎用性=新 smoke 自動 discover / 非冗長化=散在 smoke の単一 entry)。next-actions #52(4)#53(12) の runner 新設候補を closure**
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -77,13 +77,13 @@ draft §4.6「test 整理の具体方針」(5 種別 table) + 「古い test の
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | `session-help-surface` 現仕様確定 + `hook-frequency-tweaks-smoke.sh` Case 7 旧期待値を新仕様 (opt-in pointer) に更新 | 0.5h | task-69,70,71,72,73 |
-| 2 | 🔲 | Web UI smoke に sandbox / CI network 条件明示 + environmental skip 整備 | 0.5h | Step 1 |
-| 3 | 🔲 | context footprint smoke 統合 (SessionStart bytes / agents count / skills count、各 Phase budget smoke を束ねる runner) | 0.7h | Step 1 |
-| 4 | 🔲 | test 5 種別整理 (parity/behavior/budget/portability/stale-detector) + 古い test 4 分類処理 (放置 fail 0) | 0.7h | Step 2,3 |
-| 5 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、draft §6 受け入れ条件の網羅性 + stale-test 検出力を cross-check | 0.5h | Step 1-4 |
-| 6 | 🔲 | (テスト合格) **全 Phase (69-73) smoke を束ねた統合実行で regression 0** + draft §6 受け入れ条件 全項目チェック | 0.5h | Step 5 |
-| 7 | 🔲 | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — smoke runner の種別一括実行 entry 共通化 | 0.4h | Step 6 |
+| 1 | ✅ | `session-help-surface` 現仕様確定 + `hook-frequency-tweaks-smoke.sh` Case 7 旧期待値を新仕様 (opt-in pointer) に更新 | 0.5h | task-69,70,71,72,73 |
+| 2 | ✅ | Web UI smoke に sandbox / CI network 条件明示 + environmental skip 整備 | 0.5h | Step 1 |
+| 3 | ✅ | context footprint smoke 統合 (SessionStart bytes / agents count / skills count、各 Phase budget smoke を束ねる runner) | 0.7h | Step 1 |
+| 4 | ✅ | test 5 種別整理 (parity/behavior/budget/portability/stale-detector) + 古い test 4 分類処理 (放置 fail 0) | 0.7h | Step 2,3 |
+| 5 | ✅ | (テスト設計レビュー) reviewer 動的選定 (`hc-config.sh --get review_max_count_test` で上限確認)、draft §6 受け入れ条件の網羅性 + stale-test 検出力を cross-check | 0.5h | Step 1-4 |
+| 6 | ✅ | (テスト合格) **全 Phase (69-73) smoke を束ねた統合実行で regression 0** + draft §6 受け入れ条件 全項目チェック | 0.5h | Step 5 |
+| 7 | ✅ | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — smoke runner の種別一括実行 entry 共通化 | 0.4h | Step 6 |
 
 合計: **~3.8h**
 
