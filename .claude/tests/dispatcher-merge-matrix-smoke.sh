@@ -28,6 +28,12 @@
 #                       PostToolUse は additionalContext only
 #   G 実 manifest     : PreToolUse Bash 全子非 block / Agent|Task 2 reminder / PostToolUse * /
 #                       Stop / S-E golden 21 再照合 (block 検出力不変)
+#   H1 positive control: PreToolUse/SessionStart の additionalContext 保持 (denylist 反転 regression guard)
+#   M1 Stop concat    : 既存 systemMessage + ctx 連結 + decision:block (denylist 該当 event)
+#
+# additionalContext 分類 (denylist、公式 snapshot 準拠): 非対応 event = {Stop, SubagentStop, Notification}
+#   のみ。他全 event (PreToolUse / PostToolUse / PostToolBatch / UserPromptSubmit / SessionStart) は
+#   hookSpecificOutput.additionalContext を出力可能 (本番 task-rule-guard 等の PreToolUse advisory が依存)。
 #
 # 実行:    bash .claude/tests/dispatcher-merge-matrix-smoke.sh
 # 終了:    0 = 全 PASS / 1 = 1 件以上 FAIL
@@ -348,7 +354,10 @@ else
   fi
 fi
 
-# D2 decision:block + additionalContext → block 採用 + ctx 保持
+# D2 (Stop) decision:block + additionalContext 候補 plain → block 採用 + ctx は systemMessage へ route
+#   Stop event は additionalContext / hookSpecificOutput 非対応のため、merge は plain advisory を
+#   hookSpecificOutput.additionalContext に載せてはならない (= invalid JSON 生成 = task-71 回帰)。
+#   正しい挙動: decision:block は top-level 保持 / ctx は systemMessage へ / hookSpecificOutput は不在。
 write_manifest \
   "$(row Stop '' 1 c-block.sh '' advisory 5)" \
   "$(row Stop '' 2 c-tctx.sh '' advisory 5)"
@@ -357,7 +366,10 @@ assert_class "D2 decision:block + ctx → 単一 valid" "$SMOKE_OUT" "json"
 if [ "$HAVE_JQ" -eq 1 ]; then
   [ "$(jq_get '.decision' "$SMOKE_OUT")" = "block" ] && ok "D2 decision:block 採用" || bad "D2 decision 欠落 out='$SMOKE_OUT'"
   [ "$(jq_get '.reason' "$SMOKE_OUT")" = "BLOCK-REASON" ] && ok "D2 勝った decision の reason 保持" || bad "D2 reason 欠落 out='$SMOKE_OUT'"
-  case "$(jq_get '.hookSpecificOutput.additionalContext // .additionalContext' "$SMOKE_OUT")" in *TOP-CTX*) ok "D2 ctx 併存保持" ;; *) bad "D2 ctx 喪失 out='$SMOKE_OUT'" ;; esac
+  # Stop では hookSpecificOutput を出してはならない (additionalContext 非対応 event)
+  [ "$(jq_get 'has("hookSpecificOutput")' "$SMOKE_OUT")" = "false" ] && ok "D2 Stop で hookSpecificOutput 不在 (additionalContext 非対応 event)" || bad "D2 Stop で hookSpecificOutput が生成された (invalid) out='$SMOKE_OUT'"
+  # ctx (TOP-CTX) は systemMessage へ route される
+  case "$(jq_get '.systemMessage' "$SMOKE_OUT")" in *TOP-CTX*) ok "D2 ctx は systemMessage へ route (保持)" ;; *) bad "D2 ctx が systemMessage に無い out='$SMOKE_OUT'" ;; esac
 else
   # H1: jq 不在時 grep fallback で decision:block を検証
   if printf '%s' "$SMOKE_OUT" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
@@ -365,6 +377,112 @@ else
   else
     bad "D2 decision:block 不在 (grep fallback) out='$SMOKE_OUT'"
   fi
+fi
+
+# D2-neg negative regression: Stop / SubagentStop の merge 出力に hookSpecificOutput が存在しない、
+#   かつ additionalContext 対応 event (UserPromptSubmit / PostToolUse) では従来どおり
+#   hookSpecificOutput.additionalContext が存在することを対照群として assert (回帰防止)。
+if [ "$HAVE_JQ" -eq 1 ]; then
+  # Stop: ctx 候補 plain のみ (block 無し) → systemMessage へ、hookSpecificOutput 不在
+  write_manifest \
+    "$(row Stop '' 1 c-block.sh '' advisory 5)" \
+    "$(row Stop '' 2 c-plainA.sh '' advisory 5)"
+  run_dispatch_fake "Stop" "" "P"
+  [ "$(jq_get 'has("hookSpecificOutput")' "$SMOKE_OUT")" = "false" ] && ok "D2-neg Stop: hookSpecificOutput 不在" || bad "D2-neg Stop hookSpecificOutput 生成 (invalid) out='$SMOKE_OUT'"
+  case "$(jq_get '.systemMessage' "$SMOKE_OUT")" in *PLAIN-A*) ok "D2-neg Stop: plain advisory は systemMessage へ" ;; *) bad "D2-neg Stop systemMessage 欠落 out='$SMOKE_OUT'" ;; esac
+
+  # SubagentStop: 同様に hookSpecificOutput 不在
+  write_manifest \
+    "$(row SubagentStop '' 1 c-block.sh '' advisory 5)" \
+    "$(row SubagentStop '' 2 c-plainA.sh '' advisory 5)"
+  run_dispatch_fake "SubagentStop" "" "P"
+  [ "$(jq_get 'has("hookSpecificOutput")' "$SMOKE_OUT")" = "false" ] && ok "D2-neg SubagentStop: hookSpecificOutput 不在" || bad "D2-neg SubagentStop hookSpecificOutput 生成 (invalid) out='$SMOKE_OUT'"
+
+  # 対照群 UserPromptSubmit: additionalContext 対応 → hookSpecificOutput.additionalContext 存在
+  write_manifest \
+    "$(row UserPromptSubmit '' 1 c-ctxA.sh '' advisory 5)" \
+    "$(row UserPromptSubmit '' 2 c-plainA.sh '' advisory 5)"
+  run_dispatch_fake "UserPromptSubmit" "" "{}"
+  case "$(jq_get '.hookSpecificOutput.additionalContext' "$SMOKE_OUT")" in *CTX-A*) ok "D2-neg(対照) UserPromptSubmit: hookSpecificOutput.additionalContext 存続 (回帰防止)" ;; *) bad "D2-neg UserPromptSubmit additionalContext 欠落 (回帰) out='$SMOKE_OUT'" ;; esac
+
+  # 対照群 PostToolUse: 同様に additionalContext 存続
+  write_manifest \
+    "$(row PostToolUse '*' 1 c-ctxA.sh '' advisory 5)" \
+    "$(row PostToolUse '*' 2 c-ctxB.sh '' advisory 5)"
+  run_dispatch_fake "PostToolUse" "*" "P"
+  case "$(jq_get '.hookSpecificOutput.additionalContext' "$SMOKE_OUT")" in *CTX-A*CTX-B*) ok "D2-neg(対照) PostToolUse: hookSpecificOutput.additionalContext 存続 (回帰防止)" ;; *) bad "D2-neg PostToolUse additionalContext 欠落 (回帰) out='$SMOKE_OUT'" ;; esac
+else
+  skip "D2-neg negative regression (jq 不在)"
+fi
+
+# ===========================================================================
+# H1 positive control: additionalContext 対応 event は denylist 反転後も保持される
+#   (iter1 allowlist {UserPromptSubmit/PostToolUse/PostToolBatch} の誤分類 = PreToolUse /
+#    SessionStart の additionalContext を systemMessage に化けさせる regression を捕捉する)。
+#   本 H1 は iter1 fix 適用済コードでは RED (FAIL) になる positive control。
+#   denylist 反転 (非対応 = Stop/SubagentStop/Notification のみ) 後に GREEN になる。
+# ===========================================================================
+echo "-- H1: additionalContext 対応 event positive control (regression guard) --"
+if [ "$HAVE_JQ" -eq 1 ]; then
+  # H1-a PreToolUse advisory-only ctx (permissionDecision なし、本番 task-rule-guard 等の advisory
+  #   additionalContext 形式: hookSpecificOutput.additionalContext のみ) → 出力に
+  #   hookSpecificOutput.additionalContext が存在し、systemMessage に route されないことを assert。
+  write_manifest \
+    "$(row PreToolUse 'Edit|Write' 1 c-ctxA.sh '' advisory 5)" \
+    "$(row PreToolUse 'Edit|Write' 2 c-ctxB.sh '' advisory 5)"
+  run_dispatch_fake "PreToolUse" "Edit|Write" "P"
+  case "$(jq_get '.hookSpecificOutput.additionalContext' "$SMOKE_OUT")" in
+    *CTX-A*CTX-B*) ok "H1-a PreToolUse advisory ctx → hookSpecificOutput.additionalContext 保持 (systemMessage 化けず)" ;;
+    *) bad "H1-a PreToolUse ctx が hookSpecificOutput.additionalContext に無い (iter1 誤分類で systemMessage 化け?) out='$SMOKE_OUT'" ;;
+  esac
+  # ctx が systemMessage に紛れ込んでいない (denylist 反転前は systemMessage に route された)
+  [ "$(jq_get '(.systemMessage // "") | test("CTX-A")' "$SMOKE_OUT")" = "false" ] \
+    && ok "H1-a PreToolUse ctx は systemMessage に route されない (denylist 正)" \
+    || bad "H1-a PreToolUse ctx が systemMessage に route された (iter1 allowlist 回帰) out='$SMOKE_OUT'"
+
+  # H1-b SessionStart ctx → hookSpecificOutput.additionalContext 存在 (公式 snapshot L139/147 準拠)。
+  #   SessionStart は additionalContext 対応 event (iter1 allowlist では非対応扱い = RED)。
+  write_manifest \
+    "$(row SessionStart '' 1 c-ctxA.sh '' bootstrap 5)" \
+    "$(row SessionStart '' 2 c-ctxB.sh '' bootstrap 5)"
+  run_dispatch_fake "SessionStart" "" "P"
+  case "$(jq_get '.hookSpecificOutput.additionalContext' "$SMOKE_OUT")" in
+    *CTX-A*CTX-B*) ok "H1-b SessionStart ctx → hookSpecificOutput.additionalContext 保持 (denylist 正)" ;;
+    *) bad "H1-b SessionStart ctx が hookSpecificOutput.additionalContext に無い (iter1 誤分類?) out='$SMOKE_OUT'" ;;
+  esac
+  [ "$(jq_get '.hookSpecificOutput.hookEventName' "$SMOKE_OUT")" = "SessionStart" ] \
+    && ok "H1-b SessionStart hookEventName 正" \
+    || bad "H1-b SessionStart hookEventName 欠落 out='$SMOKE_OUT'"
+else
+  skip "H1 positive control (jq 不在)"
+fi
+
+# ===========================================================================
+# M1 Stop concat: 既存 systemMessage を持つ JSON child + ctx child + decision:block child →
+#   systemMessage が「<existing>\n<ctx>」連結、hookSpecificOutput 不在、decision==block を assert。
+#   (Stop は additionalContext 非対応 = denylist 該当 event。ctx は systemMessage へ合流する正当。)
+# ===========================================================================
+echo "-- M1: Stop systemMessage + ctx 連結 + decision:block --"
+if [ "$HAVE_JQ" -eq 1 ]; then
+  write_manifest \
+    "$(row Stop '' 1 c-sysA.sh '' advisory 5)" \
+    "$(row Stop '' 2 c-tctx.sh '' advisory 5)" \
+    "$(row Stop '' 3 c-block.sh '' advisory 5)"
+  run_dispatch_fake "Stop" "" "P"
+  assert_class "M1 Stop sysmsg+ctx+block → 単一 valid" "$SMOKE_OUT" "json"
+  # systemMessage は SYS-A (既存) と TOP-CTX (ctx 合流) の連結
+  case "$(jq_get '.systemMessage' "$SMOKE_OUT")" in
+    *SYS-A*TOP-CTX*) ok "M1 Stop systemMessage = 既存 + ctx 連結 (SYS-A\\nTOP-CTX)" ;;
+    *) bad "M1 Stop systemMessage 連結欠落 out='$SMOKE_OUT'" ;;
+  esac
+  [ "$(jq_get 'has("hookSpecificOutput")' "$SMOKE_OUT")" = "false" ] \
+    && ok "M1 Stop hookSpecificOutput 不在 (denylist 該当 event)" \
+    || bad "M1 Stop hookSpecificOutput 生成 (invalid) out='$SMOKE_OUT'"
+  [ "$(jq_get '.decision' "$SMOKE_OUT")" = "block" ] \
+    && ok "M1 Stop decision:block 保持" \
+    || bad "M1 Stop decision:block 欠落 out='$SMOKE_OUT'"
+else
+  skip "M1 Stop concat (jq 不在)"
 fi
 
 # D3 permissionDecision deny + allow → deny 勝ち (most-restrictive)
