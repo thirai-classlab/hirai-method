@@ -1,171 +1,83 @@
-// hc-config Web UI — task-63 設計簡素化版 (top/edit 2-view、カスタム保存撤去)
-// vanilla JS + Tailwind CDN, fetch API only, no external deps
+// hc-config Web UI — task-76 2 分割再設計 (左 preset / 右 category accordion + 上部タブ 設定/履歴)
+// vanilla JS + Tailwind CDN, fetch API only, no external deps。
 //
-// 起源: docs/draft/hc-config-web-ui-ux-redesign.md §3.5 / §3.7 / §3.9
-//        + user 確定要求「プリセット名保存不要」(task-63 設計簡素化)
+// 設計 SSoT: docs/draft/hc-config-web-2pane-redesign.md §3 (2 分割レイアウト / accordion 同時 1 開 /
+//   編集→custom 遷移 / 履歴タブ分離 / no-scroll)。task-63 の top/edit 2-view は廃止。
 //
-// State machine:
-//   view: 'top' | 'edit'
-//   - top   : 起動時の現状確認 view (現在 preset 名 banner + 6 軸 read-only table / unsaved カスタム表示 + 「設定を変更」CTA)
-//   - edit  : 設定編集 view (preset list 日本語名 + 「適用」「キャンセル」)
+// API contract (Step 2 確定):
+//   GET /api/presets        → { presets:[{name, display_name_ja, use_case, affected_key_count, group}], axes_schema }
+//                             group ∈ {POC, 社内ツール, 本番運用, その他}
+//   GET /api/current-preset → 一致: {name, display_name_ja, match_type:'preset', axes}
+//                             不一致: {name:'custom', display_name_ja:'未保存変更あり', match_type:'custom', axes:null}
+//   GET /api/categories     → { categories:[{name, key_count}] }  実 7 種
+//   GET /api/keys?category= → { keys:[{key, category, description, effect, current_value}], total }
+//   GET /api/preset/:name/diff → { preset, axes, use_case, changes:[{key, current, new, changed, effect}] }
+//   POST /api/set {key,value}  → { ok:true, key, value }   (batch は client で loop)
+//   GET /api/preset/history    → { history:[{timestamp, preset, preset_display_name_ja?, applied_at, applied_count, failed_count, rolled_back_count}] }
+//   POST /api/preset/rollback/:ts → rollback
 //
-// task-61 から継承:
-//   - WCAG 2.2 AA (iter 2 16 SC 全 closure / iter 4 B 7 件)
-//   - C-U1 / C-U2 / H-U1 / H-U3 / H-U4 / H-XSS / M-U3 / M-U4
-//   - dialog helpers (showConfirmDialog with resolved flag)
+// State machine (新):
+//   tab: 'config' | 'history'
+//   presets[]                  : 左ペイン source (group 付き)
+//   categories[]               : 右ペイン accordion 見出し source (実 7 category)
+//   keysByCategory{}           : category → keys[] cache (lazy load)
+//   keyMeta{}                  : key → {category, description, effect, type} (型推定込み)
+//   baseline{}                 : key → 保存済 (server) の現在値 (文字列)
+//   draft{}                    : key → ユーザ編集後の値 (文字列)。baseline と差分があるものだけ保存対象
+//   selectedPreset             : 左で選択中の preset name (preview 中)。編集発生で null + custom 化
+//   isCustom                   : 手動編集が発生して custom 状態か (draft §3 「手動編集が発生したら custom」)
+//   openCategory               : 現在開いている accordion category 名 (同時 1 つだけ)
+//   history[]
+//   saving / rollbackInProgress
 //
-// task-63 簡素化版 + task-65 (6 軸 data model 案 A):
-//   - state.view 'top' | 'edit' 排他切替
-//   - state.currentPreset (起動時 /api/current-preset fetch)。
-//       preset 一致: { match_type:'preset', name, display_name_ja, axes:{6 軸 object} }
-//       unsaved    : { match_type:'unsaved', name:'custom', display_name_ja, axes:null }
-//   - state.editPresetSelection (編集画面 preset 選択中の英 key)
-//   - reducer(state, action) Pure Function (副作用なし、state 不変更新)
-//   - renderTop(state) / renderEdit(state) (state → DOM)
-//   - top view は cp.axes 直接参照 (object→6 軸 table / null→カスタム表示)
-//   - getDisplayName(preset) (display_name_ja 優先、fallback name)
-//   - カスタム保存機能撤去 (showPromptDialog / savePresetApi / edit:save_custom action 削除)
-//   - task-65: 6 軸 dropdown 個別編集撤去 (loadCurrentAxes / loadAxesWithOptions / setKeyApi /
-//     onChangeAxis / applyIndividualMode / editMode / editAxisChanges / edit:change_axis 全削除)。
-//     編集経路は preset 一括変更に一本化。
-//   - 絵文字なし (user F1 確定要求)
+// XSS: DOM 構築は el() builder (textContent / 属性のみ、innerHTML 不使用)。
+// a11y: タブ role=tab/aria-selected、accordion は <details>/<summary> でキーボード操作可。
 //
 ;(function () {
   'use strict'
 
   // ============================================================
-  // 6 軸 key list (axes fetcher 用、領域 A server.js PRESET_AXES と整合)
+  // 定数
   // ============================================================
-  const AXIS_KEYS = [
-    'quality_level',
-    'language_framework',
-    'git_workflow',
-    'tdd_policy',
-    'review_intensity',
-    'autonomy_level',
-  ]
+  // 左ペイン group の表示順 (server の group 値と一致)
+  const PRESET_GROUP_ORDER = ['POC', '社内ツール', '本番運用', 'その他']
 
-  // ============================================================
-  // 軸日本語ラベル (draft §3.4 wireframe text 準拠)
-  // ============================================================
-  const AXIS_LABELS_JA = {
-    quality_level: '品質レベル',
-    language_framework: '言語・FW',
-    git_workflow: 'Git 運用',
-    tdd_policy: 'TDD ポリシー',
-    review_intensity: 'レビュー強度',
-    autonomy_level: '自律度',
+  // 既知 enum key (select で表示)。/api/keys に enum 情報が無いため client 側 SSoT。
+  //   default_preset は 4 enforcement level (modes.md / CommonRules.md 由来)。
+  const ENUM_OPTIONS = {
+    default_preset: ['advisory', 'team-default', 'strict', 'harness-dev'],
   }
 
   // ============================================================
   // initial state
   // ============================================================
   const initialState = {
-    view: 'top', // 'top' | 'edit'  (task-63 採用、task-61 'idle'/'category'/'key'/'preset' 廃止)
-    // task-65: currentPreset.axes は API response 由来。
-    //   preset 一致: { match_type:'preset', name, display_name_ja, axes:{6 軸 object} }
-    //   unsaved    : { match_type:'unsaved', name:'custom', display_name_ja, axes:null }
-    currentPreset: null,
-    presets: [], // [{ name, display_name_ja, ... }] (server /api/presets)
+    tab: 'config', // 'config' | 'history'
+    presets: [],
+    categories: [],
+    keysByCategory: {}, // category → keys[]
+    keyMeta: {}, // key → { category, description, effect, type }
+    baseline: {}, // key → server 現在値 (string)
+    draft: {}, // key → 編集後値 (string)
+    selectedPreset: null,
+    isCustom: false,
+    openCategory: null,
     history: [],
-    // edit view 内 sub-state (task-65: 6 軸個別編集撤去により preset 選択のみ)
-    editPresetSelection: null, // 選択中 preset 英 key
-    editPresetDiff: null, // diff preview (preset 選択時)
-    // UI flag
-    applying: false,
+    saving: false,
     rollbackInProgress: false,
   }
 
-  // ============================================================
-  // mutable state holder (reducer 経由のみ更新)
-  // ============================================================
   let state = { ...initialState }
 
   // ============================================================
-  // reducer (Pure Function、副作用なし、新 state を return)
-  // 起源: draft §3.7
+  // value type 推定 ('boolean' | 'enum' | 'text')
+  //   /api/keys は型 field を持たないため current_value + 既知 enum から推定する。
   // ============================================================
-  function reducer(prevState, action) {
-    if (!action || !action.type) return prevState
-    switch (action.type) {
-      case 'load:current': {
-        // payload: { currentPreset, presets, history }
-        return {
-          ...prevState,
-          currentPreset: action.payload.currentPreset || prevState.currentPreset,
-          presets: action.payload.presets !== undefined ? action.payload.presets : prevState.presets,
-          history: action.payload.history !== undefined ? action.payload.history : prevState.history,
-          view: 'top',
-        }
-      }
-      case 'top:enter': {
-        // edit → top 戻り、編集 buffer を破棄 (task-65: editMode / 個別変更 state 撤去)
-        return {
-          ...prevState,
-          view: 'top',
-          editPresetSelection: null,
-          editPresetDiff: null,
-        }
-      }
-      case 'edit:enter': {
-        // top → edit (task-65: preset 選択のみ、6 軸 baseline snapshot 撤去)
-        return {
-          ...prevState,
-          view: 'edit',
-          editPresetSelection: null,
-          editPresetDiff: null,
-        }
-      }
-      case 'edit:select_preset': {
-        // payload: { presetName, diff }
-        return {
-          ...prevState,
-          editPresetSelection: action.payload.presetName,
-          editPresetDiff: action.payload.diff || null,
-        }
-      }
-      case 'edit:cancel': {
-        return reducer(prevState, { type: 'top:enter' })
-      }
-      case 'edit:apply': {
-        // 適用後は top 復帰、currentPreset は payload で更新。
-        // applying flag を必ず false に戻す (部分失敗パスでも applying 残留を防ぐ。
-        //   catch 節以外の成功/部分失敗パスは明示 reset が無いため、apply 完了 action で集中 reset)
-        return {
-          ...prevState,
-          view: 'top',
-          editPresetSelection: null,
-          editPresetDiff: null,
-          applying: false,
-          currentPreset: action.payload && action.payload.currentPreset ? action.payload.currentPreset : prevState.currentPreset,
-        }
-      }
-      case 'ui:set_flag': {
-        // payload: { flag: 'applying'|'rollbackInProgress', value: bool }
-        return { ...prevState, [action.payload.flag]: action.payload.value }
-      }
-      case 'history:update': {
-        return { ...prevState, history: action.payload.history || [] }
-      }
-      default:
-        return prevState
-    }
-  }
-
-  function dispatch(action) {
-    state = reducer(state, action)
-    render()
-  }
-
-  // ============================================================
-  // getDisplayName (display_name_ja 優先、fallback name)
-  // ============================================================
-  function getDisplayName(preset) {
-    if (!preset) return ''
-    if (preset.display_name_ja && typeof preset.display_name_ja === 'string' && preset.display_name_ja.length > 0) {
-      return preset.display_name_ja
-    }
-    return preset.name || ''
+  function inferType(key, value) {
+    if (Object.prototype.hasOwnProperty.call(ENUM_OPTIONS, key)) return 'enum'
+    const v = value === null || value === undefined ? '' : String(value).trim().toLowerCase()
+    if (v === 'true' || v === 'false') return 'boolean'
+    return 'text'
   }
 
   // ============================================================
@@ -190,49 +102,22 @@
     return data
   }
 
-  const loadPresets = async () => {
-    const r = await api('GET', '/api/presets')
-    return r.presets || []
-  }
-  const loadHistory = async () => {
-    const r = await api('GET', '/api/preset/history')
-    return r.history || []
-  }
-  // task-63: 起動時に /api/current-preset で現在 preset 判定
-  //   draft §3.6 仕様: { match_type: 'preset'|'unsaved', name, display_name_ja, axes } (custom 撤去済 draft §8)
-  //   server 互換補正: match_type 不在で name == 'custom' / 'unsaved' の旧 server response も unsaved に正規化
+  const loadPresets = async () => (await api('GET', '/api/presets')).presets || []
+  const loadCategories = async () => (await api('GET', '/api/categories')).categories || []
+  const loadKeys = async (category) => (await api('GET', `/api/keys?category=${encodeURIComponent(category)}`)).keys || []
+  const loadHistory = async () => (await api('GET', '/api/preset/history')).history || []
+  const loadPresetDiff = async (name) => await api('GET', `/api/preset/${encodeURIComponent(name)}/diff`)
+  const setKeyApi = async (key, value) => await api('POST', '/api/set', { key, value })
+  const rollbackApi = async (timestamp) => await api('POST', `/api/preset/rollback/${encodeURIComponent(timestamp)}`)
   const loadCurrentPreset = async () => {
     try {
       const r = await api('GET', '/api/current-preset')
-      // 互換: server 側で match_type 欠落時、name から推定
-      if (!r.match_type) {
-        if (r.name === 'custom') r.match_type = 'unsaved'
-        else if (r.name === 'unsaved') r.match_type = 'unsaved'
-        else if (r.name) r.match_type = 'preset'
-        else r.match_type = 'unsaved'
-      }
+      if (!r.match_type) r.match_type = r.name && r.name !== 'custom' ? 'preset' : 'custom'
       return r
     } catch (e) {
-      // task-65: /api/current-preset 取得失敗時は unsaved 扱い (axes:null)。
-      //   (旧 loadCurrentAxes fallback は 6 軸が yml key でなく常に空を返すため撤去)
-      return { match_type: 'unsaved', name: null, display_name_ja: null, axes: null }
+      return { match_type: 'custom', name: 'custom', display_name_ja: '未保存変更あり', axes: null }
     }
   }
-  const loadPresetDiff = async (name) => {
-    const r = await api('GET', `/api/preset/${encodeURIComponent(name)}/diff`)
-    return r
-  }
-  const applyPresetApi = async (name, skipKeys) => {
-    return await api('POST', `/api/preset/${encodeURIComponent(name)}/apply`, { skip_keys: skipKeys || [] })
-  }
-  // task-65: setKeyApi (個別 key set) は 6 軸 dropdown 撤去により呼出元消失のため削除。
-  const rollbackApi = async (timestamp) => {
-    return await api('POST', `/api/preset/rollback/${encodeURIComponent(timestamp)}`)
-  }
-  // task-65: loadCurrentAxes / loadAxesWithOptions は撤去。
-  //   6 軸 (quality_level 等) は yml raw key ではなく preset metadata のため、/api/keys からの
-  //   軸 key 抽出は常に空を返す dead path だった。top view は /api/current-preset の axes を直接
-  //   参照し、edit view の 6 軸 dropdown は撤去 (編集経路は preset 一括変更に一本化)。
 
   // ============================================================
   // DOM utils (textContent only、innerHTML 禁止 XSS 防止)
@@ -246,10 +131,11 @@
         else if (k === 'onchange') e.addEventListener('change', v)
         else if (k === 'oninput') e.addEventListener('input', v)
         else if (k === 'onkeydown') e.addEventListener('keydown', v)
+        else if (k === 'ontoggle') e.addEventListener('toggle', v)
         else if (k === 'htmlFor') e.htmlFor = v
         else if (v === true) e.setAttribute(k, '')
         else if (v === false || v === undefined || v === null) {
-          // skip
+          // skip falsy attr
         } else {
           e.setAttribute(k, String(v))
         }
@@ -270,13 +156,15 @@
     while (node.firstChild) node.removeChild(node.firstChild)
   }
 
+  function $(id) {
+    return document.getElementById(id)
+  }
+
   // ============================================================
-  // toast (4 type: error / success / warning / info)
-  // task-63: 絵文字なし、テキストアイコンのみ
+  // toast (error / success / warning / info、絵文字なしテキストアイコン)
   // ============================================================
   function toast(message, type) {
-    let cls
-    let icon
+    let cls, icon
     if (type === 'error') { cls = 'bg-red-700 text-white'; icon = '[!]' }
     else if (type === 'success') { cls = 'bg-emerald-700 text-white'; icon = '[OK]' }
     else if (type === 'warning') { cls = 'bg-amber-600 text-white'; icon = '[!]' }
@@ -291,32 +179,30 @@
       icon ? el('span', { 'aria-hidden': 'true', class: 'font-mono text-xs' }, icon) : null,
       el('span', null, message)
     )
-    const cont = document.getElementById('toast-container')
+    const cont = $('toast-container')
     if (cont) cont.appendChild(t)
     setTimeout(() => t.remove(), 4000)
   }
 
   function setStatus(text) {
-    const sb = document.getElementById('status-text')
+    const sb = $('status-text')
     if (sb) sb.textContent = text
   }
 
   // ============================================================
-  // dialog helpers (task-61 から継承、resolved flag で二重 resolve 防止)
+  // dialog helper (resolved flag で二重 resolve 防止、task-61 から継承)
   // ============================================================
   function showConfirmDialog(opts) {
     return new Promise((resolve) => {
-      const dlg = document.getElementById('confirm-dialog')
-      const titleEl = document.getElementById('confirm-dialog-title')
-      const bodyEl = document.getElementById('confirm-dialog-body')
-      const okBtn = document.getElementById('confirm-dialog-ok')
-      const cancelBtn = document.getElementById('confirm-dialog-cancel')
+      const dlg = $('confirm-dialog')
+      const titleEl = $('confirm-dialog-title')
+      const bodyEl = $('confirm-dialog-body')
+      const okBtn = $('confirm-dialog-ok')
+      const cancelBtn = $('confirm-dialog-cancel')
 
       titleEl.textContent = opts.title || '確認'
       clear(bodyEl)
-      for (const line of opts.bodyLines || []) {
-        bodyEl.appendChild(el('p', null, line))
-      }
+      for (const line of opts.bodyLines || []) bodyEl.appendChild(el('p', null, line))
       okBtn.textContent = opts.okLabel || '実行'
       cancelBtn.textContent = opts.cancelLabel || 'キャンセル'
       okBtn.className = opts.danger
@@ -330,10 +216,7 @@
         cleanup()
         resolve(value)
       }
-      const onOk = () => safeResolve(true)
-      const onCancel = () => safeResolve(false)
       const onClose = () => safeResolve(dlg.returnValue === 'ok')
-
       function cleanup() {
         okBtn.removeEventListener('click', okClickHandler)
         cancelBtn.removeEventListener('click', cancelClickHandler)
@@ -342,8 +225,8 @@
           try { dlg.close() } catch (e) { /* noop */ }
         }
       }
-      const okClickHandler = () => { dlg.returnValue = 'ok'; onOk() }
-      const cancelClickHandler = () => { dlg.returnValue = 'cancel'; onCancel() }
+      const okClickHandler = () => { dlg.returnValue = 'ok'; safeResolve(true) }
+      const cancelClickHandler = () => { dlg.returnValue = 'cancel'; safeResolve(false) }
       okBtn.addEventListener('click', okClickHandler)
       cancelBtn.addEventListener('click', cancelClickHandler)
       dlg.addEventListener('close', onClose)
@@ -353,9 +236,6 @@
     })
   }
 
-  // ============================================================
-  // keyboard helper: Enter/Space → action (H-U1)
-  // ============================================================
   function activateOnEnterOrSpace(action) {
     return (ev) => {
       if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
@@ -366,363 +246,260 @@
   }
 
   // ============================================================
-  // task-65: 6 軸 read-only table builder (preset 一致時)
-  //   axes = matched preset の axes object (6 key)。日本語ラベル (AXIS_LABELS_JA) + 値で表示。
+  // derived helpers
   // ============================================================
-  function renderAxesTable(axes) {
-    const tableBox = el('div', { class: 'bg-white rounded-lg border border-slate-200 overflow-hidden' })
-    tableBox.appendChild(
-      el(
-        'div',
-        { class: 'px-4 py-2 border-b border-slate-200 bg-slate-50' },
-        el('h3', { class: 'text-sm font-semibold text-slate-700' }, '設定内容 (6 軸)')
-      )
-    )
-    const table = el(
-      'table',
-      { class: 'w-full text-sm', 'aria-label': '現在の 6 軸設定 (読み取り専用)' },
-      el(
-        'caption',
-        { class: 'sr-only' },
-        '現在の harness-config.yml の 6 軸状態 (品質レベル / 言語フレームワーク / Git 運用 / TDD ポリシー / レビュー強度 / 自律度)'
-      )
-    )
-    const thead = el(
-      'thead',
-      { class: 'bg-slate-50 text-xs uppercase text-slate-500' },
-      el(
-        'tr',
-        null,
-        el('th', { scope: 'col', class: 'text-left px-3 py-2' }, '軸'),
-        el('th', { scope: 'col', class: 'text-left px-3 py-2' }, '現在値')
-      )
-    )
-    table.appendChild(thead)
-    const tbody = el('tbody', null)
-    for (const k of AXIS_KEYS) {
-      const labelJa = AXIS_LABELS_JA[k] || k
-      // task-65 iter2 (ui M-2): HTML タグ風 `<未設定>` 表示の誤解を避け '—' に変更。
-      const val = axes[k] !== undefined && axes[k] !== null ? String(axes[k]) : '—'
-      tbody.appendChild(
-        el(
-          'tr',
-          { class: 'border-t border-slate-100' },
-          // task-65 iter2 (ui M-3 / WCAG 1.3.1): 軸名 (ラベル) 列を th scope="row" で row header 化。
-          el(
-            'th',
-            { scope: 'row', class: 'px-3 py-2 text-left font-normal', lang: 'ja' },
-            el('span', { class: 'font-semibold text-slate-700' }, labelJa),
-            el('span', { class: 'text-xs text-slate-400 ml-2 font-mono' }, k)
-          ),
-          el('td', { class: 'px-3 py-2 font-mono text-sm text-blue-700' }, val)
-        )
-      )
+  // baseline と draft の差分 key (保存対象)
+  function changedKeys() {
+    const out = []
+    for (const key of Object.keys(state.draft)) {
+      if (String(state.draft[key]) !== String(state.baseline[key])) out.push(key)
     }
-    table.appendChild(tbody)
-    tableBox.appendChild(table)
-    return tableBox
+    return out
+  }
+
+  function hasChanges() {
+    return changedKeys().length > 0
+  }
+
+  // 現在の表示値 (draft 優先、無ければ baseline)
+  function currentValue(key) {
+    return Object.prototype.hasOwnProperty.call(state.draft, key) ? state.draft[key] : state.baseline[key]
   }
 
   // ============================================================
-  // task-65: unsaved (axes:null) 時のカスタム表示 panel
-  //   preset 外 (unsaved) では 6 軸の現在値が一意に定まらないため、6 軸 table の代わりに
-  //   「カスタム設定 (プリセット外)」見出し + 説明を表示。どの設定が preset と異なるかは
-  //   edit view の preset 選択 diff preview で確認する導線に委ねる (top view では一意 diff 不能)。
+  // 左ペイン render (preset を group section 化 + ★ カスタム)
+  //   render target: #preset-list
   // ============================================================
-  function renderCustomPanel() {
+  function renderPresetList() {
+    const cont = $('preset-list')
+    if (!cont) return
+    clear(cont)
+
+    if (!state.presets.length) {
+      cont.appendChild(el('p', { class: 'text-sm text-slate-400 px-2 py-1' }, '読み込み中...'))
+      return
+    }
+
+    // group ごとに分類
+    const groups = {}
+    for (const p of state.presets) {
+      const g = p.group || 'その他'
+      if (!groups[g]) groups[g] = []
+      groups[g].push(p)
+    }
+    const orderedGroupNames = PRESET_GROUP_ORDER.filter((g) => groups[g] && groups[g].length)
+    // 想定外 group も末尾に拾う
+    for (const g of Object.keys(groups)) {
+      if (!orderedGroupNames.includes(g)) orderedGroupNames.push(g)
+    }
+
+    for (const g of orderedGroupNames) {
+      cont.appendChild(el('h3', { class: 'preset-group__heading', lang: 'ja' }, g))
+      const ul = el('ul', { class: 'preset-group__list', role: 'list', 'aria-label': `${g} のプリセット` })
+      for (const p of groups[g]) {
+        ul.appendChild(renderPresetItem(p))
+      }
+      cont.appendChild(ul)
+    }
+
+    // ★ カスタム
+    cont.appendChild(el('h3', { class: 'preset-group__heading', lang: 'ja' }, 'その他'))
+    const customSel = state.isCustom
+    const onCustom = () => { /* custom は選択操作不可 (編集結果として自動遷移)。クリックは no-op */ }
+    cont.appendChild(
+      el(
+        'div',
+        {
+          class: `preset-item preset-item--custom ${customSel ? 'preset-item--selected' : ''}`,
+          role: 'listitem',
+          'aria-current': customSel ? 'true' : null,
+          lang: 'ja',
+          tabindex: '-1',
+          onclick: onCustom,
+        },
+        el('span', { class: 'preset-item__name' }, '★ カスタム'),
+        el('span', { class: 'preset-item__sub text-xs text-slate-500' }, '手動編集後の未保存状態')
+      )
+    )
+  }
+
+  function renderPresetItem(p) {
+    const isSel = !state.isCustom && state.selectedPreset === p.name
+    const onSelect = () => onSelectPreset(p.name)
     return el(
-      'div',
+      'li',
       {
-        class: 'bg-white rounded-lg border border-slate-200 p-4',
-        role: 'region',
-        'aria-labelledby': 'custom-panel-heading',
+        class: `preset-item ${isSel ? 'preset-item--selected' : ''}`,
+        role: 'listitem',
+        tabindex: '0',
+        'data-preset-key': p.name,
+        'aria-current': isSel ? 'true' : null,
+        'aria-label': `プリセット ${p.display_name_ja || p.name}${isSel ? ' (選択中)' : ''}`,
+        onclick: onSelect,
+        onkeydown: activateOnEnterOrSpace(onSelect),
         lang: 'ja',
       },
-      el('h3', { id: 'custom-panel-heading', class: 'text-sm font-semibold text-slate-700 mb-1' }, 'カスタム設定 (プリセット外)'),
-      el(
-        'p',
-        { class: 'text-sm text-slate-600' },
-        '現在の設定はどの組み込みプリセットにも一致しません (未保存変更あり)。'
-      ),
-      el(
-        'p',
-        { class: 'text-xs text-slate-500 mt-1' },
-        'プリセットとの差分は「設定を変更」からプリセットを選ぶと確認できます。'
-      )
+      el('span', { class: 'preset-item__name' }, p.display_name_ja || p.name),
+      el('span', { class: 'preset-item__sub text-xs text-slate-400 font-mono' }, p.name),
+      p.use_case ? el('span', { class: 'preset-item__sub text-xs text-slate-500', lang: 'ja' }, p.use_case) : null
     )
   }
 
   // ============================================================
-  // render: top view (現状確認 + 「設定を変更」CTA)
-  // 起源: draft §3.4 wireframe
-  // a11y: banner region + table read-only + CTA button focus ring
+  // 右ペイン render (実 7 category を accordion 化、同時 1 つ開く)
+  //   render target: #category-accordion
   // ============================================================
-  function renderTop(currentState) {
-    const cp = currentState.currentPreset
-    const box = el('section', {
-      class: 'space-y-4',
-      'aria-labelledby': 'top-view-heading',
-      role: 'region',
-      lang: 'ja',
-    })
+  function renderCategoryAccordion() {
+    const cont = $('category-accordion')
+    if (!cont) return
+    clear(cont)
 
-    box.appendChild(
-      el('h2', { id: 'top-view-heading', class: 'sr-only' }, '現在の設定')
-    )
-
-    // 現在 preset banner
-    //   task-65 iter2 (ui H-1 / code-rev M2): server は 'preset'/'unsaved' のみ返す
-    //   ('custom' は task-63 で廃止)。2-state (preset / else=unsaved) に collapse。
-    const matchType = cp && cp.match_type === 'preset' ? 'preset' : 'unsaved'
-    let bannerLabel = ''
-    let bannerValue = ''
-    if (matchType === 'preset') {
-      bannerLabel = 'プリセット'
-      bannerValue = getDisplayName(cp) || '(不明)'
-    } else {
-      bannerLabel = '状態'
-      bannerValue = '未保存変更あり (どのプリセットにも一致しません)'
-    }
-    // task-65 iter2 (ui H-2): matchType 応じた状態別カラークラス (style.css L133-149 定義済の amber/emerald)。
-    const bannerStateClass = matchType === 'preset' ? 'preset-banner--preset' : 'preset-banner--unsaved'
-    const banner = el(
-      'div',
-      {
-        class: `preset-banner ${bannerStateClass} bg-white rounded-lg border border-slate-200 p-5`,
-        role: 'region',
-        'aria-label': '現在の設定状態',
-      },
-      el('h3', { class: 'text-base font-bold text-slate-800 mb-2' }, '現在の設定'),
-      el(
-        'div',
-        { class: 'flex items-baseline gap-3 flex-wrap' },
-        el('span', { class: 'text-sm uppercase text-slate-500 font-semibold' }, bannerLabel),
-        el('span', { class: 'text-lg font-bold text-blue-800', lang: 'ja' }, bannerValue)
-      )
-    )
-    box.appendChild(banner)
-
-    // task-65: cp.axes を直接参照 (API が matched preset の axes を返す)。
-    //   axes が object (preset 一致) → 6 軸 read-only table を表示。
-    //   axes が null/undefined (unsaved) → 「カスタム設定 (プリセット外)」見出しに切替。
-    const axes = cp && cp.axes && typeof cp.axes === 'object' ? cp.axes : null
-    if (axes) {
-      box.appendChild(renderAxesTable(axes))
-    } else {
-      box.appendChild(renderCustomPanel())
+    if (!state.categories.length) {
+      cont.appendChild(el('p', { class: 'text-sm text-slate-400 px-2 py-2' }, '読み込み中...'))
+      return
     }
 
-    // CTA: 「設定を変更」ボタン
-    const actions = el(
-      'div',
-      { class: 'flex items-center gap-3 flex-wrap' },
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'px-5 py-3 text-base bg-blue-700 hover:bg-blue-800 text-white font-bold rounded shadow-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2',
-          onclick: onClickGotoEdit,
-          lang: 'ja',
-        },
-        '設定を変更'
-      )
-    )
-    box.appendChild(actions)
-
-    return box
-  }
-
-  // ============================================================
-  // render: edit view (preset list + 適用 / キャンセル)
-  // 起源: draft §3.5 / §3.9 a11y。task-65 で 6 軸 dropdown 撤去済 — preset 一括変更のみ。
-  // ============================================================
-  function renderEdit(currentState) {
-    const box = el('section', {
-      class: 'space-y-4',
-      'aria-labelledby': 'edit-view-heading',
-      role: 'region',
-      lang: 'ja',
-    })
-
-    box.appendChild(
-      el(
-        'div',
-        { class: 'flex items-center justify-between flex-wrap gap-2' },
-        el('h2', { id: 'edit-view-heading', class: 'text-lg font-bold text-slate-800' }, '設定を編集'),
-        el(
-          'button',
-          {
-            type: 'button',
-            class: 'px-3 py-2 text-sm bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-700 min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-400',
-            onclick: onClickBackToTop,
-            'aria-label': 'トップ画面に戻る',
-          },
-          'トップに戻る'
-        )
-      )
-    )
-
-    // ============ preset 選択 section ============
-    const presetSection = el(
-      'div',
-      {
-        class: 'bg-white rounded-lg border border-slate-200 p-4',
-        role: 'region',
-        'aria-labelledby': 'edit-preset-heading',
-      },
-      el('h3', { id: 'edit-preset-heading', class: 'text-base font-semibold text-slate-800 mb-3' }, 'プリセットから選ぶ')
-    )
-
-    if (!currentState.presets || currentState.presets.length === 0) {
-      presetSection.appendChild(
-        el('p', { class: 'text-sm text-slate-500' }, 'プリセットを読み込み中...')
-      )
-    } else {
-      const presetUl = el('ul', {
-        class: 'space-y-1',
-        role: 'list',
-        'aria-label': 'プリセット選択リスト',
-      })
-      for (const p of currentState.presets) {
-        const isSel = currentState.editPresetSelection === p.name
-        const displayName = getDisplayName(p)
-        const onSelect = () => onSelectPresetInEdit(p.name)
-        const li = el(
-          'li',
-          {
-            class: `cursor-pointer px-3 py-2 rounded border min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isSel ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 hover:bg-slate-50'}`,
-            role: 'listitem',
-            tabindex: '0',
-            'data-preset-key': p.name,
-            'aria-current': isSel ? 'true' : null,
-            'aria-label': `プリセット ${displayName}${isSel ? ' (選択中)' : ''}`,
-            onclick: onSelect,
-            onkeydown: activateOnEnterOrSpace(onSelect),
-            lang: 'ja',
-          },
-          el(
-            'div',
-            { class: 'flex items-baseline justify-between gap-2 flex-wrap' },
-            el('span', { class: 'text-sm font-semibold text-slate-800', lang: 'ja' }, displayName),
-            el('span', { class: 'text-xs text-slate-400 font-mono' }, p.name)
-          ),
-          p.use_case ? el('div', { class: 'text-xs text-slate-500 mt-0.5', lang: 'ja' }, p.use_case) : null
-        )
-        presetUl.appendChild(li)
+    for (const c of state.categories) {
+      const catName = c.name || '(未分類)'
+      const isOpen = state.openCategory === catName
+      const detailsAttrs = {
+        class: 'category-accordion__item',
+        'data-category': catName,
+        ontoggle: (ev) => onToggleCategory(catName, ev.target.open),
       }
-      presetSection.appendChild(presetUl)
+      if (isOpen) detailsAttrs.open = true
 
-      // preset 選択時 diff preview
-      if (currentState.editPresetDiff) {
-        const diff = currentState.editPresetDiff
-        const changed = (diff.changes || []).filter((c) => c.changed)
-        const previewBox = el(
-          'div',
-          {
-            class: 'mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm',
-            role: 'region',
-            'aria-label': '選択プリセットの差分プレビュー',
-          },
-          el(
-            'p',
-            { class: 'font-semibold text-blue-900 mb-1' },
-            `差分: ${changed.length} 件の変更`
-          )
-        )
-        if (changed.length > 0) {
-          const ul = el('ul', { class: 'space-y-0.5 text-xs', role: 'list' })
-          for (const c of changed) {
-            ul.appendChild(
-              el(
-                'li',
-                { class: 'font-mono text-slate-700' },
-                `${c.key}: ${c.current} → ${c.new}`
-              )
-            )
-          }
-          previewBox.appendChild(ul)
+      const summary = el(
+        'summary',
+        { class: 'category-accordion__summary', lang: 'ja' },
+        el('span', { class: 'category-accordion__name' }, catName),
+        el('span', { class: 'category-accordion__count text-xs text-slate-400' }, `${c.key_count} keys`)
+      )
+
+      const bodyChildren = []
+      if (isOpen) {
+        const keys = state.keysByCategory[catName]
+        if (!keys) {
+          bodyChildren.push(el('p', { class: 'text-xs text-slate-400 px-3 py-2' }, '読み込み中...'))
+        } else if (!keys.length) {
+          bodyChildren.push(el('p', { class: 'text-xs text-slate-400 px-3 py-2' }, 'key がありません'))
+        } else {
+          for (const k of keys) bodyChildren.push(renderKeyRow(k))
         }
-        presetSection.appendChild(previewBox)
       }
+      const body = el('div', { class: 'category-accordion__body' }, ...bodyChildren)
+      cont.appendChild(el('details', detailsAttrs, summary, body))
     }
-    box.appendChild(presetSection)
-
-    // task-65: 個別変更 section (6 軸 drop-down) は撤去。
-    //   6 軸は yml raw key でなく preset metadata のため、/api/keys からの options 取得元が無く
-    //   常に 0 件 (dead UI) だった。編集経路は preset 一括変更に一本化 (6 軸は top view で read-only 表示専用)。
-
-    // ============ アクション buttons (task-63 簡素化: 「キャンセル」「適用」のみ) ============
-    const hasChange = !!currentState.editPresetSelection
-    const applyDisabled = currentState.applying || !hasChange
-
-    const actions = el(
-      'div',
-      { class: 'flex items-center gap-3 flex-wrap' },
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'px-4 py-2 text-sm bg-slate-200 hover:bg-slate-300 text-slate-800 rounded min-h-[44px] focus:outline-none focus:ring-2 focus:ring-slate-400',
-          onclick: onClickCancel,
-          'aria-label': '編集を破棄してトップ画面に戻る',
-        },
-        'キャンセル'
-      ),
-      el(
-        'button',
-        {
-          type: 'button',
-          class: `px-4 py-2 text-sm font-semibold rounded shadow-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-offset-1 ${applyDisabled ? 'bg-emerald-400 text-white opacity-60 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-800 text-white focus:ring-emerald-400'}`,
-          onclick: onClickApply,
-          disabled: applyDisabled,
-          'aria-label': currentState.applying ? '適用処理中' : '編集内容を harness-config.yml に適用',
-          'aria-disabled': applyDisabled ? 'true' : 'false',
-        },
-        currentState.applying ? '適用中...' : '適用'
-      )
-    )
-    box.appendChild(actions)
-
-    return box
   }
 
-  // ============================================================
-  // render: dispatcher (state → DOM)
-  // ============================================================
-  function render() {
-    // 描画 target は index.html の <div id="view-container"> (L34、<main id="main"> 内の動的 content div)。
-    // 旧 'main-panel' は index.html に実在しない id で view 全体が描画されない bug の原因だった (task-63 Step 7 修正)。
-    const panel = document.getElementById('view-container')
-    if (!panel) return
-    clear(panel)
-    if (state.view === 'top') {
-      panel.appendChild(renderTop(state))
-    } else if (state.view === 'edit') {
-      panel.appendChild(renderEdit(state))
+  function renderKeyRow(keyObj) {
+    const key = keyObj.key
+    const meta = state.keyMeta[key] || { type: 'text', description: '', effect: '' }
+    const val = currentValue(key)
+    const isChanged = String(state.draft[key]) === String(val) &&
+      Object.prototype.hasOwnProperty.call(state.draft, key) &&
+      String(state.draft[key]) !== String(state.baseline[key])
+
+    let control
+    if (meta.type === 'boolean') {
+      const checked = String(val).trim().toLowerCase() === 'true'
+      control = el('input', {
+        type: 'checkbox',
+        class: 'key-row__toggle',
+        checked: checked ? true : false,
+        'aria-label': `${key} (${checked ? 'on' : 'off'})`,
+        onchange: (ev) => onEditKey(key, ev.target.checked ? 'true' : 'false'),
+      })
+    } else if (meta.type === 'enum') {
+      const opts = ENUM_OPTIONS[key] || []
+      const sel = el('select', {
+        class: 'key-row__select',
+        'aria-label': key,
+        onchange: (ev) => onEditKey(key, ev.target.value),
+      })
+      const cur = String(val == null ? '' : val)
+      // 現在値が既知 option に無い場合も先頭に保持
+      const allOpts = opts.includes(cur) ? opts : [cur, ...opts]
+      for (const o of allOpts) {
+        const optEl = el('option', { value: o }, o)
+        if (o === cur) optEl.selected = true
+        sel.appendChild(optEl)
+      }
+      control = sel
     } else {
-      // unknown view fallback → top
-      panel.appendChild(renderTop(state))
+      control = el('input', {
+        type: 'text',
+        class: 'key-row__text',
+        value: val == null ? '' : String(val),
+        'aria-label': key,
+        oninput: (ev) => onEditKey(key, ev.target.value),
+      })
     }
-    // sidebar / category list は task-63 で廃止 (DOM 非存在の場合 silent)
-    // history footer は維持
-    renderHistory()
+
+    return el(
+      'div',
+      { class: `key-row ${isChanged ? 'key-row--changed' : ''}`, 'data-key': key },
+      el(
+        'div',
+        { class: 'key-row__head' },
+        el('span', { class: 'key-row__name font-mono', title: meta.description || '' }, key),
+        control
+      ),
+      meta.description ? el('p', { class: 'key-row__desc text-xs text-slate-500', lang: 'ja' }, meta.description) : null,
+      meta.effect ? el('p', { class: 'key-row__effect text-xs text-slate-400', lang: 'ja' }, meta.effect) : null
+    )
   }
 
   // ============================================================
-  // history footer (task-61 から継承、絵文字なしテキスト化)
+  // 保存バー / 状態バッジ update (render の一部、再描画なしで text のみ)
+  // ============================================================
+  function updateSaveBar() {
+    const note = $('save-bar-note')
+    const saveBtn = $('btn-save')
+    const cancelBtn = $('btn-cancel')
+    const n = changedKeys().length
+    if (note) {
+      note.textContent = state.saving
+        ? '保存中...'
+        : (n > 0 ? `${n} 件の変更があります` : '変更なし')
+    }
+    const disabled = state.saving || n === 0
+    if (saveBtn) {
+      saveBtn.disabled = disabled
+      saveBtn.textContent = state.saving ? '保存中...' : '保存'
+    }
+    if (cancelBtn) cancelBtn.disabled = disabled
+  }
+
+  function updateStateBadge() {
+    const badge = $('header-state-badge')
+    if (!badge) return
+    badge.classList.remove('state-badge--preset', 'state-badge--custom')
+    if (state.isCustom) {
+      badge.textContent = 'カスタム'
+      badge.classList.add('state-badge--custom')
+    } else if (state.selectedPreset) {
+      const p = state.presets.find((x) => x.name === state.selectedPreset)
+      badge.textContent = p ? (p.display_name_ja || p.name) : state.selectedPreset
+      badge.classList.add('state-badge--preset')
+    } else {
+      badge.textContent = '—'
+    }
+  }
+
+  // ============================================================
+  // 履歴タブ render (render target: #history-tbody)
   // ============================================================
   function formatHistoryTime(h) {
     if (h.applied_at) {
       const d = new Date(h.applied_at)
-      if (!isNaN(d.getTime())) {
-        return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false })
-      }
+      if (!isNaN(d.getTime())) return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false })
     }
     return h.timestamp
   }
 
   function renderHistory() {
-    const tbody = document.getElementById('history-tbody')
+    const tbody = $('history-tbody')
     if (!tbody) return
     clear(tbody)
     if (!state.history.length) {
@@ -732,25 +509,13 @@
     for (const h of state.history) {
       const failedCount = Number(h.failed_count || 0)
       const failedCell = failedCount > 0
-        ? el(
-            'span',
-            { class: 'inline-flex items-center gap-1 text-red-700 font-semibold' },
-            el('span', { 'aria-hidden': 'true', class: 'font-mono text-xs' }, '[!]'),
-            String(failedCount)
-          )
+        ? el('span', { class: 'text-red-700 font-semibold' }, String(failedCount))
         : el('span', { class: 'text-slate-500' }, '0')
       const rolledBackCount = Number(h.rolled_back_count || 0)
       const rolledBackCell = rolledBackCount > 0
-        ? el(
-            'span',
-            { class: 'inline-flex items-center gap-1 text-amber-700 font-semibold' },
-            el('span', { 'aria-hidden': 'true', class: 'font-mono text-xs' }, '[r]'),
-            String(rolledBackCount)
-          )
+        ? el('span', { class: 'text-amber-700 font-semibold' }, String(rolledBackCount))
         : el('span', { class: 'text-slate-500' }, '0')
-
       const presetDisplay = h.preset_display_name_ja || h.preset || '<unknown>'
-      const rollbackLabel = `${h.timestamp} (preset: ${presetDisplay}) をロールバック`
       const rollbackDisabled = state.rollbackInProgress
       const tr = el(
         'tr',
@@ -770,10 +535,9 @@
               class: `text-xs px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded border border-amber-400 min-h-[32px] ${rollbackDisabled ? 'opacity-60 cursor-not-allowed' : ''}`,
               onclick: () => onRollback(h.timestamp, presetDisplay, h.applied_count),
               disabled: rollbackDisabled,
-              'aria-label': rollbackLabel,
-              'aria-disabled': rollbackDisabled ? 'true' : 'false',
+              'aria-label': `${h.timestamp} (preset: ${presetDisplay}) をロールバック`,
             },
-            'ロールバック'
+            'この時点へ戻す'
           )
         )
       )
@@ -782,102 +546,240 @@
   }
 
   // ============================================================
-  // event handlers (task-63 state machine 適合)
+  // tab 切替 (DOM 属性 + panel hidden 切替)
   // ============================================================
-  function onClickGotoEdit() {
-    // task-65: 6 軸 dropdown 撤去により編集 baseline (currentAxes) / options fetch は不要。
-    //   edit view は preset list (preset 一括変更経路) のみ。
-    dispatch({ type: 'edit:enter' })
-    setStatus('編集画面')
+  function applyTabUI() {
+    const isConfig = state.tab === 'config'
+    const tabConfig = $('tab-config')
+    const tabHistory = $('tab-history')
+    const panelConfig = $('panel-config')
+    const panelHistory = $('panel-history')
+    if (tabConfig) { tabConfig.setAttribute('aria-selected', isConfig ? 'true' : 'false'); tabConfig.tabIndex = isConfig ? 0 : -1 }
+    if (tabHistory) { tabHistory.setAttribute('aria-selected', isConfig ? 'false' : 'true'); tabHistory.tabIndex = isConfig ? -1 : 0 }
+    if (panelConfig) panelConfig.classList.toggle('hidden', !isConfig)
+    if (panelHistory) panelHistory.classList.toggle('hidden', isConfig)
   }
 
-  function onClickBackToTop() {
-    dispatch({ type: 'top:enter' })
-    setStatus('トップ画面')
+  function switchTab(tab) {
+    state = { ...state, tab }
+    applyTabUI()
+    if (tab === 'history') renderHistory()
   }
 
-  async function onSelectPresetInEdit(presetName) {
-    setStatus(`プリセット ${presetName} の差分を計算中...`)
+  // ============================================================
+  // master render (設定タブの再描画)
+  // ============================================================
+  function render() {
+    renderPresetList()
+    renderCategoryAccordion()
+    updateSaveBar()
+    updateStateBadge()
+  }
+
+  // ============================================================
+  // event: accordion 開閉 (同時 1 つだけ開く)
+  // ============================================================
+  async function onToggleCategory(catName, isOpen) {
+    if (isOpen) {
+      if (state.openCategory === catName) return
+      state = { ...state, openCategory: catName }
+      // 当該 category の keys を未取得なら lazy load
+      if (!state.keysByCategory[catName]) {
+        try {
+          const keys = await loadKeys(catName)
+          const byCat = { ...state.keysByCategory, [catName]: keys }
+          const meta = { ...state.keyMeta }
+          const baseline = { ...state.baseline }
+          for (const k of keys) {
+            meta[k.key] = {
+              category: k.category,
+              description: k.description,
+              effect: k.effect,
+              type: inferType(k.key, k.current_value),
+            }
+            // baseline は初回 load 時のみ (編集中 draft を壊さない)
+            if (!Object.prototype.hasOwnProperty.call(baseline, k.key)) {
+              baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
+            }
+          }
+          state = { ...state, keysByCategory: byCat, keyMeta: meta, baseline }
+        } catch (e) {
+          toast(`設定値の取得に失敗: ${e.message}`, 'error')
+        }
+      }
+      // 他 category を閉じるため再描画
+      render()
+    } else {
+      // close: state も閉に同期 (再描画はしない、details の DOM 状態に追従)
+      if (state.openCategory === catName) state = { ...state, openCategory: null }
+    }
+  }
+
+  // ============================================================
+  // event: key 編集 (draft 更新 → custom 化)
+  // ============================================================
+  function onEditKey(key, value) {
+    const draft = { ...state.draft, [key]: String(value) }
+    // baseline と一致に戻ったら draft から除去 (= 変更なし扱い)
+    if (String(value) === String(state.baseline[key])) {
+      delete draft[key]
+    }
+    // 手動編集が発生したら custom (draft §3「手動編集が発生したら custom」)
+    const stillHasChange = Object.keys(draft).some((k) => String(draft[k]) !== String(state.baseline[k]))
+    state = {
+      ...state,
+      draft,
+      isCustom: stillHasChange ? true : state.isCustom,
+      selectedPreset: stillHasChange ? null : state.selectedPreset,
+    }
+    // text input は再描画で focus を失わないよう、保存バー / バッジのみ更新 + 左ペインのみ再描画。
+    //   右 accordion は再描画しない (input の focus 維持)。
+    renderPresetList()
+    updateSaveBar()
+    updateStateBadge()
+  }
+
+  // ============================================================
+  // event: preset 選択 (diff を draft に反映、preview)
+  // ============================================================
+  async function onSelectPreset(presetName) {
+    setStatus(`プリセット ${presetName} を読み込み中...`)
     try {
       const diff = await loadPresetDiff(presetName)
-      dispatch({ type: 'edit:select_preset', payload: { presetName, diff } })
-      setStatus(`プリセット ${presetName} を選択中`)
+      const draft = { ...state.draft }
+      const baseline = { ...state.baseline }
+      const meta = { ...state.keyMeta }
+      for (const c of (diff.changes || [])) {
+        // diff.current は server 現在値 = baseline。未取得 key の baseline を補完。
+        if (c.current !== '<unknown>' && !Object.prototype.hasOwnProperty.call(baseline, c.key)) {
+          baseline[c.key] = String(c.current)
+        }
+        // preset 値を draft に反映 (preview)
+        draft[c.key] = String(c.new)
+        if (c.current !== '<unknown>' && String(c.new) === String(baseline[c.key])) {
+          delete draft[c.key] // 値が同一なら draft 不要
+        }
+        if (!meta[c.key]) {
+          meta[c.key] = { category: '', description: '', effect: c.effect || '', type: inferType(c.key, c.new) }
+        }
+      }
+      state = {
+        ...state,
+        draft,
+        baseline,
+        keyMeta: meta,
+        selectedPreset: presetName,
+        isCustom: false,
+      }
+      render()
+      const p = state.presets.find((x) => x.name === presetName)
+      const dn = p ? (p.display_name_ja || p.name) : presetName
+      setStatus(`プリセット「${dn}」を選択 (未保存プレビュー)`)
     } catch (e) {
       toast(`差分取得失敗: ${e.message}`, 'error')
       setStatus('エラー')
     }
   }
 
-  async function onClickApply() {
-    if (state.applying) return
-    if (state.editPresetSelection) {
-      await applyPresetMode()
-    } else {
-      toast('適用対象の変更がありません', 'info')
+  // ============================================================
+  // event: 保存 (変更のあった key だけ /api/set で loop)
+  // ============================================================
+  async function onClickSave() {
+    if (state.saving) return
+    const keys = changedKeys()
+    if (!keys.length) {
+      toast('変更がありません', 'info')
+      return
     }
-  }
-
-  async function applyPresetMode() {
-    const presetName = state.editPresetSelection
-    const selected = (state.presets || []).find((p) => p.name === presetName)
-    const displayName = getDisplayName(selected) || presetName
-    const diff = state.editPresetDiff
-    const changedCount = diff ? (diff.changes || []).filter((c) => c.changed).length : '?'
-
     const confirmed = await showConfirmDialog({
-      title: 'プリセット適用の確認',
+      title: '保存の確認',
       bodyLines: [
-        `『${displayName}』を適用しますか?`,
-        `変更対象: ${changedCount} 軸`,
-        '実行すると harness-config.yml が atomic backup 付きで更新されます。',
+        `${keys.length} 件の設定値を harness-config.yml に保存します。`,
+        '各 key は atomic backup 付きで個別に更新されます。',
       ],
-      okLabel: '適用する',
+      okLabel: '保存する',
       cancelLabel: 'キャンセル',
       danger: false,
     })
     if (!confirmed) return
 
-    dispatch({ type: 'ui:set_flag', payload: { flag: 'applying', value: true } })
-    setStatus('適用中...')
-    try {
-      const r = await applyPresetApi(presetName, [])
-      if (r.ok) {
-        toast(`適用成功: ${r.applied} 件適用 (『${displayName}』)`, 'success')
-      } else if (r.partial) {
-        toast(`部分失敗: ${r.applied || 0} 成功 / ${r.failed || 1} 失敗`, 'warning')
-      } else {
-        toast(`適用失敗: ${r.error || 'unknown'}`, 'error')
+    state = { ...state, saving: true }
+    updateSaveBar()
+    setStatus('保存中...')
+    let ok = 0
+    let failed = 0
+    const newBaseline = { ...state.baseline }
+    for (const key of keys) {
+      try {
+        await setKeyApi(key, state.draft[key])
+        newBaseline[key] = String(state.draft[key])
+        ok += 1
+      } catch (e) {
+        failed += 1
+        toast(`${key} の保存に失敗: ${e.message}`, 'error')
       }
-      // top 復帰 + currentPreset 再取得
-      await _finalizeApply('適用完了')
-    } catch (e) {
-      toast(`適用失敗: ${e.message}`, 'error')
-      setStatus('エラー')
-      dispatch({ type: 'ui:set_flag', payload: { flag: 'applying', value: false } })
     }
-  }
+    // baseline を保存済値で更新、draft から保存成功分を除去
+    const newDraft = { ...state.draft }
+    for (const key of keys) {
+      if (String(newDraft[key]) === String(newBaseline[key])) delete newDraft[key]
+    }
+    state = { ...state, saving: false, baseline: newBaseline, draft: newDraft }
 
-  // 適用成功後の共通後処理:
-  //   currentPreset / history を再取得し、state を top 復帰させ render する。
-  //   (task-65: 個別変更経路撤去により呼出元は applyPresetMode のみ)
-  async function _finalizeApply(statusText) {
-    const newCurrent = await loadCurrentPreset()
-    const newHistory = await loadHistory()
-    state = reducer(state, { type: 'edit:apply', payload: { currentPreset: newCurrent } })
-    state = reducer(state, { type: 'history:update', payload: { history: newHistory } })
-    setStatus(statusText)
+    if (failed === 0) toast(`保存成功: ${ok} 件`, 'success')
+    else toast(`部分保存: ${ok} 成功 / ${failed} 失敗`, 'warning')
+
+    // 保存後に現在 preset を再判定 (バッジ update)
+    try {
+      const cp = await loadCurrentPreset()
+      if (cp.match_type === 'preset') {
+        state = { ...state, isCustom: false, selectedPreset: cp.name }
+      } else {
+        state = { ...state, isCustom: hasChanges() ? state.isCustom : false }
+        if (!hasChanges()) state = { ...state, isCustom: true } // 保存済だが preset 不一致 = custom
+      }
+      const newHistory = await loadHistory()
+      state = { ...state, history: newHistory }
+    } catch (e) {
+      // バッジ再判定失敗は致命的でない
+    }
     render()
-  }
-
-  // task-65: applyIndividualMode (6 軸 dropdown 個別変更) は撤去。編集経路は preset 一括変更のみ。
-
-  function onClickCancel() {
-    dispatch({ type: 'edit:cancel' })
-    setStatus('編集を破棄、トップ画面')
+    renderHistory()
+    setStatus('保存完了')
   }
 
   // ============================================================
-  // rollback (history footer 経由)
+  // event: 取消 (編集破棄、server から再 load)
+  // ============================================================
+  async function onClickCancel() {
+    if (state.saving) return
+    state = { ...state, draft: {}, isCustom: false }
+    // 開いている category を再 load (baseline = server 値で表示が戻る)
+    const cat = state.openCategory
+    if (cat) {
+      try {
+        const keys = await loadKeys(cat)
+        const byCat = { ...state.keysByCategory, [cat]: keys }
+        const baseline = { ...state.baseline }
+        const meta = { ...state.keyMeta }
+        for (const k of keys) {
+          baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
+          meta[k.key] = { category: k.category, description: k.description, effect: k.effect, type: inferType(k.key, k.current_value) }
+        }
+        state = { ...state, keysByCategory: byCat, baseline, keyMeta: meta }
+      } catch (e) { /* noop */ }
+    }
+    // 現在 preset 再判定
+    try {
+      const cp = await loadCurrentPreset()
+      state = { ...state, selectedPreset: cp.match_type === 'preset' ? cp.name : null, isCustom: cp.match_type !== 'preset' }
+    } catch (e) { /* noop */ }
+    render()
+    setStatus('編集を破棄しました')
+  }
+
+  // ============================================================
+  // event: rollback (履歴タブ)
   // ============================================================
   async function onRollback(timestamp, presetDisplayName, appliedCount) {
     if (state.rollbackInProgress) return
@@ -895,33 +797,65 @@
     })
     if (!confirmed) return
 
-    dispatch({ type: 'ui:set_flag', payload: { flag: 'rollbackInProgress', value: true } })
+    state = { ...state, rollbackInProgress: true }
+    renderHistory()
     setStatus('ロールバック中...')
     try {
       const r = await rollbackApi(timestamp)
-      if (r.ok) {
-        toast(`ロールバック成功: ${r.restored} 件復元`, 'success')
-      } else {
-        toast(`部分失敗: ${r.restored} 成功 / ${r.failed} 失敗`, 'warning')
-      }
-      const newCurrent = await loadCurrentPreset()
-      const newHistory = await loadHistory()
-      state = reducer(state, { type: 'load:current', payload: { currentPreset: newCurrent, history: newHistory } })
-      state = reducer(state, { type: 'ui:set_flag', payload: { flag: 'rollbackInProgress', value: false } })
+      if (r.ok) toast(`ロールバック成功: ${r.restored} 件復元`, 'success')
+      else toast(`部分失敗: ${r.restored} 成功 / ${r.failed} 失敗`, 'warning')
+      // 設定値 / 現在 preset / 履歴を再取得
+      await reloadAfterMutation()
       setStatus('ロールバック完了')
-      render()
     } catch (e) {
       toast(`ロールバック失敗: ${e.message}`, 'error')
       setStatus('エラー')
-      dispatch({ type: 'ui:set_flag', payload: { flag: 'rollbackInProgress', value: false } })
+    } finally {
+      state = { ...state, rollbackInProgress: false }
+      renderHistory()
     }
   }
 
+  // server 値が変わった後の再 load (rollback 後など)
+  async function reloadAfterMutation() {
+    // 開いている category の keys を fresh load + baseline 更新 + draft クリア
+    const cat = state.openCategory
+    const byCat = { ...state.keysByCategory }
+    const baseline = { ...state.baseline }
+    const meta = { ...state.keyMeta }
+    if (cat) {
+      try {
+        const keys = await loadKeys(cat)
+        byCat[cat] = keys
+        for (const k of keys) {
+          baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
+          meta[k.key] = { category: k.category, description: k.description, effect: k.effect, type: inferType(k.key, k.current_value) }
+        }
+      } catch (e) { /* noop */ }
+    }
+    let cp
+    try { cp = await loadCurrentPreset() } catch (e) { cp = { match_type: 'custom', name: 'custom' } }
+    let history = state.history
+    try { history = await loadHistory() } catch (e) { /* noop */ }
+    state = {
+      ...state,
+      keysByCategory: byCat,
+      baseline,
+      keyMeta: meta,
+      draft: {},
+      selectedPreset: cp.match_type === 'preset' ? cp.name : null,
+      isCustom: cp.match_type !== 'preset',
+      history,
+    }
+    render()
+    renderHistory()
+  }
+
   // ============================================================
-  // Tailwind CDN detection (task-61 から継承、M-U1)
+  // Tailwind CDN detection (task-61 から継承)
   // ============================================================
   function detectTailwind() {
-    const warningEl = document.getElementById('cdn-warning')
+    const warningEl = $('cdn-warning')
     if (!warningEl) return
     const cdnLoaded = () => typeof window.tailwind !== 'undefined'
     const hideWarning = () => warningEl.classList.add('hidden')
@@ -929,10 +863,7 @@
     const scripts = document.querySelectorAll('script[src*="tailwindcss.com"]')
     let scriptErrored = false
     for (const s of scripts) {
-      s.addEventListener('error', () => {
-        scriptErrored = true
-        showWarning()
-      })
+      s.addEventListener('error', () => { scriptErrored = true; showWarning() })
     }
     const start = Date.now()
     const timeoutMs = 3000
@@ -946,37 +877,86 @@
   }
 
   // ============================================================
+  // 静的 DOM の event 配線 (タブ / 保存 / 取消)
+  // ============================================================
+  function wireStaticControls() {
+    const tabConfig = $('tab-config')
+    const tabHistory = $('tab-history')
+    if (tabConfig) {
+      tabConfig.addEventListener('click', () => switchTab('config'))
+      tabConfig.addEventListener('keydown', (ev) => {
+        if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') { ev.preventDefault(); $('tab-history').focus(); switchTab('history') }
+      })
+    }
+    if (tabHistory) {
+      tabHistory.addEventListener('click', () => switchTab('history'))
+      tabHistory.addEventListener('keydown', (ev) => {
+        if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') { ev.preventDefault(); $('tab-config').focus(); switchTab('config') }
+      })
+    }
+    const saveBtn = $('btn-save')
+    const cancelBtn = $('btn-cancel')
+    if (saveBtn) saveBtn.addEventListener('click', onClickSave)
+    if (cancelBtn) cancelBtn.addEventListener('click', onClickCancel)
+  }
+
+  // ============================================================
   // init
   // ============================================================
   async function init() {
     setStatus('読み込み中...')
     detectTailwind()
+    wireStaticControls()
+    applyTabUI()
     try {
-      const [currentPreset, presets, history] = await Promise.all([
-        loadCurrentPreset(),
+      const [presets, categories, currentPreset, history] = await Promise.all([
         loadPresets(),
+        loadCategories(),
+        loadCurrentPreset(),
         loadHistory(),
       ])
-      state = reducer(state, { type: 'load:current', payload: { currentPreset, presets, history } })
+      state = {
+        ...state,
+        presets,
+        categories,
+        history,
+        selectedPreset: currentPreset && currentPreset.match_type === 'preset' ? currentPreset.name : null,
+        isCustom: !(currentPreset && currentPreset.match_type === 'preset'),
+        // 初期は先頭 category を開く (右ペインが空白に見えないように)
+        openCategory: categories.length ? (categories[0].name || null) : null,
+      }
+      // 先頭 category の keys を先読み
+      if (state.openCategory) {
+        try {
+          const keys = await loadKeys(state.openCategory)
+          const meta = {}
+          const baseline = {}
+          for (const k of keys) {
+            meta[k.key] = { category: k.category, description: k.description, effect: k.effect, type: inferType(k.key, k.current_value) }
+            baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
+          }
+          state = { ...state, keysByCategory: { [state.openCategory]: keys }, keyMeta: meta, baseline }
+        } catch (e) { /* noop、accordion 開時に再試行 */ }
+      }
       render()
-      // task-65 iter2 (ui H-1 / code-rev M2): 'custom' dead branch 撤去 (server は 'preset'/'unsaved' のみ)。
+      renderHistory()
       const cpName = currentPreset && currentPreset.match_type === 'preset'
-        ? getDisplayName(currentPreset)
-        : '未保存変更'
-      setStatus(`Ready (${cpName} / ${presets.length} presets)`)
+        ? (currentPreset.display_name_ja || currentPreset.name)
+        : 'カスタム'
+      setStatus(`Ready (${cpName} / ${presets.length} presets / ${categories.length} categories)`)
     } catch (e) {
       toast(`初期化失敗: ${e.message}`, 'error')
       setStatus('エラー (server 起動を確認してください)')
     }
   }
 
-  // expose for smoke / debugging (task-63 grep verify 用)
+  // expose for smoke / debugging (grep verify 用、task-76 Step 7 smoke が参照)
   window.__hcConfigUi = {
-    reducer,
-    getDisplayName,
+    inferType,
+    changedKeys: () => changedKeys(),
     initialState,
-    AXIS_KEYS,
-    AXIS_LABELS_JA,
+    PRESET_GROUP_ORDER,
+    ENUM_OPTIONS,
     getState: () => state,
   }
 
