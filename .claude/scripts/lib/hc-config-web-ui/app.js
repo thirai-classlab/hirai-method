@@ -174,7 +174,8 @@
       'div',
       {
         class: `pointer-events-auto px-4 py-2 rounded shadow-lg text-sm flex items-center gap-2 ${cls}`,
-        role: type === 'error' ? 'alert' : 'status',
+        // L1: error / warning は role=alert (即時読み上げ)、それ以外は status
+        role: (type === 'error' || type === 'warning') ? 'alert' : 'status',
       },
       icon ? el('span', { 'aria-hidden': 'true', class: 'font-mono text-xs' }, icon) : null,
       el('span', null, message)
@@ -302,8 +303,9 @@
       cont.appendChild(ul)
     }
 
-    // ★ カスタム
-    cont.appendChild(el('h3', { class: 'preset-group__heading', lang: 'ja' }, 'その他'))
+    // ★ カスタム (H3 fix: preset group 'その他' とは独立した「カスタム」見出しにし、
+    //   server が 'その他' group の preset を返した場合の見出し重複を防ぐ)
+    cont.appendChild(el('h3', { class: 'preset-group__heading', lang: 'ja' }, 'カスタム'))
     const customSel = state.isCustom
     const onCustom = () => { /* custom は選択操作不可 (編集結果として自動遷移)。クリックは no-op */ }
     cont.appendChild(
@@ -396,15 +398,19 @@
     const key = keyObj.key
     const meta = state.keyMeta[key] || { type: 'text', description: '', effect: '' }
     const val = currentValue(key)
-    const isChanged = String(state.draft[key]) === String(val) &&
-      Object.prototype.hasOwnProperty.call(state.draft, key) &&
+    // 変更扱い: draft に key があり baseline と値が異なる (C1/L1 fix: tautology を簡素化)
+    const isChanged = Object.prototype.hasOwnProperty.call(state.draft, key) &&
       String(state.draft[key]) !== String(state.baseline[key])
 
+    // M3 fix: control に id を付与し .key-row__name を <label htmlFor=id> にして
+    //   ラベルクリックで control に focus が移るようにする。
+    const controlId = `keyctl-${key}`
     let control
     if (meta.type === 'boolean') {
       const checked = String(val).trim().toLowerCase() === 'true'
       control = el('input', {
         type: 'checkbox',
+        id: controlId,
         class: 'key-row__toggle',
         checked: checked ? true : false,
         'aria-label': `${key} (${checked ? 'on' : 'off'})`,
@@ -413,6 +419,7 @@
     } else if (meta.type === 'enum') {
       const opts = ENUM_OPTIONS[key] || []
       const sel = el('select', {
+        id: controlId,
         class: 'key-row__select',
         'aria-label': key,
         onchange: (ev) => onEditKey(key, ev.target.value),
@@ -429,6 +436,7 @@
     } else {
       control = el('input', {
         type: 'text',
+        id: controlId,
         class: 'key-row__text',
         value: val == null ? '' : String(val),
         'aria-label': key,
@@ -442,7 +450,7 @@
       el(
         'div',
         { class: 'key-row__head' },
-        el('span', { class: 'key-row__name font-mono', title: meta.description || '' }, key),
+        el('label', { class: 'key-row__name font-mono', htmlFor: controlId, title: meta.description || '' }, key),
         control
       ),
       meta.description ? el('p', { class: 'key-row__desc text-xs text-slate-500', lang: 'ja' }, meta.description) : null,
@@ -469,6 +477,9 @@
       saveBtn.textContent = state.saving ? '保存中...' : '保存'
     }
     if (cancelBtn) cancelBtn.disabled = disabled
+    // M5: 変更ありのとき保存バーを視覚強調
+    const bar = $('save-bar')
+    if (bar) bar.classList.toggle('save-bar--dirty', n > 0 && !state.saving)
   }
 
   function updateStateBadge() {
@@ -624,12 +635,14 @@
     if (String(value) === String(state.baseline[key])) {
       delete draft[key]
     }
-    // 手動編集が発生したら custom (draft §3「手動編集が発生したら custom」)
+    // 手動編集が発生したら custom (draft §3「手動編集が発生したら custom」)。
+    //   全 draft を baseline に戻して stillHasChange===false なら custom 状態も解除する
+    //   (H4 fix: isCustom を true 据え置きにすると「★ カスタム」が居座る)。
     const stillHasChange = Object.keys(draft).some((k) => String(draft[k]) !== String(state.baseline[k]))
     state = {
       ...state,
       draft,
-      isCustom: stillHasChange ? true : state.isCustom,
+      isCustom: stillHasChange,
       selectedPreset: stillHasChange ? null : state.selectedPreset,
     }
     // text input は再描画で focus を失わないよう、保存バー / バッジのみ更新 + 左ペインのみ再描画。

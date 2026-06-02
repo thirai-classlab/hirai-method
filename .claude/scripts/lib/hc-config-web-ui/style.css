@@ -313,6 +313,10 @@ dialog::backdrop { background-color: rgba(15, 23, 42, 0.5); }
 .category-accordion__name { flex: 1 1 auto; }
 .category-accordion__body {
   padding: 0.25rem 0.5rem 0.5rem;
+  /* H1 fix: iOS Safari は <details> open 時に body が item 外へ溢れることがある。
+   *   overflow:hidden で item 内に収め、長い accordion は pane-right__body 側の
+   *   overflow-y:auto でスクロールさせる (保険)。 */
+  overflow: hidden;
 }
 
 /* key row (inline 編集) */
@@ -365,6 +369,11 @@ dialog::backdrop { background-color: rgba(15, 23, 42, 0.5); }
   padding: 0.625rem 1rem;
   border-top: 1px solid rgb(226 232 240);
   background: white;
+}
+/* M5: 変更ありのときは保存バーを強調 (上部にアンバー帯) */
+.save-bar--dirty {
+  background: rgb(255 251 235); /* amber-50 */
+  border-top: 2px solid rgb(217 119 6); /* amber-600 */
 }
 .save-bar__actions {
   display: flex;
@@ -426,12 +435,19 @@ dialog::backdrop { background-color: rgba(15, 23, 42, 0.5); }
     grid-template-columns: 1fr;
     overflow: visible;
   }
+  /* M1 fix: pane-left は max-height:40vh で頭打ちにするので overflow:hidden を維持し、
+   *   内部 (pane-left__body) を overflow-y:auto でスクロールさせる
+   *   (pane-left__body を visible にすると max-height の clip が効かず溢れる)。
+   *   右ペインは縦積みで高さ制限がないため visible で可。 */
   .pane-left {
     border-right: none;
     border-bottom: 1px solid rgb(226 232 240);
     max-height: 40vh;
+    overflow: hidden;
   }
-  .pane-left__body,
+  .pane-left__body {
+    overflow-y: auto;
+  }
   .pane-right__body {
     overflow-y: visible;
   }
