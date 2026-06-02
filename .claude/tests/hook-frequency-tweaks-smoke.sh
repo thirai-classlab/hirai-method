@@ -219,7 +219,12 @@ case_6_na_yellow_red_only_false_fires() {
 }
 
 # ----------------------------------------------------------------------
-# Case 7: session-help-surface 初回 (marker 未存在) → 表示
+# Case 7: session-help-surface 初回 (marker 未存在) → 1 行 pointer 表示 + marker 作成
+#
+# task-68 §3.2 (2026-06-01) opt-in 化に追従した spec-drift 修正:
+#   旧期待値: 初回で "主要 slash commands" 全文 help が出る (FORCE 未指定時も)
+#   新期待値: FORCE 未指定時は 1 行 pointer のみ (HC_SESSION_HELP_FORCE=true 案内)
+#             + marker 作成。"主要 slash commands" 全文は含まない。
 # ----------------------------------------------------------------------
 case_7_shs_first_session_shows() {
   local marker="$TMP_BASE/shs-case7-marker"
@@ -229,13 +234,24 @@ case_7_shs_first_session_shows() {
         HC_SESSION_HELP_MARKER_PATH="$marker" \
         bash "$SHS_HOOK" </dev/null 2>/dev/null)
   local code=$?
-  if [ "$code" = "0" ] && printf '%s' "$out" | grep -q "主要 slash commands" \
-     && [ -f "$marker" ]; then
-    _check "Case 7: shs 初回 (marker 未存在) → 表示 + marker 作成" 0
+  # task-68 §3.2: FORCE 未指定 → 1 行 pointer (短文) が出力される
+  #   - exit 0
+  #   - 出力に HC_SESSION_HELP_FORCE の案内語が含まれる (pointer 識別)
+  #   - 出力に "主要 slash commands" 全文は含まれない (opt-in 側経路のみ)
+  #   - marker ファイルが作成される
+  local pointer_present=1
+  local full_help_absent=1
+  printf '%s' "$out" | grep -q "HC_SESSION_HELP_FORCE" || pointer_present=0
+  printf '%s' "$out" | grep -q "主要 slash commands"   && full_help_absent=0
+  if [ "$code" = "0" ] && [ "$pointer_present" = "1" ] \
+     && [ "$full_help_absent" = "1" ] && [ -f "$marker" ]; then
+    _check "Case 7: shs 初回 (marker 未存在) → 1 行 pointer + marker 作成 (opt-in 化後仕様)" 0
   else
-    _check "Case 7: shs 初回 (marker 未存在) → 表示 + marker 作成" 1
-    printf '    code=%s marker_exists=%s out_len=%s\n' "$code" \
-      "$([ -f "$marker" ] && echo yes || echo no)" "${#out}" >&2
+    _check "Case 7: shs 初回 (marker 未存在) → 1 行 pointer + marker 作成 (opt-in 化後仕様)" 1
+    printf '    code=%s marker_exists=%s pointer_present=%s full_help_absent=%s out_len=%s\n' \
+      "$code" "$([ -f "$marker" ] && echo yes || echo no)" \
+      "$pointer_present" "$full_help_absent" "${#out}" >&2
+    printf '    out: %s\n' "$out" >&2
   fi
 }
 
