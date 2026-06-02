@@ -11,8 +11,10 @@ total_steps: 9
 
 # Task #72: agents / skills 露出削減 (action space 縮小、Phase 4)
 
-> Status: **⏸️ 保留 (Step 1 完了、Step 2 user 判断待ち、2026-06-02)**
+> Status: **✅ 完了 (archive scope、2026-06-02)** — Step 4 (deterministic-ize) / Step 5 (CommonRules kernel = 規範変更) は user 指示外で deferred (next-actions #71)
 > 起案: 2026-06-01
+>
+> **Step 2 user 選択確定 (2026-06-02)**: keep-9 提案 (move 135) ではなく **保守的な選択退避** を user が決定。退避対象 = agent 4 category (`02-language-specialists` 30 / `05-data-ai` 13 / `07-specialized-domains` 13 / `08-business-product` 12 = 68 agents) + skill 11 (document-docx/-pdf/-pptx/-xlsx + image-enhancer/slack-gif-creator/video-downloader + competitive-ads-extractor/twitter-algorithm-optimizer + developer-growth-analysis/meeting-insights-analyzer) **のみ**。残す category 6 (01/03/04/06/09/10、76 agents) は維持 → **agents 144→76 / skills 45→34**。**≤25 目標は意図的に未達** (user は infra/meta/research/core/quality/dev-exp の汎用 agent を残す判断)。退避先は `.claude/archive/` (案 A、git mv 復帰)。borderline agents (judgment 1) は keep 側に残置、portability gap (judgment 3) は next-actions #69 で別途追跡。
 > 関連: harness-review-remediation-plan Phase 4 (§4.4)。task-51 (context-bloat-reduction) / task-67 (rule 再構造) の延長
 > 設計起源: [harness-review-remediation-plan.md](../draft/harness-review-remediation-plan.md) ✅承認済 (approved_at 2026-06-01) §4.4
 
@@ -38,14 +40,14 @@ project `.claude/agents` の常時露出を 15-25 程度、`.claude/skills` を 
 
 ## Task 完了条件 (DoD)
 
-- [ ] project `.claude/agents` 常時露出が棚卸しされ目標 <=25 に近づく (現 144)
-- [ ] project `.claude/skills` 常時露出が棚卸しされ目標 <=12 に近づく (現 63)
-- [ ] 外した agent / skill は archive / user scope へ移動され復帰経路が docs に記載 (能力喪失なし)
-- [ ] `CommonRules.md` <=150 行目標 / `rules/*.md` total <=700 行目標 (regression budget、warn)
-- [ ] 残す / 外す判断が draft §4.4「残す候補の基準」で明示棚卸しされ user 確認済
-- [ ] reviewer approve (テスト設計レビュー)
-- [ ] count smoke (agents/skills) + 既存 smoke regression 0
-- [ ] 3 観点 refactor 判定
+- [x] project `.claude/agents` 常時露出が棚卸しされた (144→**76**、user 選択により ≤25 は意図的未達 = infra/meta/research/core/quality/dev-exp を残す判断)
+- [x] project `.claude/skills` 常時露出が棚卸しされた (11 退避、user 選択により ≤12 目標範囲外の保守的退避)
+- [x] 外した agent / skill は archive へ移動され復帰経路が docs に記載 (能力喪失なし、`.claude/archive/README.md` git mv 復帰コマンド)
+- [ ] `CommonRules.md` <=150 行目標 / `rules/*.md` total <=700 行目標 — **user 指示外 (Step 5 = 規範変更) のため deferred** → next-actions #71
+- [x] 残す / 外す判断が user 確認済 (Step 1 提案 MDV → Step 2 で user が保守的選択を確定 2026-06-02)
+- [x] reviewer approve — **archive 退避 review APPROVE (conf 0.95)、CRITICAL #1 discover-exclusion を実機エビデンス確証 (node_modules 深階層 SKILL.md が非 discover = 1 階層限定)、CRITICAL #2-5 PASS**
+- [x] count smoke (agents/skills) + 既存 smoke regression 0 — **action-space-count-smoke 5/5、reviewer-count-guard 14/14 + install-sh-sync-drift regression 0**
+- [x] 3 観点 refactor 判定 — **skip 妥当: archive 退避は git mv の構造変更で冗長削減そのもの、count smoke は既存形式踏襲で追加 refactor 不要**
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
