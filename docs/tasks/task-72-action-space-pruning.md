@@ -11,8 +11,10 @@ total_steps: 9
 
 # Task #72: agents / skills 露出削減 (action space 縮小、Phase 4)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了 (archive scope、2026-06-02)** — Step 4 (deterministic-ize) / Step 5 (CommonRules kernel = 規範変更) は user 指示外で deferred (next-actions #71)
 > 起案: 2026-06-01
+>
+> **Step 2 user 選択確定 (2026-06-02)**: keep-9 提案 (move 135) ではなく **保守的な選択退避** を user が決定。退避対象 = agent 4 category (`02-language-specialists` 30 / `05-data-ai` 13 / `07-specialized-domains` 13 / `08-business-product` 12 = 68 agents) + skill 11 (document-docx/-pdf/-pptx/-xlsx + image-enhancer/slack-gif-creator/video-downloader + competitive-ads-extractor/twitter-algorithm-optimizer + developer-growth-analysis/meeting-insights-analyzer) **のみ**。残す category 6 (01/03/04/06/09/10、76 agents) は維持 → **agents 144→76 / skills 45→34**。**≤25 目標は意図的に未達** (user は infra/meta/research/core/quality/dev-exp の汎用 agent を残す判断)。退避先は `.claude/archive/` (案 A、git mv 復帰)。borderline agents (judgment 1) は keep 側に残置、portability gap (judgment 3) は next-actions #69 で別途追跡。
 > 関連: harness-review-remediation-plan Phase 4 (§4.4)。task-51 (context-bloat-reduction) / task-67 (rule 再構造) の延長
 > 設計起源: [harness-review-remediation-plan.md](../draft/harness-review-remediation-plan.md) ✅承認済 (approved_at 2026-06-01) §4.4
 
@@ -38,14 +40,14 @@ project `.claude/agents` の常時露出を 15-25 程度、`.claude/skills` を 
 
 ## Task 完了条件 (DoD)
 
-- [ ] project `.claude/agents` 常時露出が棚卸しされ目標 <=25 に近づく (現 144)
-- [ ] project `.claude/skills` 常時露出が棚卸しされ目標 <=12 に近づく (現 63)
-- [ ] 外した agent / skill は archive / user scope へ移動され復帰経路が docs に記載 (能力喪失なし)
-- [ ] `CommonRules.md` <=150 行目標 / `rules/*.md` total <=700 行目標 (regression budget、warn)
-- [ ] 残す / 外す判断が draft §4.4「残す候補の基準」で明示棚卸しされ user 確認済
-- [ ] reviewer approve (テスト設計レビュー)
-- [ ] count smoke (agents/skills) + 既存 smoke regression 0
-- [ ] 3 観点 refactor 判定
+- [x] project `.claude/agents` 常時露出が棚卸しされた (144→**76**、user 選択により ≤25 は意図的未達 = infra/meta/research/core/quality/dev-exp を残す判断)
+- [x] project `.claude/skills` 常時露出が棚卸しされた (11 退避、user 選択により ≤12 目標範囲外の保守的退避)
+- [x] 外した agent / skill は archive へ移動され復帰経路が docs に記載 (能力喪失なし、`.claude/archive/README.md` git mv 復帰コマンド)
+- [ ] `CommonRules.md` <=150 行目標 / `rules/*.md` total <=700 行目標 — **user 指示外 (Step 5 = 規範変更) のため deferred** → next-actions #71
+- [x] 残す / 外す判断が user 確認済 (Step 1 提案 MDV → Step 2 で user が保守的選択を確定 2026-06-02)
+- [x] reviewer approve — **archive 退避 review APPROVE (conf 0.95)、CRITICAL #1 discover-exclusion を実機エビデンス確証 (node_modules 深階層 SKILL.md が非 discover = 1 階層限定)、CRITICAL #2-5 PASS**
+- [x] count smoke (agents/skills) + 既存 smoke regression 0 — **action-space-count-smoke 5/5、reviewer-count-guard 14/14 + install-sh-sync-drift regression 0**
+- [x] 3 観点 refactor 判定 — **skip 妥当: archive 退避は git mv の構造変更で冗長削減そのもの、count smoke は既存形式踏襲で追加 refactor 不要**
 
 ## Task 概要欄 (list.md 用、3 要素規範)
 
@@ -74,7 +76,7 @@ draft §4.4「agents / skills 棚卸し手順」(5 step) + 「残す候補の基
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | 使用頻度集計 (docs/tasks/transcripts/settings の agent/skill 参照回数) + 責務重複 / project 固有性 / deterministic 化可否でタグ付け | 1.0h | task-69 |
+| 1 | ✅ | 使用頻度集計 (docs/tasks/transcripts/settings の agent/skill 参照回数) + 責務重複 / project 固有性 / deterministic 化可否でタグ付け | 1.0h | task-69 |
 | 2 | 🔲 | 残す / 外す判断を draft §4.4 基準で確定 → **user に棚卸し結果を提示して承認** (削減対象は harness 運用方針に関わるため) | 0.5h | Step 1 |
 | 3 | 🔲 | 外す agent / skill を archive / user scope へ移動 + 復帰コマンドを docs に記載 | 1.5h | Step 2 |
 | 4 | 🔲 | deterministic 化できる agent (config parity / inventory 等) を script / command 化 | 1.0h | Step 2 |
@@ -85,6 +87,45 @@ draft §4.4「agents / skills 棚卸し手順」(5 step) + 「残す候補の基
 | 9 | 🔲 | (リファクタリング) 持続可能性 / 汎用性 / 非冗長化 — 重複 description 統合の最終整理 | 0.4h | Step 8 |
 
 合計: **~6.8h**
+
+## Step 1 完了記録 + 保留 (2026-06-02)
+
+> **状態**: Step 1 (調査・分析) 完了。**Step 2 (残す/外す確定 = user 承認必須、harness 運用方針 = 戦略判断) で user 判断待ちのため ⏸️ 保留**。user 指示「現状をタスクに保存して保留、他から進める」(2026-06-02)。
+
+### Step 1 成果 (read-only 分析、subagent ac6c51a7 agents conf 0.92 / ac1bdf1b skills conf 0.9)
+
+実測訂正: agents **144** (10 category サブディレクトリにネスト) / skills 実 action space **45** (`find` 63 のうち 18 は `content-post/node_modules` の vendored skill で discovery 対象外)。
+
+判定 (active machinery 参照 = rules/commands/settings/CommonRules のファイル名 grep を keep の決定的シグナル):
+
+| 対象 | 現状 | keep | move | 目標 | 判定 |
+|---|:---:|:---:|:---:|:---:|:---:|
+| agents | 144 | **9** | 135 (user scope/plugin) | ≤25 | ✅ -16 余裕 |
+| skills | 45 | **10** | 35 (archive 1 + user scope 34) | ≤12 | ✅ 余裕 2 |
+
+- **keep agents 9**: qa-expert / test-automator / code-reviewer / refactoring-specialist / architect-reviewer / ui-designer / api-designer / security-auditor / debugger (全て commands/rules が名指し起動)
+- **keep skills 10**: gateguard / verification-loop / eval-harness / gan-style-harness / continuous-agent-loop / continuous-learning-v2 / agent-introspection-debugging / check-md-mermaid / karpathy-guidelines / agent-router
+- 詳細レポート: `/tmp/task72-agents-analysis.md` + `/tmp/task72-skills-analysis.md` (再実行可能、session 跨ぎで消える点に注意 → MDV 資料に集約済)
+
+### 退避先設計 (main 検証で確定)
+
+`.claude/archive/agents/` + `.claude/archive/skills/`。install.sh は `rsync -a .claude/` で全 tree 同期 (`.claude/rules-details/` が「配布されるが startup 非注入」の前例)。Claude Code は `.claude/agents`・`.claude/skills` のみ discover するため archive 配下は action space 外。install.sh 改修不要、復帰 = `git mv` 1 コマンド (portable 性維持)。
+
+### 重要発見: 名指し reviewer の所在分裂 (Step 3 移動時の前提)
+
+採用6条/design-review が名指しする reviewer のうち、**project のみ** = qa-expert/architect-reviewer/security-auditor/ui-designer/api-designer/refactoring-specialist (= keep 対象)、**両方** = code-reviewer/test-automator/debugger、**user-scope `~/.claude/agents` のみ** = tdd-guide/pr-test-analyzer/security-reviewer/planner (project 不在 = portability gap、下記判断 3)。
+
+### Step 2 user 判断待ち事項 (3 件)
+
+| # | 判断 | 提案 | 代替 |
+|---|---|---|---|
+| 1 | borderline agents (penetration-tester / accessibility-tester / performance-engineer、参照 0 だが将来 design-review security/UI/perf lens 候補) | archive (復帰可) | keep に含める (agents 12) |
+| 2 | 退避先 | `.claude/archive/` (portable, rsync 配布, git mv 復帰) | user scope (`~/.claude/`、配布されず project から消える) |
+| 3 | portability gap (tdd-guide/pr-test-analyzer/security-reviewer/planner が user-scope のみ = consuming repo で採用6条レビュー不能、task-72 起因ではない既存欠陥) | next-actions 分離起票 + 別 task 化 | task-72 内で 4 agent を project へ取込 self-contained 化 (scope 拡張) |
+
+### 提示資料 (MDV)
+
+https://mdv.sandboxes.jp/docs/task-72-action-space-pruning-proposal (folder: hirai-method)
 
 ## 影響範囲
 
