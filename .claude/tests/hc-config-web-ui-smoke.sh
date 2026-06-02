@@ -1598,9 +1598,9 @@ _case_s35() (
     return 1
   fi
 
-  # match_type は "preset" または "unsaved" のどちらかであること
-  if ! printf '%s' "$body" | grep -qE '"match_type"[[:space:]]*:[[:space:]]*"(preset|unsaved)"'; then
-    printf 'S-35: /api/current-preset .match_type is not "preset" or "unsaved" (body: %s)\n' "$body" >&2
+  # match_type は "preset" または "custom" のどちらかであること (task-76 Step 2: 'unsaved' → 'custom')
+  if ! printf '%s' "$body" | grep -qE '"match_type"[[:space:]]*:[[:space:]]*"(preset|custom)"'; then
+    printf 'S-35: /api/current-preset .match_type is not "preset" or "custom" (body: %s)\n' "$body" >&2
     return 1
   fi
 
@@ -1616,9 +1616,9 @@ _case_s35() (
       return 1
     fi
   else
-    # unsaved 時: display_name_ja が "未保存変更あり" を含む (server.js 実装値)
+    # custom 時: display_name_ja が "未保存変更あり" を含む (server.js 実装値)
     if ! printf '%s' "$body" | grep -q '未保存変更あり'; then
-      printf 'S-35: match_type=unsaved だが display_name_ja に "未保存変更あり" が含まれない (body: %s)\n' "$body" >&2
+      printf 'S-35: match_type=custom だが display_name_ja に "未保存変更あり" が含まれない (body: %s)\n' "$body" >&2
       return 1
     fi
   fi
@@ -1850,12 +1850,12 @@ _case_s39() (
     return 1
   fi
 
-  # /api/current-preset を取得して match_type=unsaved であることを確認
+  # /api/current-preset を取得して match_type=custom であることを確認 (task-76 Step 2: 'unsaved' → 'custom')
   local after_body
   after_body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
 
-  if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
-    printf 'S-39: after /api/set change, match_type is not "unsaved" (body: %s)\n' "$after_body" >&2
+  if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"custom"'; then
+    printf 'S-39: after /api/set change, match_type is not "custom" (body: %s)\n' "$after_body" >&2
     return 1
   fi
 
@@ -2135,9 +2135,9 @@ _case_s44() (
   local body
   body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
 
-  # match_type=unsaved 前提
-  if ! printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
-    printf 'S-44: set 後に match_type=unsaved でない (body: %s)\n' "$body" >&2
+  # match_type=custom 前提 (task-76 Step 2: 'unsaved' → 'custom')
+  if ! printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"custom"'; then
+    printf 'S-44: set 後に match_type=custom でない (body: %s)\n' "$body" >&2
     return 1
   fi
 
@@ -2439,6 +2439,114 @@ _case_s49() (
 )
 
 # ============================================================
+# Case S-50: GET /api/presets 各 entry に group field がある + 3 ラベルのいずれか
+# task-76 Step 2: 左ペイン分類用 group ('POC'|'社内ツール'|'本番運用'|'その他') を付与。
+#   draft §3.4 note (SSoT): quality_level 3 group。実データでは全 10 preset が 3 group に収まり
+#   'その他' fallback は使われない (poc / inner_system / production_service のみ) が、
+#   契約上は 4 値のいずれかを許容する。
+# ============================================================
+_case_s50() (
+  set -uo pipefail
+  local port="$1"
+
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/presets")
+
+  # group field 自体が存在すること
+  if ! printf '%s' "$body" | grep -q '"group"'; then
+    printf 'S-50: /api/presets response に group field が無い (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # group の出現回数が 10 件 (preset 数) 分あること
+  local g_count
+  g_count=$(printf '%s' "$body" | grep -oE '"group"' | wc -l | tr -d ' ' || true)
+  if [ "${g_count:-0}" -lt 10 ]; then
+    printf 'S-50: group の出現回数 %s 件 (expected >= 10)\n' "$g_count" >&2
+    return 1
+  fi
+
+  # 各 group 値が許容 4 ラベルのいずれかであること
+  #   許容外の group 値が 1 件でもあれば FAIL (grep -vE で許容ラベルを除外し残りを検出)
+  local bad
+  bad=$(printf '%s' "$body" \
+    | grep -oE '"group"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | grep -vE '"group"[[:space:]]*:[[:space:]]*"(POC|社内ツール|本番運用|その他)"' || true)
+  if [ -n "$bad" ]; then
+    printf 'S-50: 許容外の group ラベルを検出 (POC/社内ツール/本番運用/その他 以外): %s\n' "$bad" >&2
+    return 1
+  fi
+
+  # 主要 3 group が実際に出現すること (10 preset が 3 group に分布する実データ確認)
+  for label in 'POC' '社内ツール' '本番運用'; do
+    if ! printf '%s' "$body" | grep -q "\"group\"[[:space:]]*:[[:space:]]*\"${label}\""; then
+      printf 'S-50: group "%s" が 1 件も出現しない (3 group 分布の確認失敗、body: %s)\n' "$label" "$body" >&2
+      return 1
+    fi
+  done
+
+  return 0
+)
+
+# ============================================================
+# Case S-51: GET /api/current-preset の match_type が 'preset'|'custom' のいずれか
+# task-76 Step 2: match_type を 'unsaved' → 'custom' に整理。'unsaved' は廃止語彙。
+#   poc-no-git apply → match_type=preset、known key 変更 → match_type=custom の遷移を 1 case で検証。
+# ============================================================
+_case_s51() (
+  set -uo pipefail
+  local port="$1"
+
+  # 1. apply 後は match_type が許容 2 値のいずれか (通常 preset)
+  local apply_code
+  apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
+  case "$apply_code" in
+    200|207) : ;;
+    4??|5??)
+      printf 'S-51: preset apply returned HTTP %s (権限/yml 破損の疑い、真の FAIL)\n' "$apply_code" >&2
+      return 1
+      ;;
+    *)
+      printf 'S-51: preset apply returned HTTP %s (server 接続不可等の環境 skip)\n' "$apply_code" >&2
+      return 2
+      ;;
+  esac
+
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+
+  # match_type は "preset" または "custom" のいずれか (旧 'unsaved' は廃止)
+  if ! printf '%s' "$body" | grep -qE '"match_type"[[:space:]]*:[[:space:]]*"(preset|custom)"'; then
+    printf 'S-51: match_type が "preset"|"custom" でない (旧 unsaved 残存の疑い、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # 'unsaved' という旧語彙が残っていないこと (regression guard)
+  if printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
+    printf 'S-51: match_type に旧語彙 "unsaved" が残存 (task-76 Step 2 で custom へ移行済のはず、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # 2. known key を変更すると match_type=custom になること
+  local set_code
+  set_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/set" \
+    '{"key":"confidence_threshold","value":"0.99"}')
+  if [ "$set_code" != "200" ]; then
+    printf 'S-51: /api/set confidence_threshold=0.99 returned HTTP %s (known key set 失敗、FAIL)\n' "$set_code" >&2
+    return 1
+  fi
+
+  local after_body
+  after_body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+  if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"custom"'; then
+    printf 'S-51: known key 変更後に match_type=custom でない (body: %s)\n' "$after_body" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -2579,7 +2687,7 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
 
   if [ -z "$SHARED_PORT" ]; then
     printf '  WARN: shared server failed to start, skipping shared-server cases\n'
-    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49; do
+    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49 S-50 S-51; do
       _record SKIP "$cid" "shared server not available"
     done
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
@@ -2825,10 +2933,24 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                                     _record FAIL "S-49" "diff 連続/並列呼び出しの応答性 (Failed to fetch 回帰防止)"
     fi
 
+    # --- task-76 Step 2 新規 case (S-50 / S-51): preset group + match_type custom ---
+    printf '\n%s\n' '--- task-76 Step 2 新規 case (S-50 / S-51) ---'
+
+    if _case_s50 "$_PORT" 2>/dev/null; then _record PASS "S-50" "GET /api/presets 各 entry に group (POC/社内ツール/本番運用/その他) + 3 group 分布"
+    else                                     _record FAIL "S-50" "GET /api/presets 各 entry に group (POC/社内ツール/本番運用/その他) + 3 group 分布"
+    fi
+
+    _s51_result=0
+    _case_s51 "$_PORT" 2>/dev/null || _s51_result=$?
+    if [ $_s51_result -eq 0 ];   then _record PASS "S-51" "GET /api/current-preset match_type が preset|custom (unsaved 廃止)"
+    elif [ $_s51_result -eq 2 ]; then _record SKIP "S-51" "match_type custom 確認 skip (apply failed)"
+    else                              _record FAIL "S-51" "GET /api/current-preset match_type が preset|custom (unsaved 廃止)"
+    fi
+
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49 S-50 S-51; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
   # S-37 / S-38 / S-41 / S-42 / S-45 / S-46 は file-only (port 不要) なので node 不在でも実行

@@ -130,6 +130,25 @@ const MIME_TYPES = {
 // 6 軸 + 10 named preset hardcode (draft §3.4)
 // ============================================================
 
+// task-76 Step 2: preset を左ペインで group 分けするための quality_level → 日本語ラベル写像。
+//   draft §3.4 note (SSoT): 実在軸 quality_level で 3 group に分割 (POC / 社内ツール / 本番運用)。
+//   PRESETS には enforcement level (advisory/team-default/strict/harness-dev) との対応 field が無いため、
+//   level による section 分けは不採用。代わりに各 preset.axes.quality_level を本 lookup で日本語 group 名へ写像する。
+//   fallback 'その他': quality_level 不在 / 上記 3 値以外。なお harness-development preset は
+//   axes.quality_level='inner_system' なので「社内ツール」group に入る (実データ確認済、2026-06-03)。
+const QUALITY_LEVEL_GROUP_JA = {
+  poc: 'POC',
+  inner_system: '社内ツール',
+  production_service: '本番運用',
+}
+const PRESET_GROUP_FALLBACK = 'その他'
+
+// preset の quality_level から日本語 group ラベルを解決する (左ペイン分類用)
+function resolvePresetGroup(preset) {
+  const ql = preset && preset.axes ? preset.axes.quality_level : undefined
+  return QUALITY_LEVEL_GROUP_JA[ql] || PRESET_GROUP_FALLBACK
+}
+
 const PRESET_AXES = [
   { key: 'quality_level', values: ['poc', 'inner_system', 'production_service'] },
   { key: 'language_framework', values: ['mixed', 'typescript', 'python', 'rust', 'go'] },
@@ -929,12 +948,13 @@ function rollbackHistory(timestamp, overrides) {
 //      - 各 preset の values 全 entry について current yml と一致するかを確認
 //      - preset values は yml の部分集合 (subset)、yml の他 key は無視
 //   3. 完全一致 (subset): { name: <preset key>, display_name_ja: <日本語名>, match_type: 'preset' }
-//   4. 不一致: { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved' }
+//   4. 不一致: { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'custom' }
+//      (task-76 Step 2: match_type 'unsaved' → 'custom' に整理。2 分割 UI の「★ カスタム」表示と語彙統一)
 //
 // task-65 (案 A): axes field を additive に復活。matched preset の axes メタデータ (6 軸) を返す。
 //   既存 field (name / display_name_ja / match_type) は不変 (後方互換)。
 //   preset 一致時: axes = matched preset の axes object (6 key)。
-//   unsaved 時: axes = null (preset 外では axis 値が一意でないため。UI 側でカスタム表示に切替)。
+//   custom 時: axes = null (preset 外では axis 値が一意でないため。UI 側でカスタム表示に切替)。
 //   (task-63 Step 4 A3 で撤去した axes 返却を、6 軸 read-only 表示の data contract gap 解消のため復活)
 //
 // overrides.spawnFn: DI seam (テスト用)
@@ -957,8 +977,10 @@ function getCurrentPreset(overrides) {
     }
   }
 
-  // 3. 一致なし (unsaved): axes は preset 外で一意でない → null (UI 側でカスタム表示)
-  return { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'unsaved', axes: null }
+  // 3. 一致なし (custom): axes は preset 外で一意でない → null (UI 側でカスタム表示)
+  //   task-76 Step 2: match_type を 'unsaved' → 'custom' に整理 (2 分割 UI で「★ カスタム」表示と語彙統一)。
+  //   内部 client (app.js) のみが参照するため後方互換上の影響なし。
+  return { name: 'custom', display_name_ja: '未保存変更あり', match_type: 'custom', axes: null }
 }
 
 // task-63 Step 4 A2: values subset 完全一致判定
@@ -1102,9 +1124,9 @@ async function handleRequest(req, res) {
   //   現在 yml 全 key 値 vs PRESETS (built-in 10) values を subset 完全一致判定し、
   //   { name, display_name_ja, match_type, axes } を返却。
   //   task-65 (案 A) で axes を additive に復活: matched preset の 6 軸メタデータを返す
-  //   (top view の 6 軸 read-only table 描画用)。unsaved 時は axes=null。
+  //   (top view の 6 軸 read-only table 描画用)。custom 時は axes=null。
   //   - 一致: name=<preset key> + display_name_ja=preset 日本語名 + match_type='preset' + axes=preset の 6 軸 object
-  //   - 不一致: name='custom' + display_name_ja='未保存変更あり' + match_type='unsaved' + axes=null
+  //   - 不一致: name='custom' + display_name_ja='未保存変更あり' + match_type='custom' + axes=null (task-76 Step 2)
   if (req.method === 'GET' && pathname === '/api/current-preset') {
     const result = getCurrentPreset()
     sendJson(res, 200, result)
@@ -1225,6 +1247,8 @@ async function handleRequest(req, res) {
       display_name_ja: p.display_name_ja || name,
       use_case: p.use_case,
       affected_key_count: Object.keys(p.values).length,
+      // task-76 Step 2: 左ペイン group 分類 (quality_level → 'POC'|'社内ツール'|'本番運用'|'その他')
+      group: resolvePresetGroup(p),
     }))
     sendJson(res, 200, { presets: list, axes_schema: PRESET_AXES })
     return
@@ -1453,6 +1477,7 @@ if (require.main === module) {
 module.exports = {
   PRESETS,
   PRESET_AXES,
+  resolvePresetGroup, // task-76 Step 2 (group 写像 test seam)
   ROLLBACK_TS_REGEX,
   HISTORY_MAX_FILES,
   callHcConfig,

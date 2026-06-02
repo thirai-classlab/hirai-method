@@ -78,7 +78,7 @@ task-63 案 C の過剰簡素化で「個別値編集 = custom」導線が失わ
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | diff「Failed to fetch」実機再現 → `computePresetDiff` を hcListAll キャッシュ参照化 + RED smoke | 0.5h | — |
+| 1 | ✅ | diff「Failed to fetch」実機再現 → `computePresetDiff` を hcListAll キャッシュ参照化 + RED smoke (commit 4d990b8、diff 0.4s→0.006s、S-48/S-49 追加、未再現も構造改善+回帰anchor) | 0.5h | — |
 | 2 | 🔲 | server.js API 拡張 (preset の enforcement level group / custom 判定 / 個別値 batch set / category metadata) | 0.8h | Step 1 |
 | 3 | 🔲 | app.js (上部タブ 設定/履歴 + 左 preset / 右 accordion 同時1開 / 編集→custom / 履歴タブ分離) | 1.1h | Step 2 |
 | 4 | 🔲 | style.css 2 分割 + accordion + no-scroll 100vh + responsive | 0.5h | Step 3 |
@@ -90,9 +90,10 @@ task-63 案 C の過剰簡素化で「個別値編集 = custom」導線が失わ
 合計工数: 約 4.5h
 
 ### Step 1: diff バグ修復
-**Step status**: 🔲
+**Step status**: ✅ (commit 4d990b8)
 **作業概要**: agent-browser で「Failed to fetch」を実機再現 → root cause 確定 → `computePresetDiff` (web-server.js L598-628) を hcGet N回から hcListAll キャッシュ参照に変更。
 **完了条件**: diff smoke PASS、ブラウザで diff 正常表示 (再現できない場合は別 root cause 調査 + user に実機ログ依頼)
+**結果**: browser で未再現 (診断仮説どおり) だが構造修正は妥当 → `computePresetDiff` L610 で `hcListAll(overrides)` 1 回参照化 (API response 不変)、diff 0.4s→0.006s。S-48 (後方互換) / S-49 (応答性回帰 anchor) 追加。全 hc-config smoke regression 0 (web-ui 45/53 PASS 8 SKIP 0 FAIL)。
 
 ### Step 2: server API 拡張
 **Step status**: 🔲
