@@ -105,7 +105,9 @@ flowchart LR
 > - **★ カスタム** (現値がどの preset とも不一致のとき)
 >
 > ※ `harness-development` preset が 10 件目に存在する場合は「ハーネス開発」group か本番群に含める (実装時 `/api/presets` の全件で確認)。
-> **enforcement level (default_preset 4 種) + 各 guard feature toggle は右ペインの「強制 / guards」accordion に集約** (左ペインには出さない、二重 selector 回避)。default_preset dropdown を選ぶと対応 guard 群が一括反映され、値が変われば「カスタム」化する。
+> **enforcement level (default_preset) + 各 guard feature toggle は右ペインに表示** (左ペインには出さない、二重 selector 回避)。default_preset 値が変われば「カスタム」化する。
+>
+> **右ペイン accordion の category (2026-06-03 Step 2 で実データ確定、上の ASCII「強制/guards」より本 note が SSoT)**: metadata 上の category は **実 7 種** (draft 当初の「6」は誤り): `保護パス`(3) / `ファイル配置`(7) / `Gate/Confidence`(12) / `feature_toggle`(29) / `state_dir`(7) / `reviewer_control`(19) / `harness_meta`(5)、計 82 key。guards/enforcement は単一 category に集約されておらず分散する: `default_preset`→`harness_meta` / `feature_*_guard_enabled`→`feature_toggle` / `review_required_*`→`reviewer_control` / `rule_change_guard`→`Gate/Confidence`。**右ペインはこの実 7 category をそのまま accordion 見出しに使う** (metadata 再分類はしない = 最小主義、task-70/71 取込は default_preset + guards が該当 category 内で視認・編集可能になることで満たす)。enforcement を 1 つにまとめたい場合は将来 metadata に `enforcement` category を新設する別 task で対応 (本 task scope 外)。
 
 ### Task 計画 (採用 6 条準拠)
 
