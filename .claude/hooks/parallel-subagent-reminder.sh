@@ -32,6 +32,9 @@
 # 環境変数 (env override > YAML > defaults):
 #   HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false  reminder 全停止 (bypass)
 #   HC_PARALLEL_SUBAGENT_TTL_SEC=300             state file TTL (秒)
+#   HC_PARALLEL_SUBAGENT_BATCH_WINDOW_SEC=5      連続単発 streak の near-ts batch 窓 (秒、task-75)
+#   HC_PARALLEL_SUBAGENT_STREAK_TIER2=2          tier2 (強 reminder) 発火 streak 閾値 (task-75)
+#   HC_PARALLEL_SUBAGENT_STREAK_TIER3=3          tier3 (Workflow 誘導) 発火 streak 閾値 (task-75)
 #   HC_PARALLEL_SUBAGENT_STATE_DIR=<path>        state dir override
 #                                                (production state 汚染回避用、
 #                                                 未設定なら repo_root/.claude/.parallel-subagent-state/)
@@ -234,6 +237,74 @@ _psr_main() (
         rmdir "$lock_dir" 2>/dev/null || true
     fi
 
+    # --- task-75: 連続単発起動 streak 算出 (near-ts cluster 走査) ---
+    # 算出方式: `updated` (本起動を append 後の TTL filter 済 state) を ts 昇順 sort し、
+    #   batch window (default 5sec) 内に連続する entry を 1 batch にクラスタ化。
+    #   最新側 batch から逆走し「単発 batch (size==1)」が連続する数を数える。
+    #   並列 batch (size>=2) に当たったら打ち切り (= streak リセット)。
+    # → streak >= tier3 なら最強、tier2<=streak<tier3 なら強、それ未満は現状 hint。
+    # 失敗時は streak=1 (= 現状動作維持、fail-safe)。
+    local batch_window="${HC_PARALLEL_SUBAGENT_BATCH_WINDOW_SEC:-5}"
+    case "$batch_window" in
+      ''|*[!0-9]*) batch_window=5 ;;
+    esac
+    local tier2="${HC_PARALLEL_SUBAGENT_STREAK_TIER2:-2}"
+    local tier3="${HC_PARALLEL_SUBAGENT_STREAK_TIER3:-3}"
+    case "$tier2" in ''|*[!0-9]*) tier2=2 ;; esac
+    case "$tier3" in ''|*[!0-9]*) tier3=3 ;; esac
+
+    # ts 昇順の配列を取得 (jq、不正時は本起動分のみの単発扱い)
+    local ts_list
+    ts_list=$(printf '%s' "$updated" | jq -r '[.[].ts] | sort | .[]' 2>/dev/null || echo "")
+
+    local streak=1
+    if [ -n "$ts_list" ]; then
+        # near-ts クラスタ: 連続 ts の gap <= batch_window なら同一 batch
+        # 配列を読み、batch 境界 (size) を最新側から数える
+        local -a ts_arr=()
+        local t
+        while IFS= read -r t; do
+            case "$t" in ''|*[!0-9]*) continue ;; esac
+            ts_arr+=("$t")
+        done <<< "$ts_list"
+
+        local n_ts=${#ts_arr[@]}
+        if [ "$n_ts" -gt 0 ]; then
+            # batch サイズ配列を昇順で構築
+            local -a batch_sizes=()
+            local cur_size=1
+            local idx=1
+            while [ "$idx" -lt "$n_ts" ]; do
+                local prev="${ts_arr[$((idx-1))]}"
+                local curr="${ts_arr[$idx]}"
+                local gap=$((curr - prev))
+                if [ "$gap" -le "$batch_window" ]; then
+                    cur_size=$((cur_size + 1))
+                else
+                    batch_sizes+=("$cur_size")
+                    cur_size=1
+                fi
+                idx=$((idx + 1))
+            done
+            batch_sizes+=("$cur_size")
+
+            # 最新側 (配列末尾) から連続する単発 batch (size==1) を数える
+            local nb=${#batch_sizes[@]}
+            local j=$((nb - 1))
+            streak=0
+            while [ "$j" -ge 0 ]; do
+                if [ "${batch_sizes[$j]}" -eq 1 ]; then
+                    streak=$((streak + 1))
+                else
+                    break
+                fi
+                j=$((j - 1))
+            done
+            # 安全網: streak 0 (最新が並列 batch) は本起動を含め最低 1
+            [ "$streak" -lt 1 ] && streak=1
+        fi
+    fi
+
     # --- (A) 並列性 reminder 判定 (Case 1-5) ---
     # Fix 7 (R5 M2): `fix` keyword に word boundary `\b` を付与し、prefix/affix 等の
     #                English word 内一致による誤検知を防ぐ。同様に `refactor` も `\b` で括る。
@@ -255,9 +326,22 @@ _psr_main() (
     # 判定: TTL filter 後の他 Agent 起動数が 1 件以下 → 単独起動扱い (本起動を含む count)
     #   count=0: 完全初回起動 (本起動の append 後 0 になるケースは lock 失敗で write skip 時のみ)
     #   count=1: 直前 TTL 内に 1 件 (本起動が初回 or 2 件目だが保守的に warning 出す)
-    #   count>=2: 並列起動済み、warning 不要
+    #   count>=2: 並列起動済み、warning 不要 (従来挙動)
     # 注: 本判定は append 前の recent_active_count を参照する (filtered で計算済み)。
+    #
+    # task-75 拡張: 従来の count<=1 gate に加え、**連続単発 streak が tier2 以上**
+    #   (= parallelizable なのに逐次を繰り返している) の場合も count>=2 でも reminder
+    #   を発火させ escalation する。これにより「3 回連続で単発起動しても黙っている」
+    #   従来欠陥を解消する。逆に最新側が並列 batch (= streak が打ち切られた状態) なら
+    #   従来どおり count>=2 で silent (現に並列化しているため reminder 不要)。
+    local gate_open=0
     if [ "$recent_active_count" -le 1 ]; then
+        gate_open=1
+    elif [ "$streak" -ge "$tier2" ]; then
+        # 連続単発 streak が立っている = 逐次継続中 → escalation 対象として gate を開く
+        gate_open=1
+    fi
+    if [ "$gate_open" -eq 1 ]; then
         if printf '%s' "$task_desc" | grep -qE "$parallel_keywords" 2>/dev/null; then
             # 除外 keyword 含むなら skip
             if ! printf '%s' "$task_desc" | grep -qE "$exclude_keywords" 2>/dev/null; then
@@ -319,7 +403,30 @@ architecture review|architect-reviewer'
 
     local msg=""
     if [ "$should_remind_parallel" -eq 1 ]; then
-        msg+="[parallel-subagent-reminder] 並列性 hint:
+        # task-75: streak に応じた tier 分岐
+        #   streak < tier2          → tier1 (現状の advisory hint、文言維持)
+        #   tier2 <= streak < tier3 → tier2 (強い reminder)
+        #   streak >= tier3         → tier3 (最強、Workflow 誘導 task-68)
+        if [ "$streak" -ge "$tier3" ]; then
+            msg+="[parallel-subagent-reminder] 並列性 hint (tier3 / streak=${streak}):
+- 直近 ${streak} 回連続で単発 Agent 起動が検出されました (parallelizable なのに逐次)。
+- **3+ の独立 fan-out は \`Workflow\` ツール (決定論 orchestration) を default 検討せよ (task-68)。**
+- 逐次が必要な場合は genuine dependency (調査→実装→レビュー / 共有 file race / commit 順序)
+  の理由を内部で明示すること。
+- advisory のため BLOCK はしませんが、並列化を強く推奨します。
+- 規範: .claude/rules/development-process.md (parallel subagent) / modes.md 遵守事項 7
+- bypass: HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false
+"
+        elif [ "$streak" -ge "$tier2" ]; then
+            msg+="[parallel-subagent-reminder] 並列性 hint (tier2 / streak=${streak}):
+- 直近 ${streak} 回連続で単発 Agent 起動が検出されました。
+- 独立作業なら **同一 message 内で複数 Agent を並列起動** (run_in_background: true) してください。
+- 依存逐次 (前段の結果が次段に必要) なら次は意識的に判断を。
+- 規範: .claude/rules/development-process.md (parallel subagent)
+- bypass: HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false
+"
+        else
+            msg+="[parallel-subagent-reminder] 並列性 hint:
 - 直近 ${ttl_sec}sec 内に他 Agent 起動が検出されません (本起動が単発)。
 - task description に並列性 keyword (実装/fix/refactor/設計/新設/拡張/改修/リファクタリング) が含まれます。
 - 独立 file 領域 / 独立 task に分割可能なら、複数 subagent を **同一 message 内で並列起動**
@@ -327,6 +434,7 @@ architecture review|architect-reviewer'
 - 規範: .claude/rules/development-process.md (parallel subagent)
 - bypass: HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false
 "
+        fi
     fi
 
     if [ "$should_remind_type" -eq 1 ]; then
