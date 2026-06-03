@@ -472,6 +472,14 @@ _validate_value() {
       if [ "$key" = "default_preset" ]; then
         _validate_default_preset "$val" || return 1
       fi
+      # task-77 Step 1: mainline_integration_policy は enum 3 値のみ
+      if [ "$key" = "mainline_integration_policy" ]; then
+        _validate_mainline_integration_policy "$val" || return 1
+      fi
+      # task-77 Step 1: mainline_branch は charset 制限 (空白含む値を reject)
+      if [ "$key" = "mainline_branch" ]; then
+        _validate_mainline_branch "$val" || return 1
+      fi
       ;;
     *)
       # 不明な型でも sanity check は通す
@@ -1147,6 +1155,32 @@ _validate_default_preset() {
       return 1
       ;;
   esac
+}
+
+# task-77 Step 1: mainline_integration_policy の enum validation (3 値のみ許可)。
+# draft git-integration-policy.md §3.1/§3.2 SSoT。bash 3.2 互換 case。
+_validate_mainline_integration_policy() {
+  local val="$1"
+  case "$val" in
+    pr-required|local-merge|local-merge-push) return 0 ;;
+    *)
+      _err "invalid value for mainline_integration_policy: '${val}' (must be one of: pr-required, local-merge, local-merge-push)"
+      return 1
+      ;;
+  esac
+}
+
+# task-77 Step 1: mainline_branch の charset validation。
+# SSoT charset: ^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,99}$ (英数字始まり + 英数字/./_/ //-、
+# release/1.0 可、空白不可)。空白含む値は git-deny の token 分割を破壊するため reject
+# (draft §3.1 / code-arch M-2 / sec M-2)。
+_validate_mainline_branch() {
+  local val="$1"
+  if [[ "$val" =~ ^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,99}$ ]]; then
+    return 0
+  fi
+  _err "invalid value for mainline_branch: '${val}' (must match ^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,99}\$, no spaces)"
+  return 1
 }
 
 # --validate: 全 key の型 validation のみ

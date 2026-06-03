@@ -78,6 +78,8 @@ reviewer_registry_test	reviewer_control	test-design / design-review のテスト
 reviewer_registry_impl	reviewer_control	module-review / system-review の実装レビュー専門 agent 配列 (言語別 reviewer 含む)	追加すると実装レビュー候補 agent が増える。削除すると該当言語レビューが省かれる
 workflow_stages_new	Gate/Confidence	new-feature 14-stage オーケストレータの stage 名配列 (finish 到達を workflow-guard が判定)	変更すると new-feature の必須 stage 列が変わる。最終要素未到達だと finish-task が BLOCK される
 workflow_stages_modify	Gate/Confidence	modify-feature 10-stage オーケストレータの stage 名配列	変更すると modify-feature の必須 stage 列が変わる。最終要素未到達だと finish-task が BLOCK される
+mainline_branch	Gate/Confidence	AI が merge 先とする本流(統合)ブランチ名 (master/develop/trunk 等に変更可、charset 制限あり)	変更すると git-deny の policy 連動 push 判定対象が切り替わる。main は mainline 移動後も常時 block 維持
+mainline_integration_policy	Gate/Confidence	本流への統合ポリシー (pr-required/local-merge/local-merge-push の 3 値)	pr-required で本流 push 全 block (PR 停止)、local-merge でローカル merge まで AI、local-merge-push で本流 push まで自動
 list_plan_first_reminder_enabled	feature_toggle	SessionStart で draft 3 件以上 ∧ list.md task 行 0 を検出し経路 B 適用を促す reminder	false にすると plan-first reminder が完全停止し batch planning の plan-first 先置き促しが消える
 parallel_subagent_reminder_enabled	feature_toggle	subagent 起動時に並列性・agent type 選定の reminder を注入する hook (BLOCK しない)	false にすると parallel-subagent-reminder が完全停止し並列起動・専門 type 推奨の促しが消える
 parallel_subagent_ttl_sec	Gate/Confidence	parallel-subagent-reminder の state file TTL (秒、直近起動判定の窓)	増やすと並列起動なし判定の窓が広がり reminder が出にくくなる。減らすと窓が狭まり出やすくなる
