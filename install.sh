@@ -54,16 +54,29 @@ WITH_MCP=true
 WITH_DOCS=true
 COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
 
+# M-1: detect conflicting mode flags. --update / --force both set MODE; specifying
+# more than one (or repeating one) would silently last-wins into an unintended mode
+# (e.g. --update --force → force rm -rf). Track whether MODE was already chosen and
+# abort instead of guessing.
+MODE_SET=false
 for arg in "$@"; do
   case "$arg" in
-    --update)   MODE="update" ;;
-    --force)    MODE="force"  ;;
+    --update|--force)
+      if $MODE_SET; then
+        echo "[install] error: conflicting mode flags (--update / --force may be given at most once, not together)" >&2
+        exit 64
+      fi
+      MODE_SET=true
+      [[ "$arg" == "--update" ]] && MODE="update" || MODE="force"
+      ;;
     --commit)   COMMIT_AFTER_SYNC=true ;;
     --dry-run)  DRY_RUN=true  ;;
     --no-mcp)   WITH_MCP=false ;;
     --no-docs)  WITH_DOCS=false ;;
     -h|--help)
-      sed -n '2,30p' "$0"
+      # L-2: print the full header comment block including the cross-repo WARNING
+      # (ends at line 43, the closing ===== of the WARNING box before `set -euo pipefail`).
+      sed -n '2,43p' "$0"
       exit 0
       ;;
     -*)
@@ -163,11 +176,16 @@ fi
 
 
 # helper: run or echo (dry-run aware)
+# H-1: array-based exec — no eval/word-split/glob re-expansion. Each arg passed
+# verbatim, safe for paths containing spaces / quotes / $ / glob chars.
+# dry-run prints %q-quoted form so the displayed command is copy-paste safe.
 run() {
   if $DRY_RUN; then
-    echo "[dry-run] $*"
+    printf '[dry-run]'
+    printf ' %q' "$@"
+    echo
   else
-    eval "$@"
+    "$@"
   fi
 }
 
@@ -212,7 +230,7 @@ case "$MODE" in
   install)
     if [[ -d "$TARGET/.claude" ]]; then
       echo "[install] existing .claude detected → backup to .claude.bak.$STAMP"
-      run "mv '$TARGET/.claude' '$TARGET/.claude.bak.$STAMP'"
+      run mv "$TARGET/.claude" "$TARGET/.claude.bak.$STAMP"
     fi
     echo "[install] rsync .claude/ → $TARGET/.claude/"
     if $DRY_RUN; then
@@ -238,7 +256,7 @@ case "$MODE" in
   force)
     if [[ -d "$TARGET/.claude" ]]; then
       echo "[install] WARN: --force will OVERWRITE existing .claude (no backup)"
-      run "rm -rf '$TARGET/.claude'"
+      run rm -rf "$TARGET/.claude"
     fi
     echo "[install] rsync .claude/ → $TARGET/.claude/"
     if $DRY_RUN; then
@@ -258,15 +276,15 @@ else
   if [[ -f "$TARGET/CLAUDE.md" ]]; then
     if [[ "$MODE" == "force" ]]; then
       echo "[install] WARN: --force overwriting $TARGET/CLAUDE.md (no backup)"
-      run "cp '$SCRIPT_DIR/CLAUDE.md' '$TARGET/CLAUDE.md'"
+      run cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md"
     else
       echo "[install] existing CLAUDE.md → backup to CLAUDE.md.bak.$STAMP, install as CLAUDE.md.template"
-      run "mv '$TARGET/CLAUDE.md' '$TARGET/CLAUDE.md.bak.$STAMP'"
-      run "cp '$SCRIPT_DIR/CLAUDE.md' '$TARGET/CLAUDE.md.template'"
+      run mv "$TARGET/CLAUDE.md" "$TARGET/CLAUDE.md.bak.$STAMP"
+      run cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md.template"
     fi
   else
     echo "[install] copying CLAUDE.md → $TARGET/CLAUDE.md.template (edit <...> placeholders then rename to CLAUDE.md)"
-    run "cp '$SCRIPT_DIR/CLAUDE.md' '$TARGET/CLAUDE.md.template'"
+    run cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md.template"
   fi
 fi
 
@@ -278,7 +296,7 @@ if $WITH_MCP; then
     echo "[install] existing .mcp.json detected → keep as-is (manual merge if you need harness defaults)"
   else
     echo "[install] copying .mcp.json → $TARGET/.mcp.json"
-    run "cp '$SCRIPT_DIR/.mcp.json' '$TARGET/.mcp.json'"
+    run cp "$SCRIPT_DIR/.mcp.json" "$TARGET/.mcp.json"
   fi
 else
   echo "[install] (--no-mcp) skip .mcp.json"
@@ -318,14 +336,14 @@ GITIGNORE_HARNESS
   fi
 else
   echo "[install] copying .gitignore → $TARGET/.gitignore"
-  run "cp '$SCRIPT_DIR/.gitignore' '$TARGET/.gitignore'"
+  run cp "$SCRIPT_DIR/.gitignore" "$TARGET/.gitignore"
 fi
 
 # ============================================================
 # 5. docs/tasks/ docs/draft/ (templates から初期化、既存は保護)
 # ============================================================
 if $WITH_DOCS; then
-  run "mkdir -p '$TARGET/docs/tasks' '$TARGET/docs/draft'"
+  run mkdir -p "$TARGET/docs/tasks" "$TARGET/docs/draft"
   for f in list.md parking-lot.md _TASK_TEMPLATE.md; do
     src="$SCRIPT_DIR/.claude/templates/docs/tasks/$f"
     dst="$TARGET/docs/tasks/$f"
@@ -333,7 +351,7 @@ if $WITH_DOCS; then
       echo "[install] $dst exists → skip"
     elif [[ -f "$src" ]]; then
       echo "[install] copy template $f → docs/tasks/"
-      run "cp '$src' '$dst'"
+      run cp "$src" "$dst"
     fi
   done
   src="$SCRIPT_DIR/.claude/templates/docs/draft/_DRAFT_TEMPLATE.md"
@@ -342,7 +360,7 @@ if $WITH_DOCS; then
     echo "[install] $dst exists → skip"
   elif [[ -f "$src" ]]; then
     echo "[install] copy template _DRAFT_TEMPLATE.md → docs/draft/"
-    run "cp '$src' '$dst'"
+    run cp "$src" "$dst"
   fi
 else
   echo "[install] (--no-docs) skip docs/tasks/ docs/draft/ templates"
@@ -351,13 +369,15 @@ fi
 # ============================================================
 # 6. hook 実行権限 (rsync -a で保持されるが、念のため)
 # ============================================================
-if [[ "$MODE" != "update" ]] || true; then
-  if $DRY_RUN; then
-    echo "[dry-run] chmod +x .claude/hooks/*.sh .claude/scripts/*.{sh,py,mjs}"
-  else
-    find "$TARGET/.claude/hooks" -maxdepth 2 -type f -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
-    find "$TARGET/.claude/scripts" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.mjs' \) -exec chmod +x {} + 2>/dev/null || true
-  fi
+# L-4: chmod runs in ALL modes (install / update / force). The previous
+# `if [[ "$MODE" != "update" ]] || true` was always true (dead condition); we want
+# exec bits restored even on --update since rsync can drop them via staging, so the
+# guard is removed and chmod is unconditional.
+if $DRY_RUN; then
+  echo "[dry-run] chmod +x .claude/hooks/*.sh .claude/scripts/*.{sh,py,mjs}"
+else
+  find "$TARGET/.claude/hooks" -maxdepth 2 -type f -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
+  find "$TARGET/.claude/scripts" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.mjs' \) -exec chmod +x {} + 2>/dev/null || true
 fi
 
 # ============================================================
