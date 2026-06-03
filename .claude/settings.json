@@ -32,6 +32,10 @@
       "Write(./.claude/mode.yml)"
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/statusline.sh"
+  },
   "hooks": {
     "PreToolUse": [
       {

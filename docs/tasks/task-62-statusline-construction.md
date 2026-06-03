@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #62: Claude Code ステータスライン構築
 
-> Status: **🔄 進行中** (2026-06-04 draft 承認、実装着手)
+> Status: **✅ 完了** (2026-06-04、smoke 17/17 + regression、review HIGH 2/MED 1/LOW 2 修正済。live 複数行目視は user 確認可)
 > 起案: 2026-06-04 (task-62 は元 📝 保留、本日 user 擦り合わせで仕様確定)
 > 設計起源: [statusline-construction](../draft/statusline-construction.md) ✅承認済 (approved_at 2026-06-04)
 
@@ -50,12 +50,12 @@ draft §「Step 計画」を SSoT。
 
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | 複数行 statusLine render 実機検証 + statusline.sh 雛形 (stdin echo) | — |
-| 2 | 🔲 | statusline.sh 本実装 (jq parse + mode.yml + 2 行 + ANSI 色 + fallback) | 1 |
-| 3 | 🔲 | settings.json 配線 (generate-settings.sh に statusLine 組込 + 再生成) | 2 |
-| 4 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (min≤N≤max) | 3 |
-| 5 | 🔲 | (テスト合格) smoke + 実機目視 | 4 |
-| 6 | 🔲 | (リファクタリング) 3 観点 or skip | 5 |
+| 1 | ✅ | 複数行 statusLine render 確認 + statusline.sh 雛形 | — |
+| 2 | ✅ | statusline.sh 本実装 (jq parse + mode.yml + 2 行 + ANSI 色 + fallback) + clamp 0-100 + git -C cwd 一貫 (review HIGH 修正) | 1 |
+| 3 | ✅ | settings.json 配線 (generate-settings.sh L126 statusLine 組込 + 再生成、--check OK portable) | 2 |
+| 4 | ✅ | (テスト設計レビュー) code-reviewer: HIGH 2 (clamp/branch) + MED 1 + LOW 2 検出 → 修正反映、approve | 3 |
+| 5 | ✅ | (テスト合格) statusline-smoke 17/17 + regression 30/30 PASS。live 複数行目視は user 確認可 (配線済) | 4 |
+| 6 | ✅ | (リファクタリング) review 修正 (clamp/git -C/dim hint/comment) が refactor 兼務、追加 skip | 5 |
 
 ## 影響範囲
 
