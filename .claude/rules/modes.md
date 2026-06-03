@@ -60,11 +60,17 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
    - 並行作業ができない場合 (依存関係 / 既に全 task 着手済) のみターン区切り報告で停止可
    - **「subagent 完了通知後のメイン報告 → 即次タスク自動起動」を default 動作**
    - **多数 fan-out は構造化** (task-68): 3 件以上の独立 subagent 起動は `Workflow` ツール default 検討 / 手書きは 2 件/ターン上限 (長 prompt は file 経由) で markup 崩れ loop を防ぐ。詳細は [`development-process.md`](./development-process.md) §「多数 fan-out の Workflow 標準化 + 1 ターン tool block 上限」
-8. **自律実行禁止リスト** (必須): Loop モードでも以下 11 カテゴリは **user 明示承認が必要**。準備 (draft / 設計 / ローカル `git commit`) のみ自律可。**2026-05-25 task #39 で緩和**: feature branch (= main / stg* 以外) への `git push` および `gh pr create` を自律実行可とした (main/stg* への push は別 layer `protected-branch-push-deny` に委譲)。
+8. **自律実行禁止リスト** (必須): Loop モードでも以下 11 カテゴリは **user 明示承認が必要**。準備 (draft / 設計 / ローカル `git commit`) のみ自律可。**2026-05-25 task #39 で緩和**: feature branch (= mainline / stg* / release* 以外) への `git push` および `gh pr create` を自律実行可とした。**2026-06-03 task #77 で本流統合を `mainline_integration_policy` (3 状態) に対応** (`git-integration-policy.md` §3.2/§3.3/§3.4 が SSoT)。
 
-   - **remote 反映**: `git push origin main|stg*` のみ (feature branch push は自律可)
+   - **remote 反映 (本流 push、policy 連動)**: `mainline_branch` (= 統合先、default `main`) への remote push は **`mainline_integration_policy` に連動**する:
+     - `pr-required` (team/prod 既定): 本流 merge / push とも **user**。AI は feature branch に commit → push → `gh pr create` まで。
+     - `local-merge` (solo): AI は **ローカル本流 merge まで自律可**、remote push は **user**。
+     - `local-merge-push` (solo/実験): AI が **ローカル merge + remote 本流 push まで自律可**。
+     - **local merge 自体は hook 非 gate (push のみ `git-deny.sh` Tier2 が gate)** のため、`pr-required` / `local-merge` 時に AI が remote 本流 push しないのは push gate (hook) が、AI が `pr-required` 時にローカル本流 merge しないのは **honor-system 統治** (現「main 操作」honor-system と整合)。
+     - **`stg*` / `release*` への remote push は全 policy で常に user** (Tier1 安全弁、policy で緩めない)。`mainline_branch` を別ブランチに変えても **`main` は常時 block 維持** (mainline 移動で main 無保護化しない)。不正 / 未知 policy 値は fail-safe で `pr-required` 扱い。
+     - **conflict 時** (`git merge --no-ff` で衝突): `git merge --abort` して user 報告・停止 (遵守事項 9「続行不可」該当、自動解決禁止)。**push 拒否時** (non-fast-forward 等): auto-retry / rebase せず **hard stop** + user 通知。
    - **PR / リリース**: `gh pr merge` / `gh release create` / `git tag <name> origin` (`gh pr create` は自律可)
-   - **main 操作**: main への merge / main checkout 後の編集
+   - **main 操作**: main checkout 後の編集 (本流 merge は上記「remote 反映 (本流 push、policy 連動)」が SSoT)
    - **DB 作業**: migration 実行 / `INSERT/UPDATE/DELETE` 直接実行 / dump / restore
    - **本番 deploy**: `vercel --prod` / `supabase deploy` / production environment 触る操作
    - **secrets**: `.env*` 編集 / API key 生成・ローテーション / OAuth token 操作

@@ -80,7 +80,7 @@ stdout に以下 4 項目を構造化して提示:
    |---|---|---|
    | **自律実行可** (modes.md 遵守事項 2 非例外) | 実装 / commit / test / refactor / branch 切替 / status sync / 既存 task の Step 進行 / subagent 並列起動 | 順次自律実行 |
    | **user 確認必須** (modes.md 遵守事項 2 例外) | 設計文書新規追加 / 仕様変更 / scope 拡張 / 戦略判断 (architecture / 技術スタック / 既存 task 優先順入替) | 提示のみ、user 承認待ち停止 |
-   | **自律実行禁止** (modes.md 遵守事項 8、11 カテゴリ) | main/stg* push / `gh pr merge` / 本番 deploy / DB migration / secrets ローテーション / 等 | 提示のみ、user 明示承認必須 |
+   | **自律実行禁止** (modes.md 遵守事項 8、11 カテゴリ) | 本流 push (policy 連動、下記 3d 参照) / `stg*`・`release*` push / `gh pr merge` / 本番 deploy / DB migration / secrets ローテーション / 等 | 提示のみ、user 明示承認必須 (policy=local-merge-push の本流 push のみ例外) |
 
 3. **自律実行可項目を順次実行** (2026-05-27 task-47 拡張、`docs/tasks/list.md` 自動 enque 統合):
 
@@ -91,7 +91,11 @@ stdout に以下 4 項目を構造化して提示:
    - **3c**: 進行中 task の Step 完遂後、status **🔲 未着手** の task から **依存解決順** で 1 件選択し、着手
      - **依存解決**: list.md「依存先タスク」列の ID 列挙を参照、依存先が全て ✅ 完了なら着手可 (一部 🔄 / 🔲 / 📝 残存なら skip して次候補へ)
      - **draft 承認確認**: 各 task の設計 draft で `approved_at:` 非空を必須 (= user 承認済のみ自律着手、設計新規追加は `modes.md` 遵守事項 2 例外条項のため自律 enque 不可、draft 不在 / 未承認 task は user 確認必須項目として step 4 stop)
-   - **3d**: 各 task の DoD 達成で status ✅ 完了 + commit + push + PR create (task #39 緩和で feature branch push + `gh pr create` 自律実行可)
+   - **3d**: 各 task の DoD 達成で status ✅ 完了 + commit。本流統合は `mainline_integration_policy` 連動 (2026-06-03 task #77、SSoT `docs/draft/git-integration-policy.md` §3.2)。**auto-merge は機械的順序 gate**: ①smoke 実行 (`run-all-smokes.sh`) ②exit 0 確認 (非0 / conflict / security CRIT で stop) ③`local-merge` / `local-merge-push` のみ `git checkout <mainline> && git merge --no-ff <feature>` (conflict は `git merge --abort` + stop) ④`local-merge-push` のみ `git push origin <mainline>` (push 拒否は rebase/retry せず hard stop)。policy 別:
+     - `pr-required` (default): feature branch push + `gh pr create` まで自律可 (task #39 緩和)、本流 merge / push は user 確認必須
+     - `local-merge`: feature push + ローカル本流 merge まで自律可、remote 本流 push は user 確認必須
+     - `local-merge-push`: ローカル merge + remote 本流 push まで自律可
+     - **`stg*` / `release*` push は全 policy で user 確認必須** (`git-deny.sh` Tier1 安全弁)。policy 値は `bash .claude/scripts/hc-config.sh --get mainline_integration_policy` (不正値は fail-safe `pr-required`)
    - **3e**: 全 task ✅ 完了 or 全 🔲 task が user 確認必須 (draft 不在 / approved_at 空) なら step 4 (user 確認 stop) へ遷移
 
 4. **user 確認必須項目で stop**:
