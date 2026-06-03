@@ -122,8 +122,11 @@ context7 fail で loop 停止しない / 「training data で確信あり」で 
 | bypass 経路 | env |
 |---|---|
 | reminder 無効化 | `HC_PARALLEL_SUBAGENT_REMINDER_ENABLED=false` |
-| TTL 変更 | `HC_PARALLEL_SUBAGENT_TTL_SEC=<秒>` |
+| TTL 変更 | `HC_PARALLEL_SUBAGENT_TTL_SEC=<秒>` (default 300) |
 | state dir 隔離 | `HC_PARALLEL_SUBAGENT_STATE_DIR=<path>` |
+| 連続単発 streak batch 窓 (task-75) | `HC_PARALLEL_SUBAGENT_BATCH_WINDOW_SEC=<秒>` (default 5、near-ts batch 判定窓) |
+| tier2 (強 reminder) 発火閾値 (task-75) | `HC_PARALLEL_SUBAGENT_STREAK_TIER2=<n>` (default 2、連続単発 streak) |
+| tier3 (Workflow 誘導) 発火閾値 (task-75) | `HC_PARALLEL_SUBAGENT_STREAK_TIER3=<n>` (default 3、連続単発 streak) |
 | agent type mapping override | `HC_AGENT_TYPE_KEYWORD_MAPPING=...` (改行区切り、advanced) |
 
 ### default mapping (要件 7、hook 内 SSoT、設定不要原則)
