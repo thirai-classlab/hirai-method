@@ -11,7 +11,7 @@ total_steps: 5
 
 # Task #79: install.sh 全上書きモード追加
 
-> Status: **🔄 進行中** (2026-06-04 draft 承認、実装着手)
+> Status: **✅ 完了** (2026-06-04、smoke 8/8 + regression 7/7、review approve + HIGH 1/MED 2 修正済)
 > 起案: 2026-06-04
 > 設計起源: [install-full-overwrite-mode](../draft/install-full-overwrite-mode.md) ✅承認済 (approved_at 2026-06-04)
 
@@ -51,11 +51,11 @@ draft §「Step 計画」を SSoT。
 
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | `--overwrite-all` mode 追加 (arg parse + M-1 conflict + RSYNC_EXCLUDES_MINIMAL + MODE 分岐 + CLAUDE.md/.mcp.json 扱い確定) | — |
-| 2 | 🔲 | dry-run 対応 + help/usage/冒頭コメント/summary 更新 | 1 |
-| 3 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (min≤N≤max) | 2 |
-| 4 | 🔲 | (テスト合格) smoke 新規 + 既存 regression 0 | 3 |
-| 5 | 🔲 | (リファクタリング) RSYNC_EXCLUDES 重複判定 or skip | 4 |
+| 1 | ✅ | `--overwrite-all` mode 追加 (arg parse + M-1 3 者排他 + RSYNC_EXCLUDES_MINIMAL + dispatch + CLAUDE.md force 準拠) | — |
+| 2 | ✅ | dry-run + help/usage/冒頭コメント/summary 更新 (誤用防止 + settings.json 再生成案内、migration helper 拡張) | 1 |
+| 3 | ✅ | (テスト設計レビュー) code-reviewer: HIGH 1 (doc) + MED 2 + LOW 2、approve → 修正反映 | 2 |
+| 4 | ✅ | (テスト合格) overwrite-all 8/8 + regression (install/update/force) 7/7 PASS | 3 |
+| 5 | ✅ | (リファクタリング) Case C → state-dir 上書き case 置換 + dry-run SIGPIPE `\|\| true` 修正 | 4 |
 
 ## 影響範囲
 
