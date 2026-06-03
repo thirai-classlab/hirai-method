@@ -1578,6 +1578,12 @@ _case_s32() (
     return 1
   fi
 
+  # M-2 (review fix): category filter 経路でも enriched entry に label_ja が返ること
+  if ! printf '%s' "$keys_body" | grep -q '"label_ja"'; then
+    printf 'S-32: category filter result に label_ja field が無い\n' >&2
+    return 1
+  fi
+
   return 0
 )
 
@@ -2606,6 +2612,13 @@ _case_s55() (
     return 1
   fi
 
+  # H-2 (review fix): label_ja 非空率 100% を担保。"label_ja":"" (空文字) が
+  # 1 件でも出現したら FAIL (空白許容、JSON エンコード形式 "label_ja":"" を検出)。
+  if printf '%s' "$body" | grep -qE '"label_ja"[[:space:]]*:[[:space:]]*""'; then
+    printf 'S-55: /api/keys に空の label_ja ("label_ja":"") が存在 (全 key 非空必須)\n' >&2
+    return 1
+  fi
+
   # 主要 key の label 値が含まれること (metadata.sh の値と一致)
   local label
   for label in '信頼度しきい値' '本流統合ポリシー' 'draftフローガード有効化'; do
@@ -2646,8 +2659,10 @@ _case_s56() (
   bad_nf=$(printf '%s' "$result" | awk '{print $2}')
   empty_label=$(printf '%s' "$result" | awk '{print $3}')
 
-  if [ "${rows:-0}" -lt 1 ]; then
-    printf 'S-56: metadata table が空 (rows=%s)\n' "$rows" >&2
+  # H-1 (review fix): rows>=1 のみだと metadata 行が誤削除されても PASS してしまう。
+  # 5 列化前後で行数不変 (現状 84 行) を担保するため下限 84 を assertion。
+  if [ "${rows:-0}" -lt 84 ]; then
+    printf 'S-56: metadata table 行数が下限 84 未満 (rows=%s、行の誤削除疑い)\n' "$rows" >&2
     return 1
   fi
   if [ "${bad_nf:-1}" != "0" ]; then

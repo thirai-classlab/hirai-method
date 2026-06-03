@@ -138,9 +138,9 @@ flowchart LR
 
 | iter | 日付 | reviewer (起動数) | CRITICAL | HIGH | MEDIUM | LOW | 修正 | 状態 |
 |:---:|---|---|:---:|:---:|:---:|:---:|---|---|
-| 1 | — | — | — | — | — | — | — | 未実施 |
+| 1 | 2026-06-03 | テスト設計レビュー (軽め、user 承認方針) | 0 | 2 | 1 | 0 | H-1 (S-56 行数下限 84 assertion 化) / H-2 (S-55 label_ja 非空率 100% assertion 化) / M-2 (S-32 category filter 経路でも label_ja 返却 assertion 化) を smoke に反映 | **収束** |
 
-**収束判定**: CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW 許容)。
+**収束判定**: CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0 (LOW 許容)。iter 1 で検出した HIGH 2 / MEDIUM 1 はいずれも「テスト網羅性の穴」(実装欠陥ではなく smoke assertion 不足) で、smoke 強化 (S-55/S-56/S-32) として反映 → 反映後 smoke 49/49 PASS (0 FAIL) で収束。実装コード (metadata/app.js/css) への修正は不要だった。
 
 ---
 

@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #78: 設定画面 UX 強化 (key 日本語ラベル + 変更内容 右サイドバー、3 列 no-scroll)
 
-> Status: **🔲 未着手** (draft 承認済、PR #59 merge で base 解消)
+> Status: **🔄 進行中** (Step 1-6 ✅、Step 7 refactor 残。draft 承認済、PR #59 merge で base 解消)
 > 起案: 2026-06-03
 > 関連: #76 (2分割UI), #77 (右ペイン key + ENUM_OPTIONS)
 > 設計起源: [settings-ui-labels-and-changes-sidebar](../draft/settings-ui-labels-and-changes-sidebar.md) ✅承認済
@@ -58,12 +58,12 @@ draft §「Step 計画」を SSoT。
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
 | 1 | ✅ | metadata 5列化 label_ja (84 key) + parser/`/api/keys` label_ja + smoke + tui-smoke 5列対応 (commit 済、84 行 NF≥5 確認) | — |
-| 2 | 🔲 | 中央 accordion render `key_name (label_ja)` + 空 fallback (app.js) | 1 |
-| 3 | 🔲 | 右サイドバー「変更内容」(app.js: 3列目 + baseline↔draft 差分 live) | 2 |
-| 4 | 🔲 | style.css 2列→3列 grid + no-scroll 100vh + 768 responsive | 3 |
-| 5 | 🔲 | (テスト設計レビュー) reviewer 動的選定 min≤N≤max (軽め、user 承認済) | 4 |
-| 6 | 🔲 | (テスト合格) smoke + visual (3列 no-scroll / 変更内容 live) | 5 |
-| 7 | 🔲 | (リファクタリング) 3 観点 | 6 |
+| 2 | ✅ | 中央 accordion render `key_name (label_ja)` + 空 fallback (keyDisplayLabel) commit 済、browser 確認 | 1 |
+| 3 | ✅ | 右サイドバー「変更内容」(renderChangesSidebar、label(key):old→new live、変更なし) commit 済、live 確認 | 2 |
+| 4 | ✅ | style.css 3列 grid (240/1fr/280) + no-scroll 100vh + 768 縦積み commit 済、scrollable=false 実測 | 3 |
+| 5 | ✅ | (テスト設計レビュー) iter 1 (軽め): HIGH 2 + MED 1 検出 → smoke assertion 強化 (S-55/S-56/S-32) で反映、実装修正不要、収束 (draft §8) | 4 |
+| 6 | ✅ | (テスト合格) smoke 49/49 PASS (0 FAIL) + visual 8 枚 (1280/1024/768 + preset/edit/history/toggle) 撮影済 | 5 |
+| 7 | 🔄 | (リファクタリング) 3 観点 | 6 |
 
 ## 影響範囲
 
