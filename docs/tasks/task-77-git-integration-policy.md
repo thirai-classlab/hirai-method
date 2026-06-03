@@ -58,8 +58,8 @@ draft §「Step 計画」を SSoT とする (Step 1-8、各 Step の詳細 + Ste
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
 | 1 | ✅ | yml 2key + metadata(Gate/Confidence) + config-loader `_HC_KNOWN_KEYS`/default/export + `_validate_mainline_{integration_policy,branch}` + charset regex。新 smoke 5/5、key-parity 維持、regression 0 | — |
-| 2 | 🔲 | git-deny.sh 3 tier 改修 (release/* 新規, main 常時, mainline policy 連動, 明示+省略経路, ECC bypass 不使用) | 1 |
-| 3 | 🔲 | autonomous-action-guard 改修不要を確認 + コメント明記 (no-op) | 1 |
+| 2 | ✅ | git-deny.sh 3 tier (`_classify_push_target`、release/* arm, main 常時, mainline policy 連動, 両経路, ECC 不使用, fail-safe) commit 433a653、smoke 19/19 + deny-layers 48/48 regression 0 | 1 |
+| 3 | ✅(no-op) | autonomous-action-guard 改修不要を確認 (task-39 で git push pattern 撤去済、push gate は git-deny.sh のみ、iter2 architect 確認) | 1 |
 | 4 | ✅ | (規範変更) modes.md 遵守事項8 policy 3状態 + finish-task Phase4.5 + resume-state に smoke→exit0→merge gate (commit 済、run-all-smokes UNEXPLAINED-FAIL 0) | 1 |
 | 5 | ✅ | 10 named preset values に policy + ENUM_OPTIONS + 6 axes display-only SSoT comment (commit 済、S-52/53/54、browser visual 確認 select 描画+custom化) | 1 |
 | 6 | 🔲 | (テスト設計レビュー) reviewer 動的選定 min≤N≤max | 5 |

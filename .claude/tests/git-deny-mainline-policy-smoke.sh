@@ -19,6 +19,14 @@
 #   - file-top に `set -euo pipefail` を書かない (caller leak 防止教訓 feedback_set_e_in_sourced_libs)。
 #   - current-branch fallback 経路は git stub で HEAD を制御する。
 #
+# honor-system / smoke 境界 (draft §3.4 H-3 / qa M2):
+#   本 smoke が検証するのは git-deny.sh の **hook 実行パス = push 判定 (block/allow)** のみ。
+#   merge 実施有無 (pr-required で本流 merge しない / local-merge(-push) で merge する) と
+#   mainline 存在確認 (P1/P2 behavioral + 存在 cell) は **merge が hook 非 gate (push のみ gate) の
+#   設計判断 H-3 により honor-system で統治** され、finish-task.md Phase 4.5 / resume-state.md Phase 6
+#   の norm 手順がカバーする。push-gate smoke (本 file) が hook 強制部分をカバーし、merge-commit
+#   behavioral と存在確認は norm-smoke 境界 (qa M2 と同じ) で smoke 直接対象外。
+#
 # 実行: bash .claude/tests/git-deny-mainline-policy-smoke.sh
 # 終了コード: 0 = 全 case PASS / 1 = 1 件以上 FAIL
 
@@ -128,6 +136,11 @@ expect_allow "P3: mainline=main + local-merge-push → push origin main allow (e
 # P3: refspec 省略経路 (current branch=main) → allow
 expect_allow "P3: mainline=main + local-merge-push → push (no refspec, current=main) allow" \
   "main" "local-merge-push" "git push" "main"
+# P1: refspec 省略 + policy=pr-required + current=mainline(main) → block
+# (block 側 refspec-omit 経路の網羅、architect H4。現状 allow 側両経路 + Tier3 のみ検証で
+#  block 側の refspec 省略経路が未検証だった)
+expect_block "P1: mainline=main + pr-required → push (no refspec, current=main) block" \
+  "main" "pr-required" "git push" "main"
 
 # --- Tier 1: stg* 常時 block (3 policy) ---
 printf "\nTier 1 (stg* always block, all 3 policies):\n"
@@ -176,6 +189,24 @@ expect_allow "Tier3: push -u origin feat/task-77-x allow" \
 # Tier3 refspec 省略経路: current=feature branch → allow
 expect_allow "Tier3: push (no refspec, current=feat/task-77-x) allow" \
   "main" "pr-required" "git push" "feat/task-77-x"
+
+# --- 2-guard: autonomous-action-guard が git push 系 pattern を持たないことを直接確認 ---
+# (qa H1 / sec L-1 / architect H4) git-deny.sh が唯一の push gate であることの片側確認。
+# 「block / allow が pass する」ではなく「autonomous-action-guard の DEFAULT_PATTERNS に
+#  `git push` を捕捉する regex が存在しない」ことを source 後の変数 grep で直接 assert する
+# (task-39 緩和で削除済の回帰防止)。
+printf "\n2-guard (autonomous-action-guard has no git push pattern):\n"
+AAG="$REPO_ROOT/.claude/hooks/autonomous-action-guard.sh"
+# DEFAULT_PATTERNS だけを取り出す (hook 全体を実行せず変数定義行群を抽出)。
+# 'DEFAULT_PATTERNS=' 開始の single-quote heredoc-like 複数行代入を sed で切り出し。
+AAG_PATTERNS="$(sed -n "/^DEFAULT_PATTERNS=/,/'$/p" "$AAG")"
+# `git ... push` を捕捉する regex 行が無いことを確認 (`git tag ... origin` は push でなく tag、別物)。
+if printf '%s' "$AAG_PATTERNS" | grep -Eq 'git\[\[:space:\]\]\+push'; then
+  FAIL=$((FAIL + 1)); FAILED_CASES+=("2-guard: autonomous-action-guard に git push pattern が存在する (want=不在)")
+  printf "  FAIL: 2-guard: autonomous-action-guard に git push pattern が存在 (want=不在)\n"
+else
+  PASS=$((PASS + 1)); printf "  PASS: 2-guard: autonomous-action-guard に git push pattern が不在 (git-deny が唯一の push gate)\n"
+fi
 
 TOTAL=$((PASS + FAIL))
 printf "\n===== Result =====\n"

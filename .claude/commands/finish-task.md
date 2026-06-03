@@ -65,7 +65,9 @@ docs(tasks): #41 done — content version management + DB overwrite fail-safe (+
 
 1. **smoke 実行**: `bash .claude/tests/run-all-smokes.sh` (または該当 task の smoke)
 2. **exit 0 確認**: smoke 非 0 / conflict / security CRITICAL のいずれかなら **stop** (本流統合せず user 報告、modes.md 停止条件)
-3. **`local-merge` / `local-merge-push` のみローカル本流 merge**: `git checkout <mainline> && git merge --no-ff <feature>`
+3. **`local-merge` / `local-merge-push` のみ本流統合**: merge 前に **mainline 存在確認**を必ず行う (draft §3.1 / git-workflow H3 / security H-1):
+   - **存在確認**: `git show-ref --verify --quiet refs/heads/<mainline>` (ローカル) または `git ls-remote --exit-code origin <mainline>` (remote)。**不在なら error 停止** (`mainline=<mainline>` が存在しないため統合せず user 報告)。`git checkout` 自体も不在で fail するが、明示チェックでクリーンに停止する (honor-system 手順)
+   - **ローカル本流 merge**: 存在確認 OK なら `git checkout <mainline> && git merge --no-ff <feature>`
    - **conflict 時**: `git merge --abort` して user 報告・停止 (自動解決禁止)
 4. **`local-merge-push` のみ remote 本流 push**: `git push origin <mainline>`
    - **push 拒否時** (non-fast-forward 等): auto-retry / rebase せず **hard stop** + user 通知
