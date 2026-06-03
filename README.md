@@ -194,7 +194,7 @@ install.sh は **冪等** で、既存 `.claude/` は `.claude.bak.<timestamp>` 
 | `--no-mcp` | `.mcp.json` を配置しない (Serena MCP 不要な project) |
 | `--no-docs` | `docs/tasks/` `docs/draft/` の templates 配置を skip |
 
-state dir 除外: `.gateguard-state/` `.taskguard-state/` `.confidence-gate-state/` `.failure-window/` `.agent-markers/` `.context-budget-state/` `.improvement-proposal-state/` `.workflow-state/` `settings.local.json` `bash-whitelist-requests/` `worktrees/`
+`--update` の除外 (保護) 対象: 全 state dir (`.gateguard-state/` `.taskguard-state/` `.confidence-gate-state/` `.failure-window/` `.agent-markers/` `.context-budget-state/` `.improvement-proposal-state/` `.workflow-state/`) + `settings.json` + `settings.local.json` + `settings.local.example.json` + **`harness-config.local.yml`** (project 固有 override) + `bash-whitelist-requests/` + `worktrees/`
 
 #### Update 運用 (複数 project)
 
@@ -207,6 +207,102 @@ bash install.sh --update /path/to/project-b
 > ⚠️ **cross-repo write は Claude Code sandbox + delegation-guard 二重制約で agent 実行不能**。`bash install.sh --update <target>` は **user manual 実行のみ可能**、agent task として subagent / main から呼び出すと sandbox deny される (詳細: memory `feedback_cross_repo_write_sandbox_block.md` / `.claude/rules/development-process.md` §「cross-repo write 例外」)。
 
 > ⚠️ **`--update` は project 固有 file を上書きする**: `.claude/harness-config.yml` / `bash-whitelist.txt` / `settings.json` / `rules/*.md` / `agents/*` / `skills/**` / `commands/*` は exclude されない。事前 `git stash` or `cp <file>.bak` で backup 推奨。
+
+### 3.2.1 導入マニュアル (新規プロジェクト / 既存プロジェクト)
+
+> install.sh の引数は **target ディレクトリのみ** (言語指定引数は無い)。`./install.sh typescript` のような言語名指定は **別物 (`~/.claude/rules/` の rules 用 installer)** で、本ハーネスの install.sh には適用されない。本ハーネスは `bash install.sh <target-dir>` が正。
+
+#### A. 新規プロジェクトに導入する (初回、default mode)
+
+```bash
+# 1. ハーネス本体を clone (初回のみ)
+git clone https://github.com/thirai-classlab/hirai-method.git ~/hirai-method
+
+# 2. 対象 project に install (target は "ディレクトリ path")
+cd ~/hirai-method
+bash install.sh /path/to/your-project          # 事前確認したいときは末尾に --dry-run
+```
+
+install.sh が配置するもの (既存 `.claude` / `CLAUDE.md` は `.bak.<timestamp>` に自動退避 = data loss なし):
+
+| 配置物 | 備考 |
+|---|---|
+| `.claude/` 一式 (hooks / skills / rules / commands / scripts / templates / config) | rsync 配置 |
+| `CLAUDE.md.template` | placeholder 入り (既存 CLAUDE.md は退避) |
+| `.mcp.json` | 既存があれば触らない / `--no-mcp` で skip |
+| `.gitignore` | harness state 除外行を追記 (無ければ新規) |
+| `docs/tasks/{list,parking-lot,_TASK_TEMPLATE}.md` + `docs/draft/_DRAFT_TEMPLATE.md` | 既存は skip / `--no-docs` で全 skip |
+| `harness-config.yml` の `harness_version: <install 日 UTC>` | install 日 stamp |
+
+導入後の初期設定 (install.sh 完了時にも案内が出る):
+
+```bash
+cd /path/to/your-project
+
+# 1. preset を選ぶ (consuming repo は team-default 推奨。重要 guard が ON になる)
+#    ※ harness-dev は本ハーネス自身の開発専用 (guard を意図的に緩和) なので consuming repo では選ばない
+bash .claude/scripts/hc-config.sh --set default_preset=team-default
+
+# 2. project 固有の上書きは SSoT yml ではなく local.yml に書く (--update で温存される)
+$EDITOR .claude/harness-config.local.yml
+
+# 3. 使う CLI を whitelist に追記 (pnpm / poetry / cargo / ...)
+$EDITOR .claude/bash-whitelist.txt
+
+# 4. CLAUDE.md を起こして project 固有情報を記入
+mv CLAUDE.md.template CLAUDE.md && $EDITOR CLAUDE.md   # <...> placeholder を埋める
+
+# 5. git 初期化 (observe.sh の project hash 検出に必要)
+git init
+
+# 6. 導入確認
+bash .claude/scripts/hc-config.sh --summary             # 現 preset / 有効・無効 guard / docs mismatch
+```
+
+Claude Code session を起動 → `/init-tasks` → (任意 `/mode loop`) → `/new-draft` → 承認 → `/new-task` → 自律実装。
+
+#### B. 既存プロジェクト (導入済) を最新ハーネスに更新する (--update mode)
+
+```bash
+cd ~/hirai-method && git pull                            # ハーネス本体を最新化
+bash install.sh --update /path/to/your-project           # 増分同期のみ
+bash install.sh --update /path/to/your-project --commit  # 同期 + .claude/ のみ自動 commit (git repo 必須)
+```
+
+`--update` は **既存 `.claude/` 必須** (無ければ exit 64 → 新規は default mode を使う)。
+
+**`--update` で保護される (上書きされない) もの** = project 固有の値:
+
+| 保護対象 | 理由 |
+|---|---|
+| 全 state dir (`.gateguard-state/` `.taskguard-state/` `.confidence-gate-state/` `.workflow-state/` 他) | session 状態 |
+| `settings.json` | repo 固有 permissions / preset |
+| `settings.local.json` / `settings.local.example.json` | ローカル設定 |
+| **`harness-config.local.yml`** | project 固有 override (← ここに書けば update で消えない) |
+| `bash-whitelist-requests/` / `worktrees/` | 申請・作業領域 |
+| `CLAUDE.md` / `.mcp.json` / `.gitignore` | touch しない |
+
+> ⚠️ 逆に `.claude/harness-config.yml` (SSoT) / `bash-whitelist.txt` / `rules/*.md` / `agents/*` / `skills/**` / `commands/*` は **exclude されず上書きされる**。project 固有値はこれらに直書きせず **`harness-config.local.yml` に書く**こと。`--update` 時に SSoT yml へ直書き値を検出すると **MIGRATE warning** が出るので、その値を local.yml に移す。
+
+更新後: `bash install.sh --update` は `.claude/` 配下の変更を列挙する。`--commit` 未指定なら手動で `.claude/` のみ分離 commit (project file と混ぜない)。
+
+> ⚠️ `bash install.sh --update <target>` は **user manual (terminal) 実行のみ可能**。cross-repo write は Claude Code sandbox + delegation-guard 二重制約で agent からは実行不能 (agent task にしない)。
+
+#### C. mode / flag 早見表
+
+| flag | 用途 |
+|---|---|
+| (なし) | 新規 install (既存は `.bak` 退避、CLAUDE.md は `.template` 配置) |
+| `--update` | 既存 `.claude/` 増分上書き (state / local / settings.json 保持、CLAUDE.md 等 不変)。既存 .claude 必須 |
+| `--update --commit` | 上記 + sync された `.claude/` path のみ自動 commit (非 git target は skip + WARN) |
+| `--force` | backup なしで上書き (危険) |
+| `--dry-run` | 実行内容を表示のみ |
+| `--no-mcp` | `.mcp.json` を配置しない |
+| `--no-docs` | docs templates 配置を skip |
+
+exit code: 引数エラー / 不正 flag / target 不在 / self-install / 言語名を渡した等 = **64**、rsync 未 install = **69**。
+
+> 詳細フロー図は [§3.9.2](#392-インストール--設定--利用の全体フロー)、project/user-level の 2 install モードは [§3.11](#311-2-つの-install-モード-project-level--user-level) を参照。
 
 ### 3.3 動作モード (Normal / Loop)
 
