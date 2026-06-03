@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #78: 設定画面 UX 強化 (key 日本語ラベル + 変更内容 右サイドバー、3 列 no-scroll)
 
-> Status: **🔄 進行中** (Step 1-6 ✅、Step 7 refactor 残。draft 承認済、PR #59 merge で base 解消)
+> Status: **✅ 完了** (Step 1-7 ✅。draft 承認済、PR #59 merge で base 解消)
 > 起案: 2026-06-03
 > 関連: #76 (2分割UI), #77 (右ペイン key + ENUM_OPTIONS)
 > 設計起源: [settings-ui-labels-and-changes-sidebar](../draft/settings-ui-labels-and-changes-sidebar.md) ✅承認済
@@ -63,7 +63,7 @@ draft §「Step 計画」を SSoT。
 | 4 | ✅ | style.css 3列 grid (240/1fr/280) + no-scroll 100vh + 768 縦積み commit 済、scrollable=false 実測 | 3 |
 | 5 | ✅ | (テスト設計レビュー) iter 1 (軽め): HIGH 2 + MED 1 検出 → smoke assertion 強化 (S-55/S-56/S-32) で反映、実装修正不要、収束 (draft §8) | 4 |
 | 6 | ✅ | (テスト合格) smoke 49/49 PASS (0 FAIL) + visual 8 枚 (1280/1024/768 + preset/edit/history/toggle) 撮影済 | 5 |
-| 7 | 🔄 | (リファクタリング) 3 観点 | 6 |
+| 7 | ✅ | (リファクタリング) 3 観点: 持続可能性=app.js `buildKeyMeta(k)` extract で 4 重複オブジェクトリテラル統合 / 非冗長化=style.css `.pane-left__heading`+`.pane-changes__heading` group selector 統合 (8 プロパティ重複削除) / 汎用性=skip (YAGNI、既存抽出十分)。behavior-preserving、smoke 49 PASS/0 FAIL regression 0 | 6 |
 
 ## 影響範囲
 

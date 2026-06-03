@@ -191,7 +191,9 @@ dialog::backdrop { background-color: rgba(15, 23, 42, 0.5); }
   background: rgb(248 250 252); /* slate-50 */
   overflow: hidden;
 }
-.pane-left__heading {
+/* pane 見出し共通 (左ペイン / 右サイドバーで同一スタイル、task-78 Step 7 DRY 化) */
+.pane-left__heading,
+.pane-changes__heading {
   flex: 0 0 auto;
   padding: 0.625rem 0.875rem;
   font-size: 0.75rem;
@@ -283,16 +285,6 @@ dialog::backdrop { background-color: rgba(15, 23, 42, 0.5); }
   border-left: 1px solid rgb(226 232 240);
   background: rgb(248 250 252); /* slate-50 */
   overflow: hidden;
-}
-.pane-changes__heading {
-  flex: 0 0 auto;
-  padding: 0.625rem 0.875rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgb(71 85 105);
-  border-bottom: 1px solid rgb(226 232 240);
 }
 .pane-changes__body {
   flex: 1 1 auto;

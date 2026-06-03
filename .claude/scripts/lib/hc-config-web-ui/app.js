@@ -269,6 +269,19 @@
     return Object.prototype.hasOwnProperty.call(state.draft, key) ? state.draft[key] : state.baseline[key]
   }
 
+  // /api/keys の key エントリから keyMeta エントリを生成する内部 helper。
+  //   4 箇所で同一パターンが出現していたのを集約 (task-78 Step 7 refactor)。
+  //   フィールド追加は本関数 1 箇所のみ変更で済む。
+  function buildKeyMeta(k) {
+    return {
+      category: k.category,
+      description: k.description,
+      effect: k.effect,
+      label_ja: k.label_ja || '',
+      type: inferType(k.key, k.current_value),
+    }
+  }
+
   // key の表示ラベル (task-78 Step 2/3): `<key_name> (<label_ja>)`、label 空は key 名のみ。
   //   返り値は textContent でのみ使用 (el() builder 経由) なので XSS 安全。
   function labelJaOf(key) {
@@ -664,13 +677,7 @@
           const meta = { ...state.keyMeta }
           const baseline = { ...state.baseline }
           for (const k of keys) {
-            meta[k.key] = {
-              category: k.category,
-              description: k.description,
-              effect: k.effect,
-              label_ja: k.label_ja || '',
-              type: inferType(k.key, k.current_value),
-            }
+            meta[k.key] = buildKeyMeta(k)
             // baseline は初回 load 時のみ (編集中 draft を壊さない)
             if (!Object.prototype.hasOwnProperty.call(baseline, k.key)) {
               baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
@@ -841,7 +848,7 @@
         const meta = { ...state.keyMeta }
         for (const k of keys) {
           baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
-          meta[k.key] = { category: k.category, description: k.description, effect: k.effect, label_ja: k.label_ja || '', type: inferType(k.key, k.current_value) }
+          meta[k.key] = buildKeyMeta(k)
         }
         state = { ...state, keysByCategory: byCat, baseline, keyMeta: meta }
       } catch (e) { /* noop */ }
@@ -906,7 +913,7 @@
         byCat[cat] = keys
         for (const k of keys) {
           baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
-          meta[k.key] = { category: k.category, description: k.description, effect: k.effect, label_ja: k.label_ja || '', type: inferType(k.key, k.current_value) }
+          meta[k.key] = buildKeyMeta(k)
         }
       } catch (e) { /* noop */ }
     }
@@ -1009,7 +1016,7 @@
           const meta = {}
           const baseline = {}
           for (const k of keys) {
-            meta[k.key] = { category: k.category, description: k.description, effect: k.effect, label_ja: k.label_ja || '', type: inferType(k.key, k.current_value) }
+            meta[k.key] = buildKeyMeta(k)
             baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
           }
           state = { ...state, keysByCategory: { [state.openCategory]: keys }, keyMeta: meta, baseline }
