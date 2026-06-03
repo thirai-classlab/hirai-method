@@ -1578,6 +1578,12 @@ _case_s32() (
     return 1
   fi
 
+  # M-2 (review fix): category filter 経路でも enriched entry に label_ja が返ること
+  if ! printf '%s' "$keys_body" | grep -q '"label_ja"'; then
+    printf 'S-32: category filter result に label_ja field が無い\n' >&2
+    return 1
+  fi
+
   return 0
 )
 
@@ -2582,6 +2588,144 @@ _case_s54() (
 )
 
 # ============================================================
+# task-78 Step 1 新規 case (S-55 / S-56): metadata label_ja (5 列目) sidebar 表示
+# ============================================================
+# Case S-55: GET /api/keys が各 entry に label_ja field を返す + 主要 key の label 値
+#   server.js parser (loadMetadata) が 5 列目 label_ja を読み、/api/keys enriched entry に
+#   付与することを検証。主要 key (confidence_threshold / mainline_integration_policy /
+#   feature_draft_flow_guard_enabled) の label が metadata.sh の値と一致することを確認。
+# ============================================================
+_case_s55() (
+  set -uo pipefail
+  local port="$1"
+
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/keys")
+  if ! printf '%s' "$body" | grep -q '"keys"'; then
+    printf 'S-55: /api/keys missing .keys field (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # label_ja field が response に存在すること
+  if ! printf '%s' "$body" | grep -q '"label_ja"'; then
+    printf 'S-55: /api/keys response に label_ja field が無い (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # H-2 (review fix): label_ja 非空率 100% を担保。"label_ja":"" (空文字) が
+  # 1 件でも出現したら FAIL (空白許容、JSON エンコード形式 "label_ja":"" を検出)。
+  if printf '%s' "$body" | grep -qE '"label_ja"[[:space:]]*:[[:space:]]*""'; then
+    printf 'S-55: /api/keys に空の label_ja ("label_ja":"") が存在 (全 key 非空必須)\n' >&2
+    return 1
+  fi
+
+  # 主要 key の label 値が含まれること (metadata.sh の値と一致)
+  local label
+  for label in '信頼度しきい値' '本流統合ポリシー' 'draftフローガード有効化'; do
+    if ! printf '%s' "$body" | grep -q "$label"; then
+      printf 'S-55: /api/keys に主要 label "%s" が無い\n' "$label" >&2
+      return 1
+    fi
+  done
+
+  return 0
+)
+
+# ============================================================
+# Case S-56: metadata table の 5 列化が key parity を壊さない (file-only、port 不要)
+#   全 metadata 行が 5 列 (key/category/description/effect/label_ja) であること、
+#   行数が 5 列化前と不変であること、全 key の label_ja が非空であることを検証。
+# ============================================================
+_case_s56() (
+  set -uo pipefail
+
+  local meta="${REPO_ROOT}/.claude/scripts/lib/hc-config-metadata.sh"
+  if [ ! -f "$meta" ]; then
+    printf 'S-56: hc-config-metadata.sh not found at %s\n' "$meta" >&2
+    return 1
+  fi
+
+  # source して table を dump、NF / 空 label を bash 内で検査
+  local result
+  result=$(source "$meta" 2>/dev/null && _hc_metadata_table 2>/dev/null | awk -F'\t' '
+    { rows++ }
+    NF != 5 { bad_nf++ }
+    NF == 5 && $5 == "" { empty_label++ }
+    END { printf "%d %d %d", rows, (bad_nf+0), (empty_label+0) }
+  ' || true)
+
+  local rows bad_nf empty_label
+  rows=$(printf '%s' "$result" | awk '{print $1}')
+  bad_nf=$(printf '%s' "$result" | awk '{print $2}')
+  empty_label=$(printf '%s' "$result" | awk '{print $3}')
+
+  # H-1 (review fix): rows>=1 のみだと metadata 行が誤削除されても PASS してしまう。
+  # 5 列化前後で行数不変 (現状 84 行) を担保するため下限 84 を assertion。
+  if [ "${rows:-0}" -lt 84 ]; then
+    printf 'S-56: metadata table 行数が下限 84 未満 (rows=%s、行の誤削除疑い)\n' "$rows" >&2
+    return 1
+  fi
+  if [ "${bad_nf:-1}" != "0" ]; then
+    printf 'S-56: 5 列でない行が %s 件存在 (key parity 破壊)\n' "$bad_nf" >&2
+    return 1
+  fi
+  if [ "${empty_label:-1}" != "0" ]; then
+    printf 'S-56: label_ja が空の key が %s 件存在 (全 key 必須)\n' "$empty_label" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-57: 変更内容 右サイドバー (task-78 Step 3) の id 契約 + render 関数存在 (file-only、port 不要)
+#   - index.html に #changes-sidebar / #changes-list が id= として実在
+#   - app.js が #changes-list を $()/getElementById で参照 (cross-file 契約乖離 guard)
+#   - app.js に renderChangesSidebar 関数 + keyDisplayLabel (key_name(label) render) が存在
+# task-76 の id mismatch render 事故 (feedback_parallel_subagent_cross_file_contract_drift) の再発防止。
+# ============================================================
+_case_s57() (
+  set -uo pipefail
+  local ui_dir="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui"
+  local app_js="${ui_dir}/app.js"
+  local index_html="${ui_dir}/index.html"
+
+  if [ ! -f "$app_js" ] || [ ! -f "$index_html" ]; then
+    printf 'S-57: app.js or index.html not found\n' >&2
+    return 1
+  fi
+
+  # index.html に sidebar container id が実在
+  local id
+  for id in changes-sidebar changes-list; do
+    if ! grep -qE "id=[\"']${id}[\"']" "$index_html" 2>/dev/null; then
+      printf 'S-57: index.html に id="%s" が存在しない (右サイドバー container 欠落)\n' "$id" >&2
+      return 1
+    fi
+  done
+
+  # app.js が changes-list を $()/getElementById で参照 (render target 契約)
+  if ! grep -qE "(\\\$|getElementById)\(['\"]changes-list['\"]\)" "$app_js" 2>/dev/null; then
+    printf 'S-57: app.js が render target id "changes-list" を $()/getElementById で参照していない\n' >&2
+    return 1
+  fi
+
+  # renderChangesSidebar 関数 (差分 render) が定義されている
+  if ! grep -qE "function renderChangesSidebar" "$app_js" 2>/dev/null; then
+    printf 'S-57: app.js に renderChangesSidebar 関数が無い (変更内容 render 不在)\n' >&2
+    return 1
+  fi
+
+  # keyDisplayLabel 関数 (key_name(label_ja) render) が定義されている
+  if ! grep -qE "function keyDisplayLabel" "$app_js" 2>/dev/null; then
+    printf 'S-57: app.js に keyDisplayLabel 関数が無い (key_name(label) render 不在)\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -2722,7 +2866,7 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
 
   if [ -z "$SHARED_PORT" ]; then
     printf '  WARN: shared server failed to start, skipping shared-server cases\n'
-    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49 S-50 S-51 S-52 S-53; do
+    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49 S-50 S-51 S-52 S-53 S-55; do
       _record SKIP "$cid" "shared server not available"
     done
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
@@ -2753,6 +2897,10 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     _record SKIP "S-44" "unsaved axes:null (shared server not available)"
     _record SKIP "S-45" "RETIRED: top-view axes table (cp.axes/AXIS_LABELS_JA) removed in task-76 redesign"
     _record SKIP "S-46" "RETIRED: edit view / applyPresetMode removed in task-76 2-pane redesign"
+    # S-56 は file-only (port 不要) なので shared server 不在でも実行 (task-78 Step 1)
+    if _case_s56 2>/dev/null; then _record PASS "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
+    else                           _record FAIL "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
+    fi
   else
     _PORT="$SHARED_PORT"
 
@@ -2987,10 +3135,26 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                                     _record FAIL "S-53" "GET /api/keys?category=Gate/Confidence に mainline_branch + mainline_integration_policy"
     fi
 
+    # --- task-78 Step 1 新規 case (S-55 / S-56): metadata label_ja sidebar 表示 ---
+    printf '\n%s\n' '--- task-78 Step 1 新規 case (S-55 / S-56) ---'
+
+    if _case_s55 "$_PORT" 2>/dev/null; then _record PASS "S-55" "GET /api/keys が label_ja field + 主要 label 値を返す"
+    else                                     _record FAIL "S-55" "GET /api/keys が label_ja field + 主要 label 値を返す"
+    fi
+
+    if _case_s56 2>/dev/null; then _record PASS "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
+    else                           _record FAIL "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
+    fi
+
+    # --- task-78 Step 3 新規 case (S-57): 変更内容 右サイドバー id 契約 + render 関数 ---
+    if _case_s57 2>/dev/null; then _record PASS "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
+    else                           _record FAIL "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
+    fi
+
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49 S-50 S-51 S-52 S-53; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49 S-50 S-51 S-52 S-53 S-55; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
   # S-41 / S-42 は file-only (port 不要) なので node 不在でも実行。
@@ -3014,6 +3178,13 @@ else
   fi
   _record SKIP "S-45" "RETIRED: top-view axes table (cp.axes/AXIS_LABELS_JA) removed in task-76 redesign"
   _record SKIP "S-46" "RETIRED: edit view / applyPresetMode removed in task-76 2-pane redesign"
+  # S-56 / S-57 は file-only (port 不要) なので node 不在でも実行 (task-78 Step 1/3)
+  if _case_s56 2>/dev/null; then _record PASS "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
+  else                           _record FAIL "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
+  fi
+  if _case_s57 2>/dev/null; then _record PASS "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
+  else                           _record FAIL "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
+  fi
 fi
 
 # --- legacy fallback + edge ---
