@@ -67,6 +67,21 @@
 #   S-40: POST /api/preset/save → 404 (custom 保存撤去 regression guard、F4)
 #   S-41: UI 3 file (index.html/app.js/style.css) に絵文字 0 件 (絵文字不要 regression guard、F5)
 #
+# task-76 Step 6-fix (2 分割再設計に合わせた stale test 整理):
+#   RETIRED (常時 SKIP、return 2):
+#     S-37 (renderTop/banner) / S-38 (edit-view state machine) /
+#     S-45 (top-view 6 軸 axes table) / S-46 (edit view / applyPresetMode)。
+#     理由: top/edit 2-view を廃止し 2 分割 1 画面 (左 preset / 右 category accordion) へ全面再設計。
+#     旧 UI symbol (renderTop/renderEdit/view:'edit'/applyPresetMode/cp.axes/AXIS_LABELS_JA) は新設計に不在。
+#   RE-TARGET:
+#     S-42 (DOM id 契約 cross-check) — 新 app.js は getElementById を $(id) wrapper 経由で呼ぶため
+#     $('id') 抽出を追加、anchor を新 render target (preset-list/category-accordion/panel-config/
+#     panel-history/history-tbody/save-bar) に更新。cross-file 契約乖離の安全網を新構造で機能させる。
+#   除外規則:
+#     S-41 (絵文字 0 件 guard) は ★ (U+2605 BLACK STAR) を検出範囲から除外
+#     (設計 §3 が「★ カスタム」を明示採用、BLACK STAR は emoji でなく typographic dingbat)。
+#   新規維持: S-48〜S-51 (task-76 Step 1-2)。
+#
 # 設計:
 #   - subshell 関数 ( set -uo pipefail; ... ) で各 case を隔離
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs 規範)
@@ -1598,9 +1613,9 @@ _case_s35() (
     return 1
   fi
 
-  # match_type は "preset" または "unsaved" のどちらかであること
-  if ! printf '%s' "$body" | grep -qE '"match_type"[[:space:]]*:[[:space:]]*"(preset|unsaved)"'; then
-    printf 'S-35: /api/current-preset .match_type is not "preset" or "unsaved" (body: %s)\n' "$body" >&2
+  # match_type は "preset" または "custom" のどちらかであること (task-76 Step 2: 'unsaved' → 'custom')
+  if ! printf '%s' "$body" | grep -qE '"match_type"[[:space:]]*:[[:space:]]*"(preset|custom)"'; then
+    printf 'S-35: /api/current-preset .match_type is not "preset" or "custom" (body: %s)\n' "$body" >&2
     return 1
   fi
 
@@ -1616,9 +1631,9 @@ _case_s35() (
       return 1
     fi
   else
-    # unsaved 時: display_name_ja が "未保存変更あり" を含む (server.js 実装値)
+    # custom 時: display_name_ja が "未保存変更あり" を含む (server.js 実装値)
     if ! printf '%s' "$body" | grep -q '未保存変更あり'; then
-      printf 'S-35: match_type=unsaved だが display_name_ja に "未保存変更あり" が含まれない (body: %s)\n' "$body" >&2
+      printf 'S-35: match_type=custom だが display_name_ja に "未保存変更あり" が含まれない (body: %s)\n' "$body" >&2
       return 1
     fi
   fi
@@ -1683,98 +1698,31 @@ _case_s36() (
 )
 
 # ============================================================
-# Case S-37: app.js に renderTop 関数 + bannerLabel/bannerValue が静的に存在 (top view banner 描画確認)
-# draft §3.4: top view は「プリセット: <日本語名>」または「未保存変更あり」banner を描画する
-# 検証方式: app.js 静的 grep (関数名/変数名の存在確認のみ。tautological)。
-# F7 (iter-2 fix): 本 case は static grep で関数/変数の存在を確認するに留まる。
-#   実 view 遷移 (top↔edit) の動作検証は Step 7 visual verification (agent-browser E2E) でカバーする。
-#   reducer は window.__hcConfigUi.reducer で expose されているが、app.js module load 時に
-#   document/window へ依存するため DOM shim 無しの純粋 eval は不可。reducer を独立 module へ
-#   抽出して DOM 非依存 unit test 化するのは Step 8 refactor 候補 (報告に記載)。
+# Case S-37: RETIRED (task-76 Step 6-fix)
+# 旧 assertion: app.js に renderTop / bannerLabel / bannerValue / 「設定を変更」CTA が存在。
+# retire 理由: task-76 で top/edit 2-view を廃止し 2 分割 1 画面 (左 preset / 右 category accordion)
+#   へ全面再設計。renderTop / top view banner / 「設定を変更」CTA は新設計に存在しない (旧 UI 前提)。
+#   新構造の描画ターゲット存在確認は S-42 (id 契約 cross-check) が、状態表示は header-state-badge を
+#   visual 検証 (Step 7) が担保する。本 case は常時 SKIP (return 2)。
 # ============================================================
 _case_s37() (
   set -uo pipefail
-  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
-
-  if [ ! -f "$app_js" ]; then
-    printf 'S-37: app.js not found at %s\n' "$app_js" >&2
-    return 1
-  fi
-
-  # renderTop 関数が存在すること
-  if ! grep -q 'function renderTop' "$app_js"; then
-    printf 'S-37: app.js missing renderTop function\n' >&2
-    return 1
-  fi
-
-  # bannerLabel / bannerValue が存在すること (top view banner 描画ロジック)
-  if ! grep -q 'bannerLabel' "$app_js"; then
-    printf 'S-37: app.js missing bannerLabel (top view banner logic)\n' >&2
-    return 1
-  fi
-
-  if ! grep -q 'bannerValue' "$app_js"; then
-    printf 'S-37: app.js missing bannerValue (top view banner logic)\n' >&2
-    return 1
-  fi
-
-  # 「設定を変更」ボタンが存在すること (top view CTA)
-  if ! grep -q '設定を変更' "$app_js"; then
-    printf 'S-37: app.js missing 「設定を変更」CTA button text\n' >&2
-    return 1
-  fi
-
-  return 0
+  printf 'S-37: RETIRED — top view (renderTop/banner) removed in task-76 2-pane redesign\n' >&2
+  return 2
 )
 
 # ============================================================
-# Case S-38: app.js に state.view='edit' 遷移ロジック + renderEdit 関数が存在 (edit view 遷移確認)
-# draft §3.3 / §3.7: state machine で top → edit 遷移は edit:enter action で行われる
-# 検証方式: app.js 静的 grep (関数名/変数名の存在確認のみ。tautological)。
-# F7 (iter-2 fix): 本 case は static grep で reducer 遷移ロジックの存在を確認するに留まる。
-#   実 view 遷移 (top↔edit) の動作検証は Step 7 visual verification (agent-browser E2E) でカバーする。
-#   reducer 純粋 eval が DOM shim 無しに不可な理由は S-37 コメント参照 (Step 8 refactor 候補)。
+# Case S-38: RETIRED (task-76 Step 6-fix)
+# 旧 assertion: app.js に renderEdit / view:'edit' 遷移 / state.view==='edit' 分岐 /
+#   edit:enter / edit:select_preset reducer action が存在。
+# retire 理由: task-76 で top/edit 2-view state machine を廃止。新設計は tab ('config'|'history')
+#   + 設定タブ内 2 分割 (左 preset / 右 accordion) で、view:'edit' 遷移 / edit:* reducer action は存在しない。
+#   タブ切替の動作は S-42 (#tab-config/#tab-history id) + visual 検証 (Step 7) が担保。常時 SKIP (return 2)。
 # ============================================================
 _case_s38() (
   set -uo pipefail
-  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
-
-  if [ ! -f "$app_js" ]; then
-    printf 'S-38: app.js not found at %s\n' "$app_js" >&2
-    return 1
-  fi
-
-  # renderEdit 関数が存在すること
-  if ! grep -q 'function renderEdit' "$app_js"; then
-    printf 'S-38: app.js missing renderEdit function\n' >&2
-    return 1
-  fi
-
-  # view: 'edit' への遷移ロジックが存在すること (reducer で view を 'edit' に遷移)
-  if ! grep -q "view: 'edit'" "$app_js"; then
-    printf 'S-38: app.js missing view:"edit" transition in reducer\n' >&2
-    return 1
-  fi
-
-  # 'top' → 'edit' の排他切替が render 内に存在すること
-  if ! grep -q "state.view === 'edit'" "$app_js"; then
-    printf 'S-38: app.js missing state.view===edit branch in render\n' >&2
-    return 1
-  fi
-
-  # task-65: editMode (preset/individual の 2 種) は 6 軸 dropdown 撤去により廃止。
-  #   edit view の遷移は edit:enter / edit:select_preset / edit:cancel / edit:apply action で行う。
-  if ! grep -q "case 'edit:enter'" "$app_js"; then
-    printf 'S-38: app.js missing edit:enter action in reducer (edit view 遷移ロジック)\n' >&2
-    return 1
-  fi
-
-  if ! grep -q "case 'edit:select_preset'" "$app_js"; then
-    printf 'S-38: app.js missing edit:select_preset action in reducer (preset 選択経路)\n' >&2
-    return 1
-  fi
-
-  return 0
+  printf 'S-38: RETIRED — edit-view state machine removed in task-76 2-pane redesign\n' >&2
+  return 2
 )
 
 # ============================================================
@@ -1850,12 +1798,12 @@ _case_s39() (
     return 1
   fi
 
-  # /api/current-preset を取得して match_type=unsaved であることを確認
+  # /api/current-preset を取得して match_type=custom であることを確認 (task-76 Step 2: 'unsaved' → 'custom')
   local after_body
   after_body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
 
-  if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
-    printf 'S-39: after /api/set change, match_type is not "unsaved" (body: %s)\n' "$after_body" >&2
+  if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"custom"'; then
+    printf 'S-39: after /api/set change, match_type is not "custom" (body: %s)\n' "$after_body" >&2
     return 1
   fi
 
@@ -1889,6 +1837,11 @@ _case_s40() (
 # F5 (iter-2 fix): user 明示要求「絵文字不要」+ draft §8 アンチパターンの regression guard。
 # index.html / app.js / style.css に emoji codepoint (U+1F300〜U+1FAFF 等) が混入したら FAIL。
 # 検証方式: perl で emoji 範囲を grep (hit したら FAIL)。perl 不在時は python3 fallback。
+#
+# task-76 Step 6-fix: ★ (U+2605 BLACK STAR) は S-41 の検出範囲から除外する。
+#   設計 SSoT (hc-config-web-2pane-redesign.md §3) が左ペイン「★ カスタム」を明示採用しており、
+#   BLACK STAR は emoji ではなく typographic dingbat (色つき絵文字レンダリングではなくテキスト記号)。
+#   範囲 U+2600-U+27BF から U+2605 のみ穴あけ (U+2600-U+2604 と U+2606-U+27BF に分割) する。
 # ============================================================
 _case_s41() (
   set -uo pipefail
@@ -1910,7 +1863,8 @@ _case_s41() (
   if command -v perl >/dev/null 2>&1; then
     for f in $files; do
       local out
-      out=$(perl -CSD -ne 'print "$ARGV:$.: $_" if /[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F1E6}-\x{1F1FF}]/' "${ui_dir}/${f}" 2>/dev/null || true)
+      # U+2605 (★ BLACK STAR) を除外: U+2600-U+2604 と U+2606-U+27BF に分割
+      out=$(perl -CSD -ne 'print "$ARGV:$.: $_" if /[\x{1F000}-\x{1FAFF}\x{2600}-\x{2604}\x{2606}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F1E6}-\x{1F1FF}]/' "${ui_dir}/${f}" 2>/dev/null || true)
       if [ -n "$out" ]; then
         hit="${hit}${out}"
       fi
@@ -1920,7 +1874,7 @@ _case_s41() (
       local out
       out=$(python3 -c "
 import sys, re
-pat = re.compile('[\U0001F000-\U0001FAFF☀-➿⬀-⯿]')
+pat = re.compile('[\U0001F000-\U0001FAFF☀-☄☆-➿⬀-⯿]')
 with open(sys.argv[1], encoding='utf-8') as fh:
     for i, line in enumerate(fh, 1):
         if pat.search(line):
@@ -1944,14 +1898,17 @@ with open(sys.argv[1], encoding='utf-8') as fh:
 )
 
 # ============================================================
-# Case S-42: app.js getElementById('X') が index.html の id="X" と整合する (DOM id 契約 cross-check)
-# task-63 Step 7: app.js render() が 'main-panel' を参照していたが index.html は 'view-container' しか持たず、
-#   view 全体が描画されない CRITICAL bug が Step 2/Step 3 並列実装の id 契約乖離で混入した。
-#   静的 grep だけでは view 描画を確認できない (S-37/S-38 は関数名存在のみの tautological 検証) 盲点を、
-#   「app.js が参照する DOM id が index.html に実在するか」という静的 cross-check で部分的に埋める。
-# 検証方式: app.js の全 getElementById('X') 呼び出しから id を抽出し、各 id が
-#   index.html に id="X" として実在することを grep で確認。1 件でも欠落したら FAIL。
-#   file-only (port 不要)。
+# Case S-42: app.js が参照する DOM id が index.html の id="X" と整合する (DOM id 契約 cross-check)
+# task-63 Step 7 起源: app.js render() が 'main-panel' を参照したが index.html は 'view-container' しか
+#   持たず view 全体が描画されない CRITICAL bug が並列実装の id 契約乖離で混入。memory
+#   feedback_parallel_subagent_cross_file_contract_drift の安全網。
+# task-76 Step 6-fix で re-target:
+#   (1) 新 app.js は getElementById を $(id) wrapper 経由で呼ぶため $('id') / $("id") も抽出対象に追加
+#       (直接 getElementById('id') も従来通り拾う)。
+#   (2) anchor を新 render target に更新: preset-list / category-accordion / panel-config /
+#       panel-history / history-tbody / save-bar (旧 view-container は撤去済)。
+# 検証方式: app.js の $('X') / getElementById('X') から id を抽出し、各 id が index.html に
+#   id="X" として実在することを確認。1 件でも欠落したら FAIL。file-only (port 不要)。
 # ============================================================
 _case_s42() (
   set -uo pipefail
@@ -1968,16 +1925,21 @@ _case_s42() (
     return 1
   fi
 
-  # app.js の getElementById('X') / getElementById("X") から id 文字列を抽出
-  #   (コメント行に混入する文字列は除外したいが、grep -oE で呼び出し形のみを拾う)
+  # app.js の DOM id 参照を抽出:
+  #   - getElementById('X') / getElementById("X")  (従来形)
+  #   - $('X') / $("X")  (新 app.js の wrapper: function $(id){return document.getElementById(id)})
+  # 注意: $(...) は変数展開風だが grep -oE の固定 pattern なので shell 展開は起きない。
   local app_ids
-  app_ids=$(grep -oE "getElementById\(['\"][a-zA-Z0-9_-]+['\"]\)" "$app_js" 2>/dev/null \
+  app_ids=$( {
+      grep -oE "getElementById\(['\"][a-zA-Z0-9_-]+['\"]\)" "$app_js" 2>/dev/null || true
+      grep -oE "\\\$\(['\"][a-zA-Z0-9_-]+['\"]\)" "$app_js" 2>/dev/null || true
+    } \
     | grep -oE "['\"][a-zA-Z0-9_-]+['\"]" \
     | tr -d "\"'" \
     | sort -u || true)
 
   if [ -z "$app_ids" ]; then
-    printf 'S-42: app.js に getElementById 呼び出しが見つからない (抽出失敗の疑い)\n' >&2
+    printf 'S-42: app.js に getElementById/$() による DOM id 参照が見つからない (抽出失敗の疑い)\n' >&2
     return 1
   fi
 
@@ -1998,21 +1960,20 @@ _case_s42() (
     return 1
   fi
 
-  # 主要 id が確かに app.js / index.html 両方に存在することを明示確認 (回帰の anchor)
-  #   view-container は render() の描画 target、これが乖離すると view が描画されない (本 bug の核心)
+  # 主要 render target が app.js / index.html 両方に存在することを明示確認 (回帰の anchor)
+  #   これらが乖離すると左右ペイン / タブ / 履歴 / 保存バーが描画されない (本 bug の核心)
   local key
-  for key in view-container status-text history-tbody confirm-dialog; do
+  for key in preset-list category-accordion panel-config panel-history history-tbody save-bar status-text confirm-dialog; do
     if ! grep -qE "id=[\"']${key}[\"']" "$index_html" 2>/dev/null; then
-      printf 'S-42: 主要 id "%s" が index.html に存在しない (anchor 確認失敗)\n' "$key" >&2
+      printf 'S-42: 主要 render target id "%s" が index.html に存在しない (anchor 確認失敗)\n' "$key" >&2
+      return 1
+    fi
+    # app.js 側も $('key') or getElementById('key') で参照していること
+    if ! grep -qE "(\\\$|getElementById)\(['\"]${key}['\"]\)" "$app_js" 2>/dev/null; then
+      printf 'S-42: app.js が render target id "%s" を $()/getElementById で参照していない (描画 target 乖離の疑い)\n' "$key" >&2
       return 1
     fi
   done
-
-  # view-container は app.js render() が getElementById で参照していること (本 bug の直接 regression guard)
-  if ! grep -qE "getElementById\(['\"]view-container['\"]\)" "$app_js" 2>/dev/null; then
-    printf 'S-42: app.js render() が getElementById(view-container) を参照していない (main-panel 回帰の疑い)\n' >&2
-    return 1
-  fi
 
   return 0
 )
@@ -2135,9 +2096,9 @@ _case_s44() (
   local body
   body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
 
-  # match_type=unsaved 前提
-  if ! printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
-    printf 'S-44: set 後に match_type=unsaved でない (body: %s)\n' "$body" >&2
+  # match_type=custom 前提 (task-76 Step 2: 'unsaved' → 'custom')
+  if ! printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"custom"'; then
+    printf 'S-44: set 後に match_type=custom でない (body: %s)\n' "$body" >&2
     return 1
   fi
 
@@ -2151,91 +2112,31 @@ _case_s44() (
 )
 
 # ============================================================
-# Case S-45: app.js top view が API axes を参照 + unsaved カスタム表示分岐を持つ (静的)
-# task-65 Step 2: renderTop は cp.axes 直接参照、axes:null (unsaved) 時はカスタム表示に切替
-# 検証方式: app.js 静的 grep (関数/分岐の存在確認)。実描画は Step 5 visual verification。
+# Case S-45: RETIRED (task-76 Step 6-fix)
+# 旧 assertion: renderTop が cp.axes 参照 + 「カスタム設定 (プリセット外)」見出し + AXIS_LABELS_JA +
+#   loadCurrentAxes 撤去確認 (task-65 top view の 6 軸 read-only table 前提)。
+# retire 理由: task-76 で top view と 6 軸 read-only table を廃止。新設計は右 category accordion で
+#   実 key を inline 編集する方式で、cp.axes / AXIS_LABELS_JA を参照しない。custom 状態は
+#   state.isCustom + header-state-badge で表現し、visual 検証 (Step 7) が担保。常時 SKIP (return 2)。
 # ============================================================
 _case_s45() (
   set -uo pipefail
-  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
-
-  if [ ! -f "$app_js" ]; then
-    printf 'S-45: app.js not found at %s\n' "$app_js" >&2
-    return 1
-  fi
-
-  # 撤去 symbol 検出は code 行のみを対象とする (説明 comment 行 // ... は除外)。
-  #   行頭空白後に // で始まる行を除外し、行末コメントは含まれるが symbol が code として
-  #   出現するかの近似 (撤去 symbol は定義/呼出が全て消えているため code 行に残らない)。
-  local app_code
-  app_code=$(grep -vE '^[[:space:]]*//' "$app_js" || true)
-
-  # renderTop が cp.axes を参照すること (API axes 直接参照)
-  if ! printf '%s' "$app_code" | grep -qE 'cp\.axes|cp && cp\.axes'; then
-    printf 'S-45: app.js renderTop が cp.axes を参照していない (API axes 参照に未修正)\n' >&2
-    return 1
-  fi
-
-  # unsaved (axes:null) 時のカスタム表示見出しが存在すること
-  if ! printf '%s' "$app_code" | grep -q 'カスタム設定 (プリセット外)'; then
-    printf 'S-45: app.js に「カスタム設定 (プリセット外)」見出しが無い (unsaved カスタム表示未実装)\n' >&2
-    return 1
-  fi
-
-  # 6 軸 read-only table の日本語ラベル参照 (AXIS_LABELS_JA) が使われること
-  if ! printf '%s' "$app_code" | grep -q 'AXIS_LABELS_JA'; then
-    printf 'S-45: app.js に AXIS_LABELS_JA 参照が無い (6 軸日本語ラベル未使用)\n' >&2
-    return 1
-  fi
-
-  # loadCurrentAxes dead path が code から撤去されていること (comment 行の言及は許容)
-  if printf '%s' "$app_code" | grep -q 'loadCurrentAxes'; then
-    printf 'S-45: app.js code に loadCurrentAxes が残存 (dead path 未撤去、task-65 Step 2 違反)\n' >&2
-    return 1
-  fi
-
-  return 0
+  printf 'S-45: RETIRED — top-view axes table (cp.axes / AXIS_LABELS_JA) removed in task-76 redesign\n' >&2
+  return 2
 )
 
 # ============================================================
-# Case S-46: edit view から 6 軸 dropdown が撤去されている (静的)
-# task-65 Step 2: 機能不全 6 軸 dropdown 撤去、編集は preset 一括 + 既存 key 個別の 2 経路
-# 検証方式: app.js 静的 grep (撤去された symbol の不在確認 + 残すべき preset 経路の存在確認)。
+# Case S-46: RETIRED (task-76 Step 6-fix)
+# 旧 assertion: 6 軸 dropdown 関連 symbol (onChangeAxis 等) 撤去 + renderEdit / applyPresetMode 存在。
+# retire 理由: task-76 で edit view / applyPresetMode を廃止 (preset 選択は onSelectPreset で diff を
+#   draft へ preview、個別編集は onEditKey)。6 軸 dropdown 撤去確認は task-63/65 の一時 regression guard で、
+#   新設計に renderEdit / applyPresetMode は存在しない。preset 選択経路は S-48/S-50 が API レベルで、
+#   描画は visual 検証 (Step 7) が担保。常時 SKIP (return 2)。
 # ============================================================
 _case_s46() (
   set -uo pipefail
-  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
-
-  if [ ! -f "$app_js" ]; then
-    printf 'S-46: app.js not found at %s\n' "$app_js" >&2
-    return 1
-  fi
-
-  # 撤去 symbol 検出は code 行のみを対象 (説明 comment 行 // ... は除外、撤去記録の言及は許容)
-  local app_code
-  app_code=$(grep -vE '^[[:space:]]*//' "$app_js" || true)
-
-  # 6 軸 dropdown 個別編集の symbol が code から撤去されていること
-  #   onChangeAxis / loadAxesWithOptions / _axesOptions / editAxisChanges は dropdown 専用 dead code
-  local sym
-  for sym in onChangeAxis loadAxesWithOptions _axesOptions editAxisChanges 'edit-axis-'; do
-    if printf '%s' "$app_code" | grep -q "$sym"; then
-      printf 'S-46: app.js code に 6 軸 dropdown 関連 symbol "%s" が残存 (撤去未完、task-65 Step 2 違反)\n' "$sym" >&2
-      return 1
-    fi
-  done
-
-  # preset 一括変更経路は残っていること (renderEdit + applyPresetMode)
-  if ! grep -q 'function renderEdit' "$app_js"; then
-    printf 'S-46: app.js に renderEdit が無い (edit view 経路を壊した疑い)\n' >&2
-    return 1
-  fi
-  if ! grep -q 'applyPresetMode' "$app_js"; then
-    printf 'S-46: app.js に applyPresetMode が無い (preset 一括変更経路を壊した疑い)\n' >&2
-    return 1
-  fi
-
-  return 0
+  printf 'S-46: RETIRED — edit view / applyPresetMode removed in task-76 2-pane redesign\n' >&2
+  return 2
 )
 
 # ============================================================
@@ -2310,6 +2211,236 @@ _case_s47() (
   diff_lines=$(comm -3 <(printf '%s\n' "$expected_keys") <(printf '%s\n' "$actual_keys") | grep -c '.' || true)
   if [ "${diff_lines:-0}" != "0" ]; then
     printf 'S-47: key set mismatch (差分 %s 件):\n%s\n' "$diff_lines" "$(comm -3 <(printf '%s\n' "$expected_keys") <(printf '%s\n' "$actual_keys"))" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# task-76 Step 1 新規 case (S-48 / S-49)
+# diff「Failed to fetch」バグ修復 (computePresetDiff の hcGet N 回ループ →
+#   hcListAll() cache 参照 1 回。N×spawnSync の Node event loop 同期ブロックが
+#   ブラウザ keep-alive 並列接続で hung connection → Failed to fetch を起こす真因)。
+# API response 後方互換 (changes[].key/current/new/changed/effect) を維持しつつ、
+#   (a) 正常 JSON 応答 (b) 連続/並列呼び出しでの応答性 を検証する。
+# ============================================================
+
+# ============================================================
+# Case S-48: GET /api/preset/:name/diff 正常 JSON 応答 + changed field 後方互換
+#   複数 preset (key 数の多い production-typescript-enterprise 含む) で diff を取得し、
+#   .changes 配列の各要素が key/current/new/changed/effect を持つことを検証。
+#   修正前は per-key hcGet で同じ JSON 構造を返すため本 case 単体では緑だが、
+#   S-49 (連続/並列応答性) と対で「N spawn ブロック解消」を担保する回帰 anchor。
+# ============================================================
+_case_s48() (
+  set -uo pipefail
+  local port="$1"
+
+  local p
+  for p in poc-no-git production-typescript-enterprise harness-development; do
+    local body
+    body=$(_curl_json "http://127.0.0.1:${port}/api/preset/${p}/diff")
+
+    # 正常 JSON: .changes + .preset
+    if ! printf '%s' "$body" | grep -q '"changes"'; then
+      printf 'S-48: /api/preset/%s/diff missing .changes field (body: %s)\n' "$p" "$body" >&2
+      return 1
+    fi
+    if ! printf '%s' "$body" | grep -q "\"preset\""; then
+      printf 'S-48: /api/preset/%s/diff missing .preset field\n' "$p" >&2
+      return 1
+    fi
+
+    # 各 changes 要素の後方互換 field (key/current/new/changed/effect)
+    local field
+    for field in '"key"' '"current"' '"new"' '"changed"' '"effect"'; do
+      if ! printf '%s' "$body" | grep -q "$field"; then
+        printf 'S-48: /api/preset/%s/diff .changes missing field %s (後方互換違反、body: %s)\n' "$p" "$field" "$body" >&2
+        return 1
+      fi
+    done
+  done
+
+  return 0
+)
+
+# ============================================================
+# Case S-49: diff endpoint 連続/並列呼び出しの応答性 (Failed to fetch 回帰防止)
+#   真因: computePresetDiff が key ごとに hcGet (= spawnSync) を呼び Node event loop を
+#   同期ブロック。連続/並列 diff request で hung connection → TypeError: Failed to fetch。
+#   検証: 同一 server に対し diff request を 6 連続実行し、全て 200 + .changes を返すこと、
+#   かつ全体が応答性閾値内 (timeout なし) で完了することを確認する。
+#   修正後 (hcListAll cache 参照) は 2 回目以降 spawn 0 で高速応答する。
+#   curl --max-time を 5s に絞り、1 件でも timeout/非 200 なら FAIL (hung connection 検出)。
+# ============================================================
+_case_s49() (
+  set -uo pipefail
+  local port="$1"
+
+  # cache を温める意図はなく、連続 request 全ての健全性を検証する。
+  # key 数の多い production-typescript-enterprise を含め 6 回連続実行。
+  local presets="production-typescript-enterprise production-python production-rust production-go harness-development inner-typescript"
+  local i=0
+  local p
+  for p in $presets; do
+    i=$((i + 1))
+    # --max-time 5: hung connection なら timeout → 空応答/非 200 で FAIL
+    local http_code
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 \
+      "http://127.0.0.1:${port}/api/preset/${p}/diff" 2>/dev/null || true)
+    if [ "$http_code" != "200" ]; then
+      printf 'S-49: diff #%d (%s) returned HTTP %s (expected 200; hung connection/timeout の疑い)\n' "$i" "$p" "$http_code" >&2
+      return 1
+    fi
+    # body に .changes があること (空応答でないこと = hung でない)
+    local body
+    body=$(_curl_json "http://127.0.0.1:${port}/api/preset/${p}/diff")
+    if ! printf '%s' "$body" | grep -q '"changes"'; then
+      printf 'S-49: diff #%d (%s) body に .changes が無い (hung/部分応答の疑い、body: %s)\n' "$i" "$p" "$body" >&2
+      return 1
+    fi
+  done
+
+  # 並列 diff 4 本同時 + current-preset (hcListAll 2s spawn) を背景で流して全件健全か確認。
+  # event loop が N spawn でブロックされていると並列接続が hung → 一部が空/非 200 になる。
+  curl -s -o /dev/null --connect-timeout 3 --max-time 8 \
+    "http://127.0.0.1:${port}/api/current-preset" &
+  local cp_pid=$!
+  local par_fail=0
+  local par_pids=""
+  local par_out_prefix="${TMP_DIR}/s49-par"
+  local idx=0
+  for p in production-typescript-enterprise production-python production-rust production-go; do
+    idx=$((idx + 1))
+    ( curl -s --connect-timeout 3 --max-time 6 \
+        "http://127.0.0.1:${port}/api/preset/${p}/diff" > "${par_out_prefix}-${idx}.json" 2>/dev/null || true ) &
+    par_pids="${par_pids} $!"
+  done
+  for pid in $par_pids; do
+    wait "$pid" 2>/dev/null || true
+  done
+  wait "$cp_pid" 2>/dev/null || true
+
+  idx=0
+  for p in production-typescript-enterprise production-python production-rust production-go; do
+    idx=$((idx + 1))
+    if ! grep -q '"changes"' "${par_out_prefix}-${idx}.json" 2>/dev/null; then
+      printf 'S-49: 並列 diff #%d (%s) が .changes を返さなかった (hung connection = Failed to fetch 再現)\n' "$idx" "$p" >&2
+      par_fail=$((par_fail + 1))
+    fi
+  done
+
+  if [ $par_fail -gt 0 ]; then
+    printf 'S-49: 並列 diff %d 件が hung (Failed to fetch 真因 = N spawn event loop block の疑い)\n' "$par_fail" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-50: GET /api/presets 各 entry に group field がある + 3 ラベルのいずれか
+# task-76 Step 2: 左ペイン分類用 group ('POC'|'社内ツール'|'本番運用'|'その他') を付与。
+#   draft §3.4 note (SSoT): quality_level 3 group。実データでは全 10 preset が 3 group に収まり
+#   'その他' fallback は使われない (poc / inner_system / production_service のみ) が、
+#   契約上は 4 値のいずれかを許容する。
+# ============================================================
+_case_s50() (
+  set -uo pipefail
+  local port="$1"
+
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/presets")
+
+  # group field 自体が存在すること
+  if ! printf '%s' "$body" | grep -q '"group"'; then
+    printf 'S-50: /api/presets response に group field が無い (body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # group の出現回数が 10 件 (preset 数) 分あること
+  local g_count
+  g_count=$(printf '%s' "$body" | grep -oE '"group"' | wc -l | tr -d ' ' || true)
+  if [ "${g_count:-0}" -lt 10 ]; then
+    printf 'S-50: group の出現回数 %s 件 (expected >= 10)\n' "$g_count" >&2
+    return 1
+  fi
+
+  # 各 group 値が許容 4 ラベルのいずれかであること
+  #   許容外の group 値が 1 件でもあれば FAIL (grep -vE で許容ラベルを除外し残りを検出)
+  local bad
+  bad=$(printf '%s' "$body" \
+    | grep -oE '"group"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | grep -vE '"group"[[:space:]]*:[[:space:]]*"(POC|社内ツール|本番運用|その他)"' || true)
+  if [ -n "$bad" ]; then
+    printf 'S-50: 許容外の group ラベルを検出 (POC/社内ツール/本番運用/その他 以外): %s\n' "$bad" >&2
+    return 1
+  fi
+
+  # 主要 3 group が実際に出現すること (10 preset が 3 group に分布する実データ確認)
+  for label in 'POC' '社内ツール' '本番運用'; do
+    if ! printf '%s' "$body" | grep -q "\"group\"[[:space:]]*:[[:space:]]*\"${label}\""; then
+      printf 'S-50: group "%s" が 1 件も出現しない (3 group 分布の確認失敗、body: %s)\n' "$label" "$body" >&2
+      return 1
+    fi
+  done
+
+  return 0
+)
+
+# ============================================================
+# Case S-51: GET /api/current-preset の match_type が 'preset'|'custom' のいずれか
+# task-76 Step 2: match_type を 'unsaved' → 'custom' に整理。'unsaved' は廃止語彙。
+#   poc-no-git apply → match_type=preset、known key 変更 → match_type=custom の遷移を 1 case で検証。
+# ============================================================
+_case_s51() (
+  set -uo pipefail
+  local port="$1"
+
+  # 1. apply 後は match_type が許容 2 値のいずれか (通常 preset)
+  local apply_code
+  apply_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/preset/poc-no-git/apply" '{}')
+  case "$apply_code" in
+    200|207) : ;;
+    4??|5??)
+      printf 'S-51: preset apply returned HTTP %s (権限/yml 破損の疑い、真の FAIL)\n' "$apply_code" >&2
+      return 1
+      ;;
+    *)
+      printf 'S-51: preset apply returned HTTP %s (server 接続不可等の環境 skip)\n' "$apply_code" >&2
+      return 2
+      ;;
+  esac
+
+  local body
+  body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+
+  # match_type は "preset" または "custom" のいずれか (旧 'unsaved' は廃止)
+  if ! printf '%s' "$body" | grep -qE '"match_type"[[:space:]]*:[[:space:]]*"(preset|custom)"'; then
+    printf 'S-51: match_type が "preset"|"custom" でない (旧 unsaved 残存の疑い、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # 'unsaved' という旧語彙が残っていないこと (regression guard)
+  if printf '%s' "$body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"unsaved"'; then
+    printf 'S-51: match_type に旧語彙 "unsaved" が残存 (task-76 Step 2 で custom へ移行済のはず、body: %s)\n' "$body" >&2
+    return 1
+  fi
+
+  # 2. known key を変更すると match_type=custom になること
+  local set_code
+  set_code=$(_curl_post_json_code "http://127.0.0.1:${port}/api/set" \
+    '{"key":"confidence_threshold","value":"0.99"}')
+  if [ "$set_code" != "200" ]; then
+    printf 'S-51: /api/set confidence_threshold=0.99 returned HTTP %s (known key set 失敗、FAIL)\n' "$set_code" >&2
+    return 1
+  fi
+
+  local after_body
+  after_body=$(_curl_json "http://127.0.0.1:${port}/api/current-preset")
+  if ! printf '%s' "$after_body" | grep -q '"match_type"[[:space:]]*:[[:space:]]*"custom"'; then
+    printf 'S-51: known key 変更後に match_type=custom でない (body: %s)\n' "$after_body" >&2
     return 1
   fi
 
@@ -2457,19 +2588,15 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
 
   if [ -z "$SHARED_PORT" ]; then
     printf '  WARN: shared server failed to start, skipping shared-server cases\n'
-    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44; do
+    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49 S-50 S-51; do
       _record SKIP "$cid" "shared server not available"
     done
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
     _record SKIP "S-26" "/api/preset/save 6 軸欠落 case 撤去 (task-63 設計簡素化)"
     _record SKIP "S-31" "/api/preset/save path traversal case 撤去 (task-63 設計簡素化)"
     _record SKIP "S-33" "XSS injection save name case 撤去 (task-63 設計簡素化)"
-    if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
-    else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
-    fi
-    if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
-    else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
-    fi
+    _record SKIP "S-37" "RETIRED: top view (renderTop/banner) removed in task-76 2-pane redesign"
+    _record SKIP "S-38" "RETIRED: edit-view state machine removed in task-76 2-pane redesign"
     # S-40 は shared server 必須なので SKIP、S-41/S-42 は file-only なので実行
     _record SKIP "S-40" "POST /api/preset/save 404 (shared server not available)"
     _s41_result=0
@@ -2478,18 +2605,14 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     elif [ $_s41_result -eq 2 ]; then _record SKIP "S-41" "絵文字検出 (perl/python3 not available)"
     else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
     fi
-    if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
-    else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+    if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
+    else                           _record FAIL "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
     fi
     # S-43/S-44 は shared server 必須なので SKIP、S-45/S-46 は file-only なので実行
     _record SKIP "S-43" "preset axes 6 key (shared server not available)"
     _record SKIP "S-44" "unsaved axes:null (shared server not available)"
-    if _case_s45 2>/dev/null; then _record PASS "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
-    else                           _record FAIL "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
-    fi
-    if _case_s46 2>/dev/null; then _record PASS "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
-    else                           _record FAIL "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
-    fi
+    _record SKIP "S-45" "RETIRED: top-view axes table (cp.axes/AXIS_LABELS_JA) removed in task-76 redesign"
+    _record SKIP "S-46" "RETIRED: edit view / applyPresetMode removed in task-76 2-pane redesign"
   else
     _PORT="$SHARED_PORT"
 
@@ -2622,13 +2745,8 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-36" "preset apply 後 /api/current-preset → match_type=preset"
     fi
 
-    if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
-    else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
-    fi
-
-    if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
-    else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
-    fi
+    _record SKIP "S-37" "RETIRED: top view (renderTop/banner) removed in task-76 2-pane redesign"
+    _record SKIP "S-38" "RETIRED: edit-view state machine removed in task-76 2-pane redesign"
 
     _s39_result=0
     _case_s39 "$_PORT" 2>/dev/null || _s39_result=$?
@@ -2654,8 +2772,8 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     fi
 
     # task-63 Step 7: DOM id 契約 cross-check (file-only、port 不要)
-    if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
-    else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+    if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
+    else                           _record FAIL "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
     fi
 
     # --- task-65 新規 case (S-43〜S-46): axes 返却 + top 6 軸 + dropdown 撤去 ---
@@ -2675,14 +2793,9 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-44" "unsaved 状態で /api/current-preset → axes:null"
     fi
 
-    # S-45 / S-46 は file-only (port 不要)
-    if _case_s45 2>/dev/null; then _record PASS "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
-    else                           _record FAIL "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
-    fi
-
-    if _case_s46 2>/dev/null; then _record PASS "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
-    else                           _record FAIL "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
-    fi
+    # S-45 / S-46 は task-76 で RETIRED (top view / edit view 廃止)
+    _record SKIP "S-45" "RETIRED: top-view axes table (cp.axes/AXIS_LABELS_JA) removed in task-76 redesign"
+    _record SKIP "S-46" "RETIRED: edit view / applyPresetMode removed in task-76 2-pane redesign"
 
     # --- task-69 Step 3 新規 case (key parity) ---
     _s47_result=0
@@ -2692,34 +2805,52 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-47" "GET /api/keys key set == yml top-level keys (full parity)"
     fi
 
+    # --- task-76 Step 1 新規 case (S-48 / S-49): diff Failed to fetch 修復 ---
+    printf '\n%s\n' '--- task-76 Step 1 新規 case (S-48 / S-49) ---'
+
+    if _case_s48 "$_PORT" 2>/dev/null; then _record PASS "S-48" "GET /api/preset/:name/diff 正常 JSON + changed field 後方互換"
+    else                                     _record FAIL "S-48" "GET /api/preset/:name/diff 正常 JSON + changed field 後方互換"
+    fi
+
+    if _case_s49 "$_PORT" 2>/dev/null; then _record PASS "S-49" "diff 連続/並列呼び出しの応答性 (Failed to fetch 回帰防止)"
+    else                                     _record FAIL "S-49" "diff 連続/並列呼び出しの応答性 (Failed to fetch 回帰防止)"
+    fi
+
+    # --- task-76 Step 2 新規 case (S-50 / S-51): preset group + match_type custom ---
+    printf '\n%s\n' '--- task-76 Step 2 新規 case (S-50 / S-51) ---'
+
+    if _case_s50 "$_PORT" 2>/dev/null; then _record PASS "S-50" "GET /api/presets 各 entry に group (POC/社内ツール/本番運用/その他) + 3 group 分布"
+    else                                     _record FAIL "S-50" "GET /api/presets 各 entry に group (POC/社内ツール/本番運用/その他) + 3 group 分布"
+    fi
+
+    _s51_result=0
+    _case_s51 "$_PORT" 2>/dev/null || _s51_result=$?
+    if [ $_s51_result -eq 0 ];   then _record PASS "S-51" "GET /api/current-preset match_type が preset|custom (unsaved 廃止)"
+    elif [ $_s51_result -eq 2 ]; then _record SKIP "S-51" "match_type custom 確認 skip (apply failed)"
+    else                              _record FAIL "S-51" "GET /api/current-preset match_type が preset|custom (unsaved 廃止)"
+    fi
+
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49 S-50 S-51; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
-  # S-37 / S-38 / S-41 / S-42 / S-45 / S-46 は file-only (port 不要) なので node 不在でも実行
-  if _case_s37 2>/dev/null; then _record PASS "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
-  else                           _record FAIL "S-37" "app.js renderTop + bannerLabel/bannerValue 静的確認"
-  fi
-  if _case_s38 2>/dev/null; then _record PASS "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
-  else                           _record FAIL "S-38" "app.js renderEdit + view:edit 遷移ロジック 静的確認"
-  fi
+  # S-41 / S-42 は file-only (port 不要) なので node 不在でも実行。
+  # S-37 / S-38 / S-45 / S-46 は task-76 で RETIRED (top/edit view 廃止)。
+  _record SKIP "S-37" "RETIRED: top view (renderTop/banner) removed in task-76 2-pane redesign"
+  _record SKIP "S-38" "RETIRED: edit-view state machine removed in task-76 2-pane redesign"
   _s41_result=0
   _case_s41 2>/dev/null || _s41_result=$?
   if [ $_s41_result -eq 0 ];   then _record PASS "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
   elif [ $_s41_result -eq 2 ]; then _record SKIP "S-41" "絵文字検出 (perl/python3 not available)"
   else                              _record FAIL "S-41" "UI 3 file 絵文字 0 件 (絵文字不要 regression guard)"
   fi
-  if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
-  else                           _record FAIL "S-42" "app.js getElementById id 契約が index.html id= と整合 (DOM id cross-check)"
+  if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
+  else                           _record FAIL "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
   fi
-  if _case_s45 2>/dev/null; then _record PASS "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
-  else                           _record FAIL "S-45" "app.js top view が cp.axes 参照 + unsaved カスタム表示 + loadCurrentAxes 撤去"
-  fi
-  if _case_s46 2>/dev/null; then _record PASS "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
-  else                           _record FAIL "S-46" "edit view 6 軸 dropdown 撤去 (preset 一括経路は維持)"
-  fi
+  _record SKIP "S-45" "RETIRED: top-view axes table (cp.axes/AXIS_LABELS_JA) removed in task-76 redesign"
+  _record SKIP "S-46" "RETIRED: edit view / applyPresetMode removed in task-76 2-pane redesign"
 fi
 
 # --- legacy fallback + edge ---

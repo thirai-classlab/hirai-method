@@ -3,66 +3,105 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>hc-config Web UI</title>
+  <title>hc-config 設定</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
+<!--
+  task-76 Step 3-4: 2 分割再設計 (左 preset / 右 category accordion + 上部タブ 設定/履歴)。
+  no-scroll: html,body 100% / #app-root 100vh overflow hidden。ページ全体スクロール禁止。
+  app.js の querySelector/render target と id を厳密一致させる (task-63 id mismatch 事故の再発防止):
+    #status-text #cdn-warning #app-root
+    #tab-config #tab-history (role=tab) / #panel-config #panel-history (role=tabpanel)
+    #preset-list (左ペイン render target) #category-accordion (右ペイン render target)
+    #save-bar #btn-save #btn-cancel #header-state-badge
+    #history-tbody (履歴タブ render target)
+    #confirm-dialog #confirm-dialog-title #confirm-dialog-body #confirm-dialog-ok #confirm-dialog-cancel
+    #toast-container
+-->
+<body class="bg-slate-50 text-slate-900">
   <!-- skip link (a11y SC 2.4.1) -->
-  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-blue-700 focus:text-white focus:px-3 focus:py-2 focus:rounded">メインコンテンツへスキップ</a>
+  <a href="#panel-config" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-blue-700 focus:text-white focus:px-3 focus:py-2 focus:rounded">メインコンテンツへスキップ</a>
 
-  <!-- Header -->
-  <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10" role="banner">
-    <div class="px-6 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <h1 class="text-lg font-bold text-slate-800" lang="ja">hc-config Web UI</h1>
-        <span class="text-xs text-slate-500">task-63 / hirai-method harness</span>
+  <!-- 最上位 container: viewport 100vh 固定、ページ全体スクロール禁止 -->
+  <div id="app-root">
+    <!-- Header: タイトル + タブ + 状態バッジ -->
+    <header class="app-header" role="banner">
+      <div class="app-header__title">
+        <h1 class="text-base font-bold text-slate-800" lang="ja">hc-config 設定</h1>
+        <span class="text-xs text-slate-400">hirai-method harness</span>
       </div>
-      <div id="status-banner" class="text-sm text-slate-600" role="status" aria-live="polite" aria-atomic="true">
-        <span id="status-text">起動中...</span>
+
+      <!-- 上部タブ (設定 / 履歴) -->
+      <div class="app-tabs" role="tablist" aria-label="表示切替">
+        <button id="tab-config" class="app-tab" role="tab" type="button" aria-selected="true" aria-controls="panel-config" tabindex="0">設定</button>
+        <button id="tab-history" class="app-tab" role="tab" type="button" aria-selected="false" aria-controls="panel-history" tabindex="-1">履歴</button>
       </div>
-    </div>
+
+      <div class="app-header__status">
+        <span id="header-state-badge" class="state-badge" lang="ja">読み込み中</span>
+        <span id="status-text" class="text-xs text-slate-500" role="status" aria-live="polite" aria-atomic="true">起動中...</span>
+      </div>
+    </header>
+
     <!-- Tailwind CDN offline 警告 -->
-    <div id="cdn-warning" class="hidden bg-amber-100 border-t border-amber-300 text-amber-800 text-sm px-6 py-2" role="alert" lang="ja">
+    <div id="cdn-warning" class="hidden bg-amber-100 border-b border-amber-300 text-amber-800 text-xs px-4 py-1" role="alert" lang="ja">
       Tailwind CDN に接続できません。レイアウトが崩れる可能性があります (ネット接続 / Proxy / CSP を確認)。
     </div>
-  </header>
 
-  <!-- Main: 2 view 排他切替 (state.view = 'top' | 'edit')、app.js が動的 render で挿入 -->
-  <main id="main" class="flex-1 overflow-y-auto" role="main" tabindex="-1" lang="ja">
-    <!-- view-top + view-edit container は app.js render() で動的注入 -->
-    <div id="view-container" class="max-w-4xl mx-auto px-6 py-8">
-      <div class="bg-white rounded-lg border border-slate-200 p-6 text-slate-500">読み込み中...</div>
-    </div>
-  </main>
+    <!-- 設定タブ: 2 分割 (左 preset / 右 category accordion) -->
+    <main id="panel-config" class="panel-config" role="tabpanel" aria-labelledby="tab-config" tabindex="0" lang="ja">
+      <!-- 左ペイン: プリセット -->
+      <aside class="pane-left" role="region" aria-label="プリセット">
+        <h2 class="pane-left__heading">プリセット</h2>
+        <div id="preset-list" class="pane-left__body">
+          <p class="text-sm text-slate-400 px-2 py-1">読み込み中...</p>
+        </div>
+      </aside>
 
-  <!-- Footer: history -->
-  <footer class="bg-white border-t border-slate-200 px-6 py-3 max-h-80 overflow-y-auto" role="contentinfo" lang="ja">
-    <section role="region" aria-labelledby="history-heading">
-      <h2 id="history-heading" class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">プリセット適用履歴</h2>
-      <table id="history-table" class="w-full text-sm" aria-describedby="history-heading">
-        <!-- MED-Q1 iter 4 B: caption / columns に Rolled back を追加 -->
-        <caption class="sr-only">プリセット適用履歴一覧 (Timestamp / Preset / Applied / Failed / Rolled back / Action)</caption>
-        <thead class="text-xs uppercase text-slate-500 border-b border-slate-200">
-          <tr>
-            <th scope="col" class="text-left py-1 pr-3">Timestamp</th>
-            <th scope="col" class="text-left py-1 pr-3">Preset</th>
-            <th scope="col" class="text-left py-1 pr-3">Applied</th>
-            <th scope="col" class="text-left py-1 pr-3">Failed</th>
-            <th scope="col" class="text-left py-1 pr-3">Rolled back</th>
-            <th scope="col" class="text-left py-1 pr-3">Action</th>
-          </tr>
-        </thead>
-        <tbody id="history-tbody">
-          <tr><td colspan="6" class="py-2 text-slate-400">履歴を読み込み中...</td></tr>
-        </tbody>
-      </table>
-    </section>
-  </footer>
+      <!-- 右ペイン: 実設定値 (category accordion) -->
+      <section class="pane-right" role="region" aria-label="実設定値">
+        <div id="category-accordion" class="pane-right__body">
+          <p class="text-sm text-slate-400 px-2 py-2">読み込み中...</p>
+        </div>
+        <!-- 保存バー (編集発生時にアクティブ) -->
+        <div id="save-bar" class="save-bar">
+          <span id="save-bar-note" class="text-xs text-slate-500" lang="ja"></span>
+          <div class="save-bar__actions">
+            <button id="btn-cancel" type="button" class="btn-cancel" disabled>取消</button>
+            <button id="btn-save" type="button" class="btn-save" disabled>保存</button>
+          </div>
+        </div>
+      </section>
+    </main>
 
-  <!-- confirm dialog (custom、diff preview + 適用 confirm) -->
+    <!-- 履歴タブ: 適用 / rollback 履歴 -->
+    <main id="panel-history" class="panel-history hidden" role="tabpanel" aria-labelledby="tab-history" tabindex="0" lang="ja">
+      <section role="region" aria-labelledby="history-heading">
+        <h2 id="history-heading" class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">プリセット適用 / ロールバック履歴</h2>
+        <table id="history-table" class="w-full text-sm" aria-describedby="history-heading">
+          <caption class="sr-only">プリセット適用履歴一覧 (Timestamp / Preset / Applied / Failed / Rolled back / Action)</caption>
+          <thead class="text-xs uppercase text-slate-500 border-b border-slate-200">
+            <tr>
+              <th scope="col" class="text-left py-1 pr-3">時刻</th>
+              <th scope="col" class="text-left py-1 pr-3">プリセット</th>
+              <th scope="col" class="text-left py-1 pr-3">適用</th>
+              <th scope="col" class="text-left py-1 pr-3">失敗</th>
+              <th scope="col" class="text-left py-1 pr-3">復元</th>
+              <th scope="col" class="text-left py-1 pr-3">操作</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="6" class="py-2 text-slate-400">履歴を読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <!-- confirm dialog (保存 / rollback confirm) -->
   <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body" class="rounded-lg shadow-xl p-0 backdrop:bg-slate-900/40" lang="ja">
-    <div class="bg-white rounded-lg max-w-lg">
+    <div class="bg-white rounded-lg w-full max-w-lg">
       <header class="px-5 py-3 border-b border-slate-200">
         <h2 id="confirm-dialog-title" class="text-base font-bold text-slate-800">確認</h2>
       </header>
