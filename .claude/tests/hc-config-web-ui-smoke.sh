@@ -2448,6 +2448,140 @@ _case_s51() (
 )
 
 # ============================================================
+# task-77 Step 5 新規 case (S-52 / S-53 / S-54): git 統合 policy 実 key 化
+#   §3.5: 10 named preset の values に mainline_integration_policy が入り 3 値のいずれか
+#   §3.6: mainline_branch / mainline_integration_policy が Gate/Confidence category 実 key として右ペインに出る
+#   app.js ENUM_OPTIONS に mainline_integration_policy enum (select 表示)
+# ============================================================
+
+# ============================================================
+# Case S-52: 各 named preset の values に mainline_integration_policy + 3 値分布
+#   /api/presets は values を返さない (axes_values 撤去済、task-63 Step 4 A3) ため、
+#   per-preset の /api/preset/:name/diff (changes[].key/new、後方互換) で values を検証する。
+#   §3.5 の policy 既定: poc-*=local-merge-push / inner-*+production-*=pr-required / harness-development=local-merge
+# ============================================================
+_case_s52() (
+  set -uo pipefail
+  local port="$1"
+
+  # 10 named preset 全件
+  local presets="poc-no-git poc-with-git inner-typescript inner-python \
+    production-typescript-personal production-typescript-enterprise production-python \
+    production-rust production-go harness-development"
+
+  # §3.5 期待 policy (preset:policy)
+  local expect_local_merge_push="poc-no-git poc-with-git"
+  local expect_local_merge="harness-development"
+  # 残り (inner-*/production-*) は pr-required
+
+  local saw_pr="" saw_lmp="" saw_lm=""
+  local p
+  for p in $presets; do
+    local body val
+    body=$(_curl_json "http://127.0.0.1:${port}/api/preset/${p}/diff")
+
+    # changes[] から mainline_integration_policy の "new" 値を抽出
+    #   各 change は {"key":"...","current":"...","new":"...",...} の単一 object
+    #   mainline_integration_policy を含む change object 部分を切り出し new を取る
+    val=$(printf '%s' "$body" \
+      | grep -oE '"key"[[:space:]]*:[[:space:]]*"mainline_integration_policy"[^}]*"new"[[:space:]]*:[[:space:]]*"[^"]*"' \
+      | grep -oE '"new"[[:space:]]*:[[:space:]]*"[^"]*"' \
+      | sed -E 's/.*"new"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
+
+    if [ -z "$val" ]; then
+      printf 'S-52: preset %s の diff に mainline_integration_policy change が無い (values 未追加の疑い、body: %s)\n' "$p" "$body" >&2
+      return 1
+    fi
+
+    # 許容 3 値
+    case "$val" in
+      pr-required|local-merge|local-merge-push) : ;;
+      *)
+        printf 'S-52: preset %s の policy 値 "%s" が許容外 (pr-required/local-merge/local-merge-push)\n' "$p" "$val" >&2
+        return 1
+        ;;
+    esac
+
+    # §3.5 期待値との照合
+    local want="pr-required"
+    case " $expect_local_merge_push " in *" $p "*) want="local-merge-push" ;; esac
+    case " $expect_local_merge " in *" $p "*) want="local-merge" ;; esac
+    if [ "$val" != "$want" ]; then
+      printf 'S-52: preset %s の policy expected %s but got %s (§3.5 違反)\n' "$p" "$want" "$val" >&2
+      return 1
+    fi
+
+    case "$val" in
+      pr-required) saw_pr=1 ;;
+      local-merge-push) saw_lmp=1 ;;
+      local-merge) saw_lm=1 ;;
+    esac
+  done
+
+  # 3 値が実際に分布すること
+  if [ -z "$saw_pr" ] || [ -z "$saw_lmp" ] || [ -z "$saw_lm" ]; then
+    printf 'S-52: 3 policy 値の分布不足 (pr=%s lmp=%s lm=%s)\n' "${saw_pr:-0}" "${saw_lmp:-0}" "${saw_lm:-0}" >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
+# Case S-53: GET /api/keys?category=Gate/Confidence に mainline_branch + mainline_integration_policy が出る
+#   右ペイン Gate/Confidence accordion に実 key として表示される前提を担保。
+# ============================================================
+_case_s53() (
+  set -uo pipefail
+  local port="$1"
+
+  local body
+  # category 名に '/' を含むので URL encode (Gate%2FConfidence)
+  body=$(_curl_json "http://127.0.0.1:${port}/api/keys?category=Gate%2FConfidence")
+
+  local k
+  for k in mainline_branch mainline_integration_policy; do
+    if ! printf '%s' "$body" | grep -q "\"${k}\""; then
+      printf 'S-53: /api/keys?category=Gate/Confidence に "%s" が出ない (Step 1 metadata category 未反映の疑い、body: %s)\n' "$k" "$body" >&2
+      return 1
+    fi
+  done
+
+  return 0
+)
+
+# ============================================================
+# Case S-54: app.js ENUM_OPTIONS に mainline_integration_policy enum (3 値) が静的に存在
+#   file-only (port 不要)。select 表示に必要な client SSoT を grep で確認。
+# ============================================================
+_case_s54() (
+  set -uo pipefail
+
+  local app_js="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui/app.js"
+  if [ ! -f "$app_js" ]; then
+    printf 'S-54: app.js not found at %s\n' "$app_js" >&2
+    return 2
+  fi
+
+  # ENUM_OPTIONS 内に mainline_integration_policy key が存在
+  if ! grep -q "mainline_integration_policy:" "$app_js"; then
+    printf 'S-54: app.js ENUM_OPTIONS に mainline_integration_policy が無い (select 表示不可)\n' >&2
+    return 1
+  fi
+
+  # 3 値が全て列挙されていること
+  local v
+  for v in 'pr-required' 'local-merge-push' 'local-merge'; do
+    if ! grep -q "'${v}'" "$app_js"; then
+      printf 'S-54: app.js ENUM_OPTIONS に policy 値 "%s" が無い\n' "$v" >&2
+      return 1
+    fi
+  done
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -2588,7 +2722,7 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
 
   if [ -z "$SHARED_PORT" ]; then
     printf '  WARN: shared server failed to start, skipping shared-server cases\n'
-    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49 S-50 S-51; do
+    for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-43 S-44 S-48 S-49 S-50 S-51 S-52 S-53; do
       _record SKIP "$cid" "shared server not available"
     done
     _record SKIP "S-22" "/api/preset/save 撤去 (task-63 設計簡素化)"
@@ -2607,6 +2741,12 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     fi
     if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
     else                           _record FAIL "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
+    fi
+    _s54_result=0
+    _case_s54 2>/dev/null || _s54_result=$?
+    if [ $_s54_result -eq 0 ];   then _record PASS "S-54" "app.js ENUM_OPTIONS に mainline_integration_policy enum (3 値、select 表示)"
+    elif [ $_s54_result -eq 2 ]; then _record SKIP "S-54" "app.js not found"
+    else                              _record FAIL "S-54" "app.js ENUM_OPTIONS に mainline_integration_policy enum (3 値、select 表示)"
     fi
     # S-43/S-44 は shared server 必須なので SKIP、S-45/S-46 は file-only なので実行
     _record SKIP "S-43" "preset axes 6 key (shared server not available)"
@@ -2775,6 +2915,12 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
     else                           _record FAIL "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
     fi
+    _s54_result=0
+    _case_s54 2>/dev/null || _s54_result=$?
+    if [ $_s54_result -eq 0 ];   then _record PASS "S-54" "app.js ENUM_OPTIONS に mainline_integration_policy enum (3 値、select 表示)"
+    elif [ $_s54_result -eq 2 ]; then _record SKIP "S-54" "app.js not found"
+    else                              _record FAIL "S-54" "app.js ENUM_OPTIONS に mainline_integration_policy enum (3 値、select 表示)"
+    fi
 
     # --- task-65 新規 case (S-43〜S-46): axes 返却 + top 6 軸 + dropdown 撤去 ---
     printf '\n%s\n' '--- task-65 新規 case (S-43〜S-46) ---'
@@ -2830,10 +2976,21 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                              _record FAIL "S-51" "GET /api/current-preset match_type が preset|custom (unsaved 廃止)"
     fi
 
+    # --- task-77 Step 5 新規 case (S-52 / S-53): git 統合 policy 実 key 化 ---
+    printf '\n%s\n' '--- task-77 Step 5 新規 case (S-52 / S-53) ---'
+
+    if _case_s52 "$_PORT" 2>/dev/null; then _record PASS "S-52" "各 named preset の diff に mainline_integration_policy (§3.5 既定値 + 3 値分布)"
+    else                                     _record FAIL "S-52" "各 named preset の diff に mainline_integration_policy (§3.5 既定値 + 3 値分布)"
+    fi
+
+    if _case_s53 "$_PORT" 2>/dev/null; then _record PASS "S-53" "GET /api/keys?category=Gate/Confidence に mainline_branch + mainline_integration_policy"
+    else                                     _record FAIL "S-53" "GET /api/keys?category=Gate/Confidence に mainline_branch + mainline_integration_policy"
+    fi
+
     _stop_shared_server
   fi
 else
-  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49 S-50 S-51; do
+  for cid in S-05 S-06 S-07 S-08 S-09 S-10 S-11 S-12 S-13 S-14 S-15 S-16 S-19 S-20 S-21 S-23 S-24 S-25 S-27 S-28 S-29 S-30 S-32 S-35 S-36 S-39 S-40 S-43 S-44 S-47 S-48 S-49 S-50 S-51 S-52 S-53; do
     _record SKIP "$cid" "node or hc-config-web-server.js not available"
   done
   # S-41 / S-42 は file-only (port 不要) なので node 不在でも実行。
@@ -2848,6 +3005,12 @@ else
   fi
   if _case_s42 2>/dev/null; then _record PASS "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
   else                           _record FAIL "S-42" "app.js DOM id 契約が index.html id= と整合 (DOM id cross-check)"
+  fi
+  _s54_result=0
+  _case_s54 2>/dev/null || _s54_result=$?
+  if [ $_s54_result -eq 0 ];   then _record PASS "S-54" "app.js ENUM_OPTIONS に mainline_integration_policy enum (3 値、select 表示)"
+  elif [ $_s54_result -eq 2 ]; then _record SKIP "S-54" "app.js not found"
+  else                              _record FAIL "S-54" "app.js ENUM_OPTIONS に mainline_integration_policy enum (3 値、select 表示)"
   fi
   _record SKIP "S-45" "RETIRED: top-view axes table (cp.axes/AXIS_LABELS_JA) removed in task-76 redesign"
   _record SKIP "S-46" "RETIRED: edit view / applyPresetMode removed in task-76 2-pane redesign"
