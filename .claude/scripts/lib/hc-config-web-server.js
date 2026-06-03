@@ -563,6 +563,8 @@ function loadMetadata(overrides) {
       category: parts[1] || '',
       description: parts[2] || '',
       effect: parts[3] || '',
+      // task-78 Step 1: 5 列目 label_ja (短い日本語ラベル、欠落は空 fallback で後方互換)
+      label_ja: parts[4] || '',
     }
   })
   if (!overrides.bypassCache) {
@@ -1195,6 +1197,8 @@ async function handleRequest(req, res) {
         category,
         description: meta ? meta.description || '' : '',
         effect: meta ? meta.effect || '' : '',
+        // task-78 Step 1: 短い日本語ラベル (sidebar 表示用、metadata 不在 key は空)
+        label_ja: meta ? meta.label_ja || '' : '',
         current_value: value,
       })
     }
