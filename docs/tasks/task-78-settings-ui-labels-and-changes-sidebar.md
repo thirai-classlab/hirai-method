@@ -57,7 +57,7 @@ draft §「Step 計画」を SSoT。
 
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | metadata 5列化 label_ja + 82key ラベル (subagent生成→main レビュー) + parser/`/api/keys` + key-parity 維持 | — |
+| 1 | ✅ | metadata 5列化 label_ja (84 key) + parser/`/api/keys` label_ja + smoke + tui-smoke 5列対応 (commit 済、84 行 NF≥5 確認) | — |
 | 2 | 🔲 | 中央 accordion render `key_name (label_ja)` + 空 fallback (app.js) | 1 |
 | 3 | 🔲 | 右サイドバー「変更内容」(app.js: 3列目 + baseline↔draft 差分 live) | 2 |
 | 4 | 🔲 | style.css 2列→3列 grid + no-scroll 100vh + 768 responsive | 3 |

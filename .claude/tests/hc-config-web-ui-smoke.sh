@@ -2663,6 +2663,54 @@ _case_s56() (
 )
 
 # ============================================================
+# Case S-57: 変更内容 右サイドバー (task-78 Step 3) の id 契約 + render 関数存在 (file-only、port 不要)
+#   - index.html に #changes-sidebar / #changes-list が id= として実在
+#   - app.js が #changes-list を $()/getElementById で参照 (cross-file 契約乖離 guard)
+#   - app.js に renderChangesSidebar 関数 + keyDisplayLabel (key_name(label) render) が存在
+# task-76 の id mismatch render 事故 (feedback_parallel_subagent_cross_file_contract_drift) の再発防止。
+# ============================================================
+_case_s57() (
+  set -uo pipefail
+  local ui_dir="${REPO_ROOT}/.claude/scripts/lib/hc-config-web-ui"
+  local app_js="${ui_dir}/app.js"
+  local index_html="${ui_dir}/index.html"
+
+  if [ ! -f "$app_js" ] || [ ! -f "$index_html" ]; then
+    printf 'S-57: app.js or index.html not found\n' >&2
+    return 1
+  fi
+
+  # index.html に sidebar container id が実在
+  local id
+  for id in changes-sidebar changes-list; do
+    if ! grep -qE "id=[\"']${id}[\"']" "$index_html" 2>/dev/null; then
+      printf 'S-57: index.html に id="%s" が存在しない (右サイドバー container 欠落)\n' "$id" >&2
+      return 1
+    fi
+  done
+
+  # app.js が changes-list を $()/getElementById で参照 (render target 契約)
+  if ! grep -qE "(\\\$|getElementById)\(['\"]changes-list['\"]\)" "$app_js" 2>/dev/null; then
+    printf 'S-57: app.js が render target id "changes-list" を $()/getElementById で参照していない\n' >&2
+    return 1
+  fi
+
+  # renderChangesSidebar 関数 (差分 render) が定義されている
+  if ! grep -qE "function renderChangesSidebar" "$app_js" 2>/dev/null; then
+    printf 'S-57: app.js に renderChangesSidebar 関数が無い (変更内容 render 不在)\n' >&2
+    return 1
+  fi
+
+  # keyDisplayLabel 関数 (key_name(label_ja) render) が定義されている
+  if ! grep -qE "function keyDisplayLabel" "$app_js" 2>/dev/null; then
+    printf 'S-57: app.js に keyDisplayLabel 関数が無い (key_name(label) render 不在)\n' >&2
+    return 1
+  fi
+
+  return 0
+)
+
+# ============================================================
 # Case S-34: SIGTERM graceful shutdown → port release
 # iter 4 C: G5 — SIGTERM graceful (S-04 は SIGINT、本 case は SIGTERM)
 # ============================================================
@@ -3083,6 +3131,11 @@ if _has_node && [ -f "${WEB_SERVER}" ]; then
     else                           _record FAIL "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
     fi
 
+    # --- task-78 Step 3 新規 case (S-57): 変更内容 右サイドバー id 契約 + render 関数 ---
+    if _case_s57 2>/dev/null; then _record PASS "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
+    else                           _record FAIL "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
+    fi
+
     _stop_shared_server
   fi
 else
@@ -3110,9 +3163,12 @@ else
   fi
   _record SKIP "S-45" "RETIRED: top-view axes table (cp.axes/AXIS_LABELS_JA) removed in task-76 redesign"
   _record SKIP "S-46" "RETIRED: edit view / applyPresetMode removed in task-76 2-pane redesign"
-  # S-56 は file-only (port 不要) なので node 不在でも実行 (task-78 Step 1)
+  # S-56 / S-57 は file-only (port 不要) なので node 不在でも実行 (task-78 Step 1/3)
   if _case_s56 2>/dev/null; then _record PASS "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
   else                           _record FAIL "S-56" "metadata table 5 列化 (全 key label_ja 非空、NF==5、key parity 不変)"
+  fi
+  if _case_s57 2>/dev/null; then _record PASS "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
+  else                           _record FAIL "S-57" "変更内容 右サイドバー id 契約 (changes-sidebar/changes-list) + renderChangesSidebar/keyDisplayLabel 存在"
   fi
 fi
 

@@ -13,7 +13,8 @@
   app.js の querySelector/render target と id を厳密一致させる (task-63 id mismatch 事故の再発防止):
     #status-text #cdn-warning #app-root
     #tab-config #tab-history (role=tab) / #panel-config #panel-history (role=tabpanel)
-    #preset-list (左ペイン render target) #category-accordion (右ペイン render target)
+    #preset-list (左ペイン render target) #category-accordion (中央ペイン render target)
+    #changes-sidebar (右サイドバー container) #changes-list (変更内容 render target、task-78 Step 3)
     #save-bar #btn-save #btn-cancel #header-state-badge
     #history-tbody (履歴タブ render target)
     #confirm-dialog #confirm-dialog-title #confirm-dialog-body #confirm-dialog-ok #confirm-dialog-cancel
@@ -49,7 +50,7 @@
       Tailwind CDN に接続できません。レイアウトが崩れる可能性があります (ネット接続 / Proxy / CSP を確認)。
     </div>
 
-    <!-- 設定タブ: 2 分割 (左 preset / 右 category accordion) -->
+    <!-- 設定タブ: 3 分割 (左 preset / 中央 category accordion / 右 変更内容、task-78 Step 4) -->
     <main id="panel-config" class="panel-config" role="tabpanel" aria-labelledby="tab-config" tabindex="0" lang="ja">
       <!-- 左ペイン: プリセット -->
       <aside class="pane-left" role="region" aria-label="プリセット">
@@ -59,7 +60,7 @@
         </div>
       </aside>
 
-      <!-- 右ペイン: 実設定値 (category accordion) -->
+      <!-- 中央ペイン: 実設定値 (category accordion) -->
       <section class="pane-right" role="region" aria-label="実設定値">
         <div id="category-accordion" class="pane-right__body">
           <p class="text-sm text-slate-400 px-2 py-2">読み込み中...</p>
@@ -73,6 +74,14 @@
           </div>
         </div>
       </section>
+
+      <!-- 右サイドバー: 変更内容 (task-78 Step 3、baseline↔draft 差分を live 表示) -->
+      <aside id="changes-sidebar" class="pane-changes" role="region" aria-label="変更内容">
+        <h2 class="pane-changes__heading">変更内容</h2>
+        <div id="changes-list" class="pane-changes__body" aria-live="polite">
+          <p class="changes-empty text-xs text-slate-400" lang="ja">変更なし</p>
+        </div>
+      </aside>
     </main>
 
     <!-- 履歴タブ: 適用 / rollback 履歴 -->
