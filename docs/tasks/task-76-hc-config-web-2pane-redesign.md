@@ -11,7 +11,7 @@ total_steps: 8
 
 # Task #76: hc-config Web 設定ページ 2 分割再設計 (custom 復活 + task-70/71 取込 + diff バグ修復)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-06-03、全 8 Step、commit 4d990b8/7df441e/d58d2f7/9145e2a 他、smoke 0 FAIL、reviewer iter1 収束 + security APPROVED、visual 8 screenshot no-scroll 実測、DoD 全達成。push/PR は feature branch 自律、merge は user)
 > 起案: 2026-06-03
 > 関連: #70 (enforcement_matrix), #71 (dispatcher), #72 (web-ui flaky smoke), #61/#63 (Web UI 実装/簡素化)
 > 設計起源: [hc-config-web-2pane-redesign](../draft/hc-config-web-2pane-redesign.md)
@@ -83,9 +83,9 @@ task-63 案 C の過剰簡素化で「個別値編集 = custom」導線が失わ
 | 3 | ✅ | app.js (上部タブ 設定/履歴 + 左 preset / 右 accordion 同時1開 / 編集→custom / 履歴タブ分離) commit d58d2f7、browser 自己検証 (a)-(f) PASS | 1.1h | Step 2 |
 | 4 | ✅ | style.css 2 分割 + accordion + no-scroll 100vh + responsive (d58d2f7、1280/1024 scrollHeight==clientHeight) | 0.5h | Step 3 |
 | 5 | ✅ | dead code 削除 + 旧 docstring 圧縮 (d58d2f7、3 file 全面書換で sidebar 残骸除去) | 0.2h | Step 3 |
-| 6 | 🔄 | (テスト設計レビュー) iter1: code-reviewer + frontend-developer 2体 (max10内)、HIGH4 (stale smoke 6FAIL/S-42 guard空振り/isCustom reset/iOS overflow) + MED/LOW、security APPROVED。Step6-fix で対応中 | 0.5h | Step 5 |
-| 7 | 🔲 | (テスト合格) smoke 更新 + E2E + visual 必須 (初期/preset選択/編集→custom/accordion/タブ切替/no-scroll/responsive/toast) | 0.6h | Step 6 |
-| 8 | 🔲 | (リファクタリング) 3 観点判定 or skip | 0.3h | Step 7 |
+| 6 | ✅ | (テスト設計レビュー) iter1: code-reviewer + frontend-developer 2体、HIGH4 全件修正 (isCustom reset 確定バグ / stale smoke 6FAIL retire / S-42 guard 修復 / iOS overflow) + MED/LOW、security APPROVED → 収束 (commit 9145e2a、smoke 0 FAIL で客観検証) | 0.5h | Step 5 |
+| 7 | ✅ | (テスト合格) smoke 43 PASS/12 SKIP/0 FAIL regression 0 + browser 再検証 (H4 含む全 pass) + visual 8 screenshot (no-scroll 1280/1024 pageScrollable:false 実測) | 0.6h | Step 6 |
+| 8 | ✅(skip) | (リファクタリング) skip: refactor を Step6-fix に内包 (isChanged tautology 簡素化 / 全面書換で sidebar dead code 除去 / 関数粒度良好)、3 観点で追加対応不要 | 0.3h | Step 7 |
 
 合計工数: 約 4.5h
 
@@ -150,6 +150,7 @@ task-63 案 C の過剰簡素化で「個別値編集 = custom」導線が失わ
 | 日付 | 状態 | 備考 |
 |---|---|---|
 | 2026-06-03 | 起案 | draft hc-config-web-2pane-redesign 承認 |
+| 2026-06-03 | 完了 | 全 8 Step。commit 4d990b8(diff)/7df441e(API)/d58d2f7(frontend)/9145e2a(fix+smoke)。smoke 43P/0F、reviewer 収束、visual 8枚 no-scroll 実測。DoD 全達成 |
 
 ## 派生 task / 次アクション候補
 

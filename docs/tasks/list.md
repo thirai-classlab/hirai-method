@@ -230,4 +230,4 @@ Phase 1 → Phase 2 → Phase 3
 2. **🔄 → ✅**: `/finish-task <id>` で完了 3 条件（build / test / docs 反映）を満たしてから更新
 3. **🔄 → ⏸️**: 保留事由を [`parking-lot.md`](parking-lot.md) に転記し、ここの行は削除
 4. **削除**: 不採用の場合も履歴として `parking-lot.md` の `❌` セクションに残す
-| 76 | 🔄 | **Task: hc-config Web 設定ページ 2 分割再設計** | 「設定できない (diff Failed to fetch) / task-70-71 未取込 / UX 複雑」を解消するため hc-config Web UI を上部タブ + 2 分割 (左 preset / 右 category accordion) に再設計し diff バグを修復する。完成すれば user が viewport 内 no-scroll で preset 選択・個別値編集 (編集で自動 custom 化)・enforcement level/guard 切替・履歴閲覧を直感的に行えるようになる。 | task-70, task-71 | [task-76-hc-config-web-2pane-redesign.md](task-76-hc-config-web-2pane-redesign.md) |
+| 76 | ✅ | **Task: hc-config Web 設定ページ 2 分割再設計** | 「設定できない (diff Failed to fetch) / task-70-71 未取込 / UX 複雑」を解消するため hc-config Web UI を上部タブ + 2 分割 (左 preset / 右 category accordion) に再設計し diff バグを修復する。完成すれば user が viewport 内 no-scroll で preset 選択・個別値編集 (編集で自動 custom 化)・enforcement level/guard 切替・履歴閲覧を直感的に行えるようになる。 | task-70, task-71 | [task-76-hc-config-web-2pane-redesign.md](task-76-hc-config-web-2pane-redesign.md) |
