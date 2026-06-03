@@ -249,15 +249,22 @@ $EDITOR .claude/harness-config.local.yml
 # 3. 使う CLI を whitelist に追記 (pnpm / poetry / cargo / ...)
 $EDITOR .claude/bash-whitelist.txt
 
-# 4. CLAUDE.md を起こして project 固有情報を記入
+# 4. settings.json を生成して hook を配線する (★必須・最重要)
+#    install.sh は settings.json を配らない (task-71: repo 固有 permissions / preset を守るため exclude)。
+#    未実行だと hook が一切発火せずハーネスが効かない。preset / feature toggle を変えたら再実行する。
+bash .claude/scripts/generate-settings.sh --out .claude/settings.json
+
+# 5. CLAUDE.md を起こして project 固有情報を記入
 mv CLAUDE.md.template CLAUDE.md && $EDITOR CLAUDE.md   # <...> placeholder を埋める
 
-# 5. git 初期化 (observe.sh の project hash 検出に必要)
+# 6. git 初期化 (observe.sh の project hash 検出に必要)
 git init
 
-# 6. 導入確認
+# 7. 導入確認
 bash .claude/scripts/hc-config.sh --summary             # 現 preset / 有効・無効 guard / docs mismatch
 ```
+
+> ⚠️ **`generate-settings.sh` を実行しないと hook が 1 つも発火しません** (install.sh は settings.json を配布しないため)。これが「install したのにガードが効かない」の最頻原因です。preset 変更 / feature toggle 変更後も再実行してください。
 
 Claude Code session を起動 → `/init-tasks` → (任意 `/mode loop`) → `/new-draft` → 承認 → `/new-task` → 自律実装。
 
@@ -265,11 +272,17 @@ Claude Code session を起動 → `/init-tasks` → (任意 `/mode loop`) → `/
 
 ```bash
 cd ~/hirai-method && git pull                            # ハーネス本体を最新化
-bash install.sh --update /path/to/your-project           # 増分同期のみ
+bash install.sh --update /path/to/your-project           # .claude/ 一式を増分同期 (hooks/scripts/rules/manifest/...)
 bash install.sh --update /path/to/your-project --commit  # 同期 + .claude/ のみ自動 commit (git repo 必須)
+
+# ★ 同期後、settings.json を再生成して新規 hook / dispatcher 配線を採用する (必須)
+cd /path/to/your-project
+bash .claude/scripts/generate-settings.sh --out .claude/settings.json
 ```
 
 `--update` は **既存 `.claude/` 必須** (無ければ exit 64 → 新規は default mode を使う)。
+
+> ⚠️ **`--update` は file を同期するが settings.json は touch しない** (exclude)。新しい task で hook / dispatcher manifest が追加されても、`generate-settings.sh` を**再実行するまで新 hook は配線されない**。「ハーネスを更新したのに新機能が効かない」場合はこの再生成漏れが原因。
 
 **`--update` で保護される (上書きされない) もの** = project 固有の値:
 
