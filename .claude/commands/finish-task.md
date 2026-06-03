@@ -57,6 +57,29 @@ docs(tasks): #41 done — content version management + DB overwrite fail-safe (+
 
 (既存 commit log のパターンに揃える: `docs(tasks): #N done — <summary> (...)`)
 
+### Phase 4.5: 本流統合 (mainline_integration_policy 連動、2026-06-03 task #77)
+
+完了 commit 後、`mainline_integration_policy` に応じて本流統合を分岐する。SSoT は `docs/draft/git-integration-policy.md` §3.2 挙動表。policy 値は `bash .claude/scripts/hc-config.sh --get mainline_integration_policy` で確認 (default `pr-required`、不正 / 未知値は fail-safe で `pr-required` 扱い)、本流ブランチは `--get mainline_branch` (default `main`)。
+
+**auto-merge は機械的順序 gate** (honor-system でなく手順として実行):
+
+1. **smoke 実行**: `bash .claude/tests/run-all-smokes.sh` (または該当 task の smoke)
+2. **exit 0 確認**: smoke 非 0 / conflict / security CRITICAL のいずれかなら **stop** (本流統合せず user 報告、modes.md 停止条件)
+3. **`local-merge` / `local-merge-push` のみ本流統合**: merge 前に **mainline 存在確認**を必ず行う (draft §3.1 / git-workflow H3 / security H-1):
+   - **存在確認**: `git show-ref --verify --quiet refs/heads/<mainline>` (ローカル) または `git ls-remote --exit-code origin <mainline>` (remote)。**不在なら error 停止** (`mainline=<mainline>` が存在しないため統合せず user 報告)。`git checkout` 自体も不在で fail するが、明示チェックでクリーンに停止する (honor-system 手順)
+   - **ローカル本流 merge**: 存在確認 OK なら `git checkout <mainline> && git merge --no-ff <feature>`
+   - **conflict 時**: `git merge --abort` して user 報告・停止 (自動解決禁止)
+4. **`local-merge-push` のみ remote 本流 push**: `git push origin <mainline>`
+   - **push 拒否時** (non-fast-forward 等): auto-retry / rebase せず **hard stop** + user 通知
+
+| policy | Phase 4.5 動作 |
+|---|---|
+| `pr-required` (default) | 本流 merge せず、従来どおり commit 提案 (Phase 4) + `gh pr create` で PR 提示。本流 merge / push は user |
+| `local-merge` | smoke green → ローカル `<mainline>` に `--no-ff` merge まで。「remote 本流 push は user」案内で停止 |
+| `local-merge-push` | smoke green → ローカル merge → remote `<mainline>` push まで自律 |
+
+**安全弁**: `stg*` / `release*` への push は全 policy で常に user (本 Phase 対象外)。`git-deny.sh` Tier1 が hook gate。
+
 ### Phase 5: 完了報告フォーマット
 
 CLAUDE.md "Autonomous Progression" の報告フォーマットに沿う:

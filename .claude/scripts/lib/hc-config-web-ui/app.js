@@ -44,8 +44,10 @@
 
   // 既知 enum key (select で表示)。/api/keys に enum 情報が無いため client 側 SSoT。
   //   default_preset は 4 enforcement level (modes.md / CommonRules.md 由来)。
+  //   mainline_integration_policy は git 統合 policy 3 値 (task-77 §3.5、git-deny.sh が enforcement)。
   const ENUM_OPTIONS = {
     default_preset: ['advisory', 'team-default', 'strict', 'harness-dev'],
+    mainline_integration_policy: ['pr-required', 'local-merge', 'local-merge-push'],
   }
 
   // ============================================================

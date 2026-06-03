@@ -168,6 +168,18 @@ confidence_threshold: 0.5
 confidence_required: false
 confidence_state_dir: .claude/.confidence-gate-state
 
+# === Git 統合ポリシー (task-77、draft git-integration-policy.md §3.1/§3.2) ===
+# mainline_branch: AI が merge 先とする本流(統合)ブランチ。master/develop/trunk 等に変更可。
+#   charset: ^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,99}$ (英数字始まり + 英数字/./_/ //-、release/1.0 可、空白不可)。
+#   hc-config --set が範囲外を reject、hook も fail-safe で main 扱い。
+# mainline_integration_policy: 本流への統合ポリシー (3 値、§3.2 参照)。
+#   pr-required      : feature + commit + PR 作成まで。本流 merge / push は user (team/prod 既定)
+#   local-merge      : ローカル本流に merge まで AI。remote push は user (solo、push 前確認)
+#   local-merge-push : ローカル merge + remote push まで AI (solo/実験、最速)
+#   不正/未知値は hc-config --set が reject、hook 実行時は fail-safe で pr-required 扱い。
+mainline_branch: main
+mainline_integration_policy: pr-required
+
 # === 必須環境変数（プロジェクト固有）===
 # SessionStart hook (.claude/hooks/check-required-env.sh) が読み、未設定があれば
 # stderr に WARN を出してユーザーに通知する（fail-open: 未設定でも session 起動継続）。

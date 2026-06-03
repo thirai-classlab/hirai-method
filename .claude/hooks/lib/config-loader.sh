@@ -176,7 +176,9 @@ REVIEW_MIN_COUNT_SYSTEM \
 REVIEW_MAX_COUNT_SYSTEM \
 REVIEW_REQUIRED_SECURITY \
 REVIEW_MIN_COUNT_SECURITY \
-REVIEW_ITERATION_MAX"
+REVIEW_ITERATION_MAX \
+MAINLINE_BRANCH \
+MAINLINE_INTEGRATION_POLICY"
 
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
@@ -339,6 +341,14 @@ HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED="false"
 #   (top-level key としてのみ認識)。matrix 内容は yml 直 parse で読む (--summary / smoke)。
 HC_DEFAULT_PRESET="harness-dev"
 HC_ENFORCEMENT_MATRIX=""
+
+# --- Git 統合ポリシー (task-77、draft git-integration-policy.md §3.1/§3.4) ---
+# mainline_branch: AI が merge 先とする本流(統合)ブランチ (master/develop/trunk 等に変更可)。
+# mainline_integration_policy: 本流への統合ポリシー (pr-required/local-merge/local-merge-push)。
+#   値解決: env(HC_*) > local.yml > yml > default。不正/未知値は hook 実行時に
+#   fail-safe で pr-required 扱い (本 default で fallback、guard 側で再検証)。
+HC_MAINLINE_BRANCH="main"
+HC_MAINLINE_INTEGRATION_POLICY="pr-required"
 
 # --- Reviewer 制御 (task-44 Phase 1、2026-05-27 追加) ---
 # review_required_* (bool default true、security のみ false): false で当該 review command を skip
@@ -697,6 +707,9 @@ export HC_REVIEW_REQUIRED_MODULE HC_REVIEW_MIN_COUNT_MODULE HC_REVIEW_MAX_COUNT_
 export HC_REVIEW_REQUIRED_SYSTEM HC_REVIEW_MIN_COUNT_SYSTEM HC_REVIEW_MAX_COUNT_SYSTEM
 export HC_REVIEW_REQUIRED_SECURITY HC_REVIEW_MIN_COUNT_SECURITY
 export HC_REVIEW_ITERATION_MAX
+
+# Git 統合ポリシー (task-77)
+export HC_MAINLINE_BRANCH HC_MAINLINE_INTEGRATION_POLICY
 
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper

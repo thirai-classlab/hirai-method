@@ -149,6 +149,13 @@ function resolvePresetGroup(preset) {
   return QUALITY_LEVEL_GROUP_JA[ql] || PRESET_GROUP_FALLBACK
 }
 
+// task-77 Step 5 §3.6 (SSoT、display-only 明示): 以下 6 軸 (quality_level / language_framework /
+//   git_workflow / tdd_policy / review_intensity / autonomy_level) は **preset の分類表示専用ラベル**であり、
+//   harness-config.yml の実 key ではない。axis 値 (例 git_workflow='none'/'unrestricted') は git 制御を含む
+//   いかなる behavior にも一切影響しない。
+//   実際の git 統合制御は `mainline_integration_policy` (実 key、右ペイン Gate/Confidence accordion で編集可、
+//   3 値 pr-required/local-merge/local-merge-push) が担う。git_workflow axis label を見て「保護なし」等と
+//   誤認しないこと (security L-1)。6 軸全体の去就 (撤去 or 恒久ラベル化) は別 task で判断 (draft §3.6)。
 const PRESET_AXES = [
   { key: 'quality_level', values: ['poc', 'inner_system', 'production_service'] },
   { key: 'language_framework', values: ['mixed', 'typescript', 'python', 'rust', 'go'] },
@@ -179,6 +186,7 @@ const PRESETS = {
       feature_workflow_enforcement_enabled: 'false',
       feature_draft_flow_guard_enabled: 'false',
       feature_task_rule_guard_enabled: 'false',
+      mainline_integration_policy: 'local-merge-push',
     },
   },
   'poc-with-git': {
@@ -197,6 +205,7 @@ const PRESETS = {
       review_iteration_max: '2',
       feature_gateguard_enabled: 'false',
       feature_workflow_enforcement_enabled: 'false',
+      mainline_integration_policy: 'local-merge-push',
     },
   },
   'inner-typescript': {
@@ -216,6 +225,7 @@ const PRESETS = {
       review_iteration_max: '3',
       feature_gateguard_enabled: 'true',
       feature_workflow_enforcement_enabled: 'true',
+      mainline_integration_policy: 'pr-required',
     },
   },
   'inner-python': {
@@ -235,6 +245,7 @@ const PRESETS = {
       review_iteration_max: '3',
       feature_gateguard_enabled: 'true',
       feature_workflow_enforcement_enabled: 'true',
+      mainline_integration_policy: 'pr-required',
     },
   },
   'production-typescript-personal': {
@@ -257,6 +268,7 @@ const PRESETS = {
       feature_gateguard_enabled: 'true',
       feature_workflow_enforcement_enabled: 'true',
       feature_confidence_gate_enabled: 'true',
+      mainline_integration_policy: 'pr-required',
     },
   },
   'production-typescript-enterprise': {
@@ -281,6 +293,7 @@ const PRESETS = {
       feature_workflow_enforcement_enabled: 'true',
       feature_confidence_gate_enabled: 'true',
       feature_autonomous_action_guard_enabled: 'true',
+      mainline_integration_policy: 'pr-required',
     },
   },
   'production-python': {
@@ -303,6 +316,7 @@ const PRESETS = {
       feature_gateguard_enabled: 'true',
       feature_workflow_enforcement_enabled: 'true',
       feature_autonomous_action_guard_enabled: 'true',
+      mainline_integration_policy: 'pr-required',
     },
   },
   'production-rust': {
@@ -325,6 +339,7 @@ const PRESETS = {
       feature_gateguard_enabled: 'true',
       feature_workflow_enforcement_enabled: 'true',
       feature_autonomous_action_guard_enabled: 'true',
+      mainline_integration_policy: 'pr-required',
     },
   },
   'production-go': {
@@ -347,6 +362,7 @@ const PRESETS = {
       feature_gateguard_enabled: 'true',
       feature_workflow_enforcement_enabled: 'true',
       feature_autonomous_action_guard_enabled: 'true',
+      mainline_integration_policy: 'pr-required',
     },
   },
   'harness-development': {
@@ -368,6 +384,7 @@ const PRESETS = {
       feature_gateguard_enabled: 'true',
       feature_workflow_enforcement_enabled: 'true',
       feature_confidence_gate_enabled: 'true',
+      mainline_integration_policy: 'local-merge',
     },
   },
 }
