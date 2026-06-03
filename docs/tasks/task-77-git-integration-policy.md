@@ -11,7 +11,7 @@ total_steps: 8
 
 # Task #77: git 統合ポリシー設定 (mainline_branch + mainline_integration_policy 3 段階)
 
-> Status: **🔲 未着手** (設計レビュー収束済 iter1 5体+iter2 2体、CRIT/HIGH=0)
+> Status: **✅ 完了** (2026-06-03、全 8 Step。設計レビュー 7体収束 + 実装 commit 6本 + Step6-fix、git-deny smoke 21/21・git-policy 5/5・web-ui S-52-54・run-all-smokes UNEXPLAINED-FAIL 0、UI visual 確認。push/PR は feature branch 自律、merge は user)
 > 起案: 2026-06-03
 > 関連: #70 (enforcement_matrix), git_workflow 飾り audit (2026-06-03)
 > 設計起源: [git-integration-policy](../draft/git-integration-policy.md) ✅承認済 + 5体design-review収束
@@ -62,9 +62,9 @@ draft §「Step 計画」を SSoT とする (Step 1-8、各 Step の詳細 + Ste
 | 3 | ✅(no-op) | autonomous-action-guard 改修不要を確認 (task-39 で git push pattern 撤去済、push gate は git-deny.sh のみ、iter2 architect 確認) | 1 |
 | 4 | ✅ | (規範変更) modes.md 遵守事項8 policy 3状態 + finish-task Phase4.5 + resume-state に smoke→exit0→merge gate (commit 済、run-all-smokes UNEXPLAINED-FAIL 0) | 1 |
 | 5 | ✅ | 10 named preset values に policy + ENUM_OPTIONS + 6 axes display-only SSoT comment (commit 済、S-52/53/54、browser visual 確認 select 描画+custom化) | 1 |
-| 6 | 🔲 | (テスト設計レビュー) reviewer 動的選定 min≤N≤max | 5 |
-| 7 | 🔲 | (テスト合格) smoke matrix 全cell + run-all-smokes regression 0 | 6 |
-| 8 | 🔲 | (リファクタリング) 3 観点 | 7 |
+| 6 | ✅ | (テスト設計レビュー) pr-test-analyzer 1体 → gap (存在確認 / refspec-omit block / 2-guard) を Step6-fix で解消、P1/P2/存在 behavioral は honor-system 境界明記。収束 | 5 |
+| 7 | ✅ | (テスト合格) git-deny smoke 21/21 + git-policy 5/5 + web-ui S-52/53/54 + relaxation 12/12、run-all-smokes UNEXPLAINED-FAIL 0 (最終状態)、Step5 で UI visual 確認 (policy select 描画+custom化) | 6 |
+| 8 | ✅(skip) | (リファクタリング) skip: git-deny は `_classify_push_target` helper で両経路統一済 (非冗長化) + config 駆動 (汎用性) + 既存 smoke 慣習踏襲 (持続可能性)、3 観点で追加対応不要 | 7 |
 
 ## 影響範囲
 
@@ -82,6 +82,7 @@ draft §「Step 計画」を SSoT とする (Step 1-8、各 Step の詳細 + Ste
 | 日付 | 状態 | 備考 |
 |---|---|---|
 | 2026-06-03 | 起案+設計レビュー収束 | draft 承認 + 5体design-review iter1/iter2 収束 (CRIT/HIGH=0) |
+| 2026-06-03 | 完了 | 全 8 Step。commit: be9115b(S1)/433a653(S2)/1d956c7(S5)/a2e1a20(S4)/Step6-fix。smoke 全 green、run-all UNEXPLAINED-FAIL 0、visual 確認。default pr-required=現行維持で後方互換 |
 
 ## 派生 task / 次アクション候補
 - (🟢) 6 axes の去就 (撤去 or 恒久ラベル化) は別 task で判断 (draft §3.6)
