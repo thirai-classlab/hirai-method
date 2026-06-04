@@ -7,14 +7,14 @@
 # 設計 SSoT: docs/draft/statusline-construction.md §3 採用案
 #
 # 出力レイアウト (2 行、絵文字なし、ANSI 色):
-#   行1: <model> · <branch> · ctx <N>%
-#   行2: 5h <N>% · 7d <N>% · <mode> · settings: .claude/scripts/hc-config.sh
+#   行1: <model> · <branch> · context <N>% used
+#   行2: 5h <N>% used · 7d <N>% used · mode: <mode> · settings: bash .claude/scripts/hc-config.sh
 #
 # 数値元 (stdin JSON):
 #   model  = .model.display_name
 #   ctx    = .context_window.used_percentage
-#   5h 残  = 100 - .rate_limits.five_hour.used_percentage
-#   7d 残  = 100 - .rate_limits.seven_day.used_percentage
+#   5h     = .rate_limits.five_hour.used_percentage (used を直接表示)
+#   7d     = .rate_limits.seven_day.used_percentage (used を直接表示)
 #   branch = .workspace.repo.* (branch) — 不在時は $CWD で git 直問い
 #   mode   = $cwd/.claude/mode.yml の mode: 値 (不在 normal)
 #
@@ -86,28 +86,12 @@ read_mode() {
   esac
 }
 
-# === 残り % を閾値で着色 (≥50 緑 / 20-49 黄 / <20 赤) ===
-# 引数: ラベル(5h/7d) 残り値(整数 or "—")
-colorize_remaining() {
+# === used % を閾値で着色 (使用率なので high が悪い: <50 緑 / 50-79 黄 / ≥80 赤) ===
+# 引数: ラベル(5h/7d) used 値(整数 or "—")
+colorize_used() {
   local label="$1" val="$2"
   if [ "$val" = "—" ]; then
     printf '%s%s —%s' "$DIM" "$label" "$RESET"
-    return
-  fi
-  local color="$GREEN"
-  if [ "$val" -lt 20 ] 2>/dev/null; then
-    color="$RED"
-  elif [ "$val" -lt 50 ] 2>/dev/null; then
-    color="$YELLOW"
-  fi
-  printf '%s%s %s%%%s' "$color" "$label" "$val" "$RESET"
-}
-
-# === ctx % 着色 (使用率なので high が悪い: <50 緑 / 50-79 黄 / ≥80 赤) ===
-colorize_ctx() {
-  local val="$1"
-  if [ "$val" = "—" ]; then
-    printf '%sctx —%s' "$DIM" "$RESET"
     return
   fi
   local color="$GREEN"
@@ -116,16 +100,32 @@ colorize_ctx() {
   elif [ "$val" -ge 50 ] 2>/dev/null; then
     color="$YELLOW"
   fi
-  printf '%sctx %s%%%s' "$color" "$val" "$RESET"
+  printf '%s%s %s%% used%s' "$color" "$label" "$val" "$RESET"
+}
+
+# === ctx % 着色 (使用率なので high が悪い: <50 緑 / 50-79 黄 / ≥80 赤) ===
+colorize_ctx() {
+  local val="$1"
+  if [ "$val" = "—" ]; then
+    printf '%scontext —%s' "$DIM" "$RESET"
+    return
+  fi
+  local color="$GREEN"
+  if [ "$val" -ge 80 ] 2>/dev/null; then
+    color="$RED"
+  elif [ "$val" -ge 50 ] 2>/dev/null; then
+    color="$YELLOW"
+  fi
+  printf '%scontext %s%% used%s' "$color" "$val" "$RESET"
 }
 
 # === mode 着色 (loop は強調 / normal は dim) ===
 colorize_mode() {
   local mode="$1"
   if [ "$mode" = "loop" ]; then
-    printf '%s%sloop%s' "$BOLD" "$MAGENTA" "$RESET"
+    printf 'mode: %s%sloop%s' "$BOLD" "$MAGENTA" "$RESET"
   else
-    printf '%snormal%s' "$DIM" "$RESET"
+    printf 'mode: %snormal%s' "$DIM" "$RESET"
   fi
 }
 
@@ -146,16 +146,6 @@ to_int_or_dash() {
       fi
       printf '%s' "$v" ;;
   esac
-}
-
-# 残り % = 100 - used。used が "—" なら "—"。
-remaining_from_used() {
-  local used="$1"
-  if [ "$used" = "—" ]; then
-    printf '%s' "—"
-  else
-    printf '%s' "$((100 - used))"
-  fi
 }
 
 CWD="$(resolve_cwd)"
@@ -179,8 +169,8 @@ CTX="$(to_int_or_dash "$CTX_RAW")"
 
 FIVEH_USED="$(printf '%s' "$INPUT" | jq -r '.rate_limits.five_hour.used_percentage // empty' 2>/dev/null || true)"
 SEVEND_USED="$(printf '%s' "$INPUT" | jq -r '.rate_limits.seven_day.used_percentage // empty' 2>/dev/null || true)"
-FIVEH_REMAIN="$(remaining_from_used "$(to_int_or_dash "$FIVEH_USED")")"
-SEVEND_REMAIN="$(remaining_from_used "$(to_int_or_dash "$SEVEND_USED")")"
+FIVEH="$(to_int_or_dash "$FIVEH_USED")"
+SEVEND="$(to_int_or_dash "$SEVEND_USED")"
 
 # branch: workspace.repo から取得を試み、無ければ git 直問い
 BRANCH="$(printf '%s' "$INPUT" | jq -r '
@@ -191,7 +181,7 @@ if [ -z "$BRANCH" ] || [ "$BRANCH" = "null" ]; then
 fi
 [ -z "$BRANCH" ] && BRANCH="-"
 
-# === 行1: <model> · <branch> · ctx <N>% ===
+# === 行1: <model> · <branch> · context <N>% used ===
 LINE1="$(printf '%s%s%s%s%s%s%s' \
   "$CYAN" "$MODEL" "$RESET" \
   "$SEP" \
@@ -199,11 +189,11 @@ LINE1="$(printf '%s%s%s%s%s%s%s' \
   "$SEP" \
   "$(colorize_ctx "$CTX")")"
 
-# === 行2: 5h <N>% · 7d <N>% · <mode> · settings: .claude/scripts/hc-config.sh ===
-LINE2="$(printf '%s%s%s%s%s%s%ssettings: .claude/scripts/hc-config.sh%s' \
-  "$(colorize_remaining "5h" "$FIVEH_REMAIN")" \
+# === 行2: 5h <N>% used · 7d <N>% used · mode: <mode> · settings: bash .claude/scripts/hc-config.sh ===
+LINE2="$(printf '%s%s%s%s%s%s%ssettings: bash .claude/scripts/hc-config.sh%s' \
+  "$(colorize_used "5h" "$FIVEH")" \
   "$SEP" \
-  "$(colorize_remaining "7d" "$SEVEND_REMAIN")" \
+  "$(colorize_used "7d" "$SEVEND")" \
   "$SEP" \
   "$(colorize_mode "$MODE")" \
   "$SEP" \
