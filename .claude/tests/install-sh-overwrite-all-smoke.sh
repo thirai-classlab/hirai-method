@@ -56,8 +56,13 @@ if ! command -v rsync >/dev/null 2>&1; then
     exit 1
 fi
 
+# 全 case 共通の root を 1 つだけ確保し、per-case subdir をその下に切る。
+# trap で EXIT (正常終了 / FAIL) に加え INT TERM (Ctrl-C / kill) でも必ず削除し、
+# /tmp に残骸が溜まらないようにする。
+# 注: trap action は単純な rm のみで set -e / pipefail を caller に leak させない
+# (file-top strict mode 不使用方針を踏襲、CLAUDE.md HIGH 教訓)。
 TMP_BASE="$(mktemp -d /tmp/install-sh-overwrite-all-smoke.XXXXXX)"
-trap 'rm -rf "$TMP_BASE"' EXIT
+trap 'rm -rf "$TMP_BASE"' EXIT INT TERM
 
 PASS=0
 FAIL=0
