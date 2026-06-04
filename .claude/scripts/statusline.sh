@@ -7,8 +7,8 @@
 # 設計 SSoT: docs/draft/statusline-construction.md §3 採用案
 #
 # 出力レイアウト (2 行、絵文字なし、ANSI 色):
-#   行1: <model> · <branch> · context <N>% used
-#   行2: 5h <N>% used · 7d <N>% used · mode: <mode> · settings: bash .claude/scripts/hc-config.sh
+#   行1: <model> | used token ・context <N>% ・5h <N>% ・7d <N>% | mode: <mode>
+#   行2: <branch> | settings: bash .claude/scripts/hc-config.sh
 #
 # 数値元 (stdin JSON):
 #   model  = .model.display_name
@@ -45,7 +45,9 @@ if [ "${HC_STATUSLINE_NO_COLOR:-}" = "1" ] || [ -n "${NO_COLOR:-}" ]; then
   RESET=""; DIM=""; BOLD=""; GREEN=""; YELLOW=""; RED=""; CYAN=""; MAGENTA=""
 fi
 
-SEP="${DIM} · ${RESET}"
+# 大区切り ( | ) と usage-group 内区切り ( ・)。どちらも dim。
+SEP="${DIM} | ${RESET}"
+GROUP_SEP="${DIM} ・${RESET}"
 
 # === stdin JSON を読む ===
 INPUT="$(cat 2>/dev/null || true)"
@@ -87,27 +89,12 @@ read_mode() {
 }
 
 # === used % を閾値で着色 (使用率なので high が悪い: <50 緑 / 50-79 黄 / ≥80 赤) ===
-# 引数: ラベル(5h/7d) used 値(整数 or "—")
-colorize_used() {
-  local label="$1" val="$2"
-  if [ "$val" = "—" ]; then
-    printf '%s%s —%s' "$DIM" "$label" "$RESET"
-    return
-  fi
-  local color="$GREEN"
-  if [ "$val" -ge 80 ] 2>/dev/null; then
-    color="$RED"
-  elif [ "$val" -ge 50 ] 2>/dev/null; then
-    color="$YELLOW"
-  fi
-  printf '%s%s %s%% used%s' "$color" "$label" "$val" "$RESET"
-}
-
-# === ctx % 着色 (使用率なので high が悪い: <50 緑 / 50-79 黄 / ≥80 赤) ===
-colorize_ctx() {
+# usage-group 共通の値着色 helper。ラベルは呼出側 (dim) が付与し、本関数は値のみ着色して返す。
+# 引数: used 値(整数 or "—")。出力は "<N>%" (色付き) or "—" (dim)。
+colorize_pct() {
   local val="$1"
   if [ "$val" = "—" ]; then
-    printf '%scontext —%s' "$DIM" "$RESET"
+    printf '%s—%s' "$DIM" "$RESET"
     return
   fi
   local color="$GREEN"
@@ -116,7 +103,7 @@ colorize_ctx() {
   elif [ "$val" -ge 50 ] 2>/dev/null; then
     color="$YELLOW"
   fi
-  printf '%scontext %s%% used%s' "$color" "$val" "$RESET"
+  printf '%s%s%%%s' "$color" "$val" "$RESET"
 }
 
 # === mode 着色 (loop は強調 / normal は dim) ===
@@ -151,12 +138,19 @@ to_int_or_dash() {
 CWD="$(resolve_cwd)"
 MODE="$(read_mode "$CWD")"
 
-# === jq 不在 → plain 降格 (model + branch のみ、非破壊) ===
+# === jq 不在 → plain 降格 (usage-group 省略、非破壊) ===
+# 行1 = <model> | mode: <mode> (usage-group 省略可)、行2 = <branch> | settings: bash ...。
+# jq 不在で JSON parse 不可のため model は "Claude" 固定。mode は mode.yml から jq 無しで読める。
 if ! command -v jq >/dev/null 2>&1; then
   branch="$(git_branch)"
-  [ -z "$branch" ] && branch="-"
-  # 色なし plain (jq 不在環境は最小限の表示)。1 行で済ませる。
-  printf 'Claude · %s\n' "$branch"
+  # 色なし plain (jq 不在環境は最小限の表示)。
+  line1="Claude | mode: $MODE"
+  if [ -n "$branch" ]; then
+    line2="$branch | settings: bash .claude/scripts/hc-config.sh"
+  else
+    line2="settings: bash .claude/scripts/hc-config.sh"
+  fi
+  printf '%s\n%s\n' "$line1" "$line2"
   exit 0
 fi
 
@@ -181,24 +175,35 @@ if [ -z "$BRANCH" ] || [ "$BRANCH" = "null" ]; then
 fi
 [ -z "$BRANCH" ] && BRANCH="-"
 
-# === 行1: <model> · <branch> · context <N>% used ===
+# === usage-group: "used token ・context <N>% ・5h <N>% ・7d <N>%" ===
+# 先頭 literal ラベル "used token" (dim) → グループ内 ・ 区切りで context / 5h / 7d を並べる。
+# 各 ・ ラベル (context/5h/7d) は dim、% 値のみ colorize_pct で着色。
+USAGE_GROUP="$(printf '%sused token%s%s%scontext%s %s%s%s5h%s %s%s%s7d%s %s' \
+  "$DIM" "$RESET" \
+  "$GROUP_SEP" "$DIM" "$RESET" "$(colorize_pct "$CTX")" \
+  "$GROUP_SEP" "$DIM" "$RESET" "$(colorize_pct "$FIVEH")" \
+  "$GROUP_SEP" "$DIM" "$RESET" "$(colorize_pct "$SEVEND")")"
+
+# === 行1: <model> | <usage-group> | mode: <mode> ===
 LINE1="$(printf '%s%s%s%s%s%s%s' \
   "$CYAN" "$MODEL" "$RESET" \
   "$SEP" \
-  "$BRANCH" \
+  "$USAGE_GROUP" \
   "$SEP" \
-  "$(colorize_ctx "$CTX")")"
+  "$(colorize_mode "$MODE")")"
 
-# === 行2: 5h <N>% used · 7d <N>% used · mode: <mode> · settings: bash .claude/scripts/hc-config.sh ===
-LINE2="$(printf '%s%s%s%s%s%s%ssettings: bash .claude/scripts/hc-config.sh%s' \
-  "$(colorize_used "5h" "$FIVEH")" \
-  "$SEP" \
-  "$(colorize_used "7d" "$SEVEND")" \
-  "$SEP" \
-  "$(colorize_mode "$MODE")" \
-  "$SEP" \
-  "$DIM" "$RESET")"
-# LOW-1: settings hint を dim 表示 (draft §3)。上の printf で末尾 $DIM ... $RESET が hint を包囲済。
+# === 行2: <branch> | settings: bash .claude/scripts/hc-config.sh ===
+# branch 不在 ("-" 含む空相当) 時は settings hint のみ (空表示の " | " を避ける)。
+if [ -n "$BRANCH" ] && [ "$BRANCH" != "-" ]; then
+  LINE2="$(printf '%s%s%ssettings: bash .claude/scripts/hc-config.sh%s' \
+    "$BRANCH" \
+    "$SEP" \
+    "$DIM" "$RESET")"
+else
+  LINE2="$(printf '%ssettings: bash .claude/scripts/hc-config.sh%s' \
+    "$DIM" "$RESET")"
+fi
+# LOW-1: settings hint を dim 表示 (draft §3)。末尾 $DIM ... $RESET が hint を包囲済。
 
 printf '%s\n%s\n' "$LINE1" "$LINE2"
 exit 0
