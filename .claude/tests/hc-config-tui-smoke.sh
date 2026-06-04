@@ -183,12 +183,13 @@ _case_1() (
   done <<< "$all_keys"
 
   # H13: yml 実 key 数 == metadata key 総数 (双方向一致)
-  meta_count=$(_hc_metadata_table | awk -F'\t' 'NF==4 {print $1}' | grep -c .)
+  # task-78 Step 1: label_ja (5 列目) 追加で NF==5 になったため NF>=4 に緩和 (key 列の抽出に列数は不問)
+  meta_count=$(_hc_metadata_table | awk -F'\t' 'NF>=4 {print $1}' | grep -c .)
   if [ "$yml_count" -ne "$meta_count" ]; then
     printf 'Case 1: key count mismatch: yml=%d metadata=%d\n' "$yml_count" "$meta_count" >&2
     # yml にあって metadata に無い key (および逆)
     local meta_keys
-    meta_keys=$(_hc_metadata_table | awk -F'\t' 'NF==4 {print $1}')
+    meta_keys=$(_hc_metadata_table | awk -F'\t' 'NF>=4 {print $1}')
     printf 'Case 1: in yml not in metadata:\n' >&2
     comm -23 <(printf '%s\n' "$all_keys" | sort) <(printf '%s\n' "$meta_keys" | sort) >&2
     printf 'Case 1: in metadata not in yml:\n' >&2

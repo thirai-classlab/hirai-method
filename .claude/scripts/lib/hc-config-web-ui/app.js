@@ -269,6 +269,30 @@
     return Object.prototype.hasOwnProperty.call(state.draft, key) ? state.draft[key] : state.baseline[key]
   }
 
+  // /api/keys の key エントリから keyMeta エントリを生成する内部 helper。
+  //   4 箇所で同一パターンが出現していたのを集約 (task-78 Step 7 refactor)。
+  //   フィールド追加は本関数 1 箇所のみ変更で済む。
+  function buildKeyMeta(k) {
+    return {
+      category: k.category,
+      description: k.description,
+      effect: k.effect,
+      label_ja: k.label_ja || '',
+      type: inferType(k.key, k.current_value),
+    }
+  }
+
+  // key の表示ラベル (task-78 Step 2/3): `<key_name> (<label_ja>)`、label 空は key 名のみ。
+  //   返り値は textContent でのみ使用 (el() builder 経由) なので XSS 安全。
+  function labelJaOf(key) {
+    const meta = state.keyMeta[key]
+    return meta && meta.label_ja ? String(meta.label_ja) : ''
+  }
+  function keyDisplayLabel(key) {
+    const lj = labelJaOf(key)
+    return lj ? `${key} (${lj})` : key
+  }
+
   // ============================================================
   // 左ペイン render (preset を group section 化 + ★ カスタム)
   //   render target: #preset-list
@@ -398,7 +422,7 @@
 
   function renderKeyRow(keyObj) {
     const key = keyObj.key
-    const meta = state.keyMeta[key] || { type: 'text', description: '', effect: '' }
+    const meta = state.keyMeta[key] || { type: 'text', description: '', effect: '', label_ja: '' }
     const val = currentValue(key)
     // 変更扱い: draft に key があり baseline と値が異なる (C1/L1 fix: tautology を簡素化)
     const isChanged = Object.prototype.hasOwnProperty.call(state.draft, key) &&
@@ -452,7 +476,7 @@
       el(
         'div',
         { class: 'key-row__head' },
-        el('label', { class: 'key-row__name font-mono', htmlFor: controlId, title: meta.description || '' }, key),
+        el('label', { class: 'key-row__name font-mono', htmlFor: controlId, title: meta.description || '' }, keyDisplayLabel(key)),
         control
       ),
       meta.description ? el('p', { class: 'key-row__desc text-xs text-slate-500', lang: 'ja' }, meta.description) : null,
@@ -497,6 +521,54 @@
       badge.classList.add('state-badge--preset')
     } else {
       badge.textContent = '—'
+    }
+  }
+
+  // ============================================================
+  // 右サイドバー「変更内容」render (task-78 Step 3、render target: #changes-list)
+  //   baseline↔draft 差分を `<label_ja> (<key>): <old> → <new>` で live 表示。
+  //   label 空は key のみ。変更 0 件は「変更なし」。textContent のみで XSS 安全。
+  // ============================================================
+  function renderChangesSidebar() {
+    const cont = $('changes-list')
+    if (!cont) return
+    clear(cont)
+
+    const keys = changedKeys()
+    if (!keys.length) {
+      cont.appendChild(el('p', { class: 'changes-empty text-xs text-slate-400', lang: 'ja' }, '変更なし'))
+      return
+    }
+
+    for (const key of keys.slice().sort()) {
+      const lj = labelJaOf(key)
+      const oldVal = state.baseline[key]
+      const newVal = state.draft[key]
+      const oldStr = oldVal == null || oldVal === '' ? '(空)' : String(oldVal)
+      const newStr = newVal == null || newVal === '' ? '(空)' : String(newVal)
+      cont.appendChild(
+        el(
+          'div',
+          { class: 'changes-item', 'data-key': key },
+          // 見出し: label (key)。label 空は key のみ。
+          lj
+            ? el(
+                'div',
+                { class: 'changes-item__name', lang: 'ja' },
+                el('span', { class: 'changes-item__label' }, lj),
+                el('span', { class: 'changes-item__key font-mono text-xs text-slate-400' }, ` (${key})`)
+              )
+            : el('div', { class: 'changes-item__name font-mono' }, key),
+          // old → new
+          el(
+            'div',
+            { class: 'changes-item__diff text-xs' },
+            el('span', { class: 'changes-item__old' }, oldStr),
+            el('span', { class: 'changes-item__arrow', 'aria-hidden': 'true' }, ' → '),
+            el('span', { class: 'changes-item__new font-semibold' }, newStr)
+          )
+        )
+      )
     }
   }
 
@@ -587,6 +659,7 @@
     renderCategoryAccordion()
     updateSaveBar()
     updateStateBadge()
+    renderChangesSidebar()
   }
 
   // ============================================================
@@ -604,12 +677,7 @@
           const meta = { ...state.keyMeta }
           const baseline = { ...state.baseline }
           for (const k of keys) {
-            meta[k.key] = {
-              category: k.category,
-              description: k.description,
-              effect: k.effect,
-              type: inferType(k.key, k.current_value),
-            }
+            meta[k.key] = buildKeyMeta(k)
             // baseline は初回 load 時のみ (編集中 draft を壊さない)
             if (!Object.prototype.hasOwnProperty.call(baseline, k.key)) {
               baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
@@ -648,10 +716,11 @@
       selectedPreset: stillHasChange ? null : state.selectedPreset,
     }
     // text input は再描画で focus を失わないよう、保存バー / バッジのみ更新 + 左ペインのみ再描画。
-    //   右 accordion は再描画しない (input の focus 維持)。
+    //   中央 accordion は再描画しない (input の focus 維持)。右サイドバーは別 DOM のため live 再描画可。
     renderPresetList()
     updateSaveBar()
     updateStateBadge()
+    renderChangesSidebar()
   }
 
   // ============================================================
@@ -675,7 +744,7 @@
           delete draft[c.key] // 値が同一なら draft 不要
         }
         if (!meta[c.key]) {
-          meta[c.key] = { category: '', description: '', effect: c.effect || '', type: inferType(c.key, c.new) }
+          meta[c.key] = { category: '', description: '', effect: c.effect || '', label_ja: '', type: inferType(c.key, c.new) }
         }
       }
       state = {
@@ -779,7 +848,7 @@
         const meta = { ...state.keyMeta }
         for (const k of keys) {
           baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
-          meta[k.key] = { category: k.category, description: k.description, effect: k.effect, type: inferType(k.key, k.current_value) }
+          meta[k.key] = buildKeyMeta(k)
         }
         state = { ...state, keysByCategory: byCat, baseline, keyMeta: meta }
       } catch (e) { /* noop */ }
@@ -844,7 +913,7 @@
         byCat[cat] = keys
         for (const k of keys) {
           baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
-          meta[k.key] = { category: k.category, description: k.description, effect: k.effect, type: inferType(k.key, k.current_value) }
+          meta[k.key] = buildKeyMeta(k)
         }
       } catch (e) { /* noop */ }
     }
@@ -947,7 +1016,7 @@
           const meta = {}
           const baseline = {}
           for (const k of keys) {
-            meta[k.key] = { category: k.category, description: k.description, effect: k.effect, type: inferType(k.key, k.current_value) }
+            meta[k.key] = buildKeyMeta(k)
             baseline[k.key] = k.current_value == null ? '' : String(k.current_value)
           }
           state = { ...state, keysByCategory: { [state.openCategory]: keys }, keyMeta: meta, baseline }
@@ -969,6 +1038,8 @@
   window.__hcConfigUi = {
     inferType,
     changedKeys: () => changedKeys(),
+    keyDisplayLabel,
+    renderChangesSidebar,
     initialState,
     PRESET_GROUP_ORDER,
     ENUM_OPTIONS,
