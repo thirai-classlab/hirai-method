@@ -306,6 +306,25 @@ bash install.sh --update /path/to/your-project --commit  # 同期 + .claude/ の
 
 > ⚠️ `bash install.sh --update <target>` は **user manual (terminal) 実行のみ可能**。cross-repo write は Claude Code sandbox + delegation-guard 二重制約で agent からは実行不能 (agent task にしない)。
 
+#### B-2. CLAUDE.md 統合 (既存 project の CLAUDE.md と harness を統合する)
+
+`install.sh` (default / `--update` とも) は **CLAUDE.md を touch しない** (project 固有情報を守るため)。既存 project に harness を導入/更新した際、project の CLAUDE.md に harness 規範を載せるには **手動統合**する。方針は「**project 固有情報は全保持 + harness 共通規範は `@.claude/CommonRules.md` import に集約**」。
+
+**統合手順**:
+
+1. **`@.claude/CommonRules.md` import を CLAUDE.md 冒頭付近に追加** (既にあれば重複させない)。この 1 行で harness 共通規範 (Development Policy / Autonomous Progression / Rules / 動作モード / Critical Lessons / slash-command 一覧) が session 開始時に load される。
+   ```markdown
+   @.claude/CommonRules.md
+   ```
+
+2. **project 固有内容は全保持** (削除厳禁): Overview / User Context / Tech Stack / Architecture / Implementation Status / Commands / Domain Knowledge / Related Repositories / **project 固有の Critical Lessons**。迷ったら残す。
+
+3. **harness 汎用の本体テキストは重複削除可** (CommonRules.md に集約済): inline 展開していた Development Policy 本体 / Autonomous Progression 本体 / Rules table / harness slash-command 一覧 / 並列 git commit 競合・`set -e` leak 等の harness 共通 Lessons。ハーネステンプレのメタ説明文 ("これは汎用ハーネス用テンプレ" 等) と未使用 placeholder `<...>` も除去 (placeholder は project 実値で埋める)。
+
+4. **project 固有の harness delta は `## Project 固有 追補 (CommonRules への delta)` セクションに集約**: 委譲スコープの path 読替 (例 `apps/**/src`) / project 固有の autonomous 確認項目 (例 本番 deploy / DB migration) / project 固有 rule row 等、CommonRules 汎用規範に対する「この repo だけの差分」をここに置く。
+
+> このセクションは `--update` では同期されない (CLAUDE.md は protect)。harness 更新で CommonRules 側の共通規範が変わっても、project の CLAUDE.md は **import 1 行経由で自動追従**する (= 二重管理不要、共通規範を各 repo に転記しない)。新しい project 固有事情が出たら本セクション (Project 固有 追補) に追記する。
+
 #### C. mode / flag 早見表
 
 | flag | 用途 |
