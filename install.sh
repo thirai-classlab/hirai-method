@@ -2,9 +2,9 @@
 # 平井メソッド (hirai-method) — robust installer
 #
 # Usage:
-#   ./install.sh <target-project-dir> [--update] [--force] [--dry-run] [--no-mcp] [--no-docs]
+#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--dry-run] [--no-mcp] [--no-docs]
 #
-# Modes:
+# Modes (--update / --force / --overwrite-all are mutually exclusive):
 #   (default)  : 新規 install。既存 .claude / CLAUDE.md は .bak タイムスタンプ付きで退避。
 #                CLAUDE.md は CLAUDE.md.template として配置（user が <...> placeholder を埋める）。
 #   --update   : 既存 .claude/ を退避せず rsync で増分上書き。state dir / settings.local.json は保持。
@@ -14,6 +14,11 @@
 #                自動 commit する。project file (root README.md 等) は触らない。git reset 禁止 (HIGH 教訓)。
 #                非 git target なら commit skip + WARN (task-58 G1)。
 #   --force    : 既存 .claude / CLAUDE.md を backup せず上書き。CLAUDE.md は placeholder 入りで上書き。
+#   --overwrite-all : (task-79) drift した target を SSoT へ強制リセットする全上書き mode。
+#                既存 .claude/ を rsync で上書きするが **settings.local.json のみ** 温存し、それ以外
+#                (settings.json / harness-config.local.yml / state dir 群 / worktrees) も source で上書き。
+#                `--delete` は使わない (= 上書きのみ、target 独自 file は残す)。CLAUDE.md / .mcp.json /
+#                .gitignore は --force 準拠。注意: target の local override は失われる (settings.local.json のみ残る)。
 #   --dry-run  : 実行内容を表示するのみ (rsync -n + 各 cp / mkdir を echo)。
 #   --no-mcp   : .mcp.json を配置しない (Serena 不要な project)。
 #   --no-docs  : docs/tasks/, docs/draft/ の templates 配置を skip。
@@ -36,7 +41,7 @@
 # **user manual (terminal) 実行のみ可能** です。
 # (agent / subagent / hook bypass env いずれも回避不可)
 #
-# 同様に `--update <target>` mode (既存 .claude/ への増分上書き) も
+# 同様に `--update` / `--overwrite-all <target>` mode (既存 .claude/ への上書き) も
 # user manual (terminal) 実行のみ可能 です。
 #
 # 詳細: .claude/rules/development-process.md §「cross-repo write 例外」を参照
@@ -48,26 +53,31 @@ set -euo pipefail
 # arg parse
 # ============================================================
 TARGET=""
-MODE="install"          # install / update / force
+MODE="install"          # install / update / force / overwrite-all
 DRY_RUN=false
 WITH_MCP=true
 WITH_DOCS=true
 COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
 
-# M-1: detect conflicting mode flags. --update / --force both set MODE; specifying
-# more than one (or repeating one) would silently last-wins into an unintended mode
-# (e.g. --update --force → force rm -rf). Track whether MODE was already chosen and
-# abort instead of guessing.
+# M-1: detect conflicting mode flags. --update / --force / --overwrite-all each set
+# MODE; specifying more than one (or repeating one) would silently last-wins into an
+# unintended mode (e.g. --update --force → force rm -rf). Track whether MODE was
+# already chosen and abort instead of guessing. (task-79: --overwrite-all joins the
+# 3-way mutual exclusion.)
 MODE_SET=false
 for arg in "$@"; do
   case "$arg" in
-    --update|--force)
+    --update|--force|--overwrite-all)
       if $MODE_SET; then
-        echo "[install] error: conflicting mode flags (--update / --force may be given at most once, not together)" >&2
+        echo "[install] error: conflicting mode flags (--update / --force / --overwrite-all are mutually exclusive — give at most one)" >&2
         exit 64
       fi
       MODE_SET=true
-      [[ "$arg" == "--update" ]] && MODE="update" || MODE="force"
+      case "$arg" in
+        --update)        MODE="update" ;;
+        --force)         MODE="force" ;;
+        --overwrite-all) MODE="overwrite-all" ;;
+      esac
       ;;
     --commit)   COMMIT_AFTER_SYNC=true ;;
     --dry-run)  DRY_RUN=true  ;;
@@ -75,8 +85,9 @@ for arg in "$@"; do
     --no-docs)  WITH_DOCS=false ;;
     -h|--help)
       # L-2: print the full header comment block including the cross-repo WARNING
-      # (ends at line 43, the closing ===== of the WARNING box before `set -euo pipefail`).
-      sed -n '2,43p' "$0"
+      # (ends at the closing ===== of the WARNING box before `set -euo pipefail`;
+      # task-79 added 4 mode-doc lines so the box now ends at line 48).
+      sed -n '2,48p' "$0"
       exit 0
       ;;
     -*)
@@ -95,7 +106,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--dry-run|--no-mcp|--no-docs]" >&2
+  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--dry-run|--no-mcp|--no-docs]" >&2
   exit 64
 fi
 
@@ -131,10 +142,11 @@ echo "[install] mode   : $MODE  (dry-run=$DRY_RUN, with-mcp=$WITH_MCP, with-docs
 echo ""
 
 # ============================================================
-# dirty-tree safety: --update / --force 前に target の未 commit 変更を warn
+# dirty-tree safety: --update / --force / --overwrite-all 前に target の未 commit 変更を warn
 # (task-55: user 無警告で上書き rsync する事故を防ぐ。block ではなく warn のみ)
+# (task-79: --overwrite-all は local override も上書きするため warn は特に重要)
 # ============================================================
-if [[ "$MODE" == "update" || "$MODE" == "force" ]] && ! $DRY_RUN; then
+if [[ "$MODE" == "update" || "$MODE" == "force" || "$MODE" == "overwrite-all" ]] && ! $DRY_RUN; then
   if command -v git >/dev/null 2>&1 && [[ -d "$TARGET/.git" ]]; then
     DIRTY=$(cd "$TARGET" && git status --short 2>/dev/null | head -20)
     if [[ -n "$DIRTY" ]]; then
@@ -151,8 +163,10 @@ fi
 # migration helper: project 固有 override が SSoT yml に直接書かれている場合の案内
 # (task-55: docs_approved_dir 等が SSoT yml に書かれていると --update で巻き戻る潜在事故。
 #  自動移動はしない、案内のみ。違反が見つかったら user が手で local.yml へ移行する)
+# (task-79: --overwrite-all は最も破壊的な mode (local override も上書き) なので、
+#  SSoT drift 案内が出ない非対称を解消するため対象に含める。案内のみで自動移動はしない。)
 # ============================================================
-if [[ "$MODE" == "update" || "$MODE" == "force" ]] && ! $DRY_RUN; then
+if [[ "$MODE" == "update" || "$MODE" == "force" || "$MODE" == "overwrite-all" ]] && ! $DRY_RUN; then
   TARGET_SSOT="$TARGET/.claude/harness-config.yml"
   SRC_SSOT="$SCRIPT_DIR/.claude/harness-config.yml"
   if [[ -f "$TARGET_SSOT" && -f "$SRC_SSOT" ]]; then
@@ -207,6 +221,15 @@ RSYNC_EXCLUDES=(
   --exclude=harness-config.local.yml
   --exclude=bash-whitelist-requests/
   --exclude=worktrees/
+)
+
+# RSYNC_EXCLUDES_MINIMAL (task-79、--overwrite-all 専用):
+# 「全上書き」mode 用。machine-local な settings.local.json **のみ** を温存し、
+# それ以外 (settings.json / harness-config.local.yml / state dir 群 / worktrees) は
+# すべて source の状態で上書きする (drift した target を SSoT へ強制リセットする用途)。
+# `--delete` は使わない (= 上書きのみ、target にしかない file は残す)。
+RSYNC_EXCLUDES_MINIMAL=(
+  --exclude=settings.local.json
 )
 
 # NOTE (task-71 H2、2026-06-02): `settings.json` は exclude する。task-71 で settings.json は
@@ -265,6 +288,28 @@ case "$MODE" in
       rsync -a "${RSYNC_EXCLUDES[@]}" "$SCRIPT_DIR/.claude/" "$TARGET/.claude/"
     fi
     ;;
+  overwrite-all)
+    # task-79: 全上書き mode。settings.local.json のみ温存し、それ以外 (settings.json /
+    # harness-config.local.yml / state dir / worktrees) も source で上書きする。
+    # `--delete` は使わない → target にしかない file は残す (上書きのみ)。
+    if [[ ! -d "$TARGET/.claude" ]]; then
+      echo "[install] error: --overwrite-all requires existing $TARGET/.claude. Use default mode for fresh install." >&2
+      exit 64
+    fi
+    echo "[install] WARN: --overwrite-all overwrites ALL local overrides (settings.json / harness-config.local.yml / state dirs)"
+    echo "[install] WARN: only settings.local.json is preserved. No --delete (target-only files are kept)."
+    echo "[install] rsync (overwrite-all) .claude/ → $TARGET/.claude/  (preserving settings.local.json only)"
+    if $DRY_RUN; then
+      # `| head -30` closes the pipe early; under set -euo pipefail rsync's SIGPIPE
+      # (exit 141) would propagate and abort the script (CLAUDE.md HIGH lesson:
+      # SIGPIPE → pipefail → errexit → silent death). `|| true` keeps dry-run preview
+      # tolerant when the change set exceeds 30 lines (e.g. state dirs under overwrite-all).
+      rsync -an "${RSYNC_EXCLUDES_MINIMAL[@]}" "$SCRIPT_DIR/.claude/" "$TARGET/.claude/" | head -30 || true
+      echo "[dry-run] ... (truncated)"
+    else
+      rsync -a "${RSYNC_EXCLUDES_MINIMAL[@]}" "$SCRIPT_DIR/.claude/" "$TARGET/.claude/"
+    fi
+    ;;
 esac
 
 # ============================================================
@@ -274,8 +319,8 @@ if [[ "$MODE" == "update" ]]; then
   echo "[install] (update mode) CLAUDE.md は触らない"
 else
   if [[ -f "$TARGET/CLAUDE.md" ]]; then
-    if [[ "$MODE" == "force" ]]; then
-      echo "[install] WARN: --force overwriting $TARGET/CLAUDE.md (no backup)"
+    if [[ "$MODE" == "force" || "$MODE" == "overwrite-all" ]]; then
+      echo "[install] WARN: --$MODE overwriting $TARGET/CLAUDE.md (no backup)"
       run cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md"
     else
       echo "[install] existing CLAUDE.md → backup to CLAUDE.md.bak.$STAMP, install as CLAUDE.md.template"
@@ -539,6 +584,16 @@ settings.json について (task-71 H2):
   - dispatcher 配線を採用するには consuming repo で次を実行し、自リポの permissions +
     配布された manifest から settings.json を再生成する:
       bash .claude/scripts/generate-settings.sh --out .claude/settings.json
+
+--overwrite-all について (task-79):
+  - drift した target を SSoT へ強制リセットする全上書き mode。
+  - settings.local.json **のみ** 温存し、それ以外 (settings.json / harness-config.local.yml /
+    state dir 群 / worktrees) も source で上書きする = target の local override は失われる。
+  - settings.json も上書きされるため、consuming repo は実行後
+      bash .claude/scripts/generate-settings.sh --out .claude/settings.json
+    で repo 固有 permissions から再生成すること (task-71 dispatcher 配線復元)。
+  - --delete は使わないため target にしかない file は残る (上書きのみ)。
+  - 用途は drift リセット専用。日常の harness 取込は --update を使うこと (local 設定を温存)。
 
 Override precedence (高 → 低):
   env(HC_*) > .claude/harness-config.local.yml > .claude/harness-config.yml (SSoT) > hardcoded default
