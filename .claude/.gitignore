@@ -20,3 +20,16 @@ homunculus-cache/
 
 # Parallel subagent reminder state (task #38)
 .parallel-subagent-state/
+
+# Preset 履歴 (hc-config Web)
+.preset-history/
+# Reviewer count guard state
+.reviewer-count-state/
+# Context budget tier marker
+.context-budget-state/
+# Workflow enforcement state
+.workflow-state/
+# Task screenshot 一時保存
+.task-screenshots/
+# Session help 初回表示 marker
+.session-help-shown

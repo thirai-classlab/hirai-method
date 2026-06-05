@@ -188,13 +188,15 @@ install.sh は **冪等** で、既存 `.claude/` は `.claude.bak.<timestamp>` 
 | flag | 用途 |
 |---|---|
 | (default) | 新規 install。既存 `.claude` / `CLAUDE.md` は `.bak.<timestamp>` 退避、CLAUDE.md は `.template` として配置 |
-| `--update` | 既存 `.claude/` を rsync 増分上書き。state dir + `settings.local.json` 保持、CLAUDE.md / .mcp.json / .gitignore は不変 |
-| `--force` | 既存 `.claude` / `CLAUDE.md` を **backup なしで** 上書き (危険) |
+| `--update` | 既存 `.claude/` を rsync 増分上書き。state dir + `settings.local.json` 保持、CLAUDE.md / .mcp.json / .gitignore は不変。**settings.json は rsync 除外だが rsync 後に自動再生成** (task-80、statusLine / hook / dispatcher 配線を手動なしで同期、permissions 保持) |
+| `--force` | 既存 `.claude` / `CLAUDE.md` を **backup なしで** 上書き (危険)。settings.json は破壊リセット後 不在のため自動再生成は skip |
 | `--dry-run` | 実行内容を表示のみ (rsync -n + 各 cp / mkdir を echo) |
 | `--no-mcp` | `.mcp.json` を配置しない (Serena MCP 不要な project) |
 | `--no-docs` | `docs/tasks/` `docs/draft/` の templates 配置を skip |
 
 `--update` の除外 (保護) 対象: 全 state dir (`.gateguard-state/` `.taskguard-state/` `.confidence-gate-state/` `.failure-window/` `.agent-markers/` `.context-budget-state/` `.improvement-proposal-state/` `.workflow-state/`) + `settings.json` + `settings.local.json` + `settings.local.example.json` + **`harness-config.local.yml`** (project 固有 override) + `bash-whitelist-requests/` + `worktrees/`
+
+> なお `settings.json` は **rsync 除外** (repo 固有 permissions 保護) だが、`--update` は rsync 後に `generate-settings.sh` を**自動実行して settings.json を再生成**する (task-80、既存 permissions を保持したまま statusLine / 新 hook / dispatcher 配線を反映)。自動再生成は「既存 settings.json + jq あり」が条件で、満たさない時のみ手動再生成が必要。
 
 #### Update 運用 (複数 project)
 
@@ -272,24 +274,27 @@ Claude Code session を起動 → `/init-tasks` → (任意 `/mode loop`) → `/
 
 ```bash
 cd ~/hirai-method && git pull                            # ハーネス本体を最新化
-bash install.sh --update /path/to/your-project           # .claude/ 一式を増分同期 (hooks/scripts/rules/manifest/...)
+bash install.sh --update /path/to/your-project           # .claude/ 一式を増分同期 + settings.json 自動再生成
 bash install.sh --update /path/to/your-project --commit  # 同期 + .claude/ のみ自動 commit (git repo 必須)
 
-# ★ 同期後、settings.json を再生成して新規 hook / dispatcher 配線を採用する (必須)
-cd /path/to/your-project
-bash .claude/scripts/generate-settings.sh --out .claude/settings.json
+# settings.json は --update が rsync 後に自動再生成する (task-80)。
+# → statusLine / 新規 hook / dispatcher 配線が手動なしで反映され、既存 permissions は保持される。
+# 自動再生成は「既存 settings.json + jq あり」が条件。満たさない時のみ手動で:
+#   cd /path/to/your-project && bash .claude/scripts/generate-settings.sh --out .claude/settings.json
 ```
 
 `--update` は **既存 `.claude/` 必須** (無ければ exit 64 → 新規は default mode を使う)。
 
-> ⚠️ **`--update` は file を同期するが settings.json は touch しない** (exclude)。新しい task で hook / dispatcher manifest が追加されても、`generate-settings.sh` を**再実行するまで新 hook は配線されない**。「ハーネスを更新したのに新機能が効かない」場合はこの再生成漏れが原因。
+> ✅ **task-80 以降、`--update` は rsync 後に settings.json を自動再生成する** (既存 settings.json + jq あり時)。新しい task で hook / dispatcher manifest / statusLine が追加されても、**手動再生成なしで配線が反映**される (既存 permissions は保持)。jq 不在 / 既存 settings.json 不在の時のみ自動再生成が skip されるので、その場合のみ手動で `generate-settings.sh --out .claude/settings.json` を実行する。
+>
+> ⚠️ settings.json への**手編集** (dispatcher-manifest 外の独自トップレベル key / 独自 hook) は自動再生成で manifest 由来に**置換され脱落**する。独自 hook は `.claude/scripts/dispatcher-manifest.tsv` に登録すること (これが正しい運用)。
 
 **`--update` で保護される (上書きされない) もの** = project 固有の値:
 
 | 保護対象 | 理由 |
 |---|---|
 | 全 state dir (`.gateguard-state/` `.taskguard-state/` `.confidence-gate-state/` `.workflow-state/` 他) | session 状態 |
-| `settings.json` | repo 固有 permissions / preset |
+| `settings.json` | repo 固有 permissions / preset (rsync 除外。ただし `--update` 後に**自動再生成**され statusLine / hook 配線が反映、**permissions は保持**) |
 | `settings.local.json` / `settings.local.example.json` | ローカル設定 |
 | **`harness-config.local.yml`** | project 固有 override (← ここに書けば update で消えない) |
 | `bash-whitelist-requests/` / `worktrees/` | 申請・作業領域 |
@@ -306,7 +311,7 @@ bash .claude/scripts/generate-settings.sh --out .claude/settings.json
 | flag | 用途 |
 |---|---|
 | (なし) | 新規 install (既存は `.bak` 退避、CLAUDE.md は `.template` 配置) |
-| `--update` | 既存 `.claude/` 増分上書き (state / local / settings.json 保持、CLAUDE.md 等 不変)。既存 .claude 必須 |
+| `--update` | 既存 `.claude/` 増分上書き (state / local 保持、CLAUDE.md 等 不変)。settings.json は rsync 除外後に**自動再生成** (task-80、配線同期 + permissions 保持)。既存 .claude 必須 |
 | `--update --commit` | 上記 + sync された `.claude/` path のみ自動 commit (非 git target は skip + WARN) |
 | `--force` | backup なしで上書き (危険) |
 | `--dry-run` | 実行内容を表示のみ |

@@ -426,6 +426,46 @@ else
 fi
 
 # ============================================================
+# 6.3. settings.json 自動再生成 (statusLine / dispatcher 配線同期、task-80)
+# ============================================================
+# task-71 H2 で settings.json は rsync exclude (repo 固有 permissions 保護) になったため、
+# statusLine / dispatcher 配線が consuming repo に同期されない問題があった (user 報告)。
+# sync mode (update / force / overwrite-all) で rsync 後に generate-settings.sh を自動実行し、
+# 既存 settings.json の permissions を verbatim 保持したまま statusLine / dispatcher を再配線する。
+# fail-open: jq 不在 / generate-settings.sh 不在 / 既存 settings.json 不在 / 再生成失敗は
+# WARN or NOTE + skip で install 自体は継続する (permissions 喪失 / die を回避)。
+# CLAUDE.md HIGH 教訓: 再生成は subshell ( cd ...; bash ... ) で実行し caller の shell flags
+# (set -e 等) に影響させない。
+# L-1 保険: subshell に HC_PROJECT_ROOT="$TARGET" を明示注入する。generate-settings.sh の
+# resolve_project_root は HC_PROJECT_ROOT を最優先 key とするため、TARGET が git 未 init かつ
+# 環境に CLAUDE_PROJECT_DIR が残っている場合でも ROOT が TARGET に固定される (取り違え防止)。
+# 挙動不変: 通常 path も ROOT=TARGET のまま (cd "$TARGET" 後の git/pwd も TARGET を指す)。
+# mode 別の permissions 帰結 (M-1):
+#   update       : 既存 settings.json の permissions を verbatim 保持して再配線。
+#   force         : rm -rf .claude で破壊的リセット + settings.json は rsync exclude のため
+#                   再生成時には既存不在 → fail-open skip (permissions 保持の前提は成立しない)。
+#   overwrite-all : settings.json も source で上書き済のため、ここで保持される permissions は
+#                   source 由来 (consuming repo の permissions は失われる = task-79 既定)。
+if [[ "$MODE" == "update" || "$MODE" == "force" || "$MODE" == "overwrite-all" ]] && ! $DRY_RUN; then
+  GEN_SETTINGS="$TARGET/.claude/scripts/generate-settings.sh"
+  LIVE_SETTINGS="$TARGET/.claude/settings.json"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "[install] WARN: jq 不在のため settings.json 自動再生成 skip。手動: bash .claude/scripts/generate-settings.sh --out .claude/settings.json" >&2
+  elif [[ ! -f "$GEN_SETTINGS" ]]; then
+    echo "[install] WARN: generate-settings.sh 不在、settings.json 自動再生成 skip" >&2
+  elif [[ ! -f "$LIVE_SETTINGS" ]]; then
+    echo "[install] NOTE: 既存 settings.json 不在のため自動再生成 skip (permissions 喪失回避)。新規は手動生成要" >&2
+  else
+    if ( cd "$TARGET" && HC_PROJECT_ROOT="$TARGET" bash .claude/scripts/generate-settings.sh --out .claude/settings.json ); then
+      echo "[install] settings.json 再生成済 (statusLine / dispatcher 配線同期、permissions 保持)"
+    else
+      echo "[install] WARN: settings.json 自動再生成 失敗 (install は継続)。手動再生成を検討" >&2
+    fi
+  fi
+  unset GEN_SETTINGS LIVE_SETTINGS
+fi
+
+# ============================================================
 # 6.5. harness_version stamp 書込 (task-56 F)
 # ============================================================
 # stale-harness-detect.sh (SessionStart hook) が読む同期 stamp。
@@ -578,12 +618,23 @@ Next steps:
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
   6. Claude Code session 起動 → /init-tasks → /mode loop
 
-settings.json について (task-71 H2):
-  - settings.json は保護対象 (rsync exclude)。install / --update では consuming repo の
-    settings.json を上書きしない (repo 固有 permissions / preset を守るため)。
-  - dispatcher 配線を採用するには consuming repo で次を実行し、自リポの permissions +
-    配布された manifest から settings.json を再生成する:
+settings.json について (task-71 H2 / task-80):
+  - settings.json 本体は rsync exclude (repo 固有 permissions / preset を守る)。
+  - sync mode (--update / --force / --overwrite-all) では rsync 後に
+    generate-settings.sh で settings.json を **自動再生成済** (statusLine / dispatcher 配線同期、
+    permissions は verbatim 保持)。手動実行は不要 (失敗時のみ下記を手動実行):
       bash .claude/scripts/generate-settings.sh --out .claude/settings.json
+  - mode 別の permissions 帰結 (意味が異なる):
+      --update       : 既存 settings.json の permissions を verbatim 保持して再配線。
+      --force         : .claude を破壊的リセット + settings.json は exclude のため再生成時は
+                        既存不在 → fail-open skip (permissions 保持の前提は成立しない)。
+      --overwrite-all : settings.json も source で上書き済のため、保持される permissions は
+                        **source 由来** (consuming repo の permissions は失われる = task-79 既定)。
+  - 自動再生成 skip 条件: jq 不在 / generate-settings.sh 不在 / 既存 settings.json 不在
+    (いずれも WARN/NOTE + install 継続)。新規 install (default mode) は settings.json を
+    配布しないため対象外。
+  - 注意: 手編集した独自トップレベル key / 独自 hook は manifest 由来に置換され脱落する。
+    独自 hook は dispatcher-manifest.tsv に登録すること (再生成で配線が保たれる)。
 
 --overwrite-all について (task-79):
   - drift した target を SSoT へ強制リセットする全上書き mode。
