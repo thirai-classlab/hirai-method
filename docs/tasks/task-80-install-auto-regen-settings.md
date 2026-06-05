@@ -11,7 +11,7 @@ total_steps: 5
 
 # Task #80: install.sh settings.json 自動再生成 (default) + .gitignore state dir 追記
 
-> Status: **🔄 進行中** (2026-06-05 draft 承認 = 案 B 選択、実装着手)
+> Status: **✅ 完了** (2026-06-05、smoke 7/7 + regression 8/8+7/7、review approve + L-1/M-1/M-2 修正済)
 > 起案: 2026-06-05
 > 設計起源: [install-auto-regen-settings](../draft/install-auto-regen-settings.md) ✅承認済 (approved_at 2026-06-05)
 
@@ -49,11 +49,11 @@ draft [install-auto-regen-settings](../draft/install-auto-regen-settings.md) §3
 
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | install.sh settings.json 自動再生成組込 (条件 + fail-open + summary 更新) | — |
-| 2 | 🔲 | .claude/.gitignore に state dir 6 行追記 | — |
-| 3 | 🔲 | (テスト設計レビュー) reviewer 動的選定 | 1,2 |
-| 4 | 🔲 | (テスト合格) smoke (再生成/skip/permissions 保持/.gitignore) + 既存 regression 0 | 3 |
-| 5 | 🔲 | (リファクタリング) 3 観点 or skip | 4 |
+| 1 | ✅ | install.sh 6.3 自動再生成組込 (条件 guard + subshell fail-open + HC_PROJECT_ROOT 注入 + summary 更新 + mode 別 permissions 注記) | — |
+| 2 | ✅ | .claude/.gitignore に state dir 6 行追記 (comment 付き) | — |
+| 3 | ✅ | (テスト設計レビュー) code-reviewer: CRIT/HIGH 0、M-1(overwrite-all doc)/M-2(force 実挙動)/L-1(ROOT 保険) approve → 修正反映 | 1,2 |
+| 4 | ✅ | (テスト合格) regen-settings smoke 7/7 + regression overwrite-all 8/8 + sync-drift 7/7 PASS | 3 |
+| 5 | ✅ | (リファクタリング) review 修正が兼務 (force 誤記訂正 / doc 整合)、追加 skip | 4 |
 
 ## 影響範囲
 

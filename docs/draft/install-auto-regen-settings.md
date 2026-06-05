@@ -95,6 +95,7 @@ fi
 - [ ] `.claude/.gitignore` に 6 state dir entry 追加
 - [ ] 既存 install/update/force/overwrite-all smoke regression 0
 - [ ] summary hint 更新 / bash 3.2 互換
+- [ ] 再生成 path の mode 別挙動: **update** = 既存 settings.json の permissions を保持しつつ statusLine/dispatcher 再配線 (smoke Case A/B/E で担保)。**force** = rm -rf .claude で破壊的リセット + settings.json は rsync exclude のため再生成ガードは「既存不在 → fail-open skip」(smoke Case G で担保、permissions 保持の前提は成立しない)。**overwrite-all** = settings.json も source で上書き済のため再生成で保持される permissions は source 由来 (consuming repo permissions は失われる = task-79 既定)、smoke 複雑化を避け accepted-risk
 
 ---
 
