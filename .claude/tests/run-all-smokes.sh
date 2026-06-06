@@ -77,6 +77,9 @@ _get_smoke_category() {
     stale-harness-detect-smoke)
       printf 'stale-det' ;;
     # behavior: BLOCK/warn 挙動検証 (default)
+    # cli 機能検証 (task-83)
+    npx-cli-smoke)
+      printf 'behavior' ;;
     *)
       printf 'behavior' ;;
   esac

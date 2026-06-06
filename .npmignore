@@ -1,0 +1,13 @@
+# content-post 生成物 (ClassLab 固有、1.5G+。harness 本体ではない)
+.claude/skills/content-post/drafts/
+.claude/skills/content-post/contents_manage/images/
+# transient state
+.claude/.workflow-state/
+.claude/.*-state/
+.task-screenshots/
+.claude/.task-screenshots/
+# 開発専用 (配布不要)
+docs/draft/
+docs/tasks/
+# project 固有 rules (task-82 で保護、install.sh L29 exclude と SSoT 整合。配布物から除外)
+.claude/project-rules/
