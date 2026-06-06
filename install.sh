@@ -26,7 +26,7 @@
 # Exclude (state / user-local):
 #   .gateguard-state/ .taskguard-state/ .confidence-gate-state/ .failure-window/
 #   .agent-markers/ .context-budget-state/ .improvement-proposal-state/ .workflow-state/
-#   settings.local.json settings.local.example.json bash-whitelist-requests/ worktrees/
+#   settings.local.json settings.local.example.json bash-whitelist-requests/ worktrees/ project-rules/ (task-82, project-owned)
 #
 # Dependencies: rsync, bash 4+
 #
@@ -221,6 +221,7 @@ RSYNC_EXCLUDES=(
   --exclude=harness-config.local.yml
   --exclude=bash-whitelist-requests/
   --exclude=worktrees/
+  --exclude=project-rules/
 )
 
 # RSYNC_EXCLUDES_MINIMAL (task-79、--overwrite-all 専用):
@@ -230,7 +231,14 @@ RSYNC_EXCLUDES=(
 # `--delete` は使わない (= 上書きのみ、target にしかない file は残す)。
 RSYNC_EXCLUDES_MINIMAL=(
   --exclude=settings.local.json
+  --exclude=project-rules/
 )
+
+# NOTE (task-82): `.claude/project-rules/<name>.md` は **project 所有** (consuming repo の
+# harness rule override / 追補)。harness 7 rule (`.claude/rules/*.md`) から `@import` され、
+# rsync で上書きすると project 固有編集が消失するため両 exclude set に project-rules/ を含める
+# (overwrite-all でも project-rules は守る = project の override は drift リセット対象外)。
+# 不在 target には下記「project-rules create-if-absent」block が空テンプレを配置する。
 
 # NOTE (task-71 H2、2026-06-02): `settings.json` は exclude する。task-71 で settings.json は
 # permissions verbatim 同梱の generated artifact (harness 本体は harness-dev preset の
@@ -410,6 +418,35 @@ if $WITH_DOCS; then
 else
   echo "[install] (--no-docs) skip docs/tasks/ docs/draft/ templates"
 fi
+
+# ============================================================
+# 5.5. project-rules/ create-if-absent (task-82、全 mode 共通、project 所有保護)
+# ============================================================
+# `.claude/project-rules/<name>.md` は consuming repo の harness rule override / 追補を書く
+# **project 所有** file。harness 7 rule (`.claude/rules/*.md`) から `@import` され、harness
+# rule の後に結合 load される。RSYNC_EXCLUDES / RSYNC_EXCLUDES_MINIMAL の `--exclude=project-rules/`
+# により rsync では一切 touch しない (= 既存 project 編集を上書きしない、保護)。
+# ここで「なければ空テンプレを配置・あれば skip」する冪等 cp で初回雛形を提供する
+# (docs/tasks templates と同じ create-if-absent ロジック)。全 mode (install/update/force/
+# overwrite-all) で適用 — project-rules は project 所有のため force/overwrite-all でも上書きしない。
+PROJECT_RULES_SRC="$SCRIPT_DIR/.claude/project-rules"
+PROJECT_RULES_DST="$TARGET/.claude/project-rules"
+if [[ -d "$PROJECT_RULES_SRC" ]]; then
+  run mkdir -p "$PROJECT_RULES_DST"
+  for src in "$PROJECT_RULES_SRC"/*.md; do
+    [[ -e "$src" ]] || continue   # nullglob 非依存 (no-match で literal glob を skip)
+    base="$(basename "$src")"
+    dst="$PROJECT_RULES_DST/$base"
+    if [[ -f "$dst" ]]; then
+      echo "[install] project-rules/$base exists → skip (project-owned, protected)"
+    else
+      echo "[install] copy project-rules template $base → .claude/project-rules/"
+      run cp "$src" "$dst"
+    fi
+  done
+  unset src base dst
+fi
+unset PROJECT_RULES_SRC PROJECT_RULES_DST
 
 # ============================================================
 # 6. hook 実行権限 (rsync -a で保持されるが、念のため)
@@ -645,6 +682,13 @@ settings.json について (task-71 H2 / task-80):
     で repo 固有 permissions から再生成すること (task-71 dispatcher 配線復元)。
   - --delete は使わないため target にしかない file は残る (上書きのみ)。
   - 用途は drift リセット専用。日常の harness 取込は --update を使うこと (local 設定を温存)。
+
+project-rules/ について (task-82):
+  - .claude/project-rules/<name>.md は **project 所有** (update 免除)。harness 7 rule
+    (.claude/rules/*.md) から @import され、harness rule の後に結合 load される。
+  - harness rule の override / 追補はここに書く (7 harness rule 本体は触らない)。
+    update/force/overwrite-all いずれの mode でも rsync exclude + create-if-absent で保護
+    (なければ空テンプレ配置・あれば skip、既存編集は上書きされない)。
 
 Override precedence (高 → 低):
   env(HC_*) > .claude/harness-config.local.yml > .claude/harness-config.yml (SSoT) > hardcoded default

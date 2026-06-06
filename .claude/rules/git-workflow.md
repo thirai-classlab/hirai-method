@@ -65,3 +65,7 @@ honor system: 緊急バイパス時は理由を commit message または PR desc
 ## 関連
 
 - Commit 規約: Conventional Commits（`<type>(<scope>): <desc>`）
+
+---
+> **project 固有の追補・override は `.claude/project-rules/git-workflow.md` に書く** (本 file は harness 所有、`install.sh --update` で上書きされる。project 固有編集は下記 import 先へ)。
+@../project-rules/git-workflow.md

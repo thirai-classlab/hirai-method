@@ -325,6 +325,19 @@ bash install.sh --update /path/to/your-project --commit  # 同期 + .claude/ の
 
 > このセクションは `--update` では同期されない (CLAUDE.md は protect)。harness 更新で CommonRules 側の共通規範が変わっても、project の CLAUDE.md は **import 1 行経由で自動追従**する (= 二重管理不要、共通規範を各 repo に転記しない)。新しい project 固有事情が出たら本セクション (Project 固有 追補) に追記する。
 
+#### B-3. project-rules 保護 (harness rule を上書きせず project 固有 override を書く)
+
+harness の 7 共通 rule (`.claude/rules/{development-process,git-workflow,modes,self-improvement,task-management,why-x5-output,workflow}.md`) は **harness 所有**で `install.sh --update` の rsync で上書き追従される。consuming repo がこれらを直接編集すると update で消失する。これを防ぐため、各 harness rule の末尾から `@../project-rules/<name>.md` を **@import** で結合 load する設計を採る。
+
+| layer | 配置 | update 挙動 | 用途 |
+|---|---|---|---|
+| **harness rule** (上書き) | `.claude/rules/<name>.md` | rsync で上書き (harness 所有) | 共通規範本体 + 末尾に `@../project-rules/<name>.md` 1 行 |
+| **project rule** (保護) | `.claude/project-rules/<name>.md` | **なければ作成・あれば更新しない** | project 固有の拡張 / override (harness rule の**後に**結合) |
+
+- **編集先の指針**: harness 共通 rule を project 固有に変えたい / 追補したい時は、**7 harness rule (`.claude/rules/*.md`) を一切触らず** `.claude/project-rules/<name>.md` に書く。@import で harness rule の後に load されるため、後勝ちで override / 追補できる。
+- **保護機構 (二重)**: `install.sh` は (1) `RSYNC_EXCLUDES` / `RSYNC_EXCLUDES_MINIMAL` に `--exclude=project-rules/` を含め update/force/overwrite-all いずれの rsync でも project-rules を touch しない、(2) create-if-absent で **なければ空テンプレ配置・あれば skip** (既存 project 編集を上書きしない)。→ harness 共通 rule は update 追従、project 固有 override は永続保護を両立。
+- **新規ルール領域**: `.claude/project-rules/` に新 file を追加 + 必要なら CLAUDE.md / 既存 rule から `@import` する (7 harness rule 本体は触らない)。
+
 #### C. mode / flag 早見表
 
 | flag | 用途 |

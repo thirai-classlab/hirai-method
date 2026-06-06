@@ -183,3 +183,7 @@ Loop モードでも委譲・事実検証等の安全ガードは無効化され
 > **関連 artifact 完全 list (mode 系 hook + 5 層強制機構 + smoke 群 + 設計起源 draft path)**: [modes/artifacts.md](../rules-details/modes/artifacts.md)
 
 > **各規範の起源 (history 全体、task-21 W0.1 〜 task-51 Step 3 の変更履歴) / commit hash**: [modes/origin.md](../rules-details/modes/origin.md)
+
+---
+> **project 固有の追補・override は `.claude/project-rules/modes.md` に書く** (本 file は harness 所有、`install.sh --update` で上書きされる。project 固有編集は下記 import 先へ)。
+@../project-rules/modes.md
