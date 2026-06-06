@@ -11,7 +11,7 @@ total_steps: 5
 
 # Task #82: プロジェクトルール保護 (project-rules/ companion + @import)
 
-> Status: **🔄 進行中** (2026-06-06 draft 承認、実装着手)
+> Status: **✅ 完了** (2026-06-06、smoke 6/6 + regression (overwrite-all 8 / sync-drift 7 / regen 7) PASS。review: review_required_test=false advisory + 加算的低リスク + smoke 包括検証で formal reviewer skip)
 > 起案: 2026-06-06
 > 設計起源: [project-rules-protection](../draft/project-rules-protection.md) ✅承認済 (approved_at 2026-06-06)
 
@@ -48,11 +48,11 @@ draft [project-rules-protection](../draft/project-rules-protection.md) §3 を S
 
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | 7 rule 末尾に @import + pointer / project-rules 7 file 空テンプレ作成 | — |
-| 2 | 🔲 | install.sh project-rules create-if-absent + rsync exclude + summary / README §追記 | 1 |
-| 3 | 🔲 | (テスト設計レビュー) reviewer 動的選定 | 2 |
-| 4 | 🔲 | (テスト合格) @import/companion/create-if-absent/update 非上書き/rsync exclude smoke + regression 0 | 3 |
-| 5 | 🔲 | (リファクタリング) 3 観点 or skip | 4 |
+| 1 | ✅ | 7 rule 末尾に @import + pointer / project-rules 7 file 空テンプレ作成 | — |
+| 2 | ✅ | install.sh project-rules create-if-absent (§5.5) + 両 RSYNC_EXCLUDES exclude + summary / README §B-3 追記 | 1 |
+| 3 | ✅ | (テスト設計レビュー) review_required_test=false advisory + 加算的低リスク + smoke 包括検証で formal reviewer skip | 2 |
+| 4 | ✅ | (テスト合格) project-rules-protection-smoke 6/6 (@import/companion/create-if-absent/update・overwrite-all 非上書き/exclude) + regression 22 PASS | 3 |
+| 5 | ✅ | (リファクタリング) 加算的配線のみ、refactor 対象なし skip | 4 |
 
 ## 影響範囲
 

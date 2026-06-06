@@ -70,3 +70,7 @@ PR 直前 → F2 /verify 6 phase → READY なら commit/push
 > **全 skill / command 完全 list**: [self-improvement/related-skills.md](../rules-details/self-improvement/related-skills.md)
 
 > **L1-L5 + F1/F2 模倣の起源 (ECC 由来 / skill 移植 provenance) / 規範化経緯**: [self-improvement/origin.md](../rules-details/self-improvement/origin.md)
+
+---
+> **project 固有の追補・override は `.claude/project-rules/self-improvement.md` に書く** (本 file は harness 所有、`install.sh --update` で上書きされる。project 固有編集は下記 import 先へ)。
+@../project-rules/self-improvement.md

@@ -285,3 +285,7 @@ consuming repo は **proactive に harness 最新版を取り込む** 義務を�
 詳細は [`task-management.md`](./task-management.md) §「Parking Lot（今後検討タスク）」を参照。
 
 > **各規範の起源 / commit hash / 採用判断 (TDD / 委譲必須要件 7 件 / staging / cross-repo / Confidence Gate F3 / harness 取込)**: [development-process/origin.md](../rules-details/development-process/origin.md)
+
+---
+> **project 固有の追補・override は `.claude/project-rules/development-process.md` に書く** (本 file は harness 所有、`install.sh --update` で上書きされる。project 固有編集は下記 import 先へ)。
+@../project-rules/development-process.md

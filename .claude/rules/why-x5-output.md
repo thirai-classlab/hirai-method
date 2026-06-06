@@ -91,3 +91,7 @@ export HC_WHY_X5_DISABLE=1
 
 > feedback memory 全件 (SUPERSEDED 含む): [why-x5-output/feedback-memory.md](../rules-details/why-x5-output/feedback-memory.md)
 > v1→v10 経緯 table (full): [why-x5-output/v1-v10-history.md](../rules-details/why-x5-output/v1-v10-history.md)
+
+---
+> **project 固有の追補・override は `.claude/project-rules/why-x5-output.md` に書く** (本 file は harness 所有、`install.sh --update` で上書きされる。project 固有編集は下記 import 先へ)。
+@../project-rules/why-x5-output.md

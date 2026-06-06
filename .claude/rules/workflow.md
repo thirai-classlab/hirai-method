@@ -151,3 +151,7 @@ bypass: `HC_REVIEW_PROJECT_CONTEXT_REQUIRED=false` (項目 5 の project context
 
 > **全 skill 完全 list (直接関連 / 補助関連 / audit 系)**: [workflow/related-skills.md](../rules-details/workflow/related-skills.md)
 > **各規範の起源 / commit hash / 採用判断**: [workflow/origin.md](../rules-details/workflow/origin.md) (git log + 関連 draft / 副産物 entry 参照)
+
+---
+> **project 固有の追補・override は `.claude/project-rules/workflow.md` に書く** (本 file は harness 所有、`install.sh --update` で上書きされる。project 固有編集は下記 import 先へ)。
+@../project-rules/workflow.md
