@@ -23,7 +23,7 @@ The empirical 84.1% dispatch rate (1,178 historical `general-purpose` prompts, s
 | `.claude/skills/agent-router/dispatch-table.yml` | Single source of truth: keyword → agent |
 | `.claude/skills/agent-router/tests/test_router.py` | 48 unit + integration tests (Phase 1: 19, Phase 2: 21, Phase 3+6: 8) |
 | `.claude/skills/agent-router/samples/representative_prompts.txt` | Verification fixtures |
-| `.claude/hooks/agent-router-suggest.sh` | Optional `UserPromptSubmit` hint injector (forwards `AGENT_ROUTER_LLM_FALLBACK` to the router) |
+| `.claude/hooks/agent-router-suggest.sh` | `UserPromptSubmit` hint injector, wired via `dispatcher-manifest.tsv` (advisory channel) and gated by `feature_agent_router_suggest_enabled` (default ON). Forwards `AGENT_ROUTER_LLM_FALLBACK` to the router |
 
 ## How it works
 
@@ -46,7 +46,7 @@ Validated against 1,178 real `general-purpose` prompts from the 90-day transcrip
 Claude Code does not currently expose a `SubagentStart` PreToolUse event that can rewrite a `subagent_type` argument transparently. PreToolUse can block tool calls but not transparently mutate them in a way the orchestrating model accepts. Consequently:
 
 - **Routing logic** lives in the `agent-router` skill so the main agent can invoke it deterministically before launching `Agent(...)`.
-- **A best-effort `UserPromptSubmit` hook** (`agent-router-suggest.sh`) is provided to inject an inline hint (`[agent-router suggestion] ...`) into freshly submitted user prompts. The main agent reads this hint and chooses whether to honor it.
+- **A best-effort `UserPromptSubmit` hook** (`agent-router-suggest.sh`) is wired via `dispatcher-manifest.tsv` (gated by `feature_agent_router_suggest_enabled`, default ON) to inject an inline hint (`[agent-router suggestion] ...`) into freshly submitted user prompts. The main agent reads this hint and chooses whether to honor it.
 - **No automatic routing** — the orchestrator is always the decision-maker. This preserves auditability and avoids surprising the user.
 
 ### Why scoring (not embeddings / ML) for Phase 1
@@ -141,7 +141,7 @@ Before launching `Agent(subagent_type="general-purpose", ...)`:
    - Phase 1: proceed with `general-purpose`.
    - Phase 2 (with `AGENT_ROUTER_LLM_FALLBACK=on`): the router has already invoked the LLM selector and surfaced the result. If `llm_used: true` and not falling back, prefer the recommended agent.
 
-The optional `UserPromptSubmit` hook surfaces the same recommendation inline as `[agent-router suggestion] ...`. When the hook is wired (see `.claude/settings.json`), the main agent will see the hint without an explicit CLI call.
+The `UserPromptSubmit` hook surfaces the same recommendation inline as `[agent-router suggestion] ...`. It is wired via `dispatcher-manifest.tsv` (gated by `feature_agent_router_suggest_enabled`, default ON), so the main agent sees the hint without an explicit CLI call. Disable per-repo with `hc-config.sh --feature agent_router_suggest=false`.
 
 ## Phase 2 status (2026-05-05)
 

@@ -11,7 +11,7 @@ total_steps: 4
 
 # Task #81: agent-router-suggest.sh を dispatcher 配線 (復活)
 
-> Status: **🔄 進行中** (2026-06-06 draft 承認 = 案 A、実装着手)
+> Status: **✅ 完了** (2026-06-06、smoke 11/11 + regression 全 PASS、live dispatcher 発火確認、review APPROVE)
 > 起案: 2026-06-06
 > 設計起源: [wire-agent-router-suggest](../draft/wire-agent-router-suggest.md) ✅承認済 (approved_at 2026-06-06)
 
@@ -48,10 +48,10 @@ draft [wire-agent-router-suggest](../draft/wire-agent-router-suggest.md) §3 を
 
 | Step | Status | 作業概要 | 依存 |
 |:---:|:---:|:---|:---|
-| 1 | 🔲 | manifest 配線 + feature toggle (default true) + config-loader export + hook gate + 誤記述/docs 訂正 | — |
-| 2 | 🔲 | (テスト設計レビュー) reviewer 動的選定 | 1 |
-| 3 | 🔲 | (テスト合格) toggle ON/OFF + マッチ/非マッチ smoke + drift 0 + regression 0 | 2 |
-| 4 | 🔲 | (リファクタリング) 3 観点 or skip | 3 |
+| 1 | ✅ | manifest 配線 (order 3) + feature toggle (default true) + config-loader 3 点 export + hook 冒頭 gate + 誤記述/docs (AGENT-ROUTER.md ×3) 訂正 | — |
+| 2 | ✅ | (テスト設計レビュー) code-reviewer: CRIT/HIGH 0、APPROVE。LOW 2 (router.py 不在 smoke 任意 / L169 stale → next-actions #76) | 1 |
+| 3 | ✅ | (テスト合格) 新 smoke 11/11 + regression (dispatcher-core 22 / baseline 25 / merge-matrix 83 他) PASS + drift 0 + live dispatcher 発火実測 | 2 |
+| 4 | ✅ | (リファクタリング) 新規配線のみで refactor 対象なし、skip | 3 |
 
 ## 影響範囲
 
