@@ -374,6 +374,7 @@ feature_init_tasks_on_start_enabled: true         # init-tasks-on-start
 feature_notify_enabled: true                      # notify + stop (sound)
 feature_check_md_mermaid_enabled: true            # check-md-mermaid
 feature_failure_loop_detect_enabled: true         # failure-loop-detect
+feature_agent_router_suggest_enabled: true        # agent-router-suggest (task-81 復活配線、条件付き 1 行 hint、default ON)
 
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 2 D)
 # 対象: .claude/scripts/hc-config.sh の cmd_interactive dispatcher (L1782 周辺)

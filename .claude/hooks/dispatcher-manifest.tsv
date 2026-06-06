@@ -35,3 +35,4 @@ SessionStart		3	stale-harness-detect.sh	stale_harness_detect	bootstrap	5
 SessionStart		4	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
 UserPromptSubmit		1	context-budget.sh	context_budget	advisory	5
 UserPromptSubmit		2	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
+UserPromptSubmit		3	agent-router-suggest.sh	agent_router_suggest	advisory	5
