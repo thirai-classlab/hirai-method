@@ -540,6 +540,57 @@ if ! $DRY_RUN; then
 fi
 
 # ============================================================
+# 6.6. harness_npm_version stamp 書込 (task-84 Step 1)
+# ============================================================
+# stale-harness-detect.sh (SessionStart hook) が npm registry latest と
+# semver 比較するための同期 stamp。install.sh 自身の package.json の
+# `.version` (semver x.y.z) を target の harness-config.yml に書き込む。
+# 既存 `harness_npm_version:` 行があれば差し替え、無ければ追記。
+# 既存 date stamp (harness_version) とは独立に併存する。
+# fail-safe: package.json 不在 / version 取得不能なら stamp を skip
+#            (既存挙動を壊さない)。stamp 書込失敗は WARN のみで install 継続。
+if ! $DRY_RUN; then
+  TARGET_HC_NPM="$TARGET/.claude/harness-config.yml"
+  SRC_PKG="$SCRIPT_DIR/package.json"
+  NPM_VER=""
+  if [[ -f "$SRC_PKG" ]]; then
+    if command -v node >/dev/null 2>&1; then
+      # L-2 (task-84 fix): path を JS 文字列へ直接埋め込まず argv 経由で渡す
+      # (path injection 回避)。$SRC_PKG にメタ文字が含まれても安全。
+      NPM_VER="$(node -e 'try{process.stdout.write(String(require(process.argv[1]).version||""))}catch(e){}' "$SRC_PKG" 2>/dev/null || true)"
+    fi
+    # node 不在 / 取得失敗時の fallback: grep/sed で "version": "x.y.z" を抽出
+    if [[ -z "$NPM_VER" || "$NPM_VER" == "undefined" ]]; then
+      NPM_VER="$(grep -E '"version"[[:space:]]*:' "$SRC_PKG" 2>/dev/null \
+        | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)"
+    fi
+  fi
+  if [[ -f "$TARGET_HC_NPM" && -n "$NPM_VER" && "$NPM_VER" != "undefined" ]]; then
+    if grep -qE '^harness_npm_version:' "$TARGET_HC_NPM" 2>/dev/null; then
+      TMP_HC_NPM="$(mktemp /tmp/harness-config-npm.XXXXXX.yml)"
+      sed -E "s|^harness_npm_version:.*|harness_npm_version: \"${NPM_VER}\"|" "$TARGET_HC_NPM" > "$TMP_HC_NPM" 2>/dev/null \
+        && mv "$TMP_HC_NPM" "$TARGET_HC_NPM" \
+        && echo "[install] harness_npm_version stamp updated -> $NPM_VER" \
+        || echo "[install] WARN: failed to update harness_npm_version stamp (install continues)" >&2
+      rm -f "$TMP_HC_NPM" 2>/dev/null || true
+    else
+      {
+        echo "# === Harness NPM Version Stamp (task-84, install.sh が書込) ==="
+        echo "harness_npm_version: \"${NPM_VER}\""
+        echo ""
+        cat "$TARGET_HC_NPM"
+      } > "${TARGET_HC_NPM}.tmp" 2>/dev/null \
+        && mv "${TARGET_HC_NPM}.tmp" "$TARGET_HC_NPM" \
+        && echo "[install] harness_npm_version stamp inserted -> $NPM_VER" \
+        || echo "[install] WARN: failed to insert harness_npm_version stamp (install continues)" >&2
+    fi
+  elif [[ -f "$TARGET_HC_NPM" ]]; then
+    echo "[install] NOTE: package.json version 取得不能のため harness_npm_version stamp skip (fail-safe)" >&2
+  fi
+  unset TARGET_HC_NPM SRC_PKG NPM_VER TMP_HC_NPM
+fi
+
+# ============================================================
 # 6.7. sync drift 案内 + --commit による分離 commit (task-58 G1)
 # ============================================================
 # install.sh --update が SSoT を同期した直後、target 側 .claude/ 配下の

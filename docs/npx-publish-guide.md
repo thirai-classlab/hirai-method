@@ -79,7 +79,23 @@ hirai-method install /tmp/test-harness   # 配布確認
 npm unlink -g @takuma-hirai/hirai-method # 後始末
 ```
 
+## 準自動アップデート（task-84、【3】）
+
+consuming repo は SessionStart で harness が最新か自動チェックされる:
+
+1. `install.sh --update` 時に `harness_npm_version`(semver) が consuming repo の `harness-config.yml` に stamp される（npm package version の記録）。
+2. SessionStart hook `stale-harness-detect.sh` が **throttle（既定 24h 1 回）** で npm registry latest を取得し、stamp と semver 比較する。
+3. 新版があれば `<system-reminder>` で **「`npx @takuma-hirai/hirai-method@latest update <dir>` で更新」を WARN**（block しない、適用は user の 1 コマンド = 完全自動 push なし）。
+4. network 失敗・stamp 不在は **fail-open**（silent、開発を止めない）。
+
+| 設定 (harness-config.yml) | 既定 | 役割 |
+|---|---|---|
+| `feature_stale_harness_detect_enabled` | `true` | 機能 ON/OFF（env `HC_FEATURE_STALE_HARNESS_DETECT_ENABLED`） |
+| `stale_harness_check_interval_hours` | `24` | registry 再チェック間隔 |
+
+一時無効化: `HC_STALE_HARNESS_DETECT_ENABLED=false`。
+
 ## 関連
 
-- 【3】準自動 update（task-84 予定）: `check` を SessionStart の stale-detect に組込み、新版検出時に `npx ... update` を WARN 誘導
+- 【3】準自動 update（task-84）: 上記「準自動アップデート」セクション。設計: [`docs/draft/npx-auto-update.md`](draft/npx-auto-update.md)
 - `.claude/rules/development-process.md` §harness 取込チェックリスト（npx 経路）
