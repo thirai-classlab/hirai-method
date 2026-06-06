@@ -7,6 +7,17 @@
         "Authorization": "Bearer ${GITHUB_PAT}"
       }
     },
+    "salesforce": {
+      "command": "npx",
+      "args": ["-y", "@tsmztech/mcp-server-salesforce"],
+      "env": {
+        "SALESFORCE_CONNECTION_TYPE": "${SALESFORCE_CONNECTION_TYPE}",
+        "SALESFORCE_USERNAME": "${SALESFORCE_USERNAME}",
+        "SALESFORCE_PASSWORD": "${SALESFORCE_PASSWORD}",
+        "SALESFORCE_TOKEN": "${SALESFORCE_TOKEN}",
+        "SALESFORCE_INSTANCE_URL": "${SALESFORCE_INSTANCE_URL}"
+      }
+    },
     "agent-browser": {
       "command": "npx",
       "args": ["-y", "@vercel/agent-browser", "mcp"]
