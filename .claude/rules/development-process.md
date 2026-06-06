@@ -231,8 +231,10 @@ consuming repo は **proactive に harness 最新版を取り込む** 義務を�
 
 ### 取込手順 5 step
 
-1. `git checkout main && git pull origin main`
-2. `bash install.sh --update <consuming repo absolute path>` を terminal で実行 (cross-repo write は agent 経路 deny のため **user manual のみ**)
+1. `git checkout main && git pull origin main` (clone 経路の場合。**npx 経路なら本 step 不要**)
+2. harness を target に反映。2 経路いずれか (cross-repo write は agent 経路 deny のため **どちらも user manual / terminal 実行のみ**):
+   - **clone 経路**: `bash install.sh --update <consuming repo absolute path>`
+   - **npx 経路 (task-83)**: `npx @takuma-hirai/hirai-method@latest update <consuming repo absolute path>` (clone 不要、registry から最新取得。事前に `npx @takuma-hirai/hirai-method@latest check` で stale 確認可)
 3. consuming repo で `git status` / `git diff`
 4. `chore: sync .claude/ from hirai-method <YYYY-MM-DD>` で分離 commit (`install.sh --update --commit` flag で自動 commit 可)
 5. consuming repo 側の smoke / test 再実行

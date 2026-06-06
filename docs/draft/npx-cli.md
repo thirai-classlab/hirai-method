@@ -1,13 +1,13 @@
 <!--
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-06-07
+approved_by: user
 retroactive: false
 -->
 
 # hirai-method の npx CLI 化（public npm 公開 + `npx hirai-method check / install / update`）
 
-**ステータス:** 🔲 **draft（2026-06-07 起案、user 承認待ち）**
+**ステータス:** ✅ **承認済（2026-06-07、scoped 名で実装決定）**
 **起点:** 自動アップデート roadmap【2】（user 指示 2026-06-06「2 機能構築後に自動アップデートを成立させる」）。【1】project-rules 保護（task-82 / PR #65）完了を受けた次段。
 **前提:**
 - 【1】project-rules 保護 完了済（harness rule = update 追従 / project-rules = 永続保護 の分離が確立）
@@ -91,7 +91,7 @@ flowchart LR
 
 ### Step 1 詳細（既存 package.json 拡張）
 - `name`: **scoped `@<org>/hirai-method`** を推奨（research 項目 6: name 衝突回避 + signal 明確）。unscoped `hirai-method` は最短だが publish 前に npm 上の name 空き確認が必要 → **org 名は user に確認**（下記「承認時の確認事項」）
-- `version`: SSoT は `.claude/harness-config.yml` の `harness_version`。publish 手順で両者を同期（規約: publish 前に `npm version <x>` → harness_version stamp も同値に）
+- `version`: **semver（初期 `0.1.0`）**。npm は semver 必須のため、日付形式の `harness_version`（`YYYY-MM-DD`、stale-detect【3】用）とは**型が異なり同期不可** → 別概念として分離（2026-06-07 実装着手時の整合修正）。`check` は npm registry の semver 同士を比較。publish 手順で `npm version <patch|minor|major>` を bump、harness_version 日付 stamp は install.sh が別途書込（【3】）
 - `bin`: `{ "<binname>": "bin/cli.js" }`（`npx <pkg>` で叩く名前。scoped でも bin 名は短く `hirai-method` 可）
 - `publishConfig`: `{ "access": "public" }`（scoped を public publish、毎回 `--access public` flag 不要）
 - `files`: `["bin/", ".claude/", "install.sh", "CLAUDE.md", "docs/INVENTORY.md"]` allowlist
@@ -176,9 +176,18 @@ flowchart LR
 
 | iter | 日付 | reviewer (起動数) | CRITICAL | HIGH | MEDIUM | LOW | 修正 commit | 状態 |
 |:---:|---|---|:---:|:---:|:---:|:---:|---|---|
-| 1 | 2026-06-07 | (起動予定: architect-reviewer, security-reviewer, code-architect, cli-developer + harness-optimizer) | — | — | — | — | — | 未実施 |
+| 1 | 2026-06-07 | code-reviewer, security-reviewer, test-automator (3) | 2 | 6 | 多数 | 多数 | (fix round 1) | 解消 |
+| 2 | 2026-06-07 | (smoke 全 PASS + regression 0 を収束 proxy) | 0 | 0 | 0 | 残 LOW のみ | — | **収束** |
 
-**収束判定**: CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0（LOW 許容）
+**収束判定**: CRITICAL = 0 ∧ HIGH = 0 ∧ MEDIUM = 0（LOW 許容）。fix round1 で CRIT2/HIGH6/MED 全解消 → smoke 43/43 PASS + regression 0 で iter2 収束確認。
+
+### iter 1 集約 finding (反映方針)
+
+- **CRITICAL (test 設計 gap)**: CRIT-1 semver 比較分岐未検証 / CRIT-2 update サブコマンド未検証 → cli.js に semver export + INSTALL_SH/REGISTRY_BASE override の testability hook 追加、smoke に単体 + integration ケース追加。
+- **HIGH**: H1 (code) parseSemver 非数字 segment を 0 握り潰し→誤 up-to-date（task-84 流用基盤のため最優先）/ HIGH-1〜4 (test) rsync 不在・flag passthrough・exit 透過・transient 除外 未検証。
+- **MEDIUM**: M1 (`--` end-of-options) / MEDIUM-1 (hasCommand shell template) / MED-2 (smoke Case8 exit bug) / MED-5/6/1 (smoke 補完 + runner 登録)。
+- **PASS 確認** (security): spawnSync array 渡しで command injection なし / HTTPS 強制 / path traversal は install.sh 責務 / files allowlist で機密混入なし。
+- **反映**: fix round 1 で CRIT+HIGH+MED を解消 → iter 2 で再検証 (smoke 全 PASS + regression 0 を収束条件に代替)。
 
 ---
 
@@ -186,7 +195,7 @@ flowchart LR
 
 | 日付 | 承認者 | 結果 |
 |---|---|---|
-| 2026-06-07 | (承認待ち) | — |
+| 2026-06-07 | user | **承認**（案 A / scoped `@<org>/hirai-method` 名で実装決定。org 名は実装 Step 1 で user 確認 → publish 時確定）→ `docs/tasks/task-83-npx-cli.md` 作成 |
 
 ---
 
