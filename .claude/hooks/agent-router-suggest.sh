@@ -8,7 +8,10 @@
 # so the user prompt continues unchanged.
 #
 # Activation:
-#   Wired in .claude/settings.json under hooks.UserPromptSubmit.
+#   Wired via .claude/hooks/dispatcher-manifest.tsv (UserPromptSubmit, advisory
+#   channel), gated by feature toggle feature_agent_router_suggest_enabled
+#   (default ON). Disable per-repo with `hc-config.sh --feature
+#   agent_router_suggest=false` or env HC_FEATURE_AGENT_ROUTER_SUGGEST_ENABLED=false.
 #   Confidence threshold (suggest vs stay quiet) defaults to 0.5; set
 #   AGENT_ROUTER_SUGGEST_THRESHOLD in env to override.
 #
@@ -32,8 +35,22 @@
 
 set -uo pipefail  # task-22 W1: errexit 外し SIGPIPE 141 サイレント死を防止 (CLAUDE.md Critical Lessons HIGH)
 
-THRESHOLD="${AGENT_ROUTER_SUGGEST_THRESHOLD:-0.5}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- feature gate (task-81、3 点セット規範) ---
+# config-loader.sh は is_feature_enabled / HC_* を提供 (fail-open 設計)。
+# dispatcher も manifest feature_key で gate するが、直接起動経路でも OFF を保証するため
+# hook 冒頭でも gate する。OFF なら stdin を消費せず即 no-op exit 0。
+# shellcheck source=lib/config-loader.sh
+if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/lib/config-loader.sh"
+fi
+if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled agent_router_suggest; then
+    exit 0   # feature OFF で no-op
+fi
+
+THRESHOLD="${AGENT_ROUTER_SUGGEST_THRESHOLD:-0.5}"
 ROUTER_PY="${SCRIPT_DIR}/../skills/agent-router/router.py"
 
 if [[ ! -f "${ROUTER_PY}" ]]; then
