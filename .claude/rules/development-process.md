@@ -226,7 +226,7 @@ consuming repo は **proactive に harness 最新版を取り込む** 義務を�
 |---|---|---|
 | 1 | **stg* / main merge の直前** | **必須** |
 | 2 | **定期 sync** (週次、曜日固定推奨) | 推奨 |
-| 3 | **F WARN 検出時** (`stale-harness-detect.sh` WARN → 即実行) | **必須** |
+| 3 | **F WARN 検出時** (`stale-harness-detect.sh` が SessionStart で npm registry 最新版と `harness_npm_version` stamp を比較 → 新版検出で `npx @takuma-hirai/hirai-method@latest update <dir>` を WARN 誘導 → 即実行、task-84) | **必須** |
 | 4 | **重大 fix 通知時** (hirai-method release notes / commit log 監視) | 任意 |
 
 ### 取込手順 5 step

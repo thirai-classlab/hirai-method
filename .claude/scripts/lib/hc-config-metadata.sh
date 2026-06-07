@@ -126,6 +126,8 @@ feature_tool_call_slip_detect_enabled	feature_toggle	tool-call-slip-detector (St
 harness_version	harness_meta	harness 本体のバージョン (install.sh が更新する日付文字列、採用先 project は手動編集しない)	変更すると stale-harness-detect の比較基準が切り替わる。手動編集すると採用先 project の取込判定が崩れる	harnessバージョン
 stale_harness_markers	harness_meta	stale-harness-detect が consuming repo の取込遅れ検出に使う marker ファイル配列 (CommonRules.md 等)	追加すると stale 検出対象 file が増える。削除すると該当 file の drift が検出されなくなる	stale検出marker群
 feature_stale_harness_detect_enabled	harness_meta	stale-harness-detect (consuming repo の harness 取込遅れを SessionStart で WARN 通知する hook)	false にすると stale-harness-detect を OFF にし harness 取込遅れの WARN 通知が止まる	stale検出有効化
+stale_harness_check_interval_hours	harness_meta	stale-harness-detect が npm registry latest と semver 比較する際の throttle 間隔 (時間単位、default 24)	大きくすると registry 取得頻度が下がり stale 検出が遅れる。小さくすると毎 session 近く取得し network 負荷が増える	registry取得間隔
+harness_npm_version	harness_meta	stale-harness-detect が registry latest と比較する npm semver stamp (install.sh が package.json から書込む)	手動編集すると registry 比較の基準 version がずれ更新通知の判定が崩れる。install.sh 再実行で正規値に戻る	npmバージョンstamp
 default_preset	harness_meta	本 repo で適用する enforcement preset (advisory/team-default/strict/harness-dev、guard の期待強制レベルを決める)	変更すると --summary / mismatch smoke が照合する preset 期待値が切り替わる。実 enforcement は feature_*_enabled が SSoT	既定プリセット
 enforcement_matrix	harness_meta	guard ごとの docs_claim + preset 期待 + disabled_reason を宣言する nested block (flat parser は値を読まず --summary が直接 parse)	編集すると --summary / mismatch smoke の照合対象 guard と期待値が変わる。実 enforcement の on/off は feature toggle 側が決める	enforcement行列
 METADATA_EOF

@@ -42,6 +42,13 @@
 # 採用先 project は手動で編集しない (install.sh が更新する)。
 harness_version: "2026-05-29"
 
+# harness_npm_version: npm registry の semver と比較するための同期 stamp (task-84 Step 1)。
+# 形式: semver "x.y.z"。install.sh / npx update が package.json の .version から書込む。
+# stale-harness-detect.sh (SessionStart) が npm registry latest と semver 比較し、
+# 新版検出で `npx @takuma-hirai/hirai-method@latest update <dir>` を WARN 誘導する。
+# 採用先 project は手動で編集しない (install.sh が更新する)。本値は hirai-method 自身の stamp。
+harness_npm_version: "0.1.0"
+
 # === Stale Harness Detect (task-56 F) ===
 # .claude/hooks/stale-harness-detect.sh (SessionStart hook) が消費。
 # stale_harness_markers: 主要 marker file 一覧 (`.claude/` からの相対 path)。
@@ -54,8 +61,12 @@ harness_version: "2026-05-29"
 # WARN 出力時は `bash install.sh --update <repo>` 案内 (cross-repo write 例外 §)。
 # bypass:
 #   export HC_FEATURE_STALE_HARNESS_DETECT_ENABLED=false   # 1 セッション OFF
+# stale_harness_check_interval_hours: registry 比較の throttle 間隔 (task-84 Step 2)。
+#   前回 check (.claude/.stale-harness-state/last-check の mtime) から本値 (時間) 未満なら
+#   registry を取得せず skip (SessionStart 毎の network 取得を抑制)。default 24。
 stale_harness_markers: [CommonRules.md, scripts/hc-config.sh, hooks/lib/config-loader.sh, hooks/loop-confirmation-detector.sh, hooks/stale-harness-detect.sh]
 feature_stale_harness_detect_enabled: true
+stale_harness_check_interval_hours: 24
 
 # === 委譲ガードの保護パス ===
 # delegation-guard.sh が「メインエージェント直接操作禁止」とみなす path 部分一致リスト。
