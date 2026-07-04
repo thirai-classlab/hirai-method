@@ -105,6 +105,15 @@
 #   → Step 6 refactoring (behavior-preserving function split)
 #   設計 draft: docs/draft/config-yml-phase3-hc-config-script.md
 #   smoke: .claude/tests/hc-config-script-smoke.sh (21 cases iter 5)
+#
+# HOTFIX-2 (draft install-immediately-usable-redesign-20260618 §9.1 + §4.2):
+#   hook runtime (config-loader.sh Step 3.5) は harness-config.local.yml override を適用するが、
+#   CLI が main yml しか読まないと「CLI 表示と runtime 実効値の真実が 2 つに分裂」する
+#   (subscbase-api 実機 R6)。--get / --summary / --diff / --list / TUI の共通経路 _get_current に
+#   local.yml tier を挿入し、解決順を runtime と完全一致させる:
+#     env(HC_*) > harness-config.local.yml > harness-config.yml (SSoT) > hardcoded default
+#   --set は SSoT yml にのみ書く既存動作を維持 (local override 中の key は stderr note で通知)。
+#   smoke: .claude/tests/hc-config-local-yml-smoke.sh
 
 set -uo pipefail
 
@@ -159,6 +168,12 @@ _hc_categories() {
 
 # --config <path> 引数で test isolation 対応 (smoke Case 3-6)
 CONFIG_PATH=""
+
+# HOTFIX-2: local override 層の path。main() で CONFIG_PATH 確定後に
+# config-loader.sh Step 3.5 と同一規約 (HC_LOCAL_CONFIG_PATH env 優先、
+# 無ければ dirname(CONFIG_PATH)/harness-config.local.yml) で解決する。
+# --config で tmp yml を指す smoke では tmp dir に local.yml が無く自動 no-op (test isolation 維持)。
+LOCAL_CONFIG_PATH=""
 
 # .bak retention (最新 N 件保持、それより古い bak は自動削除)
 # iter 3 MED M-NEW-01 (code-rev) + L-03 (security):
@@ -709,18 +724,24 @@ _get_default() {
     # EXIT trap で確実 cleanup (subshell 内のみ有効)
     trap 'rm -f "$empty_yml"' EXIT
     export HC_CONFIG_PATH="$empty_yml"
+    # HOTFIX-2: caller env に HC_LOCAL_CONFIG_PATH が漏れていると config-loader Step 3.5 が
+    # local.yml を parse して defaults が汚染されるため、不在 path を指して no-op 化する
+    # (dirname(empty_yml)=/tmp に stray な harness-config.local.yml がある場合の汚染も同時に防ぐ)。
+    export HC_LOCAL_CONFIG_PATH="${empty_yml}.local.yml"
     # shellcheck disable=SC1091
     source "${REPO_ROOT}/.claude/hooks/lib/config-loader.sh" 2>/dev/null
     eval "printf '%s' \"\${HC_${env_name}:-}\""
   )
 }
 
-# 現在値を取得 (env > yml > defaults の優先順)
+# 現在値を取得 (env > local.yml > yml > defaults の優先順)
 #
-# 解決順:
-#   1. caller env HC_<KEY> が set されているか (export 済) → その値
-#   2. yml に key が存在 → yml の raw 値
-#   3. config-loader.sh の defaults → empty yml で source して取得 (HIGH H-02 test-auto fix)
+# 解決順 (HOTFIX-2: config-loader.sh の runtime 実効値解決と完全一致):
+#   1.   caller env HC_<KEY> が set されているか (export 済) → その値
+#   1.5. harness-config.local.yml に key が存在 → local の raw 値
+#        (config-loader.sh Step 3.5 mirror: local は SSoT に勝ち、env には負ける)
+#   2.   yml に key が存在 → yml の raw 値
+#   3.   config-loader.sh の defaults → empty yml で source して取得 (HIGH H-02 test-auto fix)
 _get_current() {
   local key="$1"
   local env_name
@@ -733,6 +754,14 @@ _get_current() {
     printf '%s' "$env_val"
     return 0
   fi
+  # Step 1.5: local.yml override (HOTFIX-2、env の下 / SSoT yml の上に挿入)
+  local local_raw
+  if [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ]; then
+    if local_raw=$(_yml_get_raw "$LOCAL_CONFIG_PATH" "$key"); then
+      printf '%s' "$local_raw"
+      return 0
+    fi
+  fi
   # Step 2: yml に存在すれば raw 値
   local raw
   if raw=$(_yml_get_raw "$CONFIG_PATH" "$key"); then
@@ -741,6 +770,22 @@ _get_current() {
   fi
   # Step 3: config-loader.sh の defaults
   _get_default "$key"
+}
+
+# key の実効値が local.yml 由来か判定 (HOTFIX-2、--summary の "(local overridden)" marker 用)
+# 条件: local.yml 存在 ∧ 当該 key を定義 ∧ caller env HC_<KEY> 未 set (env は local に勝つため)
+# $1: key → 0 = local 由来 / 1 = それ以外
+_is_local_overridden() {
+  local key="$1" env_name env_is_set
+  if [ -z "${LOCAL_CONFIG_PATH:-}" ] || [ ! -f "$LOCAL_CONFIG_PATH" ]; then
+    return 1
+  fi
+  env_name=$(_key_to_env "$key")
+  eval "env_is_set=\${HC_${env_name}+set}"
+  if [ "${env_is_set:-}" = "set" ]; then
+    return 1
+  fi
+  _yml_get_raw "$LOCAL_CONFIG_PATH" "$key" >/dev/null 2>&1
 }
 
 # --config <path> の path validation (HIGH F-04 fix: path traversal guard)
@@ -908,8 +953,11 @@ cmd_get() {
   if ! _validate_key_format "$key"; then
     return 1
   fi
-  # 1) yml に存在 → _get_current で env > yml の順
-  if _yml_get_raw "$CONFIG_PATH" "$key" >/dev/null 2>&1; then
+  # 1) yml (SSoT) or local.yml に存在 → _get_current で env > local.yml > yml の順 (HOTFIX-2)
+  #    local.yml のみに存在する key も runtime (config-loader Step 3.5) は実効化するため CLI も追従。
+  if _yml_get_raw "$CONFIG_PATH" "$key" >/dev/null 2>&1 \
+    || { [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ] \
+         && _yml_get_raw "$LOCAL_CONFIG_PATH" "$key" >/dev/null 2>&1; }; then
     _get_current "$key"
     printf '\n'
     return 0
@@ -949,7 +997,14 @@ cmd_set() {
   if ! _validate_value "$key" "$type" "$val"; then
     return 1
   fi
-  _yml_set "$CONFIG_PATH" "$key" "$val"
+  _yml_set "$CONFIG_PATH" "$key" "$val" || return $?
+  # HOTFIX-2: --set は SSoT yml にのみ書く (既存動作維持)。local.yml が同 key を override
+  # している場合、--get / runtime の実効値は local 値のまま変わらないため stderr で通知する
+  # (silent 混乱防止、_yml_set_escape_value の notice と同流儀。--reset / --feature も本経路)。
+  if _is_local_overridden "$key"; then
+    _err "note: harness-config.local.yml overrides '${key}' — effective value stays local: $(_yml_get_raw "$LOCAL_CONFIG_PATH" "$key")"
+  fi
+  return 0
 }
 
 # --feature <name>=<true|false>: feature toggle shorthand
@@ -1099,10 +1154,21 @@ cmd_summary() {
       ;;
   esac
 
-  printf 'preset: %s\n' "$preset"
+  # HOTFIX-2: local.yml 存在時は冒頭に path を 1 行明示 (CLI 表示と runtime 実効値の分裂防止)。
+  # 注意: mode-session-start.sh が awk '/^preset:/' '/^totals:/' で parse するため、
+  # 既存行の format は変えず行を追加するのみ ("(local overridden)" は $2 より後ろに付与)。
+  if [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ]; then
+    printf 'local config: %s\n' "$LOCAL_CONFIG_PATH"
+  fi
+
+  local preset_marker=""
+  if _is_local_overridden default_preset; then
+    preset_marker=" (local overridden)"
+  fi
+  printf 'preset: %s%s\n' "$preset" "$preset_marker"
   printf 'guards:\n'
 
-  local guards g fkey claim eff reason
+  local guards g fkey claim eff reason local_mark
   local enabled_count=0 disabled_count=0
   local undoc_mismatch=0 doc_exception=0
   guards="$(_em_guards)"
@@ -1112,23 +1178,28 @@ cmd_summary() {
     claim="$(_em_field "$g" docs_claim)"
     eff="$(_get_current "$fkey" 2>/dev/null || printf '')"
     [ -z "$eff" ] && eff="$(_get_default "$fkey" 2>/dev/null || printf '')"
+    # HOTFIX-2: 実効値が local.yml 由来なら marker 付与 (operator が override 元を識別できるように)
+    local_mark=""
+    if _is_local_overridden "$fkey"; then
+      local_mark=" (local overridden)"
+    fi
 
     if [ "$eff" = "true" ]; then
       enabled_count=$((enabled_count + 1))
-      printf '  %s: enabled (docs: %s)\n' "$g" "$claim"
+      printf '  %s: enabled (docs: %s)%s\n' "$g" "$claim" "$local_mark"
     else
       disabled_count=$((disabled_count + 1))
       if [ "$claim" = "block" ]; then
         reason="$(_em_disabled_reason "$g" "$preset" 2>/dev/null || printf '')"
         if [ -n "$reason" ]; then
           doc_exception=$((doc_exception + 1))
-          printf '  %s: disabled (docs: block, reason: %s)\n' "$g" "$reason"
+          printf '  %s: disabled (docs: block, reason: %s)%s\n' "$g" "$reason" "$local_mark"
         else
           undoc_mismatch=$((undoc_mismatch + 1))
-          printf '  %s: disabled (docs: block, reason: UNDOCUMENTED MISMATCH)\n' "$g"
+          printf '  %s: disabled (docs: block, reason: UNDOCUMENTED MISMATCH)%s\n' "$g" "$local_mark"
         fi
       else
-        printf '  %s: disabled (docs: %s)\n' "$g" "$claim"
+        printf '  %s: disabled (docs: %s)%s\n' "$g" "$claim" "$local_mark"
       fi
     fi
   done <<< "$guards"
@@ -2252,6 +2323,15 @@ main() {
   fi
   if ! _validate_config_path "$CONFIG_PATH"; then
     return 1
+  fi
+
+  # HOTFIX-2: local override path を config-loader.sh Step 3.5 と同一規約で解決
+  # (HC_LOCAL_CONFIG_PATH env 優先、無ければ SSoT yml と同 dir の harness-config.local.yml)。
+  # 読取専用の override 層のため path validation は不要 (--set は CONFIG_PATH にのみ書く)。
+  if [ -n "${HC_LOCAL_CONFIG_PATH:-}" ]; then
+    LOCAL_CONFIG_PATH="$HC_LOCAL_CONFIG_PATH"
+  else
+    LOCAL_CONFIG_PATH="$(dirname "$CONFIG_PATH")/harness-config.local.yml"
   fi
 
   if [ "${#new_args[@]}" -eq 0 ]; then
