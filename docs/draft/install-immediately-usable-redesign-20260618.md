@@ -131,7 +131,7 @@ BLOCK error は **(1) なぜ block されたか + (2) 復旧 1 行コマンド +
 | 現状 | hirai-method `harness-config.yml` の `default_preset: harness-dev` (本 repo 内部開発用) が install.sh の rsync で consuming repo に **逐語 copy**。yml 内で `feature_task_rule_guard_enabled: false` 等 5 件が個別 `false` 配布。`default_preset` 値変更だけでは `feature_*_enabled` に波及しない設計 |
 | 影響 | consuming repo で task-rule-guard / draft-flow-guard / workflow-guard / gateguard / tool_call_slip が **全部 silent no-op**。AI が「設計→承認→タスク化」を強制されず直接実装に走る (subscbase-api 本日事案) |
 | 対策 A (推奨) | `install.sh` に **preset 自動切替 logic** を追加: 新規 install 時は `default_preset: team-default` で書込、feature toggle も対応する team-default 値で書込 (`task_rule_guard / draft_flow_guard / workflow_enforcement / gateguard` を **true** に上書き)。opt-in で `--preset=harness-dev` を allow |
-| 対策 B (短期、応急) | install.sh 末尾で `harness-config.local.yml` を自動生成 (`default_preset: team-default` + feature toggle 4 件 individual `true`) |
+| 対策 B (短期、応急) | install.sh 末尾で `harness-config.local.yml` を自動生成 (`default_preset: team-default` + guard toggle **8 件** individual `true` = feature 4 件 + `review_required_{design,test,module,system}` 4 件)。review_required 4 件を欠くと enforcement_matrix の team-default 期待 (presets.team-default: true、team-default の disabled_reason 無し) と自己矛盾し、consuming repo で enforcement-mismatch-smoke Case 3 が UNDOCUMENTED mismatch FAIL する (2026-07-05 HOTFIX-1 実装時に実測検出、8 件へ修正) |
 | 対策 C (構造改革、長期) | `harness-config.yml` を **preset block 構造化**: `preset_table.team-default.features.{task_rule_guard: true, ...}` を yml SSoT 化し、`default_preset:` 切替で feature toggle が自動連動。現在の独立 toggle と互換維持しつつ移行 |
 
 ### 4.2 (R6) hc-config.sh CLI の local.yml 非対応
@@ -343,7 +343,7 @@ P1-7 (list.md header) ─────────────┘
 
 | ID | 内容 | 工数 | 効果 |
 |---|---|---|---|
-| **HOTFIX-1** | install.sh に **5 行追加** で `default_preset: team-default` を consuming repo に明示書込 (overwrite モード以外) | 30 min | subscbase-api 事案の即時防止 (新規 consuming repo) |
+| **HOTFIX-1** | install.sh §6.4 で `harness-config.local.yml` を create-if-absent 自動生成 (`default_preset: team-default` + guard toggle 8 件 true = feature 4 + review_required 4、§4.1 対策 B 参照。当初案「5 行追加 / toggle 4 件」は enforcement-mismatch-smoke Case 3 自己矛盾のため 8 件へ拡張) | 30 min | subscbase-api 事案の即時防止 (新規 consuming repo) |
 | **HOTFIX-2** | hc-config.sh `--get` / `--summary` に `harness-config.local.yml` 読込み追加 | 1-2 h | CLI 表示と runtime 値の一致 |
 
 HOTFIX 2 件は P1-1 / P1-2 の minimal subset。本提案承認待ちの間に user が `feat/hotfix-install-ready` branch で先行 merge 可能。
