@@ -503,6 +503,74 @@ if [[ "$MODE" == "update" || "$MODE" == "force" || "$MODE" == "overwrite-all" ]]
 fi
 
 # ============================================================
+# 6.4. consuming repo preset bootstrap (HOTFIX-1)
+# ============================================================
+# 設計根拠: docs/draft/install-immediately-usable-redesign-20260618.md §9.1 HOTFIX-1 / §4.1 対策 B。
+# SSoT harness-config.yml は default_preset: harness-dev を verbatim copy するため、
+# consuming repo では主要 guard が全 disabled になる (subscbase-api 2026-06-18 実機事案)。
+# default_preset 変更は feature_*_enabled / review_required_* に波及しない (R7) ため、
+# local.yml への individual toggle 明示書込が必須。team-default が enforcement_matrix で
+# 期待する 8 guard (feature 4 + review_required 4) を全て true 化しないと、
+# enforcement-mismatch-smoke Case 3 が preset=team-default 下で UNDOCUMENTED mismatch
+# を検出し FAIL する (matrix に team-default の disabled_reason は無い)。
+# ここで harness-config.local.yml を
+# create-if-absent 生成する (既存は verbatim 保持 = 冪等。本 file は RSYNC_EXCLUDES
+# に含まれるため update/force の rsync でも消えない)。
+# self-install (TARGET と SCRIPT_DIR の物理 path 一致、symlink 経由で L128 の
+# 文字列比較をすり抜けた場合含む) は harness 自身の dogfood (harness-dev preset)
+# を壊すため skip。fail-open: 生成失敗は WARN のみで install 継続 (die しない)。
+if ! $DRY_RUN; then
+  LOCAL_YML="$TARGET/.claude/harness-config.local.yml"
+  TARGET_PHYS="$(cd "$TARGET" 2>/dev/null && pwd -P || echo "$TARGET")"
+  SOURCE_PHYS="$(cd "$SCRIPT_DIR" 2>/dev/null && pwd -P || echo "$SCRIPT_DIR")"
+  if [[ "$TARGET_PHYS" == "$SOURCE_PHYS" ]]; then
+    echo "[install] NOTE: self-install 検出 (target == harness repo 物理 path) → preset bootstrap skip (harness-dev dogfood 維持)" >&2
+  elif [[ ! -d "$TARGET/.claude" ]]; then
+    echo "[install] WARN: $TARGET/.claude 不在のため preset bootstrap skip" >&2
+  elif [[ -f "$LOCAL_YML" ]]; then
+    echo "[install] NOTE: harness-config.local.yml 既存 → 生成 skip (project 所有、verbatim 保持)"
+  else
+    # mktemp の X 群は末尾必須 (BSD/macOS は非末尾 X を randomize せず literal 名を
+    # 生成し、stale file 残存で以降 rc=1 になる)。set -e 下の非ガード代入は fail-open
+    # 契約を破って die するため || true + 空判定で WARN + skip に落とす。TMPDIR 尊重。
+    TMP_LOCAL="$(mktemp "${TMPDIR:-/tmp}/harness-config-local.XXXXXX" 2>/dev/null || true)"
+    # set -e 下でも heredoc 書込失敗で die しないよう || true、成否は -s で判定
+    if [[ -n "$TMP_LOCAL" ]]; then
+      cat > "$TMP_LOCAL" 2>/dev/null <<'LOCAL_YML_EOF' || true
+# === harness-config.local.yml (install.sh 自動生成、HOTFIX-1) ===
+# 本 file は project 所有: install.sh --update で上書きされない (rsync exclude)。
+# 設計根拠: docs/draft/install-immediately-usable-redesign-20260618.md §9.1 / §4.1 対策 B。
+# SSoT harness-config.yml の default_preset: harness-dev は consuming repo では
+# 主要 guard 全 disabled になるため、team-default へ上書きする。
+# 注意 (R7): default_preset 変更は feature_*_enabled / review_required_* に波及
+# しないため、下記 8 toggle (feature 4 + review_required 4) の individual 明示が
+# 必須 (default_preset 行だけ残して toggle 行を消すと guard は無効のまま)。
+# review_required 4 件も true にしないと enforcement_matrix の team-default 期待
+# (presets.team-default: true) と自己矛盾し、enforcement-mismatch-smoke Case 3 が
+# UNDOCUMENTED mismatch で FAIL する。preset / toggle を変えたい場合は本 file を
+# 編集する (SSoT harness-config.yml は触らない — --update で SSoT 値が上書きされる)。
+default_preset: team-default
+feature_task_rule_guard_enabled: true
+feature_draft_flow_guard_enabled: true
+feature_workflow_enforcement_enabled: true
+feature_gateguard_enabled: true
+review_required_design: true
+review_required_test: true
+review_required_module: true
+review_required_system: true
+LOCAL_YML_EOF
+    fi
+    if [[ -s "$TMP_LOCAL" ]] && mv "$TMP_LOCAL" "$LOCAL_YML" 2>/dev/null; then
+      echo "[install] harness-config.local.yml 生成 (default_preset: team-default + guard toggle 8 件 true)"
+    else
+      echo "[install] WARN: harness-config.local.yml 生成失敗 (install は継続)。手動作成を検討" >&2
+      rm -f "$TMP_LOCAL" 2>/dev/null || true
+    fi
+  fi
+  unset LOCAL_YML TARGET_PHYS SOURCE_PHYS TMP_LOCAL
+fi
+
+# ============================================================
 # 6.5. harness_version stamp 書込 (task-56 F)
 # ============================================================
 # stale-harness-detect.sh (SessionStart hook) が読む同期 stamp。
@@ -516,7 +584,8 @@ if ! $DRY_RUN; then
     NEW_STAMP="$(date -u +%Y-%m-%d)"
     if grep -qE '^harness_version:' "$TARGET_HC" 2>/dev/null; then
       # 既存 line を置換 (BSD sed / GNU sed 両対応: -i '' / -i バックアップ拡張子なし)
-      TMP_HC="$(mktemp /tmp/harness-config.XXXXXX.yml)"
+      # X 末尾 + || true ガード (§6.4 と同理由: BSD/macOS literal 名 + set -e die 回避)
+      TMP_HC="$(mktemp "${TMPDIR:-/tmp}/harness-config.XXXXXX" 2>/dev/null || true)"
       sed -E "s|^harness_version:.*|harness_version: \"${NEW_STAMP}\"|" "$TARGET_HC" > "$TMP_HC" 2>/dev/null \
         && mv "$TMP_HC" "$TARGET_HC" \
         && echo "[install] harness_version stamp updated -> $NEW_STAMP" \
@@ -567,7 +636,8 @@ if ! $DRY_RUN; then
   fi
   if [[ -f "$TARGET_HC_NPM" && -n "$NPM_VER" && "$NPM_VER" != "undefined" ]]; then
     if grep -qE '^harness_npm_version:' "$TARGET_HC_NPM" 2>/dev/null; then
-      TMP_HC_NPM="$(mktemp /tmp/harness-config-npm.XXXXXX.yml)"
+      # X 末尾 + || true ガード (§6.4 と同理由: BSD/macOS literal 名 + set -e die 回避)
+      TMP_HC_NPM="$(mktemp "${TMPDIR:-/tmp}/harness-config-npm.XXXXXX" 2>/dev/null || true)"
       sed -E "s|^harness_npm_version:.*|harness_npm_version: \"${NPM_VER}\"|" "$TARGET_HC_NPM" > "$TMP_HC_NPM" 2>/dev/null \
         && mv "$TMP_HC_NPM" "$TARGET_HC_NPM" \
         && echo "[install] harness_npm_version stamp updated -> $NPM_VER" \
@@ -701,6 +771,8 @@ Next steps:
   2. project 固有 override (docs_approved_dir / protected_paths 追加分 等) は
      \$EDITOR .claude/harness-config.local.yml     # ←ココに書く (install.sh --update で温存される)
      (SSoT .claude/harness-config.yml は触らない — --update で SSoT 値が上書きされる)
+     (HOTFIX-1: 不在時は default_preset: team-default + guard toggle 8 件 true
+      (feature 4 + review_required 4) で自動生成済。preset / toggle を変えたい場合も本 file を編集する)
   3. \$EDITOR .claude/bash-whitelist.txt           # 使う CLI (pnpm/poetry/cargo/...) を追記
   4. mv CLAUDE.md.template CLAUDE.md && \$EDITOR CLAUDE.md   # <...> placeholders を埋める
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
