@@ -54,6 +54,7 @@ _get_smoke_category() {
     enforcement-mismatch-smoke|\
     harness-config-local-smoke|\
     hc-config-key-parity-smoke|\
+    hc-config-local-yml-smoke|\
     hc-config-migration-smoke|\
     layer-b-context-isolation-smoke|\
     review-required-min-count-smoke|\
@@ -69,6 +70,7 @@ _get_smoke_category() {
     # portability: cwd/install 差分
     dual-mode-portability-smoke|\
     hook-cwd-robustness-smoke|\
+    install-local-yml-smoke|\
     install-sh-sync-drift-smoke|\
     project-root-smoke|\
     session-start-parallel-smoke)
