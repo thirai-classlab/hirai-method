@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #87: install.sh 末尾 self-doctor (install 直後の setup issue 0 化検証、P1-3)
 
-> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave4-self-doctor`、Phase 1 クリティカルパス末尾)
+> Status: **✅ 完了** (2026-07-05、commit `a7c0287`、DoD 全項目実測 PASS、**Phase 1 完遂**)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.5 (R5)/§5 P1-3
 > 設計起源: [install-self-doctor.md](../draft/install-self-doctor.md)
@@ -52,12 +52,12 @@ install 直後の /doctor 8 setup issues (R5) による AI の「ハーネス側
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | `.claude/scripts/self-doctor.sh` 新設 (D1-D8 check + WARN/INFO 分類 + 3 点提示 format + exit code 2 層 fail-open) | 0.4d | — |
-| 2 | 🔲 | install.sh §7.5 呼出統合 (`--no-doctor` + fail-open + dry-run skip) + §8 summary 案内 | 0.2d | Step 1 |
-| 3 | 🔲 | feature toggle 3 点 set + 新規 smoke `self-doctor-smoke.sh` 10 case (A-J、詳細は draft §3.6 Step 3) | 0.5d | Step 2 |
-| 4 | 🔲 | (テスト設計レビュー) reviewer 動的選定、収束まで反復 (上限 `review_iteration_max`) | 0.3d | Step 3 |
-| 5 | 🔲 | (テスト合格) 新 smoke 10/10 + 既存 install 系 smoke regression 0 (UI 無し task のため E2E/visual 対象外) | 0.2d | Step 4 |
-| 6 | 🔲 | (リファクタリング) 3 観点 (特に D2/D6 の既存 script 委譲徹底で判定 logic 重複 0)、不要なら `skip: <reason>` | 0.1d | Step 5 |
+| 1 | ✅ | `.claude/scripts/self-doctor.sh` 新設 (D1-D8 check + WARN/INFO 分類 + 3 点提示 format + exit code 2 層 fail-open) | 0.4d | — |
+| 2 | ✅ | install.sh §7.5 呼出統合 (`--no-doctor` + fail-open + dry-run skip) + §8 summary 案内 | 0.2d | Step 1 |
+| 3 | ✅ | feature toggle 3 点 set + 新規 smoke `self-doctor-smoke.sh` 10 case (A-J、詳細は draft §3.6 Step 3) | 0.5d | Step 2 |
+| 4 | ✅ | (テスト設計レビュー) reviewer 動的選定、収束まで反復 (上限 `review_iteration_max`) | 0.3d | Step 3 |
+| 5 | ✅ | (テスト合格) 新 smoke 10/10 + 既存 install 系 smoke regression 0 (UI 無し task のため E2E/visual 対象外) | 0.2d | Step 4 |
+| 6 | ✅ | (リファクタリング) 3 観点 (特に D2/D6 の既存 script 委譲徹底で判定 logic 重複 0)、不要なら `skip: <reason>` | 0.1d | Step 5 |
 
 合計: 1.7 day (roadmap 公称 0.5 day はテスト 3 段を含まない粗見積。Phase 1 クリティカルパス #85 0.75d → #87 1.7d ≈ 2.5d、fallback: smoke 10 → 最小 5 case 縮退可)
 
@@ -69,6 +69,10 @@ install 直後の /doctor 8 setup issues (R5) による AI の「ハーネス側
 |---|---|---|
 | 2026-07-05 | 起案 | draft 起こし (PR #69、HIGH 2 件 [D6 advisory 衝突 / D2 settings.json 前提] 修正済) |
 | 2026-07-05 | 承認 | user 承認 (AI 推奨どおり: built-in /doctor 照合は proxy + 手動 / SessionStart 配線見送り / D7 INFO 固定)、list.md 🔲 化 |
+| 2026-07-05 | Step 1-3 完了 | Workflow wf_e9b7e2b0-8de、self-doctor.sh +490 行 (D1-D8 + PROJECT_ROOT 解決 + preset-aware D6 + fail-open) / install.sh §7.5 統合 (`--no-doctor` + fail-open 2 層) / feature toggle 3 点 set + smoke 10→12 case |
+| 2026-07-05 | Step 4-5 完了 | 3 lens review + Fix iter 1 で HIGH 4 件 (Case G fake test / cascade isolation / D6 一次判定 coverage / install fail-open DoD runtime) + CRITICAL 1 件 (HC_ALLOW_EXTERNAL_CONFIG 修正案 a 適用) 全収束、smoke 12/12 PASS + Wave 1-3 regression 0 |
+| 2026-07-05 | Step 6 完了 | refactor `skip: draft §3 (D1-D8 定義 + 3 点提示 format + 2 層 fail-open) 準拠、既存 script (hc-config.sh --summary / generate-settings.sh --check) 委譲徹底で判定 logic 重複 0、review 3 lens で非冗長化確認済` |
+| 2026-07-05 | 完了 | commit `a7c0287`、**Phase 1 (P1-1〜P1-7) 完遂達成** |
 
 ## 派生 task / 次アクション候補
 
