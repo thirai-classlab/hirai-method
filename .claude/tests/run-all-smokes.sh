@@ -75,6 +75,7 @@ _get_smoke_category() {
     install-mcp-servers-smoke|\
     install-sh-sync-drift-smoke|\
     project-root-smoke|\
+    self-doctor-smoke|\
     session-start-parallel-smoke)
       printf 'portability' ;;
     # stale-det: 古い期待値自己検出
