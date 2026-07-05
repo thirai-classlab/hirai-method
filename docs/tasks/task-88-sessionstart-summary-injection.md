@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #88: SessionStart hc-config --summary 全文注入 (effective state 常時可視化、P1-4)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-07-05、commit `aa6eaf8`、DoD 全項目実測 PASS)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.6 (W1-2 採用済)/§5 P1-4
 > 設計起源: [sessionstart-summary-injection.md](../draft/sessionstart-summary-injection.md)
@@ -50,12 +50,12 @@ SessionStart で `hc-config.sh --summary` 全文が `<system-reminder>` 注入�
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | `mode-session-start.sh` 拡張: SUMMARY 全文注入 + fail-open gate (`SUMMARY=""` 初期化 + is_feature_enabled 不在時 enabled 扱い) | 1.0h | — |
-| 2 | 🔲 | feature toggle 3 点 set: yml key + metadata 登録 + env override 確認 | 0.5h | Step 1 |
-| 3 | 🔲 | smoke 更新: footprint cap 2400 + FP-5/FP-6 新設 + budget warn 同期 | 1.0h | Step 1-2 |
-| 4 | 🔲 | (テスト設計レビュー) reviewer 動的選定 `review_min_count_test ≤ N ≤ review_max_count_test` | 0.5h | Step 3 |
-| 5 | 🔲 | (テスト合格) 全対象 smoke PASS + regression 0 | 0.5h | Step 4 |
-| 6 | 🔲 | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.3h | Step 5 |
+| 1 | ✅ | `mode-session-start.sh` 拡張: SUMMARY 全文注入 + fail-open gate (`SUMMARY=""` 初期化 + is_feature_enabled 不在時 enabled 扱い) | 1.0h | — |
+| 2 | ✅ | feature toggle 3 点 set: yml key + metadata 登録 + env override 確認 | 0.5h | Step 1 |
+| 3 | ✅ | smoke 更新: footprint cap 2400 + FP-5/FP-6 新設 + budget warn 同期 | 1.0h | Step 1-2 |
+| 4 | ✅ | (テスト設計レビュー) reviewer 動的選定 `review_min_count_test ≤ N ≤ review_max_count_test` | 0.5h | Step 3 |
+| 5 | ✅ | (テスト合格) 全対象 smoke PASS + regression 0 | 0.5h | Step 4 |
+| 6 | ✅ | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.3h | Step 5 |
 
 合計: 約 0.5 day (roadmap P1-4 見積と整合)
 
@@ -65,6 +65,10 @@ SessionStart で `hc-config.sh --summary` 全文が `<system-reminder>` 注入�
 |---|---|---|
 | 2026-07-05 | 起案 | draft 起こし (PR #69、M4 [SUMMARY set -u 途中死 + fail-closed gate] 修正済) |
 | 2026-07-05 | 承認 | user 承認 (AI 推奨どおり: cap 2400B 承認 / toggle 階層許容)、list.md 🔲 化 + 依存先 — 化 |
+| 2026-07-05 | Step 1-3 完了 | Workflow wf_30253e0b-b13 (18 agents、resume 経由 fix iter 2 で収束)、mode-session-start +18 / yml+metadata +2 / footprint smoke +84 / budget smoke +25 |
+| 2026-07-05 | Step 4-5 完了 | 3 lens review + Fix iter 2 + dispatcher totals: default=1 / OFF=0 実測、footprint 17/17 + budget 4/4 + regression PASS |
+| 2026-07-05 | Step 6 完了 | refactor `skip: SUMMARY 初期化と fail-open gate が M4 fix core、review LOW 5 件 (FP-7 fail-open dedicated case / FP-5 label 厳密化等) は draft §派生に記録済` |
+| 2026-07-05 | 完了 | commit `aa6eaf8` |
 
 ## 派生 task / 次アクション候補
 

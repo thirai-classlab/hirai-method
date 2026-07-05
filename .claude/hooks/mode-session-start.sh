@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # mode-session-start.sh — SessionStart hook
 #
-# 役割 (task-73 案 B で短文化):
+# 役割 (task-73 案 B で短文化 + task-88 Step 1 で summary 全文注入):
 #   - セッション開始時に harness の compact status 1 行を出力 (mode / preset / guards / resume / next)
+#   - hc-config.sh --summary 全文を同一 <system-reminder> 内に注入 (effective state 常時可視化、P1-4 W1-2)
 #   - resume 検出時は 1 行で /resume-state 案内
 #   - Loop / Normal モードの詳細は in-context rule (.claude/rules/modes.md) に委譲し、
 #     mode-enforce.sh の 1 行 pointer で再宣言する (full reminder の二重出力を廃止)
 #
 # behavior-preserving: mode 判定 / context.md 検出 / feature gate / Normal モード挙動は保持、
-#   出力テキストのみ短縮。
+#   compact status の preset=/guards= フィールドも維持 (toggle OFF 時 fallback + FP-2d smoke 互換)。
 #
 # 失敗時の挙動: exit 0 のみ。失敗してもセッションをブロックしない (全 status 取得は best-effort)。
 
@@ -50,6 +51,11 @@ fi
 HC_SCRIPT="$SCRIPT_DIR/../scripts/hc-config.sh"
 PRESET=""
 GUARDS=""
+# SUMMARY は必ず初期化する (task-88 Step 1、2026-07-05 review M4):
+#   hc-config.sh 不在時に SUMMARY が unset のままだと set -u (nounset) で
+#   <system-reminder> 開始 printf 直後に閉じタグ無しで hook が途中死し、
+#   「失敗してもセッションをブロックしない」契約を破るため。
+SUMMARY=""
 if [ -f "$HC_SCRIPT" ]; then
   SUMMARY="$(bash "$HC_SCRIPT" --summary 2>/dev/null || true)"
   # 失敗時: hc-config --summary 取得不可なら guards=/preset= フィールドを省略 (fail-open)
@@ -81,6 +87,14 @@ STATUS="$STATUS help=/resume-state /hc-config /mode"
 {
   printf '<system-reminder>\n'
   printf '%s\n' "$STATUS"
+  # summary 全文注入 (task-88 Step 1、P1-4 W1-2): effective state 常時可視化。
+  # gate は fail-open: is_feature_enabled 不在 (config-loader load 失敗) = enabled 扱い
+  # (L39 の command -v pattern と同方向)。素朴な `&& is_feature_enabled ... 2>/dev/null` は
+  # コマンド不在 rc=127 で silent off となり「default ON / fail-open」と矛盾するため不可。
+  if [ -n "$SUMMARY" ] && { ! command -v is_feature_enabled >/dev/null 2>&1 || is_feature_enabled sessionstart_summary; }; then
+    printf -- '--- effective state (hc-config.sh --summary) ---\n'
+    printf '%s\n' "$SUMMARY"
+  fi
   if [ "$RESUME" = "available" ]; then
     printf '前回 session state あり: /resume-state [loop] で継続、または新規 prompt で開始\n'
   fi
