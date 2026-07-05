@@ -70,7 +70,9 @@ _get_smoke_category() {
     # portability: cwd/install 差分
     dual-mode-portability-smoke|\
     hook-cwd-robustness-smoke|\
+    install-claude-md-autofill-smoke|\
     install-local-yml-smoke|\
+    install-mcp-servers-smoke|\
     install-sh-sync-drift-smoke|\
     project-root-smoke|\
     session-start-parallel-smoke)
