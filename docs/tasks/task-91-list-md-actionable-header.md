@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #91: list.md actionable header + plan-first reminder 発火緩和 (P1-7)
 
-> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave1-preset-listmd`)
+> Status: **✅ 完了** (2026-07-05、commit `6321ce7`、DoD 全項目実測 PASS)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.8 対策 B/C/§5 P1-7
 > 設計起源: [list-md-actionable-header.md](../draft/list-md-actionable-header.md)
@@ -50,12 +50,12 @@ list.md 完全 template で plan-first reminder が発火しない問題 (R4) �
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | template list.md に actionable header 追加 (対策 B) | 0.5h | — |
-| 2 | 🔲 | hook 発火条件 2-tier 化 + tier B source gating (対策 C) | 1.5h | — |
-| 3 | 🔲 | smoke 期待値反転 2 case + 新 case 4 件 + run-all-smokes note 更新 | 1.0h | Step 2 |
-| 4 | 🔲 | (テスト設計レビュー) reviewer 動的選定 | 0.5h | Step 3 |
-| 5 | 🔲 | (テスト合格) smoke 全 PASS + run-all-smokes regression 0 | 0.3h | Step 4 |
-| 6 | 🔲 | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.2h | Step 5 |
+| 1 | ✅ | template list.md に actionable header 追加 (対策 B) | 0.5h | — |
+| 2 | ✅ | hook 発火条件 2-tier 化 + tier B source gating (対策 C) | 1.5h | — |
+| 3 | ✅ | smoke 期待値反転 2 case + 新 case 4 件 + run-all-smokes note 更新 | 1.0h | Step 2 |
+| 4 | ✅ | (テスト設計レビュー) reviewer 動的選定 | 0.5h | Step 3 |
+| 5 | ✅ | (テスト合格) smoke 全 PASS + run-all-smokes regression 0 | 0.3h | Step 4 |
+| 6 | ✅ | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.2h | Step 5 |
 
 合計: 4.0h (≒ 0.5 day、roadmap P1-7 見積と一致)
 
@@ -65,6 +65,10 @@ list.md 完全 template で plan-first reminder が発火しない問題 (R4) �
 |---|---|---|
 | 2026-07-05 | 起案 | draft 起こし (PR #69、M5 [DoD 13/13 vs expected-fail 矛盾 → env 注入で解消] + L4 [dispatcher 直接起動検証] 修正済) |
 | 2026-07-05 | 承認 | user 承認 (AI 推奨どおり: tier B に compact 不含 / 遡及挿入見送り / Case 9 保守維持)、list.md 🔲 化 + 依存先 — 化 |
+| 2026-07-05 | Step 1-3 完了 | Workflow wf_5408d0a6-00d、template +7 / hook 2-tier +69 / smoke 13 case 化 +273 / run-all note 更新 |
+| 2026-07-05 | Step 4-5 完了 | 3 lens review + Fix iter 1 + DoD 全項目 PASS (tier B 発火 / resume 沈黙 / tier A golden diff 一致 / smoke 13/13 / install.sh diff 0) |
+| 2026-07-05 | Step 6 完了 | refactor `skip: tier A 完全温存が設計制約のため構造変更余地なし、review 3 lens で非冗長化確認済` |
+| 2026-07-05 | 完了 | commit `6321ce7` |
 
 ## 派生 task / 次アクション候補
 

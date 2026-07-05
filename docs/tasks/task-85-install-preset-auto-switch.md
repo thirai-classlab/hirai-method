@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #85: install.sh consuming repo 用 preset 自動切替 (P1-1 残 scope)
 
-> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave1-preset-listmd`)
+> Status: **✅ 完了** (2026-07-05、commit `dc46efa`、DoD 全項目実測 PASS)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.1/§5 P1-1
 > 設計起源: [install-preset-auto-switch.md](../draft/install-preset-auto-switch.md)
@@ -52,12 +52,12 @@ consuming repo の preset 選択を install 時に完結させるため、instal
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | install.sh: `--preset=<name>` arg parse + validation + §6.4 生成 parameterize + summary 更新 | 2.5h | — |
-| 2 | 🔲 | harness-config.yml: enforcement_matrix 8 guard に advisory `disabled_reason` 追記 | 0.5h | — |
-| 3 | 🔲 | install-local-yml-smoke.sh: case H-M 追加 (preset 別生成 / reject / 既存保持 / set drift 静的検査) | 1.5h | Step 1, 2 |
-| 4 | 🔲 | (テスト設計レビュー) reviewer 動的選定 `review_min_count_test ≤ N ≤ review_max_count_test` | 0.5h | Step 3 |
-| 5 | 🔲 | (テスト合格) 新旧 smoke 全 PASS (install-local-yml 7+N case / enforcement-mismatch 5 case / hc-config-local-yml 12 assert) | 0.5h | Step 4 |
-| 6 | 🔲 | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.3h | Step 5 |
+| 1 | ✅ | install.sh: `--preset=<name>` arg parse + validation + §6.4 生成 parameterize + summary 更新 | 2.5h | — |
+| 2 | ✅ | harness-config.yml: enforcement_matrix 8 guard に advisory `disabled_reason` 追記 | 0.5h | — |
+| 3 | ✅ | install-local-yml-smoke.sh: case H-M 追加 (preset 別生成 / reject / 既存保持 / set drift 静的検査) | 1.5h | Step 1, 2 |
+| 4 | ✅ | (テスト設計レビュー) reviewer 動的選定 `review_min_count_test ≤ N ≤ review_max_count_test` | 0.5h | Step 3 |
+| 5 | ✅ | (テスト合格) 新旧 smoke 全 PASS (install-local-yml 7+N case / enforcement-mismatch 5 case / hc-config-local-yml 12 assert) | 0.5h | Step 4 |
+| 6 | ✅ | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.3h | Step 5 |
 
 合計: 5.8h (≒ 0.75 day、roadmap P1-1 見積 0.5 day + advisory matrix 追記分)
 
@@ -69,10 +69,14 @@ consuming repo の preset 選択を install 時に完結させるため、instal
 |---|---|---|
 | 2026-07-05 | 起案 | draft 起こし (PR #69、横断レビュー 2 lens 反映済) |
 | 2026-07-05 | 承認 | user 承認 (AI 推奨どおり: 対策 A 不採用確定 / advisory v1 採用 / review_required_security 不含)、list.md 🔲 化 |
+| 2026-07-05 | Step 1-3 完了 | Workflow wf_5408d0a6-00d (18 agents)、install.sh +84/-29 / matrix +8 / smoke case H-M +165 |
+| 2026-07-05 | Step 4-5 完了 | 3 lens review (test-effectiveness mutation probe / shell / design-parity) + Fix iter 1 + E2E 4 preset で target mismatch-smoke 5/5 (自己矛盾ゼロ)、DoD 全項目 PASS |
+| 2026-07-05 | Step 6 完了 | refactor `skip: draft §3 準拠の最小差分 + review 3 lens で非冗長化確認済 (toggle 三重管理は case I/J runtime guard 付き design-acknowledged)` |
+| 2026-07-05 | 完了 | commit `dc46efa` |
 
 ## 派生 task / 次アクション候補
 
-(発生時に必ず記入 — development-process.md §「副産物発生時の即時 draft 起こし義務」)
+- [ ] (🟢) smoke case I/J の false-pass 補強 — target の default_preset 解決が空で harness-dev fallback すると advisory disabled_reason 検証が silent no-op になり得る (review MEDIUM、実害なし healthy env)。`_run_target_mismatch_smoke` に expected-preset 引数追加で堅牢化 → [next-actions.md](next-actions.md) entry #80
 
 ## 関連
 
