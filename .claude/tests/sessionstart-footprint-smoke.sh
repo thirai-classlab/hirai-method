@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # sessionstart-footprint-smoke.sh — task-73 Step 1 (footprint hard cap + presence)
+#                                   task-88 Step 3 (cap 2400 + FP-5/FP-6 summary 注入対応)
 #
 # 目的:
-#   SessionStart 総出力 (session-start-dispatcher.sh stdout) を ~800B 以下に短縮した
-#   状態を回帰検出する。sessionstart-budget-smoke.sh は 800 を warn ライン扱いだが、
-#   本 smoke は task-73 短文化 (案 B) 後の状態を **hard cap 800B で FAIL 検出**する。
+#   SessionStart 総出力 (session-start-dispatcher.sh stdout) の footprint を hard cap で
+#   回帰検出する。sessionstart-budget-smoke.sh は warn ライン扱いだが、本 smoke は
+#   **hard cap 2400B で FAIL 検出**する (cap の SSoT は本 smoke)。
+#   task-88 (sessionstart-summary-injection) で hc-config.sh --summary 全文注入が加わり、
+#   cap を 800 → 2400 に引上げた (根拠は FOOTPRINT_CAP の comment 参照)。
 #
 # 計測内容:
 #   FP-1: Loop モード + session/context.md 存在の隔離環境で dispatcher stdout を測定。
-#         <= 800 bytes で PASS、超過で FAIL (TDD: 短縮前は 3257 で FAIL = RED)。
+#         <= 2400 bytes で PASS、超過で FAIL (task-73 当時は cap 800、TDD: 短縮前は 3257 で FAIL = RED)。
 #   FP-2: presence assert (短くしても機能情報が残ることを保証):
 #         - 出力に `mode=` (compact status 1 行) が含まれる
 #         - 出力に resume 関連語が含まれる (context.md 存在時)
@@ -17,6 +20,11 @@
 #   FP-3: Normal モード + context.md 不在の隔離環境で footprint / mode=normal / resume=none を検証。
 #   FP-4: Loop モード + HC_WHY_X5_DISABLE=1 で why-x5 signal が absent であること、
 #         かつ footprint が FP-1 loop baseline より小さいことを検証 (kill-switch 回帰検出)。
+#   FP-5: (task-88) FP-1 出力に `totals:` / `guards:` が含まれる (hc-config.sh --summary
+#         全文注入の構造保証。値・行数 hardcode なし、FP-2d と同 style)。
+#   FP-6: (task-88) Loop モード + HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED=false で
+#         `totals:` absent + <system-reminder> 開閉タグ均衡 (閉じタグ健在 = hook 途中死なし)
+#         + footprint < FP-1 baseline (FP-4 の kill-switch 検証 pattern 踏襲)。
 #
 # 実行: bash .claude/tests/sessionstart-footprint-smoke.sh
 # 終了: 0 = 全 case PASS / 1 = FAIL
@@ -26,7 +34,13 @@
 
 set -u
 
-FOOTPRINT_CAP=800   # bytes hard cap (wc -c is bytes)  — 超過で FAIL
+# bytes hard cap (wc -c is bytes) — 超過で FAIL
+# task-88 Step 3 (docs/draft/sessionstart-summary-injection.md §2 実測、2026-07-05):
+#   hc-config.sh --summary 全文注入 (P1-4) 対応で 800 → 2400 に引上げ。
+#   - harness-dev worst (loop + ctx present、日本語 disabled_reason 8 件): 実測 ~2,030B + 18% margin ≈ 2400
+#   - consuming repo (team-default 全 enabled、summary 562B): ~1,230B で十分収まる
+#   - budget smoke (sessionstart-budget-smoke.sh) の hard-fail 5000 の内側に位置する 2 段構成
+FOOTPRINT_CAP=2400
 
 # --- root 解決 ---
 _resolve_root() (
@@ -121,7 +135,7 @@ printf "env: HC_PROJECT_ROOT=%s\n" "$ROOT"
 printf "     context.md=%s\n\n" "$([ -f "$CTX_FILE" ] && echo present || echo absent)"
 
 # ------------------------------------------------------------------
-# FP-1: hard cap 800B (Loop mode + context.md present)
+# FP-1: hard cap 2400B (Loop mode + context.md present)
 printf "FP-1: stdout footprint <= %d bytes (loop + ctx=present)\n" "$FOOTPRINT_CAP"
 OUT_LOOP="$(measure_footprint "${ISOLATED_HOME}" "loop")"
 printf '%s' "$OUT_LOOP" > "${TMPBASE}/out_loop"
@@ -246,6 +260,64 @@ elif [ "$BYTES_NOWHY" -lt "$BYTES_LOOP" ]; then
   ok "FP-4b footprint=${BYTES_NOWHY} < baseline=${BYTES_LOOP} (why-x5 block omitted)"
 else
   bad "FP-4b footprint=${BYTES_NOWHY} not less than baseline=${BYTES_LOOP} — why-x5 block may not have been omitted"
+fi
+
+# ------------------------------------------------------------------
+# FP-5: summary full-text presence (task-88 Step 3、P1-4 全文注入の構造保証)
+#   FP-1 の loop 出力 (OUT_LOOP 再利用、dispatcher 追加起動なし) に
+#   hc-config.sh --summary 全文注入の構造 signal が含まれること:
+#   - `totals:` (summary 末尾の enabled/disabled 集計行)
+#   - `guards:` (summary の guard 一覧 header 行。FP-2d の `guards=` compact field とは別物)
+#   値・行数はハードコードせず exists のみ assert (FP-2d と同 style、--summary format 変更耐性)。
+printf "\nFP-5: summary full-text presence (totals: / guards: in loop output)\n"
+if printf '%s' "$OUT_LOOP" | grep -q 'totals:'; then
+  ok "FP-5a 'totals:' present (summary full text injected)"
+else
+  bad "FP-5a 'totals:' missing — hc-config.sh --summary 全文注入が regress した可能性"
+fi
+if printf '%s' "$OUT_LOOP" | grep -q 'guards:'; then
+  ok "FP-5b 'guards:' present (summary guard list injected)"
+else
+  bad "FP-5b 'guards:' missing — hc-config.sh --summary 全文注入が regress した可能性"
+fi
+
+# ------------------------------------------------------------------
+# FP-6: summary toggle-off (task-88 Step 3、FP-4 kill-switch 検証 pattern 踏襲)
+#   HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED=false で:
+#   (a) summary 全文 signal (`totals:`) が absent
+#   (b) <system-reminder> 開閉タグが均衡 (閉じタグ健在 = hook 途中死なしの構造保証)
+#   (c) footprint が FP-1 loop baseline より小さい (summary block 省略の実測保証)
+printf "\nFP-6: loop + HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED=false (summary absent + tags balanced + footprint < baseline)\n"
+OUT_SUMOFF="$(measure_footprint "${ISOLATED_HOME}" "loop" "HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED=false")"
+printf '%s' "$OUT_SUMOFF" > "${TMPBASE}/out_sumoff"
+BYTES_SUMOFF=$(wc -c < "${TMPBASE}/out_sumoff" | tr -d '[:space:]')
+printf "  INFO: loop+summary-off stdout = %s bytes (FP-1 baseline = %s bytes)\n" "$BYTES_SUMOFF" "$BYTES_LOOP"
+
+# (a) totals: absent
+if printf '%s' "$OUT_SUMOFF" | grep -q 'totals:'; then
+  bad "FP-6a 'totals:' still present with HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED=false — feature gate regressed"
+else
+  ok "FP-6a 'totals:' absent (HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED=false effective)"
+fi
+
+# (b) <system-reminder> 開閉タグ均衡 (閉じタグ健在)
+#   閉じタグ `</system-reminder>` は substring `<system-reminder>` を含まないため
+#   両者の grep -c は独立に数えられる (bash 3.2 / BSD grep 互換)。
+OPEN_SUMOFF=$(grep -c '<system-reminder>' "${TMPBASE}/out_sumoff" 2>/dev/null || true)
+CLOSE_SUMOFF=$(grep -c '</system-reminder>' "${TMPBASE}/out_sumoff" 2>/dev/null || true)
+if [ "${CLOSE_SUMOFF:-0}" -ge 1 ] && [ "${OPEN_SUMOFF:-0}" = "${CLOSE_SUMOFF:-0}" ]; then
+  ok "FP-6b system-reminder tags balanced (open=${OPEN_SUMOFF} close=${CLOSE_SUMOFF}) — 閉じタグ健在"
+else
+  bad "FP-6b system-reminder tags unbalanced (open=${OPEN_SUMOFF:-?} close=${CLOSE_SUMOFF:-?}) — hook 途中死 (閉じタグ欠落) の可能性"
+fi
+
+# (c) footprint < FP-1 loop baseline
+if [ -z "$BYTES_SUMOFF" ] || [ -z "$BYTES_LOOP" ]; then
+  bad "FP-6c byte count unavailable"
+elif [ "$BYTES_SUMOFF" -lt "$BYTES_LOOP" ]; then
+  ok "FP-6c footprint=${BYTES_SUMOFF} < baseline=${BYTES_LOOP} (summary block omitted)"
+else
+  bad "FP-6c footprint=${BYTES_SUMOFF} not less than baseline=${BYTES_LOOP} — summary block may not have been omitted"
 fi
 
 # ------------------------------------------------------------------

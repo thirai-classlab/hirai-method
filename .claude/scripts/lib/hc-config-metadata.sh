@@ -106,6 +106,7 @@ feature_notify_enabled	feature_toggle	notify + stop (sound)	false にすると n
 feature_check_md_mermaid_enabled	feature_toggle	check-md-mermaid	false にすると check-md-mermaid を OFF にし md 内 mermaid 構文検証が止まる	mermaid検証有効化
 feature_failure_loop_detect_enabled	feature_toggle	failure-loop-detect	false にすると failure-loop-detect を OFF にし同一エラー連続失敗の検出が止まる	失敗ループ検出有効化
 feature_agent_router_suggest_enabled	feature_toggle	agent-router-suggest (task-81 復活配線、UserPromptSubmit で agent-router skill を実行し高確信時のみ specialist 推奨 1 行 hint を注入、fail-open)	false にすると agent-router-suggest を OFF にし UserPromptSubmit の specialist 推奨 hint 注入が止まる	agent推奨hint有効化
+feature_sessionstart_summary_enabled	feature_toggle	mode-session-start (SessionStart reminder に hc-config.sh --summary 全文を注入して effective state を可視化、P1-4。feature_mode_session_start_enabled OFF 時は本 toggle に関わらず注入されない)	false にすると SessionStart の --summary 全文注入を OFF にし compact status 1 行のみに戻る	summary注入有効化
 feature_hc_config_tui_legacy_enabled	feature_toggle	hc-config TUI legacy fallback (task-61 Step 5 iter 2 D、HC_HC_CONFIG_TUI_LEGACY と OR 結合で dispatcher が判定)	true にすると hc-config.sh interactive で task-60 TUI を起動 (default false で task-61 Web UI を起動)	TUIレガシー有効化
 review_required_design	reviewer_control	false なら /design-review が no-op skip	false にすると design-review が no-op skip され設計レビュー fan-out が省かれる	設計レビュー必須
 review_min_count_design	reviewer_control	design-review fan-out で並列起動する reviewer の最小数 (default 3、reviewer_registry_design 件数下限)	増やすと設計レビューの網羅性が上がるが並列 subagent 消費が増える。減らすとレビューが手薄になり見逃しリスクが上がる	設計レビュー最小数
