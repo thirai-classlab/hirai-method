@@ -483,6 +483,7 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス自身の設計 draft / docs 編集を妨げないため"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
   task_rule_guard:
     feature_key: feature_task_rule_guard_enabled
     docs_claim: block
@@ -490,6 +491,7 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス自身の task.md / list.md 編集を妨げないため (next-actions #65 toggle 意図を吸収)"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
   workflow_guard:
     feature_key: feature_workflow_enforcement_enabled
     docs_claim: block
@@ -497,6 +499,7 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス開発では 14/10-stage workflow を full 適用しないため"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
   gateguard:
     feature_key: feature_gateguard_enabled
     docs_claim: block
@@ -504,6 +507,7 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス自身の hook / config 反復編集で初回 BLOCK を避けるため"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
   review_required_design:
     feature_key: review_required_design
     docs_claim: block
@@ -511,6 +515,7 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス自体の設計レビューは手動 fan-out で運用するため"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
   review_required_test:
     feature_key: review_required_test
     docs_claim: block
@@ -518,6 +523,7 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス開発では採用 6 条 4 テスト設計レビューを手動運用するため"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
   review_required_module:
     feature_key: review_required_module
     docs_claim: block
@@ -525,6 +531,7 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス開発では module-review を手動運用するため"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
   review_required_system:
     feature_key: review_required_system
     docs_claim: block
@@ -532,3 +539,4 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
     disabled_reason:
       harness-dev: "ハーネス開発では system-review を手動運用するため"
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
