@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #88: SessionStart hc-config --summary 全文注入 (effective state 常時可視化、P1-4)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave2-sessionstart-hcconfig`)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.6 (W1-2 採用済)/§5 P1-4
 > 設計起源: [sessionstart-summary-injection.md](../draft/sessionstart-summary-injection.md)

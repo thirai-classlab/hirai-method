@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #86: hc-config.sh local.yml 統合 (P1-2 残 scope — typo WARN / validate / smoke / 表示一貫性)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave2-sessionstart-hcconfig`)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.2 (R6)/§5 P1-2、next-actions entry #79 吸収
 > 設計起源: [hc-config-local-yml-integration.md](../draft/hc-config-local-yml-integration.md)
