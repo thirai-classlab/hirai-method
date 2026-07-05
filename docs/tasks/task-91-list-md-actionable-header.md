@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #91: list.md actionable header + plan-first reminder 発火緩和 (P1-7)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave1-preset-listmd`)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.8 対策 B/C/§5 P1-7
 > 設計起源: [list-md-actionable-header.md](../draft/list-md-actionable-header.md)

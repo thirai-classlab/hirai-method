@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #85: install.sh consuming repo 用 preset 自動切替 (P1-1 残 scope)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave1-preset-listmd`)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.1/§5 P1-1
 > 設計起源: [install-preset-auto-switch.md](../draft/install-preset-auto-switch.md)
