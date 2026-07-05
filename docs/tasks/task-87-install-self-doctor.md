@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #87: install.sh 末尾 self-doctor (install 直後の setup issue 0 化検証、P1-3)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave4-self-doctor`、Phase 1 クリティカルパス末尾)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.5 (R5)/§5 P1-3
 > 設計起源: [install-self-doctor.md](../draft/install-self-doctor.md)
