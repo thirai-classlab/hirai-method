@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #90: .mcp.json 配布 minimal default + opt-in flag (`--mcp-servers=<csv>`、P1-6)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave3-claudemd-mcpjson`)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.4 対策 A/§5 P1-6
 > 設計起源: [mcp-json-minimal-default.md](../draft/mcp-json-minimal-default.md)

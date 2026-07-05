@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #89: CLAUDE.md auto-fill (project 検出 + 言語別 starter、placeholder 0 化、P1-5)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave3-claudemd-mcpjson`)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.3 対策 A/C/§5 P1-5
 > 設計起源: [claude-md-auto-fill.md](../draft/claude-md-auto-fill.md)
