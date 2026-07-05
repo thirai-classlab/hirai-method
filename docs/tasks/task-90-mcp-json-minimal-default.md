@@ -11,7 +11,7 @@ total_steps: 6
 
 # Task #90: .mcp.json 配布 minimal default + opt-in flag (`--mcp-servers=<csv>`、P1-6)
 
-> Status: **🔲 未着手**
+> Status: **✅ 完了** (2026-07-05、commit `46a5158`、DoD 全項目実測 PASS)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.4 対策 A/§5 P1-6
 > 設計起源: [mcp-json-minimal-default.md](../draft/mcp-json-minimal-default.md)
@@ -50,12 +50,12 @@ total_steps: 6
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | install.sh arg parse 拡張 (`--mcp-servers=<csv>` + 検証 + `--no-mcp` conflict) | 0.5h | — |
-| 2 | 🔲 | §3 配布 logic の csv filter 化 (jq filter / all / fallback / dry-run / summary、§6.4 先例の if-wrapper + mktemp X 末尾) | 1.5h | Step 1 |
-| 3 | 🔲 | smoke 新設 (10 case) + run-all-smokes 登録 + docs 反映 | 1.0h | Step 2 |
-| 4 | 🔲 | (テスト設計レビュー) reviewer 動的選定 | 0.5h | Step 3 |
-| 5 | 🔲 | (テスト合格) 新 smoke 10/10 + 既存 install 系 regression 0 | 0.5h | Step 4 |
-| 6 | 🔲 | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.3h | Step 5 |
+| 1 | ✅ | install.sh arg parse 拡張 (`--mcp-servers=<csv>` + 検証 + `--no-mcp` conflict) | 0.5h | — |
+| 2 | ✅ | §3 配布 logic の csv filter 化 (jq filter / all / fallback / dry-run / summary、§6.4 先例の if-wrapper + mktemp X 末尾) | 1.5h | Step 1 |
+| 3 | ✅ | smoke 新設 (10 case) + run-all-smokes 登録 + docs 反映 | 1.0h | Step 2 |
+| 4 | ✅ | (テスト設計レビュー) reviewer 動的選定 | 0.5h | Step 3 |
+| 5 | ✅ | (テスト合格) 新 smoke 10/10 + 既存 install 系 regression 0 | 0.5h | Step 4 |
+| 6 | ✅ | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.3h | Step 5 |
 
 合計: 約 4.3h (roadmap P1-6 見積 0.5 day と整合)
 
@@ -67,6 +67,10 @@ total_steps: 6
 |---|---|---|
 | 2026-07-05 | 起案 | draft 起こし (PR #69、依存方向三重矛盾 [HIGH] + 擬似コード fail-open 3 点 [L6] 修正済) |
 | 2026-07-05 | 承認 | user 承認 (AI 推奨どおり: minimal default breaking 承認 / asana strip follow-up 化 / jq 不在は全配布)、list.md 🔲 化 + 依存先 task-87 → task-85 修正 |
+| 2026-07-05 | Step 1-3 完了 | Workflow wf_789e2fe6-08b、install.sh arg parse + --mcp-servers=<csv> / §3 csv filter (jq → 不在 fallback) / smoke 10 case + run-all-smokes 登録 |
+| 2026-07-05 | Step 4-5 完了 | 3 lens review + Fix iter 1 で HIGH 3 件収束、E2E `--mcp-servers=serena,context7` で 2 server 生成 + env placeholder 0 実測 |
+| 2026-07-05 | Step 6 完了 | refactor `skip: csv filter は §6.4 先例 pattern (if-wrapper + mktemp X 末尾 + fail-open) を踏襲、review 3 lens で非冗長化確認済` |
+| 2026-07-05 | 完了 | commit `46a5158` (smoke + run-all-smokes のみ、install.sh 変更は 89 commit 同梱) |
 
 ## 派生 task / 次アクション候補
 

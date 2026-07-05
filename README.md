@@ -176,22 +176,24 @@ bash install.sh /path/to/your-project
 cd /path/to/your-project
 $EDITOR .claude/harness-config.yml         # protected_paths / task_dir / ...
 $EDITOR .claude/bash-whitelist.txt         # 使う CLI (pnpm/poetry/cargo/...) を追記
-mv CLAUDE.md.template CLAUDE.md && $EDITOR CLAUDE.md   # <...> placeholders を埋める
+$EDITOR CLAUDE.md                          # task-89 auto-fill 済 (`<...>` placeholder 0)、<!-- TODO(auto-fill) --> comment を補完
 git init                                   # observe.sh の project hash 検出を有効化
 # Claude Code session 起動 → /init-tasks → /mode loop
 ```
 
-install.sh は **冪等** で、既存 `.claude/` は `.claude.bak.<timestamp>` に退避してから新規 install (data loss なし)。
+install.sh は **冪等** で、既存 `.claude/` は `.claude.bak.<timestamp>` に退避してから新規 install (data loss なし)。**CLAUDE.md は default/update mode で既存不可侵** (task-89、`.bak` 退避廃止 = subscbase-api 再発防止)、不在時のみ manifest 検出 → 言語別 template から auto-fill 生成する (`--lang=<id>` で言語 override 可)。
 
 #### install.sh モード
 
 | flag | 用途 |
 |---|---|
-| (default) | 新規 install。既存 `.claude` / `CLAUDE.md` は `.bak.<timestamp>` 退避、CLAUDE.md は `.template` として配置 |
-| `--update` | 既存 `.claude/` を rsync 増分上書き。state dir + `settings.local.json` 保持、CLAUDE.md / .mcp.json / .gitignore は不変。**settings.json は rsync 除外だが rsync 後に自動再生成** (task-80、statusLine / hook / dispatcher 配線を手動なしで同期、permissions 保持) |
-| `--force` | 既存 `.claude` / `CLAUDE.md` を **backup なしで** 上書き (危険)。settings.json は破壊リセット後 不在のため自動再生成は skip |
+| (default) | 新規 install。既存 `.claude` は `.bak.<timestamp>` 退避。**CLAUDE.md 不在時は manifest 検出 → 言語別 template から auto-fill 生成** (task-89、`<...>` placeholder 0 + `@.claude/CommonRules.md` 参照済)。**既存 CLAUDE.md は不可侵** (`.bak` 退避廃止)、CommonRules 参照不在時のみ HINT 出力 |
+| `--update` | 既存 `.claude/` を rsync 増分上書き。state dir + `settings.local.json` 保持、CLAUDE.md / .mcp.json / .gitignore は不変 (既存 CLAUDE.md に CommonRules 参照不在なら HINT のみ、read-only)。**settings.json は rsync 除外だが rsync 後に自動再生成** (task-80、statusLine / hook / dispatcher 配線を手動なしで同期、permissions 保持) |
+| `--force` | 既存 `.claude` を **backup なしで** 上書き (危険)。CLAUDE.md は **auto-fill 生成物で上書き** (task-89、既存内容失われる)。settings.json は破壊リセット後 不在のため自動再生成は skip |
+| `--lang=<id>` | (task-89) CLAUDE.md auto-fill 対象言語を明示指定 (`ts` \| `py` \| `go` \| `rust` \| `php` \| `swift` \| `generic`、未指定なら manifest 検出で自動判定) |
 | `--dry-run` | 実行内容を表示のみ (rsync -n + 各 cp / mkdir を echo) |
 | `--no-mcp` | `.mcp.json` を配置しない (Serena MCP 不要な project) |
+| `--mcp-servers=<csv>` | (task-90) 配布する MCP server を csv で選択 (default: `serena,context7` = env placeholder 0 minimal / `--mcp-servers=all` で従来全 7 server 配布 / 選択可能: `serena`, `context7`, `github`, `salesforce`, `agent-browser`, `asana-pat`, `slack` / `--no-mcp` との併用は exit 64) |
 | `--no-docs` | `docs/tasks/` `docs/draft/` の templates 配置を skip |
 
 `--update` の除外 (保護) 対象: 全 state dir (`.gateguard-state/` `.taskguard-state/` `.confidence-gate-state/` `.failure-window/` `.agent-markers/` `.context-budget-state/` `.improvement-proposal-state/` `.workflow-state/`) + `settings.json` + `settings.local.json` + `settings.local.example.json` + **`harness-config.local.yml`** (project 固有 override) + `bash-whitelist-requests/` + `worktrees/`
@@ -225,13 +227,13 @@ cd ~/hirai-method
 bash install.sh /path/to/your-project          # 事前確認したいときは末尾に --dry-run
 ```
 
-install.sh が配置するもの (既存 `.claude` / `CLAUDE.md` は `.bak.<timestamp>` に自動退避 = data loss なし):
+install.sh が配置するもの (既存 `.claude` は `.bak.<timestamp>` 退避、既存 `CLAUDE.md` は default/update mode 不可侵 = data loss なし):
 
 | 配置物 | 備考 |
 |---|---|
 | `.claude/` 一式 (hooks / skills / rules / commands / scripts / templates / config) | rsync 配置 |
-| `CLAUDE.md.template` | placeholder 入り (既存 CLAUDE.md は退避) |
-| `.mcp.json` | 既存があれば触らない / `--no-mcp` で skip |
+| `CLAUDE.md` (auto-fill、task-89) | 不在時のみ生成: manifest (`package.json` / `pyproject.toml` / `go.mod` / `Cargo.toml` / `composer.json` / `Package.swift`) 検出 → 言語別 template から `<...>` placeholder 0 で直接生成 (`@.claude/CommonRules.md` 参照込み)。既存あれば不可侵 (`.bak` 退避なし)。`--lang=<id>` で言語 override 可 (`ts` \| `py` \| `go` \| `rust` \| `php` \| `swift` \| `generic`) |
+| `.mcp.json` | 既存があれば触らない / `--no-mcp` で skip / `--mcp-servers=<csv>` で配布 server を選択 (default `serena,context7`、`all` で全 7 server) |
 | `.gitignore` | harness state 除外行を追記 (無ければ新規) |
 | `docs/tasks/{list,parking-lot,_TASK_TEMPLATE}.md` + `docs/draft/_DRAFT_TEMPLATE.md` | 既存は skip / `--no-docs` で全 skip |
 | `harness-config.yml` の `harness_version: <install 日 UTC>` | install 日 stamp |
@@ -256,8 +258,9 @@ $EDITOR .claude/bash-whitelist.txt
 #    未実行だと hook が一切発火せずハーネスが効かない。preset / feature toggle を変えたら再実行する。
 bash .claude/scripts/generate-settings.sh --out .claude/settings.json
 
-# 5. CLAUDE.md を起こして project 固有情報を記入
-mv CLAUDE.md.template CLAUDE.md && $EDITOR CLAUDE.md   # <...> placeholder を埋める
+# 5. CLAUDE.md の TODO comment を補完 (task-89 auto-fill 済で `<...>` placeholder 0、`@.claude/CommonRules.md` 参照込み)
+#    manifest から抽出不能な field (User Context / Domain Knowledge 等) は `<!-- TODO(auto-fill): ... -->` で残置される
+$EDITOR CLAUDE.md                                       # <!-- TODO(auto-fill) --> comment を project 固有情報で補完
 
 # 6. git 初期化 (observe.sh の project hash 検出に必要)
 git init
@@ -308,7 +311,7 @@ bash install.sh --update /path/to/your-project --commit  # 同期 + .claude/ の
 
 #### B-2. CLAUDE.md 統合 (既存 project の CLAUDE.md と harness を統合する)
 
-`install.sh` (default / `--update` とも) は **CLAUDE.md を touch しない** (project 固有情報を守るため)。既存 project に harness を導入/更新した際、project の CLAUDE.md に harness 規範を載せるには **手動統合**する。方針は「**project 固有情報は全保持 + harness 共通規範は `@.claude/CommonRules.md` import に集約**」。
+`install.sh` (default / `--update` とも) は **既存 CLAUDE.md を不可侵**とする (project 固有情報を守るため、task-89 で `.bak` 退避も廃止 = subscbase-api 再発防止)。default mode で CLAUDE.md 不在時のみ manifest 検出 → 言語別 template から auto-fill 生成する (`<...>` placeholder 0、`@.claude/CommonRules.md` 参照込み)。既存 project に harness を導入/更新した際、project の CLAUDE.md に harness 規範を載せるには **手動統合**する (既存 CLAUDE.md に `@.claude/CommonRules.md` 参照行が不在なら `install.sh` は stdout に HINT を出す)。方針は「**project 固有情報は全保持 + harness 共通規範は `@.claude/CommonRules.md` import に集約**」。
 
 **統合手順**:
 
@@ -342,15 +345,17 @@ harness の 7 共通 rule (`.claude/rules/{development-process,git-workflow,mode
 
 | flag | 用途 |
 |---|---|
-| (なし) | 新規 install (既存は `.bak` 退避、CLAUDE.md は `.template` 配置) |
-| `--update` | 既存 `.claude/` 増分上書き (state / local 保持、CLAUDE.md 等 不変)。settings.json は rsync 除外後に**自動再生成** (task-80、配線同期 + permissions 保持)。既存 .claude 必須 |
+| (なし) | 新規 install (既存 `.claude` は `.bak` 退避)。**CLAUDE.md は不在時のみ auto-fill 生成** (task-89、manifest 検出 → 言語別 template)、既存は不可侵 + CommonRules 参照不在時 HINT |
+| `--update` | 既存 `.claude/` 増分上書き (state / local 保持、CLAUDE.md 等 不変。既存 CLAUDE.md に `@.claude/CommonRules.md` 参照不在なら HINT のみ)。settings.json は rsync 除外後に**自動再生成** (task-80、配線同期 + permissions 保持)。既存 .claude 必須 |
 | `--update --commit` | 上記 + sync された `.claude/` path のみ自動 commit (非 git target は skip + WARN) |
-| `--force` | backup なしで上書き (危険) |
+| `--force` | backup なしで上書き (危険)。CLAUDE.md は **auto-fill 生成物で上書き** (task-89、既存内容失われる) |
+| `--lang=<id>` | (task-89) CLAUDE.md auto-fill 対象言語を明示指定 (`ts` \| `py` \| `go` \| `rust` \| `php` \| `swift` \| `generic`) |
 | `--dry-run` | 実行内容を表示のみ |
 | `--no-mcp` | `.mcp.json` を配置しない |
+| `--mcp-servers=<csv>` | (task-90) 配布 MCP server を csv 選択 (default `serena,context7`、`all` で全 7 server、`--no-mcp` と併用は exit 64) |
 | `--no-docs` | docs templates 配置を skip |
 
-exit code: 引数エラー / 不正 flag / target 不在 / self-install / 言語名を渡した等 = **64**、rsync 未 install = **69**。
+exit code: 引数エラー / 不正 flag / 不正 `--lang` 値 / target 不在 / self-install 等 = **64**、rsync 未 install = **69**。
 
 > 詳細フロー図は [§3.9.2](#392-インストール--設定--利用の全体フロー)、project/user-level の 2 install モードは [§3.11](#311-2-つの-install-モード-project-level--user-level) を参照。
 
@@ -545,7 +550,7 @@ flowchart TD
     I1["bash install.sh /path/to/project<br/>(ハーネス本体を配置)"] --> I2["cd /path/to/project"]
     I2 --> C1["bash .claude/scripts/hc-config.sh<br/>(対話 menu で設定確認 / 調整)"]
     C1 --> C2["$EDITOR .claude/bash-whitelist.txt<br/>(使う CLI を追記: pnpm/poetry/cargo...)"]
-    C2 --> C3["mv CLAUDE.md.template CLAUDE.md<br/>+ &lt;...&gt; placeholders 記入"]
+    C2 --> C3["$EDITOR CLAUDE.md<br/>(task-89 auto-fill 済、&lt;!-- TODO(auto-fill) --&gt; comment を補完)"]
     C3 --> C4["git init<br/>(observe.sh の project hash 検出)"]
     C4 --> U1["Claude Code session 起動"]
     U1 --> U2["/init-tasks (タスク台帳初期化)"]
@@ -555,10 +560,10 @@ flowchart TD
 
 | 段階 | コマンド | 目的 |
 |---|---|---|
-| **① インストール** | `bash install.sh /path/to/project` | `.claude/` 一式 + CLAUDE.md.template 配置 (冪等、既存は `.bak` 退避) |
+| **① インストール** | `bash install.sh /path/to/project` | `.claude/` 一式配置 + **CLAUDE.md auto-fill 生成** (task-89、manifest 検出で `<...>` placeholder 0)。既存 `.claude` は `.bak` 退避、既存 `CLAUDE.md` は不可侵 |
 | **② 設定** | `bash .claude/scripts/hc-config.sh` | feature toggle / reviewer 制御 / 保護パス等を安全に確認・調整 |
 | | `$EDITOR .claude/bash-whitelist.txt` | project で使う CLI prefix を追記 |
-| | `mv CLAUDE.md.template CLAUDE.md` + 編集 | project 固有情報 (Tech Stack / Commands 等) を記入 |
+| | `$EDITOR CLAUDE.md` (TODO comment 補完) | task-89 auto-fill 済、`<!-- TODO(auto-fill) -->` comment を project 固有情報 (User Context / Domain Knowledge 等 manifest から抽出不能な field) で埋める |
 | | `git init` | observe.sh の project hash 検出を有効化 |
 | **③ 利用** | Claude Code 起動 → `/init-tasks` → `/mode loop` | session 開始 + タスク台帳初期化 + 自律進行モード |
 | | `/new-draft <slug>` → 承認 → `/new-task <id> <slug>` | 設計→承認→タスク化の 3 step (設計なき着手を hook が block) |

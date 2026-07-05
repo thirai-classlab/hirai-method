@@ -2,18 +2,19 @@
 # 平井メソッド (hirai-method) — robust installer
 #
 # Usage:
-#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--preset=<name>] [--dry-run] [--no-mcp] [--no-docs]
+#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--preset=<name>] [--lang=<id>] [--dry-run] [--no-mcp] [--mcp-servers=<csv>] [--no-docs]
 #
 # Modes (--update / --force / --overwrite-all are mutually exclusive):
-#   (default)  : 新規 install。既存 .claude / CLAUDE.md は .bak タイムスタンプ付きで退避。
-#                CLAUDE.md は CLAUDE.md.template として配置（user が <...> placeholder を埋める）。
+#   (default)  : 新規 install。既存 .claude は .bak タイムスタンプ付きで退避、既存 CLAUDE.md は不可侵。
+#                CLAUDE.md 不在時は project manifest 検出 → 言語別 template auto-fill で
+#                CLAUDE.md を直接生成 (`<...>` placeholder 0、@.claude/CommonRules.md 参照済、task-89)。
 #   --update   : 既存 .claude/ を退避せず rsync で増分上書き。state dir / settings.local.json は保持。
 #                CLAUDE.md / .mcp.json / .gitignore は触らない (既存保護)。
 #                完了時に sync 変更 file 一覧 + 分離 commit 案内を出力 (task-58 G1)。
 #   --commit   : (--update と併用、opt-in) sync 対象 .claude/ path のみ git add + chore(harness): sync で
 #                自動 commit する。project file (root README.md 等) は触らない。git reset 禁止 (HIGH 教訓)。
 #                非 git target なら commit skip + WARN (task-58 G1)。
-#   --force    : 既存 .claude / CLAUDE.md を backup せず上書き。CLAUDE.md は placeholder 入りで上書き。
+#   --force    : 既存 .claude / CLAUDE.md を backup せず上書き。CLAUDE.md は auto-fill 生成物で上書き (task-89)。
 #   --overwrite-all : (task-79) drift した target を SSoT へ強制リセットする全上書き mode。
 #                既存 .claude/ を rsync で上書きするが **settings.local.json のみ** 温存し、それ以外
 #                (settings.json / harness-config.local.yml / state dir 群 / worktrees) も source で上書き。
@@ -21,11 +22,18 @@
 #                .gitignore は --force 準拠。注意: target の local override は失われる (settings.local.json のみ残る)。
 #   --dry-run  : 実行内容を表示するのみ (rsync -n + 各 cp / mkdir を echo)。
 #   --no-mcp   : .mcp.json を配置しない (Serena 不要な project)。
+#   --mcp-servers=<csv> : (task-90) 配布する MCP server を csv で選択
+#                (default: serena,context7 = env placeholder 0 の minimal 2 server、
+#                 特殊 token 'all' で従来全 7 server 配布 = 後方互換)。
+#                選択可能: serena, context7, github, salesforce, agent-browser, asana-pat, slack。
+#                --no-mcp との併用は exit 64。§3 配布 logic は Step 2 で jq filter 化予定。
 #   --no-docs  : docs/tasks/, docs/draft/ の templates 配置を skip。
 #   --preset=<name> : (task-85) §6.4 preset bootstrap で生成する harness-config.local.yml の
 #                enforcement preset を指定 (advisory | team-default | strict | harness-dev、
 #                default: team-default = HOTFIX-1 後方互換)。team-default/strict → 8 toggle true、
 #                advisory/harness-dev → 8 toggle 明示 false。既存 local.yml 時は無視 (WARN + verbatim 保持)。
+#   --lang=<id> : (task-89) CLAUDE.md auto-fill 対象言語を明示指定
+#                (ts | py | go | rust | php | swift | generic、default: 未指定=manifest 検出で自動判定)。
 #
 # Exclude (state / user-local):
 #   .gateguard-state/ .taskguard-state/ .confidence-gate-state/ .failure-window/
@@ -60,10 +68,14 @@ TARGET=""
 MODE="install"          # install / update / force / overwrite-all
 DRY_RUN=false
 WITH_MCP=true
+MCP_SERVERS="serena,context7"    # (task-90) --mcp-servers csv default = env placeholder 0 minimal
+MCP_SERVERS_SET=false             # true if --mcp-servers explicitly given (for --no-mcp conflict + Step 2 signal)
 WITH_DOCS=true
 COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
 PRESET="team-default"    # --preset default = HOTFIX-1 現行挙動維持 (後方互換、task-85)
 PRESET_EXPLICIT=false    # --preset 明示指定の有無 (既存 local.yml / self-install 時の WARN 用)
+LANG_OVERRIDE=""         # --lang override (空 = manifest 検出で自動判定、task-89)
+LANG_EXPLICIT=false      # --lang 明示指定の有無 (echo 出力で "override" と "detected" を出し分け)
 
 # M-1: detect conflicting mode flags. --update / --force / --overwrite-all each set
 # MODE; specifying more than one (or repeating one) would silently last-wins into an
@@ -88,6 +100,50 @@ for arg in "$@"; do
     --commit)   COMMIT_AFTER_SYNC=true ;;
     --dry-run)  DRY_RUN=true  ;;
     --no-mcp)   WITH_MCP=false ;;
+    --mcp-servers=*)
+      # task-90 Step 1: 配布 MCP server を csv で選択。値検証はここでは format のみ
+      # (空 csv / 空 token / token 形式 / 'all' 単独判定) を行う。source .mcp.json への
+      # key 実在検証は Step 2 (jq 存在時のみ) 側が担当する (fail-open: jq 不在時 skip)。
+      # --no-mcp との conflict は arg loop 後にまとめて検出する (--commit vs --update と同 pattern)。
+      MCP_SERVERS="${arg#--mcp-servers=}"
+      MCP_SERVERS_SET=true
+      if [[ -z "$MCP_SERVERS" ]]; then
+        echo "[install] error: --mcp-servers requires a non-empty csv (e.g. --mcp-servers=serena,context7 or --mcp-servers=all)" >&2
+        exit 64
+      fi
+      # 事前検査: leading/trailing/duplicated comma を検出。bash `IFS=',' read -a` は
+      # trailing 空 field を捨てる仕様のため、read 前に csv 生値でチェックしないと
+      # 'serena,' が silent pass する (下 for loop の empty token check は leading/中間のみ捕捉)。
+      if [[ "$MCP_SERVERS" == ,* || "$MCP_SERVERS" == *, || "$MCP_SERVERS" == *,,* ]]; then
+        echo "[install] error: --mcp-servers csv has empty token (leading/trailing/duplicated comma)" >&2
+        exit 64
+      fi
+      # token format 検証: 各 token は ^[A-Za-z0-9][A-Za-z0-9_-]*$。
+      # 併せて 'all' は単独 token のみ許可 (all,serena → exit 64)。
+      _has_all=false
+      _has_other=false
+      IFS=',' read -r -a _mcp_tokens <<< "$MCP_SERVERS"
+      for _tok in "${_mcp_tokens[@]}"; do
+        if [[ -z "$_tok" ]]; then
+          echo "[install] error: --mcp-servers csv contains empty token (trailing/duplicated comma?)" >&2
+          exit 64
+        fi
+        if [[ ! "$_tok" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
+          echo "[install] error: --mcp-servers token '$_tok' has invalid format (allowed: [A-Za-z0-9][A-Za-z0-9_-]*)" >&2
+          exit 64
+        fi
+        if [[ "$_tok" == "all" ]]; then
+          _has_all=true
+        else
+          _has_other=true
+        fi
+      done
+      if $_has_all && $_has_other; then
+        echo "[install] error: --mcp-servers=all must be used alone (not combined with other server names)" >&2
+        exit 64
+      fi
+      unset _mcp_tokens _tok _has_all _has_other
+      ;;
     --no-docs)  WITH_DOCS=false ;;
     --preset=*)
       PRESET="${arg#--preset=}"
@@ -101,12 +157,25 @@ for arg in "$@"; do
           ;;
       esac
       ;;
+    --lang=*)
+      # task-89: CLAUDE.md auto-fill 対象言語の明示指定。7 値 validation、
+      # 不正値 exit 64。未指定時は detect_project_lang() が manifest から自動判定。
+      LANG_OVERRIDE="${arg#--lang=}"
+      case "$LANG_OVERRIDE" in
+        ts|py|go|rust|php|swift|generic) LANG_EXPLICIT=true ;;
+        *)
+          echo "[install] error: invalid --lang '$LANG_OVERRIDE' (must be one of: ts, py, go, rust, php, swift, generic)" >&2
+          exit 64
+          ;;
+      esac
+      ;;
     -h|--help)
       # L-2: print the full header comment block including the cross-repo WARNING
       # (ends at the closing ===== of the WARNING box before `set -euo pipefail`;
-      # task-79 added 4 mode-doc lines, task-85 added 4 --preset doc lines so the
-      # box now ends at line 52).
-      sed -n '2,52p' "$0"
+      # task-79 added 4 mode-doc lines, task-85 added 4 --preset doc lines, task-89
+      # rewrote (default) mode desc (+1 line) + added --lang doc (+2 lines), task-90
+      # added 5 --mcp-servers doc lines so the box now ends at line 60).
+      sed -n '2,60p' "$0"
       exit 0
       ;;
     -*)
@@ -125,13 +194,21 @@ for arg in "$@"; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--preset=<name>|--dry-run|--no-mcp|--no-docs]" >&2
+  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--preset=<name>|--lang=<id>|--dry-run|--no-mcp|--mcp-servers=<csv>|--no-docs]" >&2
   exit 64
 fi
 
 # --commit は --update mode 専用 (task-58 G1)
 if $COMMIT_AFTER_SYNC && [[ "$MODE" != "update" ]]; then
   echo "[install] error: --commit requires --update mode" >&2
+  exit 64
+fi
+
+# --no-mcp と --mcp-servers の併用は conflict (task-90)
+# 「全 skip」と「選択配布」は矛盾 → 明示併用は user 意図不明として fail-fast
+# (--commit vs --update と同 pattern、last-wins による silent 事故を防ぐ)。
+if ! $WITH_MCP && $MCP_SERVERS_SET; then
+  echo "[install] error: --no-mcp and --mcp-servers cannot be used together" >&2
   exit 64
 fi
 
@@ -220,6 +297,293 @@ run() {
   else
     "$@"
   fi
+}
+
+# ============================================================
+# CLAUDE.md auto-fill helpers (task-89、draft §3.1/3.2)
+# ============================================================
+# 3 関数で「manifest 検出 → field 抽出 → template token 置換」を担う。
+# design SSoT: docs/draft/claude-md-auto-fill.md §3。placeholder `<...>` 0 化 (DoD)。
+# fail-open 契約: 抽出失敗は TODO comment で埋め、render 失敗は呼び出し側 fallback で
+# 旧挙動 (CLAUDE.md.template 配置) に落とす。set -e 下 die を避けるため grep/sed/node は
+# すべて `|| true` ガード + 結果空判定。mktemp は X 末尾 + TMPDIR 尊重 (§6.4 先例踏襲)。
+
+# detect_project_lang <target>
+# TARGET 直下 depth 1 の manifest を優先順で検査、first-win で lang id を echo。
+# LANG_OVERRIDE (--lang 明示) が空でなければ manifest 検出をスキップ。fallback は generic。
+detect_project_lang() {
+  local target="$1"
+  if [[ -n "${LANG_OVERRIDE:-}" ]]; then
+    echo "$LANG_OVERRIDE"
+    return 0
+  fi
+  if   [[ -f "$target/package.json"    ]]; then echo "ts"
+  elif [[ -f "$target/pyproject.toml"  ]]; then echo "py"
+  elif [[ -f "$target/go.mod"          ]]; then echo "go"
+  elif [[ -f "$target/Cargo.toml"      ]]; then echo "rust"
+  elif [[ -f "$target/composer.json"   ]]; then echo "php"
+  elif [[ -f "$target/Package.swift"   ]]; then echo "swift"
+  else                                          echo "generic"
+  fi
+}
+
+# extract_manifest_fields <lang> <target>
+# 出力は関数スコープ変数 (bash local に格納後 caller が読む setter パターンでなく、
+# global 変数 AF_* に代入する明示 out-param。呼び出し側は使用前に unset で洗浄する)。
+#   AF_PROJECT_NAME    : `{{PROJECT_NAME}}` 置換値 (空なら basename fallback)
+#   AF_RUNTIME_LINE    : `{{RUNTIME_LINE}}` 置換値 (空なら TODO comment fallback)
+#   AF_FRAMEWORK_LINE  : `{{FRAMEWORK_LINE}}` 置換値 (whitelist hit 時 " (name, ...)" / 空可)
+#   AF_COMMANDS_FILE   : `{{COMMANDS_BLOCK}}` 単独行 → multiline 差替に使う一時 file path
+# 抽出失敗は TODO comment を埋めて continue (die しない)。node 不在 → grep-sed fallback (§6.6 先例)。
+extract_manifest_fields() {
+  local lang="$1"
+  local target="$2"
+  AF_PROJECT_NAME=""
+  AF_RUNTIME_LINE=""
+  AF_FRAMEWORK_LINE=""
+  AF_COMMANDS_FILE=""
+
+  # commands 一時 file (multiline sed r 用)。mktemp X 末尾必須 (BSD/macOS literal 名回避)、
+  # || true で set -e 下 die 回避。取得失敗は fail-open で終了 → render 側で fallback。
+  AF_COMMANDS_FILE="$(mktemp "${TMPDIR:-/tmp}/hirai-af-commands.XXXXXX" 2>/dev/null || true)"
+  [[ -z "$AF_COMMANDS_FILE" ]] && return 0
+
+  case "$lang" in
+    ts)
+      local pkg="$target/package.json"
+      if [[ -f "$pkg" ]]; then
+        # PROJECT_NAME: node → grep-sed fallback (§6.6 chain 踏襲、path は argv 経由で injection 回避)
+        if command -v node >/dev/null 2>&1; then
+          AF_PROJECT_NAME="$(node -e 'try{process.stdout.write(String(require(process.argv[1]).name||""))}catch(e){}' "$pkg" 2>/dev/null || true)"
+        fi
+        if [[ -z "$AF_PROJECT_NAME" ]]; then
+          AF_PROJECT_NAME="$(grep -E '"name"[[:space:]]*:' "$pkg" 2>/dev/null | head -1 | sed -E 's/.*"name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)"
+        fi
+        # RUNTIME: engines.node
+        local node_engine=""
+        if command -v node >/dev/null 2>&1; then
+          node_engine="$(node -e 'try{const p=require(process.argv[1]);process.stdout.write(String((p.engines&&p.engines.node)||""))}catch(e){}' "$pkg" 2>/dev/null || true)"
+        fi
+        if [[ -z "$node_engine" ]]; then
+          node_engine="$(grep -E '"node"[[:space:]]*:' "$pkg" 2>/dev/null | head -1 | sed -E 's/.*"node"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)"
+        fi
+        if [[ -n "$node_engine" ]]; then
+          AF_RUNTIME_LINE="Node.js $node_engine"
+        else
+          AF_RUNTIME_LINE="<!-- TODO(auto-fill): 例 Node.js 22+ -->"
+        fi
+        # FRAMEWORK: whitelist (next|react|vue|express、draft §3.1)。
+        # 「dependencies / devDependencies / peerDependencies の key 完全一致」に絞る:
+        # jq あり → has($k) で決定論判定 / jq 不在 → `"react":` の JSON key literal
+        # (word boundary `-w` は `-` を非 word 文字扱いのため react-router-dom /
+        # vite-plugin-express / description 内 react-like を誤検知していた、2026-07-05
+        # finding 2 対処)。jq / grep 双方 fail-open。
+        local fw=""
+        local f
+        local hit
+        for f in next react vue express; do
+          hit=false
+          if command -v jq >/dev/null 2>&1; then
+            if jq -e --arg k "$f" \
+                 '((.dependencies // {}) + (.devDependencies // {}) + (.peerDependencies // {})) | has($k)' \
+                 "$pkg" >/dev/null 2>&1; then
+              hit=true
+            fi
+          else
+            # grep fallback: `"react":` の JSON key literal。閉じ引用符後 `:` 必須のため
+            # `"react-router-dom":` は match しない (`react"` の直後は `-`)。
+            if grep -qE "\"$f\"[[:space:]]*:" "$pkg" 2>/dev/null; then
+              hit=true
+            fi
+          fi
+          if $hit; then
+            fw="${fw}${fw:+, }${f}"
+          fi
+        done
+        if [[ -n "$fw" ]]; then
+          AF_FRAMEWORK_LINE=" ($fw)"
+        else
+          AF_FRAMEWORK_LINE=""
+        fi
+        # COMMANDS: scripts.{dev,build,test,lint} 存在 key のみ `npm run <key>` 化 (draft §3.1)
+        local emitted=0
+        local s
+        for s in dev build test lint; do
+          if grep -qE "\"$s\"[[:space:]]*:" "$pkg" 2>/dev/null; then
+            printf 'npm run %s\n' "$s" >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+            emitted=1
+          fi
+        done
+        [[ $emitted -eq 0 ]] && printf '%s\n' "<!-- TODO(auto-fill): 例 npm run dev / build / test -->" >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+      fi
+      ;;
+    py)
+      local pj="$target/pyproject.toml"
+      if [[ -f "$pj" ]]; then
+        # PROJECT_NAME: [project] name = "..." → [tool.poetry] name = "..."
+        AF_PROJECT_NAME="$(grep -E '^[[:space:]]*name[[:space:]]*=' "$pj" 2>/dev/null | head -1 | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' || true)"
+        # RUNTIME: requires-python
+        local py_req=""
+        py_req="$(grep -E '^[[:space:]]*requires-python[[:space:]]*=' "$pj" 2>/dev/null | head -1 | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' || true)"
+        if [[ -n "$py_req" ]]; then
+          AF_RUNTIME_LINE="Python $py_req"
+        else
+          AF_RUNTIME_LINE="<!-- TODO(auto-fill): 例 Python 3.12+ -->"
+        fi
+        # FRAMEWORK: whitelist (django|fastapi|flask)。dep-context に絞った pattern で
+        # false positive (description / readme 文字列内の言及等) を回避 (2026-07-05 finding 2 対処):
+        #   (1) toml table key: `^\s*fastapi\s*=`     (poetry / uv / setuptools `[project]`)
+        #   (2) list string with version specifier:    `"fastapi>=..."` / `'fastapi==..'`
+        #   (3) bare quoted name (稀、list entry):     `"fastapi"` / `'fastapi'`
+        # 散文 (`"fastapi is great"`) は fastapi 直後が空白のため (1)-(3) いずれにも該当せず drop。
+        # `-i` を維持し `Django` 等 capital 変種を許容 (現行挙動保存)。
+        local fw=""
+        local f
+        for f in django fastapi flask; do
+          if grep -qiE "(^[[:space:]]*$f[[:space:]]*=|[\"']$f[<>=~!\"'])" "$pj" 2>/dev/null; then
+            fw="${fw}${fw:+, }${f}"
+          fi
+        done
+        [[ -n "$fw" ]] && AF_FRAMEWORK_LINE=" ($fw)" || AF_FRAMEWORK_LINE=""
+        # COMMANDS: 固定 (pytest + ruff)、draft §3.1
+        printf '%s\n' "pytest" "ruff check ." >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+      fi
+      ;;
+    go)
+      local gm="$target/go.mod"
+      if [[ -f "$gm" ]]; then
+        # PROJECT_NAME: module 行の値 (full path)。空でも sanity check で basename fallback。
+        AF_PROJECT_NAME="$(grep -E '^module[[:space:]]+' "$gm" 2>/dev/null | head -1 | awk '{print $2}' || true)"
+        # RUNTIME: go directive (最小 version、`go 1.22` 等)
+        local go_dir=""
+        go_dir="$(grep -E '^go[[:space:]]+' "$gm" 2>/dev/null | head -1 | awk '{print $2}' || true)"
+        if [[ -n "$go_dir" ]]; then
+          AF_RUNTIME_LINE="Go $go_dir"
+        else
+          AF_RUNTIME_LINE="<!-- TODO(auto-fill): 例 Go 1.22+ -->"
+        fi
+        AF_FRAMEWORK_LINE=""
+        printf '%s\n' "go build ./..." "go test ./..." >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+      fi
+      ;;
+    rust)
+      local ct="$target/Cargo.toml"
+      if [[ -f "$ct" ]]; then
+        # PROJECT_NAME: [package] name = "..." (workspace root は不在の場合あり、その時 basename fallback)
+        AF_PROJECT_NAME="$(grep -E '^[[:space:]]*name[[:space:]]*=' "$ct" 2>/dev/null | head -1 | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' || true)"
+        local edition=""
+        edition="$(grep -E '^[[:space:]]*edition[[:space:]]*=' "$ct" 2>/dev/null | head -1 | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' || true)"
+        if [[ -n "$edition" ]]; then
+          AF_RUNTIME_LINE="edition = $edition"
+        else
+          AF_RUNTIME_LINE="<!-- TODO(auto-fill): 例 edition = 2021 / 2024 -->"
+        fi
+        AF_FRAMEWORK_LINE=""
+        printf '%s\n' "cargo build" "cargo test" "cargo clippy" >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+      fi
+      ;;
+    php)
+      local cj="$target/composer.json"
+      if [[ -f "$cj" ]]; then
+        # PROJECT_NAME: .name (node → grep-sed fallback、§6.6 pattern)
+        if command -v node >/dev/null 2>&1; then
+          AF_PROJECT_NAME="$(node -e 'try{process.stdout.write(String(require(process.argv[1]).name||""))}catch(e){}' "$cj" 2>/dev/null || true)"
+        fi
+        if [[ -z "$AF_PROJECT_NAME" ]]; then
+          AF_PROJECT_NAME="$(grep -E '"name"[[:space:]]*:' "$cj" 2>/dev/null | head -1 | sed -E 's/.*"name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)"
+        fi
+        # RUNTIME: require.php ("php": "^8.2" 等)
+        local php_ver=""
+        php_ver="$(grep -E '"php"[[:space:]]*:' "$cj" 2>/dev/null | head -1 | sed -E 's/.*"php"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)"
+        if [[ -n "$php_ver" ]]; then
+          AF_RUNTIME_LINE="PHP $php_ver"
+        else
+          AF_RUNTIME_LINE="<!-- TODO(auto-fill): 例 PHP 8.2+ -->"
+        fi
+        AF_FRAMEWORK_LINE=""
+        printf '%s\n' "composer install" "vendor/bin/phpunit" >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+      fi
+      ;;
+    swift)
+      local ps="$target/Package.swift"
+      if [[ -f "$ps" ]]; then
+        # PROJECT_NAME: Package(name: "...") — 行頭が空白 + name: 開始のみ照合 (product/target の
+        # `.executable(name: "...")` は行頭 . なので除外される)
+        AF_PROJECT_NAME="$(grep -E '^[[:space:]]*name[[:space:]]*:[[:space:]]*"' "$ps" 2>/dev/null | head -1 | sed -E 's/.*name[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)"
+        local sw_ver=""
+        sw_ver="$(grep -E '^// swift-tools-version' "$ps" 2>/dev/null | head -1 | sed -E 's|.*swift-tools-version[:[:space:]]*([0-9.]+).*|\1|' || true)"
+        if [[ -n "$sw_ver" ]]; then
+          AF_RUNTIME_LINE="swift-tools-version $sw_ver"
+        else
+          AF_RUNTIME_LINE="<!-- TODO(auto-fill): 例 swift-tools-version 5.10 -->"
+        fi
+        AF_FRAMEWORK_LINE=""
+        printf '%s\n' "swift build" "swift test" >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+      fi
+      ;;
+    generic|*)
+      # 検出不能: basename + TODO で埋める (draft §3.1 row 7)
+      AF_PROJECT_NAME="$(basename "$target")"
+      AF_RUNTIME_LINE="<!-- TODO(auto-fill): 主要 runtime を記入 -->"
+      AF_FRAMEWORK_LINE=""
+      printf '%s\n' "<!-- TODO(auto-fill): 主要な dev / build / test コマンドを追記 -->" >> "$AF_COMMANDS_FILE" 2>/dev/null || true
+      ;;
+  esac
+
+  # sanity: 空 / 改行含みは棄却 → basename fallback (draft §4 抽出値 sanity check)
+  if [[ -z "$AF_PROJECT_NAME" || "$AF_PROJECT_NAME" == *$'\n'* ]]; then
+    AF_PROJECT_NAME="$(basename "$target")"
+  fi
+  return 0
+}
+
+# render_claude_md <lang> <target> <template_dir> <dst>
+# 成功 0 / 失敗 1 (呼び出し側で fallback = CLAUDE.md.template 配置に落とす)。
+# sed 順序 (draft §3.2 SSoT): (1) {{COMMANDS_BLOCK}} 単独行 → r file + //d で multiline 差込
+#                              (2) 残り 3 tokens を s|| 単純置換 (区切り | は path/version の / 衝突回避)
+render_claude_md() {
+  local lang="$1"
+  local target="$2"
+  local template_dir="$3"
+  local dst="$4"
+  local tmpl="$template_dir/CLAUDE.md.example.${lang}.md"
+
+  # template 不在 → fail-open (呼び出し側 fallback)
+  [[ -f "$tmpl" ]] || return 1
+
+  extract_manifest_fields "$lang" "$target" || true
+  # commands file が取得できなければ render 不能 (mktemp 失敗など、稀)
+  if [[ -z "${AF_COMMANDS_FILE:-}" || ! -f "$AF_COMMANDS_FILE" ]]; then
+    return 1
+  fi
+
+  local tmp_out=""
+  tmp_out="$(mktemp "${TMPDIR:-/tmp}/hirai-af-out.XXXXXX" 2>/dev/null || true)"
+  if [[ -z "$tmp_out" ]]; then
+    rm -f "$AF_COMMANDS_FILE" 2>/dev/null || true
+    return 1
+  fi
+
+  # sed 特殊文字 escape (置換右辺): \ | & を無害化。区切りは | を採用 (path / version の / 衝突回避)。
+  # whitelist 抽出値の性質上、これらの文字が発生する確率は低いが defensive に処理する。
+  local pn rl fl
+  pn="$(printf '%s' "$AF_PROJECT_NAME"   | sed -e 's/[\\|&]/\\&/g' 2>/dev/null || printf '%s' "$AF_PROJECT_NAME")"
+  rl="$(printf '%s' "$AF_RUNTIME_LINE"   | sed -e 's/[\\|&]/\\&/g' 2>/dev/null || printf '%s' "$AF_RUNTIME_LINE")"
+  fl="$(printf '%s' "$AF_FRAMEWORK_LINE" | sed -e 's/[\\|&]/\\&/g' 2>/dev/null || printf '%s' "$AF_FRAMEWORK_LINE")"
+
+  if sed -e "/^{{COMMANDS_BLOCK}}$/r $AF_COMMANDS_FILE" \
+         -e "/^{{COMMANDS_BLOCK}}$/d" \
+         -e "s|{{PROJECT_NAME}}|${pn}|g" \
+         -e "s|{{RUNTIME_LINE}}|${rl}|g" \
+         -e "s|{{FRAMEWORK_LINE}}|${fl}|g" \
+         "$tmpl" > "$tmp_out" 2>/dev/null; then
+    if mv "$tmp_out" "$dst" 2>/dev/null; then
+      rm -f "$AF_COMMANDS_FILE" 2>/dev/null || true
+      return 0
+    fi
+  fi
+  rm -f "$tmp_out" "$AF_COMMANDS_FILE" 2>/dev/null || true
+  return 1
 }
 
 # ============================================================
@@ -340,34 +704,151 @@ case "$MODE" in
 esac
 
 # ============================================================
-# 2. CLAUDE.md (template として配置、既存は保護)
+# 2. CLAUDE.md (task-89 auto-fill、既存 CLAUDE.md は default/update mode で不可侵)
 # ============================================================
+# 設計 SSoT: docs/draft/claude-md-auto-fill.md §3.3 mode × 既存 matrix。
+# - install (default) + 既存不在 : auto-fill 生成 (`<...>` placeholder 0)
+# - install (default) + 既存あり : 不可侵 (.bak 退避廃止 = subscbase-api 再発防止) + CommonRules HINT
+# - update            + 既存不在 : 生成しない (現行維持) + 存在時は HINT のみ (read-only)
+# - update            + 既存あり : 不可侵 + CommonRules HINT
+# - force / overwrite-all       : auto-fill 生成 (backup なし、既存があれば上書き)
+# - dry-run                     : 検出 echo のみ、file write 0 (run() helper と同じ dry-run 契約)
+# - fail-open fallback          : template 不在 / render 失敗時は旧挙動 (CLAUDE.md.template 配置) + WARN
+CLAUDE_MD_DST="$TARGET/CLAUDE.md"
+TEMPLATE_DIR="$SCRIPT_DIR/.claude/templates"   # source 側 templates (rsync 順序非依存)
+
 if [[ "$MODE" == "update" ]]; then
+  # update mode は CLAUDE.md を生成/上書きしない (現行維持、draft §3.3)。
+  # 既存 CLAUDE.md に @.claude/CommonRules.md 参照が不在なら HINT (自動編集は subscbase-api 再発防止で禁止)。
   echo "[install] (update mode) CLAUDE.md は触らない"
+  if [[ -f "$CLAUDE_MD_DST" ]] && ! grep -q '@.claude/CommonRules.md' "$CLAUDE_MD_DST" 2>/dev/null; then
+    echo "[install] HINT: $CLAUDE_MD_DST に \`@.claude/CommonRules.md\` 参照が不在 — 先頭に 1 行追加してください (共通規範 load 用)"
+  fi
 else
-  if [[ -f "$TARGET/CLAUDE.md" ]]; then
+  # detect (dry-run でも echo)。--lang 明示なら override / 未指定なら detected
+  DETECTED_LANG="$(detect_project_lang "$TARGET")"
+  if $LANG_EXPLICIT; then
+    echo "[install] CLAUDE.md auto-fill: lang=${DETECTED_LANG} (--lang override)"
+  else
+    echo "[install] CLAUDE.md auto-fill: lang=${DETECTED_LANG} (manifest 検出)"
+  fi
+
+  if [[ -f "$CLAUDE_MD_DST" ]]; then
+    # 既存 CLAUDE.md あり
     if [[ "$MODE" == "force" || "$MODE" == "overwrite-all" ]]; then
-      echo "[install] WARN: --$MODE overwriting $TARGET/CLAUDE.md (no backup)"
-      run cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md"
+      # --force / --overwrite-all: auto-fill で上書き (backup なし、既存挙動踏襲)
+      if $DRY_RUN; then
+        echo "[dry-run] generate CLAUDE.md (lang=${DETECTED_LANG}) — overwrite existing"
+      else
+        echo "[install] WARN: --$MODE overwriting $CLAUDE_MD_DST with auto-fill (no backup)"
+        if render_claude_md "$DETECTED_LANG" "$TARGET" "$TEMPLATE_DIR" "$CLAUDE_MD_DST"; then
+          echo "[install] CLAUDE.md 再生成 (auto-fill、lang=${DETECTED_LANG})"
+        else
+          echo "[install] WARN: auto-fill 失敗 → fallback (source CLAUDE.md → CLAUDE.md.template)" >&2
+          cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md.template" 2>/dev/null || true
+        fi
+      fi
     else
-      echo "[install] existing CLAUDE.md → backup to CLAUDE.md.bak.$STAMP, install as CLAUDE.md.template"
-      run mv "$TARGET/CLAUDE.md" "$TARGET/CLAUDE.md.bak.$STAMP"
-      run cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md.template"
+      # default install + 既存 CLAUDE.md: 不可侵 (draft §3.3、.bak 退避廃止 = subscbase-api 再発防止)
+      echo "[install] existing $CLAUDE_MD_DST 保護 (default mode は不可侵、.bak 退避廃止)"
+      if ! grep -q '@.claude/CommonRules.md' "$CLAUDE_MD_DST" 2>/dev/null; then
+        echo "[install] HINT: $CLAUDE_MD_DST に \`@.claude/CommonRules.md\` 参照が不在 — 先頭に 1 行追加してください (共通規範 load 用)"
+      fi
     fi
   else
-    echo "[install] copying CLAUDE.md → $TARGET/CLAUDE.md.template (edit <...> placeholders then rename to CLAUDE.md)"
-    run cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md.template"
+    # 既存 CLAUDE.md 不在: default / force / overwrite-all いずれも auto-fill 生成
+    if $DRY_RUN; then
+      echo "[dry-run] generate CLAUDE.md (lang=${DETECTED_LANG})"
+    else
+      if render_claude_md "$DETECTED_LANG" "$TARGET" "$TEMPLATE_DIR" "$CLAUDE_MD_DST"; then
+        echo "[install] CLAUDE.md 生成 (auto-fill、lang=${DETECTED_LANG})"
+      else
+        echo "[install] WARN: auto-fill 失敗 → fallback (source CLAUDE.md → CLAUDE.md.template)" >&2
+        cp "$SCRIPT_DIR/CLAUDE.md" "$TARGET/CLAUDE.md.template" 2>/dev/null || true
+      fi
+    fi
   fi
+  unset DETECTED_LANG
 fi
+unset CLAUDE_MD_DST TEMPLATE_DIR
 
 # ============================================================
-# 3. .mcp.json (Serena MCP は /save-state /pm-start に必須)
+# 3. .mcp.json (Serena MCP は /save-state /pm-start に必須、task-90 --mcp-servers filter 対応)
 # ============================================================
+# 設計 SSoT: docs/draft/mcp-json-minimal-default.md §3 Step 2。
+# 挙動 matrix (WITH_MCP=true 時):
+#   既存 .mcp.json あり     : keep-as-is 維持 (merge しない、冪等)。--mcp-servers 指定時は NOTE。
+#   不在 + MCP_SERVERS=all  : source verbatim copy (従来動作 = 後方互換、jq 不要)。
+#   不在 + subset + jq あり : jq filter で server 単位 select 生成。source に無い token は exit 64
+#                             (typo fail-fast)。生成後 jq . で valid JSON validate + if-wrapper mv。
+#                             filter 生成失敗は WARN + 全配布 fallback (fail-open)。
+#   不在 + subset + jq 不在 : WARN + 全配布 fallback (機能優先、従来同等 regression 0)。
+#   dry-run                 : file write 0 (echo のみ)。生成 branch も dry-run 分岐で run() 契約踏襲。
+# fail-open 契約 (§6.3/6.4 先例踏襲): jq / mktemp / filter 失敗はすべて WARN + 全配布 fallback に落ちる。
+# && list 終端 mv は set -euo pipefail 下で fail-open 契約を破って die するため if-wrapper 形を採用する
+# (install.sh:1001 先例)。
 if $WITH_MCP; then
   if [[ -f "$TARGET/.mcp.json" ]]; then
     echo "[install] existing .mcp.json detected → keep as-is (manual merge if you need harness defaults)"
+    if $MCP_SERVERS_SET; then
+      echo "[install] NOTE: --mcp-servers=$MCP_SERVERS は既存 .mcp.json には適用しない (manual merge が必要)"
+    fi
+  elif [[ "$MCP_SERVERS" == "all" ]]; then
+    # 従来動作 (--mcp-servers=all は明示的後方互換オプション)
+    echo "[install] copying .mcp.json → $TARGET/.mcp.json  (--mcp-servers=all: 全 server 配布)"
+    run cp "$SCRIPT_DIR/.mcp.json" "$TARGET/.mcp.json"
+  elif command -v jq >/dev/null 2>&1; then
+    SOURCE_MCP="$SCRIPT_DIR/.mcp.json"
+    # key 実在検証 (Step 1 item 5 が Step 2 で担当と明記した部分、draft §3 D5): source .mcp.json の
+    # mcpServers keys と MCP_SERVERS の set-diff を jq で 1 回で計算。source に無い token が
+    # 1 つでもあれば typo として exit 64 で fail-fast (jq 存在時のみ、jq 不在時は下記 else fallback)。
+    # `|| true` は source .mcp.json が壊れているケースで空文字を返し、その場合は下の空判定で
+    # 全配布 fallback へ落ちる (fail-open)。
+    _mcp_missing="$(jq -r --arg csv "$MCP_SERVERS" '
+      ($csv | split(",")) - (.mcpServers | keys) | .[]
+    ' "$SOURCE_MCP" 2>/dev/null || true)"
+    _mcp_source_keys="$(jq -r '.mcpServers | keys | join(",")' "$SOURCE_MCP" 2>/dev/null || true)"
+    if [[ -z "$_mcp_source_keys" ]]; then
+      # source .mcp.json が壊れている / jq が枝を舐められない → 全配布 fallback (fail-open)
+      echo "[install] WARN: source .mcp.json の keys 取得失敗 → 全 server 配布 fallback" >&2
+      run cp "$SOURCE_MCP" "$TARGET/.mcp.json"
+    elif [[ -n "$_mcp_missing" ]]; then
+      _mcp_first_missing="$(printf '%s\n' "$_mcp_missing" | head -1)"
+      echo "[install] error: --mcp-servers token '$_mcp_first_missing' は source .mcp.json に存在しません (available: $_mcp_source_keys)" >&2
+      exit 64
+    elif $DRY_RUN; then
+      # jq filter は stdout redirect を伴うため run() helper 非対応 → 明示 dry-run 分岐
+      echo "[dry-run] generate .mcp.json (servers: $MCP_SERVERS) → $TARGET/.mcp.json"
+    else
+      # mktemp X 末尾 + TMPDIR 尊重 + || true (§6.4 先例踏襲、BSD/macOS literal 名 + set -e die 回避)
+      TMP_MCP="$(mktemp "${TMPDIR:-/tmp}/hirai-mcp.XXXXXX" 2>/dev/null || true)"
+      if [[ -z "$TMP_MCP" ]]; then
+        echo "[install] WARN: mktemp 失敗 → 全 server 配布 fallback (fail-open、install 継続)" >&2
+        run cp "$SOURCE_MCP" "$TARGET/.mcp.json"
+      else
+        # jq filter: source 全体を舐めて mcpServers を選択 keys のみで再構築。
+        # index() は「配列に含まれるか」の判定 (null/数値のいずれかを返す) で、select は truthy のみ通す。
+        jq --arg csv "$MCP_SERVERS" \
+          '{mcpServers: (.mcpServers | with_entries(select(.key as $k | ($csv | split(",")) | index($k))))}' \
+          "$SOURCE_MCP" > "$TMP_MCP" 2>/dev/null || true
+        # if-wrapper 判定 (§6.4 先例): -s (非空) + jq . (valid JSON) + mv (原子的差替)。
+        # いずれか fail で全配布 fallback (fail-open、install 継続)。
+        if [[ -s "$TMP_MCP" ]] && jq . "$TMP_MCP" >/dev/null 2>&1 && mv "$TMP_MCP" "$TARGET/.mcp.json" 2>/dev/null; then
+          echo "[install] .mcp.json 生成 (servers: $MCP_SERVERS)"
+        else
+          echo "[install] WARN: .mcp.json filter 生成失敗 → 全 server 配布 fallback (fail-open、install 継続)" >&2
+          rm -f "$TMP_MCP" 2>/dev/null || true
+          run cp "$SOURCE_MCP" "$TARGET/.mcp.json"
+        fi
+      fi
+      unset TMP_MCP
+    fi
+    unset SOURCE_MCP _mcp_missing _mcp_source_keys _mcp_first_missing
   else
-    echo "[install] copying .mcp.json → $TARGET/.mcp.json"
+    # jq 不在: skip すると serena 不在で /save-state 系が壊れ機能 regression になるため、
+    # 全配布 + WARN で機能優先 fallback (draft §3 D4)。従来同等動作 = regression 0、
+    # noise (env placeholder 残存) は従来並みで新規発生ではない。
+    echo "[install] WARN: jq 不在のため --mcp-servers 選択 skip → 全 server 配布 (従来動作)。手動選択は jq install 後に再実行してください" >&2
     run cp "$SCRIPT_DIR/.mcp.json" "$TARGET/.mcp.json"
   fi
 else
@@ -829,7 +1310,7 @@ Next steps:
       生成後の変更は本 file を編集 → bash .claude/scripts/hc-config.sh --summary で effective 状態確認。
       advisory は PoC 用 = 主要 guard warn 化。通常運用は team-default を推奨)
   3. \$EDITOR .claude/bash-whitelist.txt           # 使う CLI (pnpm/poetry/cargo/...) を追記
-  4. mv CLAUDE.md.template CLAUDE.md && \$EDITOR CLAUDE.md   # <...> placeholders を埋める
+  4. \$EDITOR CLAUDE.md   # <!-- TODO(auto-fill) --> comment を補完 (task-89 auto-fill 済、\`<...>\` placeholder 0)
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
   6. Claude Code session 起動 → /init-tasks → /mode loop
 
@@ -860,6 +1341,24 @@ settings.json について (task-71 H2 / task-80):
     で repo 固有 permissions から再生成すること (task-71 dispatcher 配線復元)。
   - --delete は使わないため target にしかない file は残る (上書きのみ)。
   - 用途は drift リセット専用。日常の harness 取込は --update を使うこと (local 設定を温存)。
+
+MCP servers について (task-90):
+  - --mcp-servers=<csv> で .mcp.json 配布 server を選択可能 (default: serena,context7 =
+    env placeholder 0 の minimal 2 server、--mcp-servers=all で従来全 7 server 配布)。
+    選択可能 server: serena, context7, github, salesforce, agent-browser, asana-pat, slack。
+    --no-mcp との併用は exit 64。
+  - 配布 logic (§3、fresh install 時のみ、既存 .mcp.json は常に keep-as-is):
+      subset (default 含む) : jq filter で server 単位 select 生成。source に無い token は exit 64。
+      all                  : source verbatim copy (従来動作)。
+      jq 不在時             : WARN + 全 server 配布 fallback (機能優先、従来同等 regression 0)。
+      filter 生成失敗時     : WARN + 全 server 配布 fallback (fail-open、install 継続)。
+      dry-run              : echo のみ、file write 0 (--dry-run 契約)。
+  - opt-in server 追加時の env 要件 (subset 選択時に手動 export 必須):
+      github       : GITHUB_PAT
+      salesforce   : SALESFORCE_CONNECTION_TYPE / USERNAME / PASSWORD / TOKEN / INSTANCE_URL
+      asana-pat    : ASANA_PAT
+      slack        : SLACK_MCP_XOXP_TOKEN / SLACK_MCP_ADD_MESSAGE_TOOL
+      (serena / context7 / agent-browser は env 不要)
 
 project-rules/ について (task-82):
   - .claude/project-rules/<name>.md は **project 所有** (update 免除)。harness 7 rule
