@@ -742,6 +742,15 @@ _get_default() {
 #        (config-loader.sh Step 3.5 mirror: local は SSoT に勝ち、env には負ける)
 #   2.   yml に key が存在 → yml の raw 値
 #   3.   config-loader.sh の defaults → empty yml で source して取得 (HIGH H-02 test-auto fix)
+#
+# array key の表示ギャップ (task-86 Step 4-3、明示、hc-config-local-yml-integration §2 案 A):
+#   本 helper は yml raw の inline 表記 (`[a, b, c]`) をそのまま返す (`_yml_get_raw` は
+#   array を parse しない設計 L306-351)。runtime (config-loader `_hc_parse_yaml_file` L459
+#   定義、array parse sub-block L503-530) は改行区切り list に parse する ─ 文字列表現は
+#   非対称。是正しない判断根拠は draft hc-config-local-yml-integration §2 (breaking change
+#   と perf コストが scalar 主用途で得る実益を上回るため案 B/C 却下)。意味的一致は
+#   hc-config-local-yml-smoke Case 7 が機械保証する (CLI raw を `[]` 除去 + `, ` → 改行で
+#   正規化 → runtime parsed と一致)。
 _get_current() {
   local key="$1"
   local env_name
@@ -854,6 +863,14 @@ cmd_list() {
     show-default) show_default=1 ;;
   esac
 
+  # task-86 Step 4-1: local.yml 存在時に stderr notice 1 行 (stdout は汚さない)
+  #   理由: hc-config-key-parity-smoke.sh (L62-64) が --list stdout を
+  #   `^[a-z_][a-zA-Z0-9_]*[[:space:]]` で key 抽出 (awk '{print $1}') するため、
+  #   stdout に `local config: ...` 行を混ぜると疑似 key `local` が拾われ parity FAIL。
+  if [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ]; then
+    printf '[hc-config] note: harness-config.local.yml overrides applied to CURRENT (details: --summary)\n' >&2
+  fi
+
   _cmd_list_header "$show_default" "$show_effect"
 
   local keys
@@ -958,6 +975,16 @@ cmd_get() {
   if _yml_get_raw "$CONFIG_PATH" "$key" >/dev/null 2>&1 \
     || { [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ] \
          && _yml_get_raw "$LOCAL_CONFIG_PATH" "$key" >/dev/null 2>&1; }; then
+    # task-86 Step 2: SSoT 不在 ∧ local にのみ存在 = typo の可能性 → config-loader Step 3.6
+    # (L600-601) と同文言 body で stderr WARN (prefix のみ [hc-config])。値は返す (fail-open、
+    # exit 0 維持)。抑止 env は Step 3.6 と共用: HC_UNKNOWN_LOCAL_KEY_WARN=0
+    if [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ] \
+      && ! _yml_get_raw "$CONFIG_PATH" "$key" >/dev/null 2>&1 \
+      && _yml_get_raw "$LOCAL_CONFIG_PATH" "$key" >/dev/null 2>&1 \
+      && [ "${HC_UNKNOWN_LOCAL_KEY_WARN:-1}" != "0" ]; then
+      printf '[hc-config] WARN: unknown_local_key: %s (in %s but not in SSoT %s; possible typo)\n' \
+        "$key" "$LOCAL_CONFIG_PATH" "$CONFIG_PATH" >&2
+    fi
     _get_current "$key"
     printf '\n'
     return 0
@@ -1061,6 +1088,10 @@ cmd_reset_all() {
 
 # --diff: 現在値と default の差分
 cmd_diff() {
+  # task-86 Step 4-1: local.yml 存在時に stderr notice 1 行 (stdout は汚さない、cmd_list と同流儀)
+  if [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ]; then
+    printf '[hc-config] note: harness-config.local.yml overrides applied to CURRENT (details: --summary)\n' >&2
+  fi
   printf '%-50s %-30s %-30s\n' "KEY" "CURRENT" "DEFAULT"
   printf '%s\n' "$(printf '%.0s-' {1..120})"
   local keys
@@ -1254,7 +1285,7 @@ _validate_mainline_branch() {
   return 1
 }
 
-# --validate: 全 key の型 validation のみ
+# --validate: 全 key の型 validation (SSoT + local.yml、task-86 Step 3)
 cmd_validate() {
   local keys
   keys=$(_yml_list_keys "$CONFIG_PATH")
@@ -1268,6 +1299,34 @@ cmd_validate() {
       errors=$((errors + 1))
     fi
   done <<< "$keys"
+
+  # task-86 Step 3: local.yml も検証 (SSoT 検証結果・成功行文言は不変、追加のみ)
+  # - SSoT に存在する key: SSoT 側 raw から infer した型で local 値を validate
+  #   → 不正なら `invalid (local): <key>` + errors 加算 (非 0 exit)
+  # - SSoT に不在の key (local-only): error にせず unknown_local_key WARN のみ
+  #   (runtime も fail-open で load する仕様と整合、config-loader.sh Step 3.6 L574-576)
+  # - WARN 抑止 env は cmd_get / config-loader と共用: HC_UNKNOWN_LOCAL_KEY_WARN=0
+  if [ -n "${LOCAL_CONFIG_PATH:-}" ] && [ -f "$LOCAL_CONFIG_PATH" ]; then
+    local local_keys local_key local_raw ssot_raw ssot_type
+    local_keys=$(_yml_list_keys "$LOCAL_CONFIG_PATH")
+    while IFS= read -r local_key; do
+      [ -z "$local_key" ] && continue
+      local_raw=$(_yml_get_raw "$LOCAL_CONFIG_PATH" "$local_key" || printf '')
+      if ssot_raw=$(_yml_get_raw "$CONFIG_PATH" "$local_key" 2>/dev/null); then
+        ssot_type=$(_infer_type "$local_key" "$ssot_raw")
+        if ! _validate_value "$local_key" "$ssot_type" "$local_raw" 2>/dev/null; then
+          _err "invalid (local): ${local_key} (type=${ssot_type}, value='${local_raw}')"
+          errors=$((errors + 1))
+        fi
+      else
+        if [ "${HC_UNKNOWN_LOCAL_KEY_WARN:-1}" != "0" ]; then
+          printf '[hc-config] WARN: unknown_local_key: %s (in %s but not in SSoT %s; possible typo)\n' \
+            "$local_key" "$LOCAL_CONFIG_PATH" "$CONFIG_PATH" >&2
+        fi
+      fi
+    done <<< "$local_keys"
+  fi
+
   if [ "$errors" -gt 0 ]; then
     _err "validation failed: ${errors} errors"
     return 1
@@ -1736,18 +1795,23 @@ _tui_render_effect_panel() {
 _tui_render_effect_panel_for_key() {
   local selected_key="$1"
   [ -z "$selected_key" ] && return 0
-  local cur type raw desc effect def
+  local cur type raw desc effect def local_mark
   raw=$(_yml_get_raw "$CONFIG_PATH" "$selected_key" || printf '')
   cur=$(_get_current "$selected_key")
   def=$(_get_default "$selected_key" 2>/dev/null || printf '')
   type=$(_infer_type "$selected_key" "$raw")
   desc=$(_meta_desc "$selected_key")
   effect=$(_meta_effect "$selected_key")
+  # task-86 Step 4-2: 現在値 が local.yml 由来なら marker 付与 (--summary L1184 と同文言)
+  local_mark=""
+  if _is_local_overridden "$selected_key"; then
+    local_mark=" (local overridden)"
+  fi
   printf '\n%s---------------------------------------------------------------%s\n' "$_TUI_DIM" "$_TUI_RESET"
   printf '%skey%s     : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$selected_key"
   printf '%s説明%s    : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$desc"
   printf '%s型%s      : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$type"
-  printf '%s現在値%s  : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$cur" | tr '\n' ',')"
+  printf '%s現在値%s  : %s%s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$cur" | tr '\n' ',')" "$local_mark"
   printf '%sdefault%s : %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$(printf '%s' "$def" | tr '\n' ',')"
   printf '%s変更効果%s: %s\n' "$_TUI_BOLD" "$_TUI_RESET" "$effect"
 }
