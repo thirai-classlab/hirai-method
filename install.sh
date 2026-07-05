@@ -2,7 +2,7 @@
 # 平井メソッド (hirai-method) — robust installer
 #
 # Usage:
-#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--dry-run] [--no-mcp] [--no-docs]
+#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--preset=<name>] [--dry-run] [--no-mcp] [--no-docs]
 #
 # Modes (--update / --force / --overwrite-all are mutually exclusive):
 #   (default)  : 新規 install。既存 .claude / CLAUDE.md は .bak タイムスタンプ付きで退避。
@@ -22,6 +22,10 @@
 #   --dry-run  : 実行内容を表示するのみ (rsync -n + 各 cp / mkdir を echo)。
 #   --no-mcp   : .mcp.json を配置しない (Serena 不要な project)。
 #   --no-docs  : docs/tasks/, docs/draft/ の templates 配置を skip。
+#   --preset=<name> : (task-85) §6.4 preset bootstrap で生成する harness-config.local.yml の
+#                enforcement preset を指定 (advisory | team-default | strict | harness-dev、
+#                default: team-default = HOTFIX-1 後方互換)。team-default/strict → 8 toggle true、
+#                advisory/harness-dev → 8 toggle 明示 false。既存 local.yml 時は無視 (WARN + verbatim 保持)。
 #
 # Exclude (state / user-local):
 #   .gateguard-state/ .taskguard-state/ .confidence-gate-state/ .failure-window/
@@ -58,6 +62,8 @@ DRY_RUN=false
 WITH_MCP=true
 WITH_DOCS=true
 COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
+PRESET="team-default"    # --preset default = HOTFIX-1 現行挙動維持 (後方互換、task-85)
+PRESET_EXPLICIT=false    # --preset 明示指定の有無 (既存 local.yml / self-install 時の WARN 用)
 
 # M-1: detect conflicting mode flags. --update / --force / --overwrite-all each set
 # MODE; specifying more than one (or repeating one) would silently last-wins into an
@@ -83,11 +89,24 @@ for arg in "$@"; do
     --dry-run)  DRY_RUN=true  ;;
     --no-mcp)   WITH_MCP=false ;;
     --no-docs)  WITH_DOCS=false ;;
+    --preset=*)
+      PRESET="${arg#--preset=}"
+      # allowed set は hc-config.sh _validate_default_preset と同一 4 値 (SSoT)。
+      # drift は install-local-yml-smoke case M (静的比較) で機械検出する (task-85)。
+      case "$PRESET" in
+        advisory|team-default|strict|harness-dev) PRESET_EXPLICIT=true ;;
+        *)
+          echo "[install] error: invalid --preset '$PRESET' (must be one of: advisory, team-default, strict, harness-dev)" >&2
+          exit 64
+          ;;
+      esac
+      ;;
     -h|--help)
       # L-2: print the full header comment block including the cross-repo WARNING
       # (ends at the closing ===== of the WARNING box before `set -euo pipefail`;
-      # task-79 added 4 mode-doc lines so the box now ends at line 48).
-      sed -n '2,48p' "$0"
+      # task-79 added 4 mode-doc lines, task-85 added 4 --preset doc lines so the
+      # box now ends at line 52).
+      sed -n '2,52p' "$0"
       exit 0
       ;;
     -*)
@@ -106,7 +125,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--dry-run|--no-mcp|--no-docs]" >&2
+  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--preset=<name>|--dry-run|--no-mcp|--no-docs]" >&2
   exit 64
 fi
 
@@ -503,9 +522,10 @@ if [[ "$MODE" == "update" || "$MODE" == "force" || "$MODE" == "overwrite-all" ]]
 fi
 
 # ============================================================
-# 6.4. consuming repo preset bootstrap (HOTFIX-1)
+# 6.4. consuming repo preset bootstrap (HOTFIX-1 + task-85 --preset parameterize)
 # ============================================================
-# 設計根拠: docs/draft/install-immediately-usable-redesign-20260618.md §9.1 HOTFIX-1 / §4.1 対策 B。
+# 設計根拠: docs/draft/install-immediately-usable-redesign-20260618.md §9.1 HOTFIX-1 / §4.1 対策 B
+#           + docs/draft/install-preset-auto-switch.md §3 Step 1 (--preset opt-in、task-85)。
 # SSoT harness-config.yml は default_preset: harness-dev を verbatim copy するため、
 # consuming repo では主要 guard が全 disabled になる (subscbase-api 2026-06-18 実機事案)。
 # default_preset 変更は feature_*_enabled / review_required_* に波及しない (R7) ため、
@@ -519,55 +539,88 @@ fi
 # self-install (TARGET と SCRIPT_DIR の物理 path 一致、symlink 経由で L128 の
 # 文字列比較をすり抜けた場合含む) は harness 自身の dogfood (harness-dev preset)
 # を壊すため skip。fail-open: 生成失敗は WARN のみで install 継続 (die しない)。
-if ! $DRY_RUN; then
+# task-85: 生成内容は --preset=<name> で parameterize (team-default/strict → 8 toggle true、
+# advisory/harness-dev → 8 toggle 明示 false = R7 対称性 + SSoT 将来値変更への pin)。
+# default は team-default (HOTFIX-1 後方互換、install-local-yml-smoke Case A/B が regression 検証)。
+
+# preset → guard toggle 値 mapping (task-85 Step 1)。
+# enforcement_matrix の presets 行 ({advisory: false, team-default: true,
+# strict: true, harness-dev: false}、8 guard 一様) と一致させる。乖離は
+# install-local-yml-smoke case I/J (target で enforcement-mismatch-smoke 実走) が機械検出。
+_preset_toggle_value() {
+  case "$1" in
+    team-default|strict)  echo "true"  ;;
+    advisory|harness-dev) echo "false" ;;
+  esac
+}
+
+if $DRY_RUN; then
+  echo "[dry-run] would generate local.yml (preset: $PRESET)"
+else
   LOCAL_YML="$TARGET/.claude/harness-config.local.yml"
   TARGET_PHYS="$(cd "$TARGET" 2>/dev/null && pwd -P || echo "$TARGET")"
   SOURCE_PHYS="$(cd "$SCRIPT_DIR" 2>/dev/null && pwd -P || echo "$SCRIPT_DIR")"
   if [[ "$TARGET_PHYS" == "$SOURCE_PHYS" ]]; then
     echo "[install] NOTE: self-install 検出 (target == harness repo 物理 path) → preset bootstrap skip (harness-dev dogfood 維持)" >&2
+    if $PRESET_EXPLICIT; then
+      echo "[install] NOTE: --preset=$PRESET は無視 (self-install は harness-dev dogfood 維持)" >&2
+    fi
   elif [[ ! -d "$TARGET/.claude" ]]; then
     echo "[install] WARN: $TARGET/.claude 不在のため preset bootstrap skip" >&2
   elif [[ -f "$LOCAL_YML" ]]; then
     echo "[install] NOTE: harness-config.local.yml 既存 → 生成 skip (project 所有、verbatim 保持)"
+    if $PRESET_EXPLICIT; then
+      echo "[install] WARN: --preset=$PRESET は無視 (既存 local.yml 保持。変更は \$EDITOR .claude/harness-config.local.yml)" >&2
+    fi
   else
     # mktemp の X 群は末尾必須 (BSD/macOS は非末尾 X を randomize せず literal 名を
     # 生成し、stale file 残存で以降 rc=1 になる)。set -e 下の非ガード代入は fail-open
     # 契約を破って die するため || true + 空判定で WARN + skip に落とす。TMPDIR 尊重。
+    PRESET_TOGGLE="$(_preset_toggle_value "$PRESET")"
     TMP_LOCAL="$(mktemp "${TMPDIR:-/tmp}/harness-config-local.XXXXXX" 2>/dev/null || true)"
-    # set -e 下でも heredoc 書込失敗で die しないよう || true、成否は -s で判定
+    # set -e 下でも heredoc / printf 書込失敗で die しないよう || true、成否は -s + grep で判定。
+    # comment header は quoted heredoc 維持 (変数展開なし)、default_preset 行 + 8 toggle 行は
+    # printf で追記 (quoted → unquoted heredoc 化による展開事故を回避、task-85 Step 1b)。
     if [[ -n "$TMP_LOCAL" ]]; then
       cat > "$TMP_LOCAL" 2>/dev/null <<'LOCAL_YML_EOF' || true
-# === harness-config.local.yml (install.sh 自動生成、HOTFIX-1) ===
+# === harness-config.local.yml (install.sh 自動生成、HOTFIX-1 + task-85 --preset) ===
 # 本 file は project 所有: install.sh --update で上書きされない (rsync exclude)。
-# 設計根拠: docs/draft/install-immediately-usable-redesign-20260618.md §9.1 / §4.1 対策 B。
+# 設計根拠: docs/draft/install-immediately-usable-redesign-20260618.md §9.1 / §4.1 対策 B
+#           + docs/draft/install-preset-auto-switch.md (--preset parameterize)。
 # SSoT harness-config.yml の default_preset: harness-dev は consuming repo では
-# 主要 guard 全 disabled になるため、team-default へ上書きする。
+# 主要 guard 全 disabled になるため、install 時指定 preset (--preset=<name>、
+# default: team-default) へ上書きする。
 # 注意 (R7): default_preset 変更は feature_*_enabled / review_required_* に波及
 # しないため、下記 8 toggle (feature 4 + review_required 4) の individual 明示が
 # 必須 (default_preset 行だけ残して toggle 行を消すと guard は無効のまま)。
-# review_required 4 件も true にしないと enforcement_matrix の team-default 期待
-# (presets.team-default: true) と自己矛盾し、enforcement-mismatch-smoke Case 3 が
-# UNDOCUMENTED mismatch で FAIL する。preset / toggle を変えたい場合は本 file を
-# 編集する (SSoT harness-config.yml は触らない — --update で SSoT 値が上書きされる)。
-default_preset: team-default
-feature_task_rule_guard_enabled: true
-feature_draft_flow_guard_enabled: true
-feature_workflow_enforcement_enabled: true
-feature_gateguard_enabled: true
-review_required_design: true
-review_required_test: true
-review_required_module: true
-review_required_system: true
+# toggle 値は enforcement_matrix の presets 期待値 ({advisory: false,
+# team-default: true, strict: true, harness-dev: false}) と一致させて生成する。
+# 乖離すると enforcement-mismatch-smoke Case 3 が UNDOCUMENTED mismatch で FAIL する。
+# preset / toggle を変えたい場合は本 file を編集する (SSoT harness-config.yml は
+# 触らない — --update で SSoT 値が上書きされる)。
+# advisory は個人実験 / PoC 用 (主要 guard warn 化)。通常運用は team-default を推奨。
 LOCAL_YML_EOF
+      printf '%s\n' \
+        "default_preset: ${PRESET}" \
+        "feature_task_rule_guard_enabled: ${PRESET_TOGGLE}" \
+        "feature_draft_flow_guard_enabled: ${PRESET_TOGGLE}" \
+        "feature_workflow_enforcement_enabled: ${PRESET_TOGGLE}" \
+        "feature_gateguard_enabled: ${PRESET_TOGGLE}" \
+        "review_required_design: ${PRESET_TOGGLE}" \
+        "review_required_test: ${PRESET_TOGGLE}" \
+        "review_required_module: ${PRESET_TOGGLE}" \
+        "review_required_system: ${PRESET_TOGGLE}" \
+        >> "$TMP_LOCAL" 2>/dev/null || true
     fi
-    if [[ -s "$TMP_LOCAL" ]] && mv "$TMP_LOCAL" "$LOCAL_YML" 2>/dev/null; then
-      echo "[install] harness-config.local.yml 生成 (default_preset: team-default + guard toggle 8 件 true)"
+    if [[ -s "$TMP_LOCAL" ]] && grep -q '^default_preset:' "$TMP_LOCAL" 2>/dev/null \
+       && mv "$TMP_LOCAL" "$LOCAL_YML" 2>/dev/null; then
+      echo "[install] harness-config.local.yml 生成 (default_preset: ${PRESET} + guard toggle 8 件 ${PRESET_TOGGLE})"
     else
       echo "[install] WARN: harness-config.local.yml 生成失敗 (install は継続)。手動作成を検討" >&2
       rm -f "$TMP_LOCAL" 2>/dev/null || true
     fi
   fi
-  unset LOCAL_YML TARGET_PHYS SOURCE_PHYS TMP_LOCAL
+  unset LOCAL_YML TARGET_PHYS SOURCE_PHYS TMP_LOCAL PRESET_TOGGLE
 fi
 
 # ============================================================
@@ -771,8 +824,10 @@ Next steps:
   2. project 固有 override (docs_approved_dir / protected_paths 追加分 等) は
      \$EDITOR .claude/harness-config.local.yml     # ←ココに書く (install.sh --update で温存される)
      (SSoT .claude/harness-config.yml は触らない — --update で SSoT 値が上書きされる)
-     (HOTFIX-1: 不在時は default_preset: team-default + guard toggle 8 件 true
-      (feature 4 + review_required 4) で自動生成済。preset / toggle を変えたい場合も本 file を編集する)
+     (preset: ${PRESET} で local.yml 自動生成済 (不在時のみ、guard toggle 8 件 = feature 4 + review_required 4 を同時書込)。
+      他 preset は install 時 --preset=<name> (advisory|team-default|strict|harness-dev)、
+      生成後の変更は本 file を編集 → bash .claude/scripts/hc-config.sh --summary で effective 状態確認。
+      advisory は PoC 用 = 主要 guard warn 化。通常運用は team-default を推奨)
   3. \$EDITOR .claude/bash-whitelist.txt           # 使う CLI (pnpm/poetry/cargo/...) を追記
   4. mv CLAUDE.md.template CLAUDE.md && \$EDITOR CLAUDE.md   # <...> placeholders を埋める
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化

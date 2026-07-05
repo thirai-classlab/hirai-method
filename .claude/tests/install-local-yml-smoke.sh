@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # .claude/tests/install-local-yml-smoke.sh — HOTFIX-1 (install-immediately-usable-redesign-20260618 §9.1 / §4.1 対策 B)
+#                                            + task-85 (install-preset-auto-switch §3 Step 3、case H-M)
 #
 # 目的:
 #   install.sh §6.4 consuming repo preset bootstrap を検証する。
@@ -9,9 +10,12 @@
 #   ことを確認する。review_required 4 件は enforcement_matrix の team-default 期待
 #   (presets.team-default: true) との自己矛盾防止に必須 (欠くと consuming repo で
 #   enforcement-mismatch-smoke Case 3 が UNDOCUMENTED mismatch FAIL する)。
+#   task-85 で --preset=<name> parameterize (advisory|team-default|strict|harness-dev)
+#   を追加、preset 別生成 / reject / 既存保持 WARN / allowed set drift を case H-M で検証。
 #
 # Case 一覧:
 #   A: 空 target に新規 install → local.yml 生成 + team-default + 8 toggle true
+#      (--preset 無指定 default = HOTFIX-1 後方互換の regression 検証を兼ねる)
 #   B: A の target に --update 再実行 → local.yml が byte 単位で不変 (冪等)
 #   C: custom 内容の local.yml を事前配置 → --update 後も verbatim 保持
 #   D: --dry-run では local.yml が生成されない (mutation ゼロ)
@@ -19,6 +23,15 @@
 #   F: 生成済 local.yml を config-loader.sh が実際に load し guard toggle が true 化
 #   G: 生成 local.yml 下で target の enforcement-mismatch-smoke.sh が全 PASS
 #      (preset=team-default と実効 toggle の自己矛盾なし = HOTFIX-1 regression 防止)
+#   H: --preset=strict 新規 install → default_preset: strict + 8 toggle true
+#   I: --preset=advisory 新規 install → default_preset: advisory + 8 toggle false
+#      + target の enforcement-mismatch-smoke 全 PASS (Case G 同型)
+#   J: --preset=harness-dev 新規 install → default_preset: harness-dev + 8 toggle false
+#      + target の enforcement-mismatch-smoke 全 PASS
+#   K: --preset=bogus → exit 64 reject + local.yml 非生成 + .claude/ 未配置 (arg parse 段で die)
+#   L: 既存 local.yml + --update --preset=strict → byte 不変 (verbatim) + stderr に WARN「--preset は無視」
+#   M: (静的) install.sh --preset allowed set == hc-config.sh _validate_default_preset の
+#      allowed set (両 file から 4 値を抽出して sort 比較、drift 機械検出)
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs 規範)
@@ -39,6 +52,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 INSTALL_SH="${REPO_ROOT}/install.sh"
 CONFIG_LOADER="${REPO_ROOT}/.claude/hooks/lib/config-loader.sh"
+HC_CONFIG_SH="${REPO_ROOT}/.claude/scripts/hc-config.sh"
 
 if [ ! -f "$INSTALL_SH" ]; then
   printf 'ERROR: install.sh not found: %s\n' "$INSTALL_SH" >&2
@@ -196,9 +210,141 @@ _case_g() (
 )
 
 # ============================================================
+# task-85 helper 群 (case H-M 用、既存 case A-G は無変更維持)
+# ============================================================
+
+# 生成 local.yml の guard toggle 8 件 (feature 4 + review_required 4) を一括 assert。
+# $1: local.yml path / $2: 期待値 (true|false)
+# key 集合は install.sh §6.4 printf 8 行 (task-85 Step 1b) と対応。
+_assert_toggles8() {
+  local yml="$1" expected="$2" key
+  for key in \
+    feature_task_rule_guard_enabled \
+    feature_draft_flow_guard_enabled \
+    feature_workflow_enforcement_enabled \
+    feature_gateguard_enabled \
+    review_required_design \
+    review_required_test \
+    review_required_module \
+    review_required_system; do
+    grep -q "^${key}: ${expected}\$" "$yml" || return 1
+  done
+  return 0
+}
+
+# Case H/I/J 共通 helper: --preset=<name> 新規 install →
+# default_preset 行 + toggle 8 件を assert。
+# $1: target dir / $2: preset 名 / $3: 期待 toggle 値 (true|false)
+_preset_install_and_assert() (
+  set -uo pipefail
+  local tgt="$1" preset="$2" expected="$3"
+  mkdir -p "$tgt"
+  bash "$INSTALL_SH" "$tgt" --preset="$preset" --no-mcp --no-docs >/dev/null 2>&1 || return 1
+  local yml="${tgt}/.claude/harness-config.local.yml"
+  [ -f "$yml" ] || return 1
+  grep -q "^default_preset: ${preset}\$" "$yml" || return 1
+  _assert_toggles8 "$yml" "$expected"
+)
+
+# Case I/J 共通 helper: target の enforcement-mismatch-smoke 実走 (Case G 同型)。
+# _preset_toggle_value (install.sh) と enforcement_matrix presets 行の乖離、
+# advisory/harness-dev disabled_reason 不在 (Case 3/5 FAIL) を機械検出する。
+# $1: target dir
+_run_target_mismatch_smoke() (
+  set -uo pipefail
+  local smoke="$1/.claude/tests/enforcement-mismatch-smoke.sh"
+  [ -f "$smoke" ] || return 1
+  _cleanup_envs
+  bash "$smoke" >/dev/null 2>&1
+)
+
+# ============================================================
+# Case H: --preset=strict 新規 install → default_preset: strict + 8 toggle true
+# ============================================================
+_case_h() (
+  set -uo pipefail
+  _preset_install_and_assert "${TMP_DIR}/target-h" strict true
+)
+
+# ============================================================
+# Case I: --preset=advisory 新規 install → default_preset: advisory
+# + 8 toggle false + target の enforcement-mismatch-smoke 全 PASS
+# (advisory disabled_reason 8 件 = task-85 Step 2 の regression 防止)
+# ============================================================
+_case_i() (
+  set -uo pipefail
+  _preset_install_and_assert "${TMP_DIR}/target-i" advisory false || return 1
+  _run_target_mismatch_smoke "${TMP_DIR}/target-i"
+)
+
+# ============================================================
+# Case J: --preset=harness-dev 新規 install → default_preset: harness-dev
+# + 8 toggle false + target の enforcement-mismatch-smoke 全 PASS
+# ============================================================
+_case_j() (
+  set -uo pipefail
+  _preset_install_and_assert "${TMP_DIR}/target-j" harness-dev false || return 1
+  _run_target_mismatch_smoke "${TMP_DIR}/target-j"
+)
+
+# ============================================================
+# Case K: --preset=bogus → exit 64 reject + local.yml 非生成 + .claude/ 未配置
+# (arg parse 段で die するため install 副作用ゼロ)
+# ============================================================
+_case_k() (
+  set -uo pipefail
+  local tgt="${TMP_DIR}/target-k"
+  mkdir -p "$tgt"
+  local rc=0
+  bash "$INSTALL_SH" "$tgt" --preset=bogus --no-mcp --no-docs >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 64 ] || return 1
+  [ ! -f "${tgt}/.claude/harness-config.local.yml" ] || return 1
+  [ ! -d "${tgt}/.claude" ]
+)
+
+# ============================================================
+# Case L: 既存 local.yml + --update --preset=strict → byte 不変 (verbatim)
+# + stderr に WARN「--preset=strict は無視」(既存 local.yml 保持の明示通知)
+# ============================================================
+_case_l() (
+  set -uo pipefail
+  local tgt="${TMP_DIR}/target-l"
+  mkdir -p "${tgt}/.claude"
+  local yml="${tgt}/.claude/harness-config.local.yml"
+  printf '# project custom override (smoke case L)\ndefault_preset: advisory\n' > "$yml"
+  local ref="${TMP_DIR}/case-l-ref.yml"
+  cp "$yml" "$ref"
+  local errlog="${TMP_DIR}/case-l-stderr.log"
+  bash "$INSTALL_SH" "$tgt" --update --preset=strict >/dev/null 2>"$errlog" || return 1
+  cmp -s "$ref" "$yml" || return 1
+  grep -q 'WARN: --preset=strict は無視' "$errlog"
+)
+
+# ============================================================
+# Case M: (静的) install.sh --preset allowed set == hc-config.sh
+# _validate_default_preset の allowed set (drift 機械検出、draft §4 リスク 3)
+# 抽出: 両 file の case pattern 行 (`advisory|team-default|...)`) から
+# `|` 区切り値を取り出し sort 比較。件数 4 も assert (抽出 regex 空振り防止)。
+# ============================================================
+_case_m() (
+  set -uo pipefail
+  [ -f "$HC_CONFIG_SH" ] || return 1
+  local set_a set_b
+  # install.sh: --preset arg parse の allowed case pattern (PRESET_EXPLICIT=true 行で一意特定)
+  set_a="$(sed -n 's/^[[:space:]]*\([a-z|-]\{1,\}\))[[:space:]]*PRESET_EXPLICIT=true.*/\1/p' "$INSTALL_SH" | tr '|' '\n' | sort)"
+  # hc-config.sh: _validate_default_preset() 関数内の `return 0` case pattern
+  set_b="$(sed -n '/^_validate_default_preset()/,/^}/p' "$HC_CONFIG_SH" \
+    | sed -n 's/^[[:space:]]*\([a-z|-]\{1,\}\))[[:space:]]*return 0.*/\1/p' | tr '|' '\n' | sort)"
+  [ -n "$set_a" ] || return 1
+  [ -n "$set_b" ] || return 1
+  [ "$(printf '%s\n' "$set_a" | grep -c .)" -eq 4 ] || return 1
+  [ "$set_a" = "$set_b" ]
+)
+
+# ============================================================
 # 実行
 # ============================================================
-printf '\n=== install-local-yml-smoke (HOTFIX-1) ===\n\n'
+printf '\n=== install-local-yml-smoke (HOTFIX-1 + task-85) ===\n\n'
 
 if _case_a 2>/dev/null; then _record PASS A "新規 install で local.yml 生成 (team-default + 8 toggle true)"
 else                         _record FAIL A "新規 install で local.yml 生成 (team-default + 8 toggle true)"; fi
@@ -220,6 +366,24 @@ else                         _record FAIL F "config-loader が生成 local.yml �
 
 if _case_g 2>/dev/null; then _record PASS G "target の enforcement-mismatch-smoke 全 PASS (team-default 自己矛盾なし)"
 else                         _record FAIL G "target の enforcement-mismatch-smoke 全 PASS (team-default 自己矛盾なし)"; fi
+
+if _case_h 2>/dev/null; then _record PASS H "--preset=strict 新規 install (default_preset: strict + 8 toggle true)"
+else                         _record FAIL H "--preset=strict 新規 install (default_preset: strict + 8 toggle true)"; fi
+
+if _case_i 2>/dev/null; then _record PASS I "--preset=advisory 新規 install (8 toggle false + target mismatch smoke 全 PASS)"
+else                         _record FAIL I "--preset=advisory 新規 install (8 toggle false + target mismatch smoke 全 PASS)"; fi
+
+if _case_j 2>/dev/null; then _record PASS J "--preset=harness-dev 新規 install (8 toggle false + target mismatch smoke 全 PASS)"
+else                         _record FAIL J "--preset=harness-dev 新規 install (8 toggle false + target mismatch smoke 全 PASS)"; fi
+
+if _case_k 2>/dev/null; then _record PASS K "--preset=bogus は exit 64 reject (local.yml 非生成 + .claude/ 未配置)"
+else                         _record FAIL K "--preset=bogus は exit 64 reject (local.yml 非生成 + .claude/ 未配置)"; fi
+
+if _case_l 2>/dev/null; then _record PASS L "既存 local.yml + --update --preset=strict → byte 不変 + WARN「--preset は無視」"
+else                         _record FAIL L "既存 local.yml + --update --preset=strict → byte 不変 + WARN「--preset は無視」"; fi
+
+if _case_m 2>/dev/null; then _record PASS M "install.sh / hc-config.sh の preset allowed set 一致 (静的 drift 検出)"
+else                         _record FAIL M "install.sh / hc-config.sh の preset allowed set 一致 (静的 drift 検出)"; fi
 
 TOTAL=$((PASS + FAIL))
 printf '\n--- Result: %d/%d PASS ---\n' "$PASS" "$TOTAL"

@@ -2,14 +2,14 @@
 slug: hc-config-local-yml-integration
 title: hc-config.sh local.yml 統合 (P1-2 残 scope — typo WARN / validate / smoke / 表示一貫性)
 created_at: 2026-07-05
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-05、AI 推奨どおり全判断点承認)
 related: install-immediately-usable-redesign-20260618 §4.2 (R6) / §5 P1-2 / §9.1 HOTFIX-2
 ---
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-05
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 

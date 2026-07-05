@@ -2,14 +2,14 @@
 slug: sessionstart-summary-injection
 title: SessionStart hc-config --summary 全文注入 (effective state 常時可視化、P1-4)
 created_at: 2026-07-05
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-05、AI 推奨どおり全判断点承認)
 related: install-immediately-usable-redesign-20260618 §4.6 (W1-2 採用済 conf 0.85) / §5 P1-4
 ---
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-05
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 

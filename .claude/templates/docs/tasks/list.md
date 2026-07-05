@@ -31,6 +31,13 @@
 > - Task: 「**何のため × 何をやる × 何ができる**」3 要素
 > - Step: **作業概要**のみ (1-2 文)
 
+> **ここから着手** (台帳が空の間の案内。最初の Task 行を追加したらこの blockquote を削除):
+> 1. 最初の作業対象を決め、`/new-draft <slug>` で設計 draft を起案する
+> 2. user 承認を得る (draft 先頭 frontmatter の承認日 field 記入)
+> 3. `/new-task <id> <slug>` で本 table に行を追加する (📝 → 🔲)
+>
+> 規範: `.claude/rules/task-management.md` §「設計→承認→タスク追加フロー」。N ≥ 3 task の一括計画は同 §「plan-first 行先置きフロー」経路 B。
+
 | # | Step Status | Task / Step | 概要 | 依存先 | 詳細 |
 |:---:|:---:|:---|:---|:---|:---|
 | <!-- 例: 1 --> | <!-- ✅ --> | <!-- **Task: <タスク名>** --> | <!-- Task 概要 (何のため × 何をやる × 何ができる) --> | <!-- task-N1, task-N2 or — --> | <!-- [task-1-foo.md](task-1-foo.md) --> |
