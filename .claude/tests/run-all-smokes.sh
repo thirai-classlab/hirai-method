@@ -105,13 +105,15 @@ _get_smoke_category() {
 _is_expected_fail() {
   local name="$1"
   # environmental (preset 緩和、恒久 expected): gateguard / workflow-guard /
-  #   task-rule-guard / list-md-plan-first-reminder / tool-call-slip-detector
+  #   task-rule-guard / tool-call-slip-detector
   # flaky (quarantine、next-actions #72 で根本追跡): hc-config-web-ui / install-sh-sync-drift
+  # 削除済 (task #91 Step 3): list-md-plan-first-reminder-smoke — 全 case per-case
+  #   HC_FEATURE_TASK_RULE_GUARD_ENABLED=true 注入により harness-dev (yml false) でも
+  #   13/13 PASS が成立し expected-fail 前提が解消 (旧 note「Case 1/7 が silent は正常」は失効)。
   case "$name" in
     gateguard-smoke|\
     workflow-guard-smoke|\
     task-rule-guard-smoke|\
-    list-md-plan-first-reminder-smoke|\
     tool-call-slip-detector-smoke|\
     hc-config-web-ui-smoke|\
     install-sh-sync-drift-smoke)
@@ -135,8 +137,6 @@ _get_expected_reason() {
       printf '[environmental] harness-dev preset で workflow_guard が advisory 化 (feature_workflow_guard_enabled=false)。team-default/strict では BLOCK される。expected fail case は Case 2/3/5 のみ。' ;;
     task-rule-guard-smoke)
       printf '[environmental] harness-dev preset で task_rule_guard が advisory 化 (feature_task_rule_guard_enabled=false)。Case 1/4 は BLOCK 期待だが advisory で素通り。Case 12 は list-md-plan-first-reminder が同 feature で no-op。expected fail case は Case 1/4/12 のみ。' ;;
-    list-md-plan-first-reminder-smoke)
-      printf '[environmental] feature_task_rule_guard_enabled=false により list-md-plan-first-reminder も no-op (同 feature group)。Case 1/7 が silent になるのは正常。team-default/strict では WARN が発火する。expected fail case は Case 1/7 のみ。' ;;
     tool-call-slip-detector-smoke)
       printf '[environmental] feature_tool_call_slip_detect_enabled=false (harness-config.yml、誤検出ループが主因と判明し 2026-06-01 切り分けで意図的 OFF) により hook が no-op。Case 1/2 の detection 期待は feature 有効時前提。feature ON 環境 (consuming repo) では PASS する。expected fail case は Case 1/2 のみ。' ;;
     hc-config-web-ui-smoke)
@@ -195,9 +195,9 @@ if [ "$LIST_ONLY" = "1" ]; then
     done
     printf '\n'
   done
-  printf '=== Expected-fail manifest (task-74 iter-1: environmental 5 + flaky 2) ===\n\n'
+  printf '=== Expected-fail manifest (task-74 iter-1 起点、task #91 で environmental 4 + flaky 2 に縮小) ===\n\n'
   for name in gateguard-smoke workflow-guard-smoke task-rule-guard-smoke \
-              list-md-plan-first-reminder-smoke tool-call-slip-detector-smoke \
+              tool-call-slip-detector-smoke \
               hc-config-web-ui-smoke install-sh-sync-drift-smoke; do
     reason=$(_get_expected_reason "$name")
     printf '[%s]\n  %s\n\n' "$name" "$reason"
