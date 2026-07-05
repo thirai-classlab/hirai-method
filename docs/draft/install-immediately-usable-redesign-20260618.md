@@ -512,9 +512,9 @@ Phase 1 で頻発した reviewer 発火 pattern (draft 引用 drift / cross-file
 ### 11.5 承認欄
 
 ```
-approved_at:
-approver:
-notes:
+approved_at: 2026-07-06
+approver: user (kfurutani@classlab.co.jp)
+notes: 「続けて」で全 refinement 承認 (R1-R6、AI 推奨どおり)。Phase 2 個別 draft 起案 (#92-#97) に着手可。
 ```
 
 ### 11.6 参照
