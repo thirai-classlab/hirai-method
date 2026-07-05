@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #86: hc-config.sh local.yml 統合 (P1-2 残 scope — typo WARN / validate / smoke / 表示一貫性)
 
-> Status: **🔄 進行中** (2026-07-05 着手、branch `feat/p1-wave2-sessionstart-hcconfig`)
+> Status: **✅ 完了** (2026-07-05、commit `9d713fc`、DoD 全項目実測 PASS)
 > 起案: 2026-07-05 / 承認: 2026-07-05 (AI 推奨どおり全判断点承認)
 > 関連: Phase 1 (#85-#91)、master roadmap install-immediately-usable-redesign-20260618 §4.2 (R6)/§5 P1-2、next-actions entry #79 吸収
 > 設計起源: [hc-config-local-yml-integration.md](../draft/hc-config-local-yml-integration.md)
@@ -50,13 +50,13 @@ CLI と runtime の真実 1 本化を完成させるため (R6 残 scope)、hc-c
 
 | Step | Status | 作業概要 | 工数 | 依存 |
 |:---:|:---:|:---|---:|:---|
-| 1 | 🔲 | smoke 拡張 Case 6〜10 追加 (RED: Case 8/9/10 FAIL 確認、Case 6/7 は現挙動固定) | 1.0h | — |
-| 2 | 🔲 | `cmd_get` local-only key typo WARN (Step 3.6 同文言、fail-open) | 0.5h | Step 1 |
-| 3 | 🔲 | `cmd_validate` の local.yml 検証対応 | 0.7h | Step 1 |
-| 4 | 🔲 | `--list` / `--diff` stderr notice + TUI effect panel marker + array gap 明示 comment | 0.8h | Step 1 |
-| 5 | 🔲 | (テスト設計レビュー) reviewer 動的選定 (`review_min_count_test`〜`review_max_count_test` 範囲) | 0.5h | Step 2-4 |
-| 6 | 🔲 | (テスト合格) local-yml smoke 全 PASS + 既存 smoke regression 0 | 0.3h | Step 5 |
-| 7 | 🔲 | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.2h | Step 6 |
+| 1 | ✅ | smoke 拡張 Case 6〜10 追加 (RED: Case 8/9/10 FAIL 確認、Case 6/7 は現挙動固定) | 1.0h | — |
+| 2 | ✅ | `cmd_get` local-only key typo WARN (Step 3.6 同文言、fail-open) | 0.5h | Step 1 |
+| 3 | ✅ | `cmd_validate` の local.yml 検証対応 | 0.7h | Step 1 |
+| 4 | ✅ | `--list` / `--diff` stderr notice + TUI effect panel marker + array gap 明示 comment | 0.8h | Step 1 |
+| 5 | ✅ | (テスト設計レビュー) reviewer 動的選定 (`review_min_count_test`〜`review_max_count_test` 範囲) | 0.5h | Step 2-4 |
+| 6 | ✅ | (テスト合格) local-yml smoke 全 PASS + 既存 smoke regression 0 | 0.3h | Step 5 |
+| 7 | ✅ | (リファクタリング) 3 観点判定 or `skip: <reason>` | 0.2h | Step 6 |
 
 合計: 4.0h (roadmap P1-2 見積 0.5 day から HOTFIX-2 実装済分を控除した残量)
 
@@ -66,6 +66,10 @@ CLI と runtime の真実 1 本化を完成させるため (R6 残 scope)、hc-c
 |---|---|---|
 | 2026-07-05 | 起案 | draft 起こし (PR #69、entry #79 (1)(2)(3) 吸収、(4) は #47 系 draft へ分離) |
 | 2026-07-05 | 承認 | user 承認 (AI 推奨どおり: array gap 明示固定 / #79(4) は install-sh-yml-customization-preserve 統合)、list.md 🔲 化 |
+| 2026-07-05 | Step 1-4 完了 | Workflow wf_30253e0b-b13、smoke TDD RED 12→31 assertion → hc-config.sh +67 で GREEN 化 (typo WARN / cmd_validate local / --list・--diff notice / TUI marker / array gap header comment) |
+| 2026-07-05 | Step 5-6 完了 | 3 lens review + Fix iter 2 + smoke 33/33 PASS (Case 1-10) + regression (key-parity 2/2、enforcement-mismatch 5/5) |
+| 2026-07-05 | Step 7 完了 | refactor `skip: draft §3 準拠の surgical 変更、review 3 lens で非冗長化確認済` |
+| 2026-07-05 | 完了 | commit `9d713fc` |
 
 ## 派生 task / 次アクション候補
 
