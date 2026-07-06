@@ -387,6 +387,7 @@ feature_check_md_mermaid_enabled: true            # check-md-mermaid
 feature_failure_loop_detect_enabled: true         # failure-loop-detect
 feature_agent_router_suggest_enabled: true        # agent-router-suggest (task-81 復活配線、条件付き 1 行 hint、default ON)
 feature_sessionstart_summary_enabled: true        # mode-session-start (hc-config --summary 全文注入、P1-4。feature_mode_session_start_enabled OFF 時は本 toggle に関わらず注入されない)
+feature_self_doctor_enabled: true                 # self-doctor.sh (install 末尾 D1-D8 setup issue 検証、P1-3、fail-open 2 層 install は常に exit 0)
 
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 2 D)
 # 対象: .claude/scripts/hc-config.sh の cmd_interactive dispatcher (L1782 周辺)

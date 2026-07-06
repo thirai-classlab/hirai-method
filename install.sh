@@ -2,7 +2,7 @@
 # 平井メソッド (hirai-method) — robust installer
 #
 # Usage:
-#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--preset=<name>] [--lang=<id>] [--dry-run] [--no-mcp] [--mcp-servers=<csv>] [--no-docs]
+#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--preset=<name>] [--lang=<id>] [--dry-run] [--no-mcp] [--mcp-servers=<csv>] [--no-docs] [--no-doctor]
 #
 # Modes (--update / --force / --overwrite-all are mutually exclusive):
 #   (default)  : 新規 install。既存 .claude は .bak タイムスタンプ付きで退避、既存 CLAUDE.md は不可侵。
@@ -34,6 +34,8 @@
 #                advisory/harness-dev → 8 toggle 明示 false。既存 local.yml 時は無視 (WARN + verbatim 保持)。
 #   --lang=<id> : (task-89) CLAUDE.md auto-fill 対象言語を明示指定
 #                (ts | py | go | rust | php | swift | generic、default: 未指定=manifest 検出で自動判定)。
+#   --no-doctor : (task-87) install 末尾の self-doctor 検証 (setup issue 検出) を skip。
+#                default で有効。dry-run 時は自動 skip (mutation 前の検証は無意味)。
 #
 # Exclude (state / user-local):
 #   .gateguard-state/ .taskguard-state/ .confidence-gate-state/ .failure-window/
@@ -71,6 +73,7 @@ WITH_MCP=true
 MCP_SERVERS="serena,context7"    # (task-90) --mcp-servers csv default = env placeholder 0 minimal
 MCP_SERVERS_SET=false             # true if --mcp-servers explicitly given (for --no-mcp conflict + Step 2 signal)
 WITH_DOCS=true
+WITH_DOCTOR=true         # --no-doctor で false = install 末尾 self-doctor 検証 skip (task-87 Step 2)
 COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
 PRESET="team-default"    # --preset default = HOTFIX-1 現行挙動維持 (後方互換、task-85)
 PRESET_EXPLICIT=false    # --preset 明示指定の有無 (既存 local.yml / self-install 時の WARN 用)
@@ -145,6 +148,7 @@ for arg in "$@"; do
       unset _mcp_tokens _tok _has_all _has_other
       ;;
     --no-docs)  WITH_DOCS=false ;;
+    --no-doctor) WITH_DOCTOR=false ;;
     --preset=*)
       PRESET="${arg#--preset=}"
       # allowed set は hc-config.sh _validate_default_preset と同一 4 値 (SSoT)。
@@ -174,8 +178,9 @@ for arg in "$@"; do
       # (ends at the closing ===== of the WARNING box before `set -euo pipefail`;
       # task-79 added 4 mode-doc lines, task-85 added 4 --preset doc lines, task-89
       # rewrote (default) mode desc (+1 line) + added --lang doc (+2 lines), task-90
-      # added 5 --mcp-servers doc lines so the box now ends at line 60).
-      sed -n '2,60p' "$0"
+      # added 5 --mcp-servers doc lines, task-87 added 2 --no-doctor doc lines
+      # so the box now ends at line 62).
+      sed -n '2,62p' "$0"
       exit 0
       ;;
     -*)
@@ -194,7 +199,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--preset=<name>|--lang=<id>|--dry-run|--no-mcp|--mcp-servers=<csv>|--no-docs]" >&2
+  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--preset=<name>|--lang=<id>|--dry-run|--no-mcp|--mcp-servers=<csv>|--no-docs|--no-doctor]" >&2
   exit 64
 fi
 
@@ -1287,6 +1292,29 @@ if ! $DRY_RUN; then
 fi
 
 # ============================================================
+# 7.5. self-doctor 検証 (install 直後の setup issue 0 化検証、task-87 Step 2)
+# ============================================================
+# §6.3-6.6 の全成果物生成 + §7 config-loader 検証の直後に、self-doctor.sh で
+# D1-D8 の期待外 (WARN) / 期待値内 (INFO) を切り分けて報告する (draft §3.4)。
+#
+# fail-open 2 層 (draft §3.3):
+#   - self-doctor.sh 単体: WARN ≥ 1 → exit 1 (smoke / CI から検出可能)
+#   - install.sh 側: `|| true` で吸収し install は常に exit 0 (報告のみ)
+#
+# skip 条件:
+#   - --no-doctor 明示指定 (WITH_DOCTOR=false)
+#   - --dry-run (§6.3-6.6 の mutation 前は検証対象未生成のため無意味)
+#   - script 不在 (旧 harness / 部分配布 target。silent NOTE + install 継続)
+if $WITH_DOCTOR && ! $DRY_RUN; then
+  if [[ -f "$TARGET/.claude/scripts/self-doctor.sh" ]]; then
+    echo ""
+    ( cd "$TARGET" && HC_PROJECT_ROOT="$TARGET" bash .claude/scripts/self-doctor.sh ) || true
+  else
+    echo "[install] NOTE: self-doctor.sh 不在、skip (task-87 未配布 target)" >&2
+  fi
+fi
+
+# ============================================================
 # 8. summary
 # ============================================================
 cat <<EOF
@@ -1313,6 +1341,7 @@ Next steps:
   4. \$EDITOR CLAUDE.md   # <!-- TODO(auto-fill) --> comment を補完 (task-89 auto-fill 済、\`<...>\` placeholder 0)
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
   6. Claude Code session 起動 → /init-tasks → /mode loop
+  7. (option) bash .claude/scripts/self-doctor.sh    # 健全性 check (task-87)。issue があれば why/fix/silence 3 行を確認、install 直後は WARN 0 が正常
 
 settings.json について (task-71 H2 / task-80):
   - settings.json 本体は rsync exclude (repo 固有 permissions / preset を守る)。
