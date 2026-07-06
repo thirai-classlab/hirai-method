@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit — hirai-method fast smoke gate (task-92 P2-1/I3)
+#
+# 役割:
+#   Fast smoke curated set (実測 ≒ 2.4s、予算 < 3s) を commit 境界で機械実行し、
+#   FAIL で BLOCK (exit 1)。feature OFF / smoke 不在 / config-loader 不在は
+#   fail-open で pass (§3.2 fail-open 2 層契約)。
+#
+# curated set (4 本、2026-07-06 dogfood 実測):
+#   1. bash -n .claude/hooks/*.sh + .claude/scripts/*.sh + install.sh  (0.08s)
+#   2. .claude/tests/enforcement-mismatch-smoke.sh                     (0.58s)
+#   3. .claude/tests/harness-config-local-smoke.sh                     (1.66s)
+#   4. .claude/tests/common-rules-import-smoke.sh                      (0.06s)
+#
+# bypass:
+#   HC_PRECOMMIT_SKIP=1 git commit ...              # 1-shot 明示 skip
+#   git commit --no-verify                          # git native skip
+#   HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED=false       # feature OFF (silent pass)
+#
+# migration path (task-94 P2-3、draft §3.2 R1 契約):
+#   本 file 内 _pc_emit_block / _pc_emit_warn / _pc_emit_info helper は
+#   task-94 で .claude/hooks/lib/block-message.sh へ 1:1 移行予定
+#   (prefix `_pc_` を除去して同 4 引数 signature を保持、
+#   `sed 's/_pc_emit_/emit_/g'` で機械置換可能)。
+#
+# fail-open 契約 (feedback_set_e_in_sourced_libs、CommonRules Critical Lessons):
+#   file-top に set -euo pipefail を書かない (caller shell への leak / SIGPIPE
+#   exit 141 サイレント死回避)。subshell 関数 _run_fast_smokes() ( set -euo
+#   pipefail; ... ) のみ strict 局所化。
+#
+# 設計 SSoT: docs/draft/install-pre-commit-distribute.md §3.2 / §3.3 / §4.3
+
+set -u
+
+# --- git worktree / submodule 対応: repo root へ固定 (§4.1 リスク緩和) ---
+_pc_repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$_pc_repo_root" || exit 0   # cd 失敗は fail-open (pass)
+
+# --- 暫定 helper (task-94 lib SSoT へ 1:1 migration 予定) ---
+# 4 args: <why> <fix_one_liner> <bypass_env> <docs_link>
+# stderr 出力順: why: / fix: / silence: / docs:
+# (empty string を渡すと該当行 skip、null 行を避けるため)
+_pc_emit() {
+  _pc_sev="$1"; _pc_why="$2"; _pc_fix="$3"; _pc_silence="$4"; _pc_docs="$5"
+  {
+    printf '[pre-commit %s] why: %s\n' "$_pc_sev" "$_pc_why"
+    [ -n "$_pc_fix" ]     && printf '[pre-commit %s] fix: %s\n'     "$_pc_sev" "$_pc_fix"
+    [ -n "$_pc_silence" ] && printf '[pre-commit %s] silence: %s\n' "$_pc_sev" "$_pc_silence"
+    [ -n "$_pc_docs" ]    && printf '[pre-commit %s] docs: %s\n'    "$_pc_sev" "$_pc_docs"
+  } >&2
+}
+_pc_emit_block() { _pc_emit BLOCK "$@"; }
+_pc_emit_warn()  { _pc_emit WARN  "$@"; }
+_pc_emit_info()  { _pc_emit INFO  "$@"; }
+
+# --- config-loader.sh 経路の feature toggle 参照 (fail-open) ---
+if [ -f "$_pc_repo_root/.claude/hooks/lib/config-loader.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$_pc_repo_root/.claude/hooks/lib/config-loader.sh" 2>/dev/null || true
+else
+  # config-loader 不在 = bootstrap 途中の可能性 → fail-open で pass (BLOCK しない)
+  _pc_emit_warn \
+    ".claude/hooks/lib/config-loader.sh 不在で feature toggle が読めない (bootstrap 中の可能性、fail-open pass)" \
+    "" \
+    "" \
+    "docs/draft/install-pre-commit-distribute.md"
+  exit 0
+fi
+
+# --- feature toggle: OFF なら silent pass ---
+# (is_feature_enabled 未定義時も安全側で pass、config-loader load 失敗の fallback)
+if command -v is_feature_enabled >/dev/null 2>&1 \
+   && ! is_feature_enabled pre_commit_smoke; then
+  exit 0
+fi
+
+# --- 1-shot bypass env (HC_PRECOMMIT_SKIP=1) ---
+if [ "${HC_PRECOMMIT_SKIP:-0}" = "1" ]; then
+  _pc_emit_info \
+    "HC_PRECOMMIT_SKIP=1 検出、fast smoke skip (1 回 bypass)" \
+    "" \
+    "" \
+    "docs/draft/install-pre-commit-distribute.md"
+  exit 0
+fi
+
+# --- fast smoke curated set (subshell 局所化で set -euo pipefail leak 防止) ---
+# smoke 不在は WARN + skip (fail-open、set -e 影響外の printf のみ)
+# smoke exit != 0 は set -e で subshell 全体を非 0 exit → 呼出側で BLOCK
+_run_fast_smokes() (
+  set -euo pipefail
+  # (1) bash -n bulk (syntax error 即検出、実測 0.08s)
+  if compgen -G ".claude/hooks/*.sh" >/dev/null 2>&1; then
+    for _f in .claude/hooks/*.sh; do bash -n "$_f"; done
+  fi
+  if compgen -G ".claude/scripts/*.sh" >/dev/null 2>&1; then
+    for _f in .claude/scripts/*.sh; do bash -n "$_f"; done
+  fi
+  [ -f install.sh ] && bash -n install.sh
+  # (2)-(4) curated smokes (順次実行、いずれか FAIL で abort)
+  for _smoke in \
+    enforcement-mismatch-smoke.sh \
+    harness-config-local-smoke.sh \
+    common-rules-import-smoke.sh
+  do
+    if [ -f ".claude/tests/$_smoke" ]; then
+      bash ".claude/tests/$_smoke" >/dev/null
+    else
+      # 不在 smoke は fail-open (WARN のみ、subshell 継続)
+      printf '[pre-commit WARN] .claude/tests/%s 不在 (fail-open skip)\n' "$_smoke" >&2
+    fi
+  done
+)
+
+# --- 予算 (default 3s、yml `pre_commit_smoke_budget_sec` → env HC_PRE_COMMIT_SMOKE_BUDGET_SEC) ---
+_pc_budget="${HC_PRE_COMMIT_SMOKE_BUDGET_SEC:-3}"
+
+# --- 実測開始 (bash 組込 SECONDS で秒単位計測) ---
+SECONDS=0
+if ! _run_fast_smokes; then
+  _pc_elapsed=$SECONDS
+  _pc_emit_block \
+    "fast smoke curated set FAIL (bash -n / enforcement-mismatch / harness-config-local / common-rules-import のいずれか、経過 ${_pc_elapsed}s)" \
+    "bash .claude/tests/enforcement-mismatch-smoke.sh 等を個別実行し失敗内容を確認 → 修正後 git commit を再試行" \
+    "HC_PRECOMMIT_SKIP=1 git commit ...  または  git commit --no-verify  (1 回 skip、恒久 OFF は HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED=false)" \
+    "docs/draft/install-pre-commit-distribute.md"
+  exit 1
+fi
+_pc_elapsed=$SECONDS
+
+# --- 予算超過は WARN のみ (BLOCK しない、smoke curated set 見直し signal) ---
+if [ "$_pc_elapsed" -gt "$_pc_budget" ]; then
+  _pc_emit_warn \
+    "fast smoke 予算超過 (${_pc_elapsed}s > ${_pc_budget}s)、curated set の見直し推奨" \
+    "smoke 追加時は pre_commit_smoke_budget_sec を再評価、CI 側 (task-93) へ回送を検討" \
+    "HC_PRE_COMMIT_SMOKE_BUDGET_SEC=<n> で env 上書き可 / harness-config.yml で永続変更" \
+    "docs/draft/install-pre-commit-distribute.md"
+fi
+
+exit 0
