@@ -15,6 +15,20 @@
 
 set -u
 
+# Feature toggle gate (task-95 3-point set)
+# yml key: feature_asana_prompt_enabled、env: HC_FEATURE_ASANA_PROMPT_ENABLED
+# fail-open: config-loader.sh 不在 / is_feature_enabled 未定義 → 既存 logic に続行
+_ASANA_HOOK_DIR="${BASH_SOURCE[0]%/*}"
+if [ -f "$_ASANA_HOOK_DIR/lib/config-loader.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$_ASANA_HOOK_DIR/lib/config-loader.sh"
+  if command -v is_feature_enabled >/dev/null 2>&1; then
+    if ! is_feature_enabled asana_prompt 2>/dev/null; then
+      exit 0
+    fi
+  fi
+fi
+
 # stdin を消費 (SessionStart 入力 JSON があれば破棄)
 cat > /dev/null 2>&1 || true
 
