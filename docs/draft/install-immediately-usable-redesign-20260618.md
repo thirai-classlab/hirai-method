@@ -363,15 +363,180 @@ HOTFIX 2 件は P1-1 / P1-2 の minimal subset。本提案承認待ちの間に 
 
 ---
 
-## §11. 変更履歴
+## §11. Phase 1 完遂 followup addendum (2026-07-05)
+
+> **位置付け**: §5 Phase 1 (P1-1 〜 P1-7) の実装完遂に伴う Phase 2/3 起案前の refinement 集約。§1〜§10 (本文) は書き換えず、Phase 1 実装で顕在化した知見・副産物・reviewer 発火 pattern を Phase 2/3 draft 起案時の前提として明文化する。本 addendum の approver は §11.5、変更履歴は §12 に統合。
+
+### 11.1 Phase 1 完遂 achievement
+
+2026-07-05 に Phase 1 P1-1 〜 P1-7 の 7 task を **5 PR (HOTFIX + Wave 1-4)** で完遂した (unique PR 5 件 = #68 HOTFIX / #70 Wave 1 / #71 Wave 2 / #72 Wave 3 / #73 Wave 4、§11.6 と一致)。第一原理 v2 DoD (§2.1) のうち **(a) user 介入無し commit / push 到達** = 全 Wave が Workflow 自律 + human review only で達成、**(b) install 直後 setup issue 0 化** = self-doctor D1-D8 で機械保証。
+
+| task | P1-N | 概要 | merge PR |
+|---|---|---|---|
+| task-85 | P1-1 | install.sh preset 自動切替 (`--preset=<name>` 4 値) + enforcement_matrix advisory disabled_reason 8 行追記 | PR #68 (HOTFIX) |
+| task-86 | P1-2 | `hc-config.sh` local.yml 統合 (`--get` / `--summary` / `--validate` / `--list` / `--diff` / TUI に local override 反映 + typo WARN + array key gap 明示) | PR #70 |
+| task-88 | P1-4 | SessionStart `hc-config.sh --summary` 全文注入 (cap 800→2400B + sub-toggle + init 失敗経路 fail-open) | PR #71 |
+| task-91 | P1-7 | list.md「ここから着手」actionable header + plan-first reminder 2-tier 化 + source gating (resume/compact skip) | PR #70 (併合) |
+| task-89 | P1-5 | CLAUDE.md.template auto-fill (manifest 6 種検出 + 言語別 starter 7 件 + `{{TOKEN}}` render 3 関数 + 既存 file 不可侵 HINT) | PR #72 |
+| task-90 | P1-6 | `.mcp.json` 配布 (`--mcp-servers=<csv>` opt-in、serena+context7 minimal default、jq 不在 fallback) | PR #72 (併合) |
+| task-87 | P1-3 | install.sh 末尾 self-doctor.sh (D1-D8 8 check + WARN/INFO 2 段 + preset-aware D6 + exit code 2 層 fail-open) | PR #73 |
+
+### 11.2 実装で確立した pattern (§4 / §5 前提の更新)
+
+Phase 2/3 draft 起案時に **前提として利用可能** な pattern。各 pattern は Phase 1 で dogfood 実測済:
+
+- **staging 戦略**: `/tmp` Write → mv → 755/644 mode 確認 (subagent silent fail 対策、[[feedback_subagent_staging_mv_silent_fail]])。`.claude/` 配下編集の default 経路
+- **mktemp fail-open ガード**: `X` 末尾 + `${TMPDIR:-/tmp}` + `|| true` (§6.4 の先例に準拠、install.sh / hook 共通契約)
+- **`set -uo pipefail` fail-open 契約**: hook file-top で `set -euo pipefail` 禁止 (caller への leak 回避)、`do_work() ( set -euo pipefail; ... )` の subshell 化のみ許可
+- **feature toggle 3 点 set**: yml key + metadata TSV + env override (`HC_FEATURE_<NAME>_ENABLED`) + hook 冒頭 `is_feature_enabled <name>` check — 新規 hook / command 追加時の default 規範
+- **mutation probe**: reviewer 実効性検証の必須 lens。smoke を意図的に壊す (sed で assert 除去) → 本当に FAIL 化するか実測 → 復元。Phase 1 では task-87 self-doctor smoke で dogfood 済
+- **逐次 vs 並列判定**: `install.sh` の同域編集 (arg parse / header / summary output) は逐次必須、独立 file (新 hook / 新 smoke / template 追加) は並列 default (task-91 が典型例 — install.sh 変更 0 行で完結)
+- **副産物 discharge**: 実装中発見 → next-actions.md 即時 entry → 完了時 user 提示 → 別 task or Phase 2/3 吸収 (Phase 1 で #78-#83 の 6 entry を捕捉)
+- **3 点提示 format**: BLOCK / WARN / INFO ごとに `why:` / `fix:` / `silence: <bypass_env>` の 3 行提示 (task-87 self-doctor で全 D1-D8 dogfood、§2.3 BLOCK 教育 3 点提示 と integrated)、P2-3 lib/block-message.sh の直接前提
+- **fail-open 2 層 (exit code 分離)**: hook / script は WARN 未満は exit 0 で継続、CRITICAL 発生時のみ exit 2 (BLOCK) or exit 1 (soft fail)。task-87 で dogfood
+
+### 11.3 Phase 2/3 refinement
+
+Phase 2 (P2-1 〜 P2-6 = task #92-#97) / Phase 3 (P3-1 〜 P3-6 = task #98-#103) の draft 起案時に **必ず反映** する 6 refinement。
+
+#### R1: P2-3 (#94) BLOCK 4 引数 と Wave 4 self-doctor 3 点提示の vocabulary 統合
+
+**背景**: Phase 1 Wave 4 (task-87 self-doctor.sh) で `why:` / `fix:` / `silence:` の 3 点提示 format を **WARN の 5 args** (`emit_warn <d_id> <title> <why> <fix> <silence>`) + **INFO の 2 args** (`emit_info <d_id> <detail>`、silence 無し) の **2 severity** で実装済、AI 教育効果を実測 (§2.3 BLOCK 教育 3 点提示と整合)。既存 hook 群の BLOCK 出力は (a) `exit 2` + stderr (`draft-flow-guard.sh` / `task-rule-guard.sh`) / (b) `{decision:"block", reason:...}` JSON stdout (`autonomous-action-guard.sh` / `confidence-gate.sh` / `gateguard.sh emit_block()`) と **2 pattern に分裂**しており、P2-3 の 3 severity 統一 API は本分裂を吸収する契約定義が必要。
+
+**refinement**: `lib/block-message.sh` は 3 severity 統一 API を公開 (`emit_block` / `emit_warn` / `emit_info`)、共通引数 4 種 = **`why` / `fix_one_liner` / `bypass_env` / `docs_link`**。契約 (出力経路 × exit code × JSON decision):
+
+| severity | output 経路 | exit code | JSON decision output |
+|---|---|---|---|
+| `emit_block` | JSON stdout (`gateguard.sh` L91 pattern を SSoT に統一) + stderr 4 行 (why / fix / bypass_env / docs_link) | 0 (JSON 経由で block 通知) | `{"decision":"block","reason":"<why + fix + bypass + docs 連結>"}` |
+| `emit_warn` | stderr 4 行 (why / fix / bypass_env / docs_link) | 0 (fail-open) | なし |
+| `emit_info` | stderr 1-2 行 (why + 任意 docs_link のみ、fix/bypass_env 無し = absorb 前提) | 0 | なし |
+
+**`bypass_env` 引数の型**: **env var literal (例: `HC_FEATURE_SELF_DOCTOR_ENABLED=false`)** を default、自由文 fallback 可 (bypass 手順が env 単独で表現不能な hook 用、例: `/gate-bypass <slug>` command 誘導 / `ECC_TASKGUARD=off` 系)。self-doctor 既存 `silence:` label は本 `bypass_env` に **1:1 mapping** — migration 経路は `emit_warn <d_id> <title> <why> <fix> <silence>` (5 args) → 統一 API `emit_warn <why> <fix> <bypass_env> <docs_link>` (4 args) に契約変更し、`d_id` / `title` は caller 側 prefix (例: `[self-doctor] WARN D2: ...`) で吸収。self-doctor は本 lib の初回 caller として dogfood し、BLOCK / WARN / INFO を単一 SSoT で提供。Phase 1 実測の AI 教育効果 (task-87 実装知見) を P2-3 draft §根拠に転記する。
+
+**対象**: #94 draft 起案時に本 refinement を §3 採用案に反映 (契約 table + self-doctor 5→4 args migration 経路 + `docs_link` 追加 4 引数目の位置付け含む)
+
+#### R2: P2-1 (#92) pre-commit + P2-2 (#93) CI matrix への Phase 1 新設 smoke 群組込み
+
+**背景**: Phase 1 で smoke 10+ 本新設 (self-doctor / install-claude-md-autofill / install-mcp-servers / hc-config-local-yml / sessionstart-footprint / sessionstart-budget / list-md-plan-first-reminder 他)。commit 境界 / CI 境界でこれらが自動実行される保証がない。
+
+**refinement**: pre-commit は「**fast smoke (< 3 秒、`bash -n` + grep 系)**」、CI matrix は「**full smoke (< 30 秒、tmp dir 実 install 系)**」で分離。**fast/full 分離は `.claude/tests/run-all-smokes.sh` の 5 カテゴリと直交する新軸** (5 カテゴリの SSoT は `_get_smoke_category()` L46-89 = **parity / behavior / budget / portability / stale-det**、`footprint` はカテゴリ名ではなく `sessionstart-footprint-smoke` が **budget** 所属 L57-60)。Phase 1 新設 smoke 群の暫定分類 (Phase 2 #92/#93 draft 起案者は §3 にそのまま転記可):
+
+| smoke | 5 category | fast/full | 根拠 |
+|---|---|---|---|
+| `self-doctor-smoke` | behavior | full | tmp dir 実 install + WARN/INFO 分類 (12 case) |
+| `install-claude-md-autofill-smoke` | portability | full | tmp dir install + manifest 検出 (Case A-P) |
+| `install-mcp-servers-smoke` | portability | full | tmp dir install + jq filter (10 case) |
+| `install-local-yml-smoke` | portability | full | tmp dir install case A-J (assertion 追加は副産物 #80 で fold) |
+| `hc-config-local-yml-smoke` | parity | fast | grep + `--get` / `--summary` 出力検証 (33 assertion) |
+| `hc-config-key-parity-smoke` | parity | fast | metadata key SSoT drift |
+| `enforcement-mismatch-smoke` | parity | fast | docs/config mismatch |
+| `sessionstart-footprint-smoke` | budget | fast | byte count + regression 検出 |
+| `sessionstart-budget-smoke` | budget | fast | tier 算出ロジック検証 |
+| `list-md-plan-first-reminder-smoke` | behavior | fast | reminder 発火条件 grep |
+
+**対象**: #92 / #93 draft 起案時に本 table を §3 採用案に転記、5 category × fast/full 2 軸の登録 rule を明示 (run-all-smokes.sh のカテゴリ拡張が必要な場合は §3 側で先行提案)
+
+#### R3: P2-6 (#97) enforcement_matrix 拡張の残 scope 明確化
+
+**背景**: Phase 1 Wave 1 (task-85 Step 2) で advisory disabled_reason **8 行を追記済** (既存 4 guard + review_required 4 種の advisory preset 対応)。P2-6 は matrix 未登録 hook の残 3 件 (W1-1 slip-detector / W1-5 agent-router / W1-6 loop-confirmation-detector) が主 scope として残る。
+
+**refinement**: P2-6 の残 scope は「**matrix 未登録 hook の追加登録 (3 件) + sessionstart 系検証拡張 (副産物 #81)**」に限定。順序制約: **#97 draft 起案は #95 (P2-4 死蔵 hook 棚卸し) 完了後に着手** (残 hook 集合が #95 で確定するため、それ以前は登録 scope が不安定)。
+
+**対象**: #97 draft 起案タイミング (#95 完了後)、§3 に advisory 記法既存 8 行との整合 template を明示
+
+#### R4: 副産物 next-actions #78 / #80-#83 の吸収先明示
+
+Phase 1 実装中に発生した 6 副産物 entry (#78-#83) の Phase 2/3 吸収先を確定する。
+
+| entry | 内容 | 吸収先 | 理由 |
+|---|---|---|---|
+| #78 | 前セッション WIP 2 件 (install.sh settings seed copy + statusline repo 名表示) | **P2-1 (#92)** に併合 (settings seed) + 独立小タスク化 (statusline) | install.sh §6.3 拡張と file 領域近接 |
+| #79 | HOTFIX-2 review LOW 3 件 + `--overwrite-all` 漏洩 | #86 (LOW 3 件)、#47 系 (漏洩) | Phase 2/3 scope 外 |
+| #80 | install-local-yml-smoke case I/J false-pass (expected-preset assert 不在) | **P3-5 (#102) install smoke 自動化** | tmp dir 実 install 経路で assert 追加 |
+| #81 | sessionstart-footprint FP-7 (fail-open dedicated) + FP-5 label 厳密化 | **P2-6 (#97)** or **P3-5 (#102)** | sessionstart 系検証拡張と併合 |
+| #82 | install-claude-md-autofill-smoke `{{TOKEN}}` literal 残存 assertion 追加 | **P3-5 (#102)** | 1 行追加で吸収 (15 min) |
+| #83 | autofill smoke Case G/N 初回起動 flakiness (fs sync 疑い) | **P2-2 (#93) CI 導入時に isolation 実装** | CI 上で intermittent FAIL 対策必須 |
+
+**対象**: 該当 task draft 起案時に §外部依存 / §関連 entry で明示的に scope 内と宣言
+
+**吸収完了 verification (#78-#83 各 entry 共通)**:
+
+- 吸収先 task の draft §外部依存 or §関連 entry に本 R4 由来 fold であることを明示 (entry #番号 + 原文参照)
+- 吸収完了 task の PR merge 時に `docs/tasks/next-actions.md` 該当 entry の処理結果列を `🔄 未処理` → `✅ → task-<N> (<PR#>) 完了` に更新
+- 吸収先 task 完了後の `/finish-task` で next-actions.md diff を verification 対象に含める
+
+#### R5: Phase 2 draft 起案 checklist (Phase 1 reviewer 発火 pattern の予防)
+
+Phase 1 で頻発した reviewer 発火 pattern (draft 引用 drift / cross-file 契約不明 / fail-open 契約不記載 / DoD command 欠落 / 依存強度混同 / frontmatter 二重管理 / docs 反映漏れ) の予防 checklist。Phase 2 の 6 task 全ての draft 起案時に **`verify_dependencies` step に含める**:
+
+- [ ] draft 引用は section 名を default (行番号は avoid、必要時のみ直近 commit hash 併記)
+- [ ] 並列 subagent 前提 task は §4 実装設計に **共有契約 SSoT table** (id / symbol / API 名 / 型 / 所有者 file) を必ず記載 ([[feedback_parallel_subagent_cross_file_contract_drift]])
+- [ ] 新 hook / lib は fail-open 契約を §4 に明記 (mktemp X 末尾ガード / `|| true` / subshell 化 / set flags 局所化)
+- [ ] §6 DoD の全項目に **実 command** 併記 (`bash .claude/tests/xxx-smoke.sh` / `grep -c <pattern> <file> == N` の数値 assertion)
+- [ ] 依存記載は **強度 (`hard` / `soft`) + 理由**付き (task-90 で「依存 = task-89 (soft, install.sh 同域編集のみ)」で drift 発生した先例)
+- [ ] frontmatter `approved_at:` は 1 箇所 SSoT、本文 §承認は frontmatter 参照 pointer 化
+- [ ] docs 反映 step (README / docs/INVENTORY / docs/PORTABILITY / install.sh header) を §7 Step 分解に **default 必須項目** として含める
+
+#### R6: DAG 修正 (§7.2 は Phase 1 完遂後の state に更新)
+
+**背景**: 現 §7.2 の DAG は Phase 1 起案時 (2026-06-18) の粗い矢印で、Phase 2 内部の順序制約と Phase 3 sink 構造が漏れている。
+
+**refinement (Phase 2 起案時に §7.2 参照 pointer を本 §11.3 R6 に寄せる)**:
+
+- Phase 2 内部順序制約: **#97 (P2-6 enforcement_matrix) は #95 (P2-4 死蔵 hook 棚卸し) 依存** (R3)
+- Phase 2 内部 vocabulary 統合: **#94 (P2-3 BLOCK 4 引数) は self-doctor 3 点提示 lib と統合** (R1)
+- Phase 3 は Phase 2 完了後 (現状維持)
+- **#102 (P3-5 install smoke 自動化) が副産物 #78/#80-#83 の吸収 hub** (R4)
+
+**Phase 2/3 個別依存の全体表 pointer**: `docs/tasks/list.md` #92-#103 の依存列参照 (#96→task-86 / #97→task-95 (本 R6 で追加) / #98→task-92 / #100→task-92 / #101→task-97 / #102→task-85+task-92 / #103→task-88+task-97)。本 addendum R6 で追加した内部順序制約は #97→#95 (R3) と #94↔self-doctor 3 点提示 lib (R1) の 2 点
+
+### 11.4 却下事項 / 保留
+
+**Phase 1 完遂に伴い解消済** (§1.2 R1-R7 の解消状況):
+
+- R1 (preset verbatim copy): **解消** (task-85 で `--preset=<name>` 4 値、default = team-default)
+- R2 (guard no-op 連鎖): **解消** (R1 解消で連鎖遮断)
+- R3 (Loop + honor 化): **2 段解消**
+  - consuming repo (team-default default) では **解消** (draft-flow-guard が BLOCK 化)
+  - 本 repo (harness-dev preset) は **draft-flow-guard advisory 継続** (`enforcement_matrix.draft_flow_guard.disabled_reason` 参照)。honor system 側の follow-up は Phase 3 P3-6 (task #103 規範文書 SSoT 整合、docs↔effective pointer 化) の scope 内で構造解消
+- R4 (list.md placeholder): **解消** (task-91 actionable header + reminder 2-tier)
+- R5 (`/doctor` 8 issue): **解消** (task-87 self-doctor D1-D8 で機械保証)
+- R6 (hc-config.sh local.yml 未読): **解消** (task-86 で全 CLI subcommand が local.yml 統合)
+- R7 (`default_preset` 単独設定不発): **解消** (task-85 で preset 別 toggle 8 件セット化)
+
+**本 addendum で扱わない項目 (別途判断)**:
+
+- 2026-06-10 grand-summary / meta-review 系列の **post-Phase-1 followup review artifact** 起案 (5 docs 更新 or 新規 review doc 起案) は本 addendum の scope 外。Phase 2 完了後の中間 review で別途判断
+- Phase 3 の I4 / I5 / I7 / I8 の詳細 refinement は Phase 2 完了後の Phase 3 起案時に別 addendum で扱う (現時点で予測 refinement は R1-R6 で十分)
+
+### 11.5 承認欄
+
+```
+approved_at: 2026-07-06
+approver: user (kfurutani@classlab.co.jp)
+notes: 「続けて」で全 refinement 承認 (R1-R6、AI 推奨どおり)。Phase 2 個別 draft 起案 (#92-#97) に着手可。
+```
+
+### 11.6 参照
+
+- Phase 1 実装 PR: #68 (HOTFIX task-85) / #70 (task-86 + task-91) / #71 (task-88) / #72 (task-89 + task-90) / #73 (task-87)
+- 副産物 registry: `docs/tasks/next-actions.md` #78-#83
+- Phase 2/3 task 登録: `docs/tasks/list.md` #92-#103
+- 関連 memory: [[feedback_subagent_staging_mv_silent_fail]] / [[feedback_parallel_subagent_cross_file_contract_drift]] / [[feedback_config_value_needs_consumer_and_smoke]]
+- Phase 1 前提 task: task-70 (harness-dev preset + enforcement_matrix 導入)、task-77 (mainline_integration_policy 統治)
+
+---
+
+## §12. 変更履歴
 
 | 日付 | 内容 | 起案者 |
 |---|---|---|
 | 2026-06-18 | 初版起案。subscbase-api install 事案を起点に 5 docs (2026-06-10 set) と統合 | main agent (claude-opus-4-7) |
+| 2026-07-05 | §11 Phase 1 完遂 followup addendum 追記 (achievement / pattern / Phase 2/3 refinement 6 件 / 副産物吸収先 / reviewer checklist / DAG 修正)。§11→§12、§12→§13 に number 繰下げ | main agent (claude-opus-4-7) |
 
 ---
 
-## §12. 承認
+## §13. 承認
 
 ```
 approved_at: 2026-06-18
