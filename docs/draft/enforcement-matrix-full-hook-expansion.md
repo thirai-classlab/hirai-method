@@ -1,15 +1,15 @@
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-06
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 ---
 slug: enforcement-matrix-full-hook-expansion
 title: enforcement_matrix 全 hook 拡張 (残 scope 明確化、task-95 依存)
 created_at: 2026-07-06
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-06、AI 推奨どおり task-95 hard 依存 + task-96 hard 依存化採用)
 related: install-immediately-usable-redesign-20260618 §5 P2-6 (W2-2) / §11.3 R3 (最重要) + R6 (依存明示) / §11.3 R4 (副産物 #81 吸収候補)
 ---
 

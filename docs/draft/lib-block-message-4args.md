@@ -1,15 +1,15 @@
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-06
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 ---
 slug: lib-block-message-4args
 title: BLOCK message 4 引数統一 lib/block-message.sh (P2-3/I6/W1-12)
 created_at: 2026-07-06
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-06、AI 推奨どおり 5 関数明示 API 採用、self-doctor 5→4 args migration 承認)
 related: install-immediately-usable-redesign-20260618 §5 P2-3 / §11.3 R1 / §11.2 3 点提示 / §11.3 R2 (fast smoke) / §11.3 R5 (Phase 2 起案 checklist) / §11.3 R6 (DAG)
 ---
 

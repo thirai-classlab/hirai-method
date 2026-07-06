@@ -1,15 +1,15 @@
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-06
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 ---
 slug: install-ci-matrix-distribute
 title: install.sh で CI matrix (2 preset) 配布 + run-all-smokes 全 smoke 実行 (P2-2/I3/W1-10)
 created_at: 2026-07-06
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-06、AI 推奨どおり preset × per-category matrix 採用)
 related: install-immediately-usable-redesign-20260618 §3 I3 / §4.7 / §5 P2-2 / §11.3 R2 (fast/full 分離) / §11.3 R4 (副産物 #83 吸収) / §11.3 R5 (Phase 2 draft checklist)
 ---
 

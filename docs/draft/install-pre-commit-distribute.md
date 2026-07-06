@@ -1,15 +1,15 @@
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-06
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 ---
 slug: install-pre-commit-distribute
 title: install.sh pre-commit 配布 + core.hooksPath 自動設定 + settings seed 吸収 (P2-1/I3/W1-9)
 created_at: 2026-07-06
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-06、AI 推奨どおり fast smoke 4 本採用、#78 sub-item 1 吸収承認)
 related: install-immediately-usable-redesign-20260618 §5 P2-1 / §4.7 / §11.3 R2 / §11.3 R4
 ---
 

@@ -1,15 +1,15 @@
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-06
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 ---
 slug: dead-hook-inventory
 title: 死蔵 hook 3 件の個別判定 + enforcement_matrix 登録 (slip-detector 温存 / asana-prompt toggle 新設 / mode-enforce 維持)
 created_at: 2026-07-06
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-06、AI 推奨どおり 3 hook 個別判定採用)
 related: install-immediately-usable-redesign-20260618 §5 P2-4 (W1-1) / §11.3 R3
 ---
 

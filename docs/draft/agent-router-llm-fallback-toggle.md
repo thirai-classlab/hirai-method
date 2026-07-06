@@ -1,15 +1,15 @@
 <!--
 task-21 W2.4 frontmatter (機械可読、draft-flow-guard.sh / harness-audit が読む):
 approval_required: true
-approved_at:
-approved_by:
+approved_at: 2026-07-06
+approved_by: user (kfurutani@classlab.co.jp)
 retroactive: false
 -->
 ---
 slug: agent-router-llm-fallback-toggle
 title: agent-router LLM fallback default OFF + yml toggle 明示化 (P2-5/W1-5、I7 triplet 遵守)
 created_at: 2026-07-06
-status: 📝 未承認
+status: ✅ 承認済 (2026-07-06、AI 推奨どおり default OFF + 3 key + subshell 化採用)
 related: install-immediately-usable-redesign-20260618 §5 P2-5 (task #96) / §11.3 R5 起案 checklist / §11.3 R2 fast/full smoke 分類 / I7 Config-Consumer-Smoke Triplet
 ---
 
