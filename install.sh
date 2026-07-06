@@ -2,12 +2,13 @@
 # 平井メソッド (hirai-method) — robust installer
 #
 # Usage:
-#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--preset=<name>] [--lang=<id>] [--dry-run] [--no-mcp] [--mcp-servers=<csv>] [--no-docs] [--no-doctor]
+#   ./install.sh <target-project-dir> [--update|--force|--overwrite-all] [--preset=<name>] [--lang=<id>] [--dry-run] [--no-mcp] [--mcp-servers=<csv>] [--no-docs] [--no-hooks] [--no-doctor]
 #
 # Modes (--update / --force / --overwrite-all are mutually exclusive):
 #   (default)  : 新規 install。既存 .claude は .bak タイムスタンプ付きで退避、既存 CLAUDE.md は不可侵。
 #                CLAUDE.md 不在時は project manifest 検出 → 言語別 template auto-fill で
 #                CLAUDE.md を直接生成 (`<...>` placeholder 0、@.claude/CommonRules.md 参照済、task-89)。
+#                .githooks/pre-commit + core.hooksPath 自動設定で fast smoke gate 有効化 (task-92、--no-hooks で opt-out)。
 #   --update   : 既存 .claude/ を退避せず rsync で増分上書き。state dir / settings.local.json は保持。
 #                CLAUDE.md / .mcp.json / .gitignore は触らない (既存保護)。
 #                完了時に sync 変更 file 一覧 + 分離 commit 案内を出力 (task-58 G1)。
@@ -28,6 +29,8 @@
 #                選択可能: serena, context7, github, salesforce, agent-browser, asana-pat, slack。
 #                --no-mcp との併用は exit 64。§3 配布 logic は Step 2 で jq filter 化予定。
 #   --no-docs  : docs/tasks/, docs/draft/ の templates 配置を skip。
+#   --no-hooks : (task-92) .githooks/pre-commit 配布 + core.hooksPath 自動設定を skip。
+#                default で配布 + 設定。既存 .githooks/ は不可侵、fast smoke gate (< 3s) opt-out。
 #   --preset=<name> : (task-85) §6.4 preset bootstrap で生成する harness-config.local.yml の
 #                enforcement preset を指定 (advisory | team-default | strict | harness-dev、
 #                default: team-default = HOTFIX-1 後方互換)。team-default/strict → 8 toggle true、
@@ -73,6 +76,7 @@ WITH_MCP=true
 MCP_SERVERS="serena,context7"    # (task-90) --mcp-servers csv default = env placeholder 0 minimal
 MCP_SERVERS_SET=false             # true if --mcp-servers explicitly given (for --no-mcp conflict + Step 2 signal)
 WITH_DOCS=true
+WITH_HOOKS=true          # --no-hooks で false = .githooks/pre-commit 配布 + core.hooksPath 設定 skip (task-92 Step 2)
 WITH_DOCTOR=true         # --no-doctor で false = install 末尾 self-doctor 検証 skip (task-87 Step 2)
 COMMIT_AFTER_SYNC=false  # --commit flag (task-58 G1, opt-in for --update only)
 PRESET="team-default"    # --preset default = HOTFIX-1 現行挙動維持 (後方互換、task-85)
@@ -148,6 +152,7 @@ for arg in "$@"; do
       unset _mcp_tokens _tok _has_all _has_other
       ;;
     --no-docs)  WITH_DOCS=false ;;
+    --no-hooks) WITH_HOOKS=false ;;
     --no-doctor) WITH_DOCTOR=false ;;
     --preset=*)
       PRESET="${arg#--preset=}"
@@ -178,9 +183,10 @@ for arg in "$@"; do
       # (ends at the closing ===== of the WARNING box before `set -euo pipefail`;
       # task-79 added 4 mode-doc lines, task-85 added 4 --preset doc lines, task-89
       # rewrote (default) mode desc (+1 line) + added --lang doc (+2 lines), task-90
-      # added 5 --mcp-servers doc lines, task-87 added 2 --no-doctor doc lines
-      # so the box now ends at line 62).
-      sed -n '2,62p' "$0"
+      # added 5 --mcp-servers doc lines, task-87 added 2 --no-doctor doc lines,
+      # task-92 added 1 line to (default) desc + 2 --no-hooks doc lines
+      # so the box now ends at line 65).
+      sed -n '2,65p' "$0"
       exit 0
       ;;
     -*)
@@ -199,7 +205,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--preset=<name>|--lang=<id>|--dry-run|--no-mcp|--mcp-servers=<csv>|--no-docs|--no-doctor]" >&2
+  echo "usage: ./install.sh <target-project-dir> [--update [--commit]|--force|--overwrite-all|--preset=<name>|--lang=<id>|--dry-run|--no-mcp|--mcp-servers=<csv>|--no-docs|--no-hooks|--no-doctor]" >&2
   exit 64
 fi
 
@@ -968,7 +974,7 @@ else
 fi
 
 # ============================================================
-# 6.3. settings.json 自動再生成 (statusLine / dispatcher 配線同期、task-80)
+# 6.3. settings.json 自動再生成 (statusLine / dispatcher 配線同期、task-80、task-92 §3.5 install seed 吸収)
 # ============================================================
 # task-71 H2 で settings.json は rsync exclude (repo 固有 permissions 保護) になったため、
 # statusLine / dispatcher 配線が consuming repo に同期されない問題があった (user 報告)。
@@ -982,29 +988,49 @@ fi
 # resolve_project_root は HC_PROJECT_ROOT を最優先 key とするため、TARGET が git 未 init かつ
 # 環境に CLAUDE_PROJECT_DIR が残っている場合でも ROOT が TARGET に固定される (取り違え防止)。
 # 挙動不変: 通常 path も ROOT=TARGET のまま (cd "$TARGET" 後の git/pwd も TARGET を指す)。
-# mode 別の permissions 帰結 (M-1):
+# mode 別の permissions 帰結 (M-1、task-92 §3.5 で install mode 分岐追加):
+#   install       : (task-92) 既存 settings.json 不在時に source から seed cp → generate-settings.sh
+#                   再配線 (副産物 #78 sub-item 1、task-71 H2 permissions 保護と両立)。既存あれば触らない。
 #   update       : 既存 settings.json の permissions を verbatim 保持して再配線。
 #   force         : rm -rf .claude で破壊的リセット + settings.json は rsync exclude のため
 #                   再生成時には既存不在 → fail-open skip (permissions 保持の前提は成立しない)。
 #   overwrite-all : settings.json も source で上書き済のため、ここで保持される permissions は
 #                   source 由来 (consuming repo の permissions は失われる = task-79 既定)。
-if [[ "$MODE" == "update" || "$MODE" == "force" || "$MODE" == "overwrite-all" ]] && ! $DRY_RUN; then
-  GEN_SETTINGS="$TARGET/.claude/scripts/generate-settings.sh"
-  LIVE_SETTINGS="$TARGET/.claude/settings.json"
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "[install] WARN: jq 不在のため settings.json 自動再生成 skip。手動: bash .claude/scripts/generate-settings.sh --out .claude/settings.json" >&2
-  elif [[ ! -f "$GEN_SETTINGS" ]]; then
-    echo "[install] WARN: generate-settings.sh 不在、settings.json 自動再生成 skip" >&2
-  elif [[ ! -f "$LIVE_SETTINGS" ]]; then
-    echo "[install] NOTE: 既存 settings.json 不在のため自動再生成 skip (permissions 喪失回避)。新規は手動生成要" >&2
-  else
-    if ( cd "$TARGET" && HC_PROJECT_ROOT="$TARGET" bash .claude/scripts/generate-settings.sh --out .claude/settings.json ); then
-      echo "[install] settings.json 再生成済 (statusLine / dispatcher 配線同期、permissions 保持)"
-    else
-      echo "[install] WARN: settings.json 自動再生成 失敗 (install は継続)。手動再生成を検討" >&2
+if ! $DRY_RUN; then
+  # task-92 §3.5 structural change: install mode (default) + 既存 settings.json 不在 → source seed cp。
+  # source `.claude/settings.json` は rsync exclude (§L601) で target に届かないため cp 経由必須。
+  # task-71 H2 との consistency: install mode は repo 固有 permissions が「無い」開始状態のため
+  # source verbatim で seed → 続く generate-settings.sh 再配線は fail-open (jq 不在等は skip)。
+  if [[ "$MODE" == "install" && ! -f "$TARGET/.claude/settings.json" ]]; then
+    if [[ -f "$SCRIPT_DIR/.claude/settings.json" ]]; then
+      if cp "$SCRIPT_DIR/.claude/settings.json" "$TARGET/.claude/settings.json" 2>/dev/null; then
+        echo "[install] seeded settings.json from source (install mode、task-92 §3.5)"
+      else
+        echo "[install] WARN: settings.json seed 失敗 (install 継続、fail-open)" >&2
+      fi
     fi
   fi
-  unset GEN_SETTINGS LIVE_SETTINGS
+  # sync mode + install mode で seed 成功 (= settings.json 実在) の両方で generate-settings.sh を実行。
+  # install mode + seed 失敗 (settings.json 不在) は下 elif [[ ! -f "$LIVE_SETTINGS" ]] で NOTE + skip。
+  if [[ "$MODE" == "update" || "$MODE" == "force" || "$MODE" == "overwrite-all" || \
+        ( "$MODE" == "install" && -f "$TARGET/.claude/settings.json" ) ]]; then
+    GEN_SETTINGS="$TARGET/.claude/scripts/generate-settings.sh"
+    LIVE_SETTINGS="$TARGET/.claude/settings.json"
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "[install] WARN: jq 不在のため settings.json 自動再生成 skip。手動: bash .claude/scripts/generate-settings.sh --out .claude/settings.json" >&2
+    elif [[ ! -f "$GEN_SETTINGS" ]]; then
+      echo "[install] WARN: generate-settings.sh 不在、settings.json 自動再生成 skip" >&2
+    elif [[ ! -f "$LIVE_SETTINGS" ]]; then
+      echo "[install] NOTE: 既存 settings.json 不在のため自動再生成 skip (permissions 喪失回避)。新規は手動生成要" >&2
+    else
+      if ( cd "$TARGET" && HC_PROJECT_ROOT="$TARGET" bash .claude/scripts/generate-settings.sh --out .claude/settings.json ); then
+        echo "[install] settings.json 再生成済 (statusLine / dispatcher 配線同期、permissions 保持)"
+      else
+        echo "[install] WARN: settings.json 自動再生成 失敗 (install は継続)。手動再生成を検討" >&2
+      fi
+    fi
+    unset GEN_SETTINGS LIVE_SETTINGS
+  fi
 fi
 
 # ============================================================
@@ -1279,6 +1305,86 @@ if [[ "$MODE" == "update" ]] && ! $DRY_RUN; then
 fi
 
 # ============================================================
+# 6.8. .githooks/pre-commit 配布 + core.hooksPath idempotent 設定 (task-92 P2-1/I3)
+# ============================================================
+# 設計 SSoT: docs/draft/install-pre-commit-distribute.md §3.1 冪等性契約 7 件。
+# consuming repo は install 直後の状態で commit 境界の quality gate (fast smoke curated set、
+# 実測 < 3s) が有効化される。
+#
+# 冪等性契約 (draft §3.1):
+#   1. 既存 <target>/.githooks/pre-commit → 上書きしない (project owns、WARN)
+#   2. .githooks/ dir 内の他 hook (pre-push 等) → 触らない
+#   3. core.hooksPath == .githooks → no-op + INFO
+#   4. core.hooksPath == 別 path (例: .husky) → 上書きしない + WARN + hint
+#   5. 非 git repo (.git 不在) → 配布のみ実施、git config skip + NOTE
+#   6. --no-hooks → 配布 + git config を全 skip、既存も触らない
+#   7. --dry-run → run() helper で file write / git config 実行を echo のみ
+#
+# 全 mode (install / update / force / overwrite-all) 共通で発火する
+# (§6.7 sync drift のような --update 限定ではない、install 直後の commit 境界 gate 有効化のため)。
+if $WITH_HOOKS; then
+  PRE_COMMIT_SRC="$SCRIPT_DIR/.claude/templates/githooks/pre-commit"
+  PRE_COMMIT_DST="$TARGET/.githooks/pre-commit"
+  if [[ ! -f "$PRE_COMMIT_SRC" ]]; then
+    echo "[install] NOTE: $PRE_COMMIT_SRC 不在 → pre-commit 配布 skip (未整備 harness)" >&2
+  else
+    # 1. .githooks/ dir 作成 (冪等、dry-run 契約は run() helper 経由)
+    run mkdir -p "$TARGET/.githooks"
+    # 2. pre-commit 配布 (契約 1: 既存は上書きしない、契約 2: 他 hook 非関与)
+    if [[ -f "$PRE_COMMIT_DST" ]]; then
+      echo "[install] $PRE_COMMIT_DST exists → skip (project-owned)"
+    else
+      echo "[install] copy pre-commit → $PRE_COMMIT_DST"
+      if $DRY_RUN; then
+        echo "[dry-run] cp $PRE_COMMIT_SRC $PRE_COMMIT_DST"
+        echo "[dry-run] chmod 755 $PRE_COMMIT_DST"
+      else
+        # cp + chmod 755 を fail-open で連鎖 (§6.4 先例)、失敗は WARN のみで install 継続
+        if cp "$PRE_COMMIT_SRC" "$PRE_COMMIT_DST" 2>/dev/null \
+           && chmod 755 "$PRE_COMMIT_DST" 2>/dev/null; then
+          echo "[install] pre-commit 配置 (mode 755、fast smoke gate)"
+        else
+          echo "[install] WARN: pre-commit 配布失敗 (install は継続、fail-open)" >&2
+        fi
+      fi
+    fi
+    # 3. core.hooksPath idempotent 設定 (契約 3/4/5)
+    if [[ -d "$TARGET/.git" ]]; then
+      # git config は sub-shell で target repo 内から実行 (submodule / worktree 混在時にも安全)。
+      # `--get` が exit 1 (未設定) を返しても `|| true` で継続 (fail-open)。
+      CURRENT_HOOKS_PATH="$(cd "$TARGET" && git config --get core.hooksPath 2>/dev/null || true)"
+      if [[ -z "$CURRENT_HOOKS_PATH" ]]; then
+        # 未設定 → 新規設定 (契約 5 の逆: git repo あり + hooksPath 未設定は自動 set OK)
+        if $DRY_RUN; then
+          echo "[dry-run] cd $TARGET && git config core.hooksPath .githooks"
+        else
+          if ( cd "$TARGET" && git config core.hooksPath .githooks 2>/dev/null ); then
+            echo "[install] core.hooksPath = .githooks 設定"
+          else
+            echo "[install] WARN: git config core.hooksPath 設定失敗 (install は継続)" >&2
+          fi
+        fi
+      elif [[ "$CURRENT_HOOKS_PATH" == ".githooks" ]]; then
+        # 契約 3: 既に .githooks 設定済 → no-op + INFO
+        echo "[install] INFO: core.hooksPath は既に .githooks (no-op)"
+      else
+        # 契約 4: 別 path (例: .husky) に設定済 → 上書きしない + WARN + hint
+        echo "[install] WARN: core.hooksPath = '$CURRENT_HOOKS_PATH' に設定済 → 上書きしない" >&2
+        echo "[install] HINT: 本 harness の pre-commit を使うには手動で: cd $TARGET && git config core.hooksPath .githooks"
+      fi
+      unset CURRENT_HOOKS_PATH
+    else
+      # 契約 5: 非 git repo → 配布のみ、git config skip + NOTE
+      echo "[install] NOTE: $TARGET は git repo でない → git config skip"
+      echo "[install] HINT: git init 後に手動で: cd $TARGET && git config core.hooksPath .githooks"
+    fi
+  fi
+  unset PRE_COMMIT_SRC PRE_COMMIT_DST
+else
+  echo "[install] (--no-hooks) skip pre-commit 配布 + core.hooksPath 設定"
+fi
+
+# ============================================================
 # 7. 検証 (config-loader 動作確認)
 # ============================================================
 if ! $DRY_RUN; then
@@ -1342,6 +1448,7 @@ Next steps:
   5. (recommended) git init                                  # observe.sh の project hash 検出を有効化
   6. Claude Code session 起動 → /init-tasks → /mode loop
   7. (option) bash .claude/scripts/self-doctor.sh    # 健全性 check (task-87)。issue があれば why/fix/silence 3 行を確認、install 直後は WARN 0 が正常
+  8. pre-commit fast smoke (< 3s、bash .claude/scripts/hc-config.sh --set feature_pre_commit_smoke_enabled=false で opt-out、task-92 §6.8 で .githooks/pre-commit 配置済)
 
 settings.json について (task-71 H2 / task-80):
   - settings.json 本体は rsync exclude (repo 固有 permissions / preset を守る)。

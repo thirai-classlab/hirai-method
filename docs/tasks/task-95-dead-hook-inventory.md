@@ -11,7 +11,7 @@ total_steps: 8
 
 # Task #95: 死蔵 hook 3 件個別判定 + enforcement_matrix 登録 (P2-4/W1-1)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-06 着手、branch `feat/p2-wave1-precommit-deadhook-router`、Phase 2 Wave 1)
 > 起案: 2026-07-06 / 承認: 2026-07-06 (AI 推奨どおり 3 hook 個別判定採用、`mode_enforce` は集合 1 entry `hooks_covered` 記法採用)
 > 関連: Phase 2 (#92-#97)、master roadmap install-immediately-usable-redesign-20260618 §5 P2-4 (W1-1) / §11.3 R3
 > 設計起源: [dead-hook-inventory.md](../draft/dead-hook-inventory.md)
@@ -73,6 +73,7 @@ I2 (Dispatcher-Only Hook) invariant の完全化と 3 死蔵 hook (slip-detector
 | 2026-07-06 | 起案 | Phase 2 batch planning 経路 B、docs/draft/dead-hook-inventory.md 起こし |
 | 2026-07-06 | 承認 | user 承認 (AI 推奨どおり 3 hook 個別判定 = 案 A 採用、`mode_enforce` は集合 1 entry + `hooks_covered` 記法採用、`feature_asana_prompt_enabled` 3 点 set 新設承認) |
 | 2026-07-06 | タスク化 | `/new-task 95 dead-hook-inventory`、list.md #95 📝 → 🔲 update、docs/tasks/task-95-*.md 生成 |
+| 2026-07-07 | 完了 | commit `7f1aac0` (feat #95) + `d614be6` (shared infra + docs)、dead-hook-inventory-smoke 7/7 PASS (DHI-1..7、Fix B で DHI-2 12-field validation + DHI-6 subprocess check 強化 + DHI-7 asana feature-off 追加) + enforcement-mismatch-smoke 5/5 PASS (required= に 3 新 guard 追加) + asana_prompt 3-point set 完備 (yml key + config-loader default/export + mode-asana-prompt.sh feature gate、Fix A)、run-all-smokes.sh から expected-fail 除外達成、Step 1-8 全 ✅ |
 
 ## 派生 task / 次アクション候補
 

@@ -13,6 +13,8 @@
 #
 #   対象 guard (draft §4.2): draft_flow_guard / task_rule_guard / workflow_guard / gateguard
 #   + review_required_{design,test,module,system}。
+#   task-95 Wave 1 (2026-07-06): 3 新 guard 追加 — tool_call_slip_detect / asana_prompt /
+#   loop_mode_enforcement (draft dead-hook-inventory.md §3.1)。
 #
 # 設計:
 #   - subshell 関数 ( set -uo pipefail; ... ) で各 case を隔離 (feedback_set_e_in_sourced_libs)
@@ -133,13 +135,15 @@ _case_1() (
 )
 
 # ============================================================
-# Case 2: 対象 5 guard (draft/task/workflow/gateguard/review-required) が matrix に存在
+# Case 2: 対象 11 guard が matrix に存在
+#   base 8: draft/task/workflow/gateguard + review_required_{design,test,module,system}
+#   task-95 追加 3: tool_call_slip_detect / asana_prompt / loop_mode_enforcement
 # ============================================================
 _case_2() (
   set -uo pipefail
   local guards required missing g
   guards="$(_matrix_guards)"
-  required="draft_flow_guard task_rule_guard workflow_guard gateguard review_required_design review_required_test review_required_module review_required_system"
+  required="draft_flow_guard task_rule_guard workflow_guard gateguard review_required_design review_required_test review_required_module review_required_system tool_call_slip_detect asana_prompt loop_mode_enforcement"
   missing=""
   for g in $required; do
     if ! printf '%s\n' "$guards" | grep -qx "$g"; then
@@ -250,7 +254,7 @@ _case_5() (
 printf '=== enforcement mismatch smoke ===\n'
 
 if _case_1 2>&1; then _record PASS 1 "enforcement_matrix に guard が 4 件以上定義されている"; else _record FAIL 1 "enforcement_matrix に guard が 4 件以上定義されている"; fi
-if _case_2 2>&1; then _record PASS 2 "対象 5 guard (draft/task/workflow/gateguard/review-required 4 種) が matrix に存在"; else _record FAIL 2 "対象 5 guard が matrix に存在"; fi
+if _case_2 2>&1; then _record PASS 2 "対象 11 guard (base 8 + task-95 追加 3: tool_call_slip_detect/asana_prompt/loop_mode_enforcement) が matrix に存在"; else _record FAIL 2 "対象 11 guard が matrix に存在"; fi
 if _case_3 2>&1; then _record PASS 3 "docs=block かつ実値=false の mismatch は disabled_reason 不在で fail"; else _record FAIL 3 "undocumented mismatch を検出 (disabled_reason 不在)"; fi
 if _case_4 2>&1; then _record PASS 4 "全 guard の feature_key が yml top-level に実在"; else _record FAIL 4 "feature_key が yml に実在"; fi
 if _case_5 2>&1; then _record PASS 5 "現 preset で false 期待の block guard に disabled_reason が網羅"; else _record FAIL 5 "現 preset false 期待 guard の disabled_reason 網羅"; fi

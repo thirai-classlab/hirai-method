@@ -165,6 +165,12 @@ FEATURE_STALE_HARNESS_DETECT_ENABLED \
 STALE_HARNESS_CHECK_INTERVAL_HOURS \
 HARNESS_NPM_VERSION \
 FEATURE_AGENT_ROUTER_SUGGEST_ENABLED \
+FEATURE_AGENT_ROUTER_LLM_FALLBACK_ENABLED \
+AGENT_ROUTER_LLM_BUDGET_USD_PER_DAY \
+AGENT_ROUTER_LLM_SIMILARITY_THRESHOLD \
+FEATURE_PRE_COMMIT_SMOKE_ENABLED \
+PRE_COMMIT_SMOKE_BUDGET_SEC \
+FEATURE_ASANA_PROMPT_ENABLED \
 REVIEW_REQUIRED_DESIGN \
 REVIEW_MIN_COUNT_DESIGN \
 REVIEW_MAX_COUNT_DESIGN \
@@ -340,6 +346,20 @@ HC_STALE_HARNESS_CHECK_INTERVAL_HOURS="24"
 HC_HARNESS_NPM_VERSION=""
 # agent-router-suggest.sh (task-81): UserPromptSubmit hook、named agent 推薦 hint を条件付き 1 行注入
 HC_FEATURE_AGENT_ROUTER_SUGGEST_ENABLED="true"
+# agent-router-suggest.sh LLM fallback (task-96 P2-3):
+#   default 3 変数を明示。yml 消失時の防御深度 (yml のみ SSoT だと consuming repo の
+#   誤削除で fallback 値が空になり cost 保護 (v+0 > 0 判定) が silent skip される事故を回避)。
+#   value 解決順: env(HC_*) > local.yml > yml > 本 defaults。metadata TSV + yml と 3 点 set。
+HC_FEATURE_AGENT_ROUTER_LLM_FALLBACK_ENABLED="false"
+HC_AGENT_ROUTER_LLM_BUDGET_USD_PER_DAY="0.1"
+HC_AGENT_ROUTER_LLM_SIMILARITY_THRESHOLD="0.7"
+# pre-commit fast smoke (task-92 P2-1):
+#   feature toggle + budget 予算秒。yml 消失時の default 保護 + hc-config.sh --get の対称性担保。
+HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED="true"
+HC_PRE_COMMIT_SMOKE_BUDGET_SEC="7"
+# mode-asana-prompt.sh (task-95 3-point set):
+#   feature toggle。yml 消失時の default 保護 + config-loader/yml/hook 3-point 対称性。
+HC_FEATURE_ASANA_PROMPT_ENABLED="true"
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 4 D、
 # config-loader.sh の対称性 + env override snapshot を確保。default false = Web UI 起動)
 HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED="false"
@@ -711,6 +731,13 @@ export HC_FEATURE_FAILURE_LOOP_DETECT_ENABLED HC_FEATURE_HC_CONFIG_TUI_LEGACY_EN
 export HC_FEATURE_REVIEWER_COUNT_GUARD_ENABLED HC_FEATURE_TOOL_CALL_SLIP_DETECT_ENABLED
 export HC_FEATURE_STALE_HARNESS_DETECT_ENABLED HC_FEATURE_AGENT_ROUTER_SUGGEST_ENABLED
 export HC_STALE_HARNESS_CHECK_INTERVAL_HOURS HC_HARNESS_NPM_VERSION
+# task-96 P2-3 agent-router LLM fallback (3-point set: defaults + yml + metadata TSV)
+export HC_FEATURE_AGENT_ROUTER_LLM_FALLBACK_ENABLED
+export HC_AGENT_ROUTER_LLM_BUDGET_USD_PER_DAY HC_AGENT_ROUTER_LLM_SIMILARITY_THRESHOLD
+# task-92 P2-1 pre-commit fast smoke (feature toggle + budget)
+export HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED HC_PRE_COMMIT_SMOKE_BUDGET_SEC
+# task-95 mode-asana-prompt 3-point set (feature toggle)
+export HC_FEATURE_ASANA_PROMPT_ENABLED
 
 # Reviewer 制御 (task-44 Phase 1)
 export HC_REVIEW_REQUIRED_DESIGN HC_REVIEW_MIN_COUNT_DESIGN HC_REVIEW_MAX_COUNT_DESIGN

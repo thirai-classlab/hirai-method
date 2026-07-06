@@ -120,6 +120,16 @@ memory key schema: `session/*` (snapshot) / `plan/<feature>/*` (Plan) / `executi
 
 **規約**: Layer A → Layer B link は **2 要素 hard match** (`details.md` 含む markdown link + section anchor) を満たせば spec compliant (2026-05-28 緩和、iter 1 review H-2 反映)。link path は forward `../rules-details/<rule>.details.md` / back `../rules/<rule>.md` (相対参照)。
 
+### 2.7.1 Phase 2 Wave 1 additions (2026-07、task-92 / task-95 / task-96)
+
+Phase 1 完遂後の品質強化 Wave として 3 機構を追加:
+
+| 機構 | 概要 | opt-out |
+|---|---|---|
+| **pre-commit smoke distribution** (task-92) | `install.sh --update` が `.claude/templates/githooks/pre-commit` (4 smoke curated set: enforcement-mismatch / delegation-guard / task-rule-guard / dispatcher-manifest) を配置。consuming repo 側で `.githooks/pre-commit` を有効化すると commit 前に自動実行される。既存 hook は上書きせず (skip + WARN)。デフォルト予算 60s (`pre_commit_smoke_budget_sec`) | `--no-hooks` (install 時 skip) / `HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED=false` (template opt-out) / `HC_PRECOMMIT_SKIP=1` (1 回 bypass) |
+| **dead-hook inventory smoke** (task-95) | `.claude/tests/dead-hook-inventory-smoke.sh` が `enforcement_matrix` 配下の hook を 3-way (dead / live / alias) 分類、`harness-config.yml` grep で live 定義と `disabled_reason` 整合を自動判定 | (smoke 単体、opt-out 不要) |
+| **agent-router LLM fallback toggle** (task-96) | `.claude/hooks/agent-router-suggest.sh` に Anthropic API selector を optional child toggle として追加。default OFF、opt-in で低信頼 prompt (< similarity threshold) のみ LLM 経路へ。daily budget cap + budget 超過時強制 disable + env 互換層 (`AGENT_ROUTER_LLM_FALLBACK`) | default false / `feature_agent_router_llm_fallback_enabled: true` で opt-in / `agent_router_llm_budget_usd_per_day: 0.1` (default) で cap |
+
 ### 2.7 アーキテクチャ
 
 ```mermaid

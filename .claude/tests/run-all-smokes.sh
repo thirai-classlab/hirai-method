@@ -50,6 +50,7 @@ _get_smoke_category() {
     action-space-count-smoke|\
     common-rules-import-smoke|\
     config-feature-toggles-smoke|\
+    dead-hook-inventory-smoke|\
     effective-hook-matrix-smoke|\
     enforcement-mismatch-smoke|\
     harness-config-local-smoke|\
@@ -73,6 +74,7 @@ _get_smoke_category() {
     install-claude-md-autofill-smoke|\
     install-local-yml-smoke|\
     install-mcp-servers-smoke|\
+    install-pre-commit-smoke|\
     install-sh-sync-drift-smoke|\
     project-root-smoke|\
     self-doctor-smoke|\
@@ -82,8 +84,9 @@ _get_smoke_category() {
     stale-harness-detect-smoke)
       printf 'stale-det' ;;
     # behavior: BLOCK/warn 挙動検証 (default)
-    # cli 機能検証 (task-83)
-    npx-cli-smoke)
+    # cli 機能検証 (task-83) / task #96 P2-5 agent-router LLM fallback 子 toggle
+    npx-cli-smoke|\
+    agent-router-llm-fallback-smoke)
       printf 'behavior' ;;
     *)
       printf 'behavior' ;;
@@ -198,7 +201,7 @@ if [ "$LIST_ONLY" = "1" ]; then
     done
     printf '\n'
   done
-  printf '=== Expected-fail manifest (task-74 iter-1 起点、task #91 で environmental 4 + flaky 2 に縮小) ===\n\n'
+  printf '=== Expected-fail manifest (task-74 iter-1 起点、task #91 で environmental 4 + flaky 2 に縮小、task-95 Wave 1 review 後 dead-hook-inventory 除外) ===\n\n'
   for name in gateguard-smoke workflow-guard-smoke task-rule-guard-smoke \
               tool-call-slip-detector-smoke \
               hc-config-web-ui-smoke install-sh-sync-drift-smoke; do

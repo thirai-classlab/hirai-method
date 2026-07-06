@@ -120,6 +120,30 @@ set -euo pipefail   # ← 絶対書かない
 
 ---
 
+## Phase 2 Wave 1 install-time 挙動 (2026-07、task-92)
+
+Wave 1 で `install.sh` に **pre-commit template distribution** を追加。consuming repo 側の commit フローに 4 smoke curated set (enforcement-mismatch / delegation-guard / task-rule-guard / dispatcher-manifest) を配線し、規範違反を commit 前に機械検出する。
+
+### 配布契約 (§6.8 install.sh)
+
+| 挙動 | 詳細 |
+|---|---|
+| 配布物 | `.claude/templates/githooks/pre-commit` を consuming repo の `.githooks/pre-commit` に配置 (dir 不在なら mkdir) |
+| 既存保護 | consuming repo に既に `.githooks/pre-commit` が存在する場合は **上書きせず skip + WARN 1 行** stderr 出力 (project 固有 pre-commit を失わない) |
+| trigger | `install.sh --update` および default install で自動配布 |
+| `--no-hooks` | flag 指定時は pre-commit 配布そのものを skip (opt-out) |
+| yml opt-out | `HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED=false` / `harness-config.yml` で `feature_pre_commit_smoke_enabled: false` にすると、template が配置されていても実行時に即 exit 0 で no-op (rewrite なしで動作を無効化) |
+| 1 回 bypass | commit 直前で `HC_PRECOMMIT_SKIP=1 git commit ...` により当該 commit のみ skip (痕跡は git commit 履歴のみ) |
+| budget | template のデフォルト予算 60s (`pre_commit_smoke_budget_sec`)、超過で SKIP + WARN 出力 |
+| consumer 側の有効化 | `git config core.hooksPath .githooks` を 1 度実行すれば以降 commit ごとに自動発火。project の `.githooks/` は既に commit 対象に入れる運用が推奨。 |
+
+### 動作確認
+
+```bash
+bash .claude/tests/install-pre-commit-smoke.sh
+# → distribution / --no-hooks skip / 既存保護 / feature toggle OFF 挙動を検証
+```
+
 ## 既存セクション (project-level install 中心)
 
 ## アーキテクチャ

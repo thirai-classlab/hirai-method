@@ -32,6 +32,10 @@
 #   L: 既存 local.yml + --update --preset=strict → byte 不変 (verbatim) + stderr に WARN「--preset は無視」
 #   M: (静的) install.sh --preset allowed set == hc-config.sh _validate_default_preset の
 #      allowed set (両 file から 4 値を抽出して sort 比較、drift 機械検出)
+#   N: (task-92 §3.5) install mode + settings.json 不在 → source から verbatim seed cp
+#      + stdout に "seeded settings.json from source (install mode" ログ + cmp -s で byte 一致
+#   O: (task-71 H2) update mode + settings.json 不在 → 自動再生成 skip + NOTE
+#      「既存 settings.json 不在のため自動再生成 skip」stderr 出力 (permissions 喪失回避契約)
 #
 # 重要制約:
 #   - file-top に set -euo pipefail を書かない (feedback_set_e_in_sourced_libs 規範)
@@ -342,6 +346,64 @@ _case_m() (
 )
 
 # ============================================================
+# Case N: (task-92 §3.5) install mode + settings.json 不在 → source から seed cp
+# 契約 (install.sh L1000-1012): MODE=install かつ TARGET/.claude/settings.json 不在なら
+#   `cp $SCRIPT_DIR/.claude/settings.json $TARGET/.claude/settings.json` を実行
+# assertion:
+#   1. 実行後 target `.claude/settings.json` が存在する (seed 成功)
+#   2. stdout に「seeded settings.json from source (install mode」を含む log 行
+#      (seed 契約が動作した proof、生成 pipeline 順序変更 regression 検出)
+#   3. cmp -s で source と byte 一致 (jq 存在時 generate-settings.sh 再配線後も
+#      manifest 由来 = source 由来 で一致するのが正常状態、drift signal 兼用)
+# ============================================================
+_case_settings_seed_install() (
+  set -uo pipefail
+  _cleanup_envs
+  local tgt="${TMP_DIR}/target-n"
+  mkdir -p "$tgt"
+  local outlog="${TMP_DIR}/case-n-out.log"
+  # install mode (default) + --no-hooks で pre-commit 副作用回避 (本 case は settings.json seed 検証)
+  bash "$INSTALL_SH" "$tgt" --no-mcp --no-docs --no-hooks >"$outlog" 2>&1 || return 1
+  # 1. settings.json 実在
+  [ -f "${tgt}/.claude/settings.json" ] || return 1
+  # 2. seed log 行 (§3.5 契約 marker)
+  grep -q 'seeded settings.json from source (install mode' "$outlog" || return 1
+  # 3. byte-identical (source と一致 = seed + regen が同 manifest 由来で drift 0)
+  cmp -s "${REPO_ROOT}/.claude/settings.json" "${tgt}/.claude/settings.json"
+)
+
+# ============================================================
+# Case O: (task-71 H2) update mode + settings.json 不在 → NOTE + 自動再生成 skip
+# 契約 (install.sh L1023-1024): MODE=update かつ target settings.json 不在なら
+#   `NOTE: 既存 settings.json 不在のため自動再生成 skip (permissions 喪失回避)` を stderr 出力
+#   generate-settings.sh は起動しない (fail-open、permissions 前提が成立しないため)
+# setup:
+#   1. install mode で target を初期化 (settings.json seed 済状態)
+#   2. seeded settings.json を削除 (task-71 H2 想定シナリオ: user が手動で消したケース)
+# assertion:
+#   1. update 実行後 settings.json は依然 不在 (自動生成しない fail-open 契約)
+#   2. stderr に「既存 settings.json 不在のため自動再生成 skip」の NOTE 行
+# ============================================================
+_case_settings_seed_update_note() (
+  set -uo pipefail
+  _cleanup_envs
+  local tgt="${TMP_DIR}/target-o"
+  mkdir -p "$tgt"
+  # 1. install mode で初期化 (seed 済状態)
+  bash "$INSTALL_SH" "$tgt" --no-mcp --no-docs --no-hooks >/dev/null 2>&1 || return 1
+  [ -f "${tgt}/.claude/settings.json" ] || return 1
+  # 2. seeded settings.json を削除 (シナリオ再現)
+  rm -f "${tgt}/.claude/settings.json"
+  # 3. update 実行
+  local outlog="${TMP_DIR}/case-o-out.log"
+  bash "$INSTALL_SH" "$tgt" --update --no-mcp --no-docs --no-hooks >"$outlog" 2>&1 || return 1
+  # 4. settings.json は依然不在 (自動生成しない contract)
+  [ ! -f "${tgt}/.claude/settings.json" ] || return 1
+  # 5. NOTE 行 存在 (task-71 H2 exact string、stdout/stderr 統合 log を対象)
+  grep -q '既存 settings.json 不在のため自動再生成 skip' "$outlog"
+)
+
+# ============================================================
 # 実行
 # ============================================================
 printf '\n=== install-local-yml-smoke (HOTFIX-1 + task-85) ===\n\n'
@@ -384,6 +446,12 @@ else                         _record FAIL L "既存 local.yml + --update --prese
 
 if _case_m 2>/dev/null; then _record PASS M "install.sh / hc-config.sh の preset allowed set 一致 (静的 drift 検出)"
 else                         _record FAIL M "install.sh / hc-config.sh の preset allowed set 一致 (静的 drift 検出)"; fi
+
+if _case_settings_seed_install 2>/dev/null; then _record PASS N "install mode + settings.json 不在 → source seed cp (task-92 §3.5)"
+else                                                _record FAIL N "install mode + settings.json 不在 → source seed cp (task-92 §3.5)"; fi
+
+if _case_settings_seed_update_note 2>/dev/null; then _record PASS O "update mode + settings.json 不在 → NOTE + 自動再生成 skip (task-71 H2)"
+else                                                    _record FAIL O "update mode + settings.json 不在 → NOTE + 自動再生成 skip (task-71 H2)"; fi
 
 TOTAL=$((PASS + FAIL))
 printf '\n--- Result: %d/%d PASS ---\n' "$PASS" "$TOTAL"
