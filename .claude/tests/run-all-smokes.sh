@@ -58,6 +58,7 @@ _get_smoke_category() {
     hc-config-local-yml-smoke|\
     hc-config-migration-smoke|\
     layer-b-context-isolation-smoke|\
+    lib-block-message-smoke|\
     review-required-min-count-smoke|\
     reviewer-count-guard-smoke|\
     rule-architecture-smoke|\
@@ -71,6 +72,7 @@ _get_smoke_category() {
     # portability: cwd/install 差分
     dual-mode-portability-smoke|\
     hook-cwd-robustness-smoke|\
+    install-ci-matrix-smoke|\
     install-claude-md-autofill-smoke|\
     install-local-yml-smoke|\
     install-mcp-servers-smoke|\
@@ -84,9 +86,11 @@ _get_smoke_category() {
     stale-harness-detect-smoke)
       printf 'stale-det' ;;
     # behavior: BLOCK/warn 挙動検証 (default)
-    # cli 機能検証 (task-83) / task #96 P2-5 agent-router LLM fallback 子 toggle
+    # cli 機能検証 (task-83) / task #96 P2-5 agent-router LLM fallback 子 toggle /
+    # task-94 P2-3 emit_block_stop 契約 (Stop hook JSON stdout 非出力 + 4 label stderr)
     npx-cli-smoke|\
-    agent-router-llm-fallback-smoke)
+    agent-router-llm-fallback-smoke|\
+    byproduct-discharge-guard-smoke)
       printf 'behavior' ;;
     *)
       printf 'behavior' ;;

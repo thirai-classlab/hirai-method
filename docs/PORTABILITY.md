@@ -144,6 +144,30 @@ bash .claude/tests/install-pre-commit-smoke.sh
 # → distribution / --no-hooks skip / 既存保護 / feature toggle OFF 挙動を検証
 ```
 
+## Phase 2 Wave 2 install-time 挙動 (2026-07、task-93)
+
+Wave 2 で `install.sh` に **CI matrix workflow distribution** を追加した。consuming repo の GitHub Actions に harness-smoke workflow (2 preset × 5 category = 10 並列 job) を配線し、PR 境界で `run-all-smokes.sh --category <name>` を実行して UNEXPLAINED-FAIL == 0 の Quality Gate を機械強制する。
+
+### 配布契約 (§6.9 install.sh)
+
+| 挙動 | 詳細 |
+|---|---|
+| 配布物 | `.github/workflows/harness-smoke.yml` を consuming repo に配置 (`.github/workflows/` dir 不在なら mkdir)。matrix (preset: team-default / strict、category: parity / behavior / budget / portability / stale-det) で 10 job 並列実行 |
+| 既存保護 | consuming repo に既に `.github/workflows/harness-smoke.yml` が存在する場合は **上書きせず create-if-absent** (project 固有 workflow / matrix / trigger を失わない) |
+| trigger | `install.sh --update` および default install で自動配布 |
+| preset override SSoT | `HC_DEFAULT_PRESET` env (`.claude/hooks/lib/config-loader.sh:353` 準拠、`_OVERRIDE` suffix 無し)。matrix job 内で `echo "HC_DEFAULT_PRESET=${{ matrix.preset }}" >> "$GITHUB_ENV"` |
+| fail-fast | `false` (1 job FAIL でも他 job 完走、10 job signal 独立) |
+| timeout | `timeout-minutes: 5` (per-job)。長時間 smoke は category 分割で吸収 |
+| artifact | 失敗時のみ `.claude/.workflow-state/**` + `/tmp/smoke-runner-out.*` を `smoke-logs-<preset>-<category>` 名で upload (retention 7 日) |
+| consumer 側の有効化 | workflow.yml 配置と `push` / `pull_request` trigger のみで自動発火。手動起動は `workflow_dispatch` で GitHub UI から可 |
+
+### 動作確認
+
+```bash
+bash .claude/tests/install-ci-matrix-smoke.sh
+# → distribution / 既存 workflow 保護 / matrix 構造 (2×5) / preset env SSoT 名一致 を検証
+```
+
 ## 既存セクション (project-level install 中心)
 
 ## アーキテクチャ

@@ -161,6 +161,16 @@ context7 fail で loop 停止しない / 「training data で確信あり」で 
 
 > **起源 / research 根拠 (§11 F1-4 Programmatic Tool Calling 優位 / F2-4 ordering)**: [harness-design-fundamental-review.md](../../docs/draft/harness-design-fundamental-review.md) §3.1
 
+## hook BLOCK/WARN/INFO 統一出力 (`lib/block-message.sh`、必須、task-94)
+
+全 hook (PreToolUse × 5 / Stop × 1 / SubagentStop × 1) + self-doctor は `.claude/hooks/lib/block-message.sh` の 4 引数 API (`why` / `fix_one_liner` / `bypass_env` / `docs_link`) 経由で BLOCK / WARN / INFO を出力する。event 別 semantics ずれ (Stop 系 `{"decision":"block"}` の主 tool 停止阻止 semantic 誤発火等) を実装層で排除するため、BLOCK は event 別 3 variant に分割 (順序不変):
+
+- **PreToolUse hook** → `emit_block_pretool` (JSON stdout `{decision:"block",...}` + stderr 4 行)
+- **Stop hook** (`byproduct-discharge-guard.sh` 等) → `emit_block_stop` (stderr 4 行のみ、JSON stdout **非出力**)
+- **SubagentStop hook** (`confidence-gate.sh`) → `emit_block_subagent` (JSON stdout + stderr 4 行)
+
+`emit_warn` / `emit_info` は event 非依存 (stderr のみ)。file-top strict mode leak 防止 (subshell 関数化) + jq 不在時 printf JSON fallback で fail-open。exit code は caller が event / 現行 exit code semantics に基づき明示する (本 lib は exit を呼ばない)。詳細契約は [`docs/draft/lib-block-message-4args.md`](../../docs/draft/lib-block-message-4args.md) §3.1 / §3.5、smoke は [`.claude/tests/lib-block-message-smoke.sh`](../tests/lib-block-message-smoke.sh)。
+
 ## サブエージェント `.claude/` 編集の staging 戦略 (必須)
 
 Claude Code permission system は subagent context での `.claude/` 配下への直接 `Write` / `Edit` / `Bash` heredoc redirect を **一律 denied** (sub-agent isolation)。メインからは通過。subagent 委譲時は `/tmp/<file>` に `Write` → `mv` で install する staging 戦略が必須。

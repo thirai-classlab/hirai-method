@@ -130,6 +130,15 @@ Phase 1 完遂後の品質強化 Wave として 3 機構を追加:
 | **dead-hook inventory smoke** (task-95) | `.claude/tests/dead-hook-inventory-smoke.sh` が `enforcement_matrix` 配下の hook を 3-way (dead / live / alias) 分類、`harness-config.yml` grep で live 定義と `disabled_reason` 整合を自動判定 | (smoke 単体、opt-out 不要) |
 | **agent-router LLM fallback toggle** (task-96) | `.claude/hooks/agent-router-suggest.sh` に Anthropic API selector を optional child toggle として追加。default OFF、opt-in で低信頼 prompt (< similarity threshold) のみ LLM 経路へ。daily budget cap + budget 超過時強制 disable + env 互換層 (`AGENT_ROUTER_LLM_FALLBACK`) | default false / `feature_agent_router_llm_fallback_enabled: true` で opt-in / `agent_router_llm_budget_usd_per_day: 0.1` (default) で cap |
 
+### 2.7.2 Phase 2 Wave 2 additions (2026-07、task-93 / task-94)
+
+Wave 2 は CI 品質ゲートと BLOCK/WARN/INFO 出力の統一 API を導入する。
+
+| 機構 | 状態 | 概要 | opt-out |
+|---|---|---|---|
+| **CI matrix workflow distribution** (task-93) | ✅ Wave 2 | `.github/workflows/harness-smoke.yml` を配布。matrix (2 preset × 5 category = 10 並列 job) で `run-all-smokes.sh --category <name>` を実行し PR 境界の Quality Gate (UNEXPLAINED-FAIL == 0) を機械強制。preset override は `HC_DEFAULT_PRESET` env (SSoT: `config-loader.sh:353`)、fail-fast: false で 10 job signal 独立。既存 `.github/workflows/harness-smoke.yml` は上書きせず create-if-absent (project 固有 workflow を失わない) | 既存 workflow.yml 存在時は自動 skip / `--no-workflows` (install 時 skip) |
+| **`lib/block-message.sh` 統一 API** (task-94) | ✅ Wave 2 | 全 hook (PreToolUse × 5 / Stop × 1 / SubagentStop × 1) + self-doctor が共通 4 引数 API (`why` / `fix_one_liner` / `bypass_env` / `docs_link`) で BLOCK / WARN / INFO を出力。event 別 semantics ずれを実装層で排除するため BLOCK は 3 variant (`emit_block_pretool` / `emit_block_stop` / `emit_block_subagent`) に分割、`emit_warn` / `emit_info` は event 非依存。fail-open (file-top strict mode leak 防止 + jq 不在時 printf fallback) | (lib、opt-out 不要) |
+
 ### 2.7 アーキテクチャ
 
 ```mermaid
