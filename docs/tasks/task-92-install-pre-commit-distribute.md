@@ -78,6 +78,7 @@ I3 Quality Gate (roadmap §3 invariant) の commit 境界機械強制不在を�
 | 2026-07-06 | 起案 | Phase 2 batch planning 経路 B、docs/draft/install-pre-commit-distribute.md 起こし |
 | 2026-07-06 | 承認 | user 承認 (AI 推奨どおり fast smoke curated set 4 本採用 / 副産物 #78 sub-item 1 吸収承認 / statusline 行 2 表示は独立小タスク化) |
 | 2026-07-06 | タスク化 | `/new-task 92 install-pre-commit-distribute`、list.md #92 📝 → 🔲 update、docs/tasks/task-92-*.md 生成 |
+| 2026-07-07 | 完了 | commit `dabb43b` (feat #92) + `d614be6` (shared infra + docs)、install-pre-commit-smoke 11/11 PASS (Fix C で HC_PRECOMMIT_SKIP + non-git-repo + project-owned protection 3 case 追加) + install-local-yml 15/15 PASS (§3.5 settings seed 2 case N/O 追加、task-71 H2 regression 0)、docs 反映 README/INVENTORY/PORTABILITY 完了、Step 1-8 全 ✅、install.sh 755 mode regression は amend で復元済 |
 
 ## 派生 task / 次アクション候補
 

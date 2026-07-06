@@ -79,6 +79,7 @@ agent-router LLM fallback が env-only opt-in で yml SSoT 不在 + budget/thres
 | 2026-07-06 | 起案 | Phase 2 batch planning 経路 B、docs/draft/agent-router-llm-fallback-toggle.md 起こし |
 | 2026-07-06 | 承認 | user 承認 (AI 推奨どおり案 B 採用 = 3 key + I7 triplet 全遵守 + env 互換層維持 + `export` 1 mechanism 固定 + budget file の task-99 GC 対象化契約) |
 | 2026-07-06 | タスク化 | `/new-task 96 agent-router-llm-fallback-toggle`、list.md #96 📝 → 🔲 update、docs/tasks/task-96-*.md 生成 |
+| 2026-07-07 | 完了 | commit `ccf8759` (feat #96) + `d614be6` (shared infra + docs)、agent-router-llm-fallback-smoke 13/13 PASS (ARF-1..13、Fix D で ARF-11 static unset check + ARF-12 static inline env prefix check + ARF-13 parent-child toggle interaction + SKIP-MAJOR guard 追加)、静的 drift 検証: `grep -cE '^\s*unset\s+AGENT_ROUTER_LLM' agent-router-suggest.sh == 0` + `grep -cE 'AGENT_ROUTER_LLM_[A-Z_]+=[^ ]+ python3' == 0`、既存 env 互換層 regression 0、Step 1-8 全 ✅ |
 
 ## 派生 task / 次アクション候補
 
