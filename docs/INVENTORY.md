@@ -80,6 +80,18 @@
 | `.claude/scripts/harness-audit.py` | ハーネス健全性レポートを実測値で出力（observations.jsonl / GateGuard / TaskGuard / failure-window）。 | New (W2.2) |
 | `.claude/commands/harness-audit.md` | `/harness-audit`: 上記スクリプトを起動して結果を整形。 | New (W2.2) |
 
+## Phase 2 Wave 1 追加 (2026-07、task-92 / task-95 / task-96)
+
+`install.sh` 側で consuming repo へ curated pre-commit hook を配布する仕組み、`.claude/hooks/` 群の dead/live/alias 判定 smoke、そして agent-router LLM fallback child toggle を追加。
+
+| Path | 役割 | ステータス |
+|---|---|---|
+| `.claude/templates/githooks/pre-commit` | consuming repo へ配布する pre-commit template。4 smoke curated set (enforcement-mismatch / delegation-guard / task-rule-guard / dispatcher-manifest) を実行。既存 `.githooks/pre-commit` は上書きせず skip + WARN、`--no-hooks` で install 時 skip、`HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED=false` で template opt-out、`HC_PRECOMMIT_SKIP=1` で 1 回 bypass。 | New (task-92) |
+| `.claude/tests/install-pre-commit-smoke.sh` | task-92 の distribution 契約 smoke。install.sh --update 経由での pre-commit 配布 + 既存保護 + `--no-hooks` skip + feature toggle OFF 挙動を検証。 | New (task-92) |
+| `.claude/tests/dead-hook-inventory-smoke.sh` | `enforcement_matrix` 配下 hook を 3-way (dead / live / alias) 自動分類し、`harness-config.yml` grep で live 定義と `disabled_reason` 整合を機械判定。 | New (task-95) |
+| `.claude/tests/agent-router-llm-fallback-smoke.sh` | task-96 の LLM fallback child toggle 契約 smoke (ARF-1..13)。default OFF / opt-in / budget 強制 disable / threshold override / env 互換 WARN / budget accumulator + static drift check (`unset` / inline env prefix) + parent-child toggle interaction を検証。 | New (task-96) |
+| `harness-config.yml` keys: `feature_pre_commit_smoke_enabled` / `pre_commit_smoke_budget_sec` / `feature_asana_prompt_enabled` / `feature_agent_router_llm_fallback_enabled` / `agent_router_llm_budget_usd_per_day` / `agent_router_llm_similarity_threshold` | Wave 1 追加 yml key 集約。`hc-config.sh --get <key>` で raw 値取得、`--set <key>=<val>` で local override。 | New (task-92 / task-96) |
+
 ## 規範文書の Layer A/B Strategy (2026-05-28、task-51)
 
 `.claude/rules/*.md` (規範文書) は **Layer A (要約、context 自動注入) + Layer B (詳細、明示 Read のみ)** の 2 層構造で運用する。

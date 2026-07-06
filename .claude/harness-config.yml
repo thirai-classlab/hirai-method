@@ -189,7 +189,7 @@ confidence_state_dir: .claude/.confidence-gate-state
 #   local-merge-push : ローカル merge + remote push まで AI (solo/実験、最速)
 #   不正/未知値は hc-config --set が reject、hook 実行時は fail-safe で pr-required 扱い。
 mainline_branch: main
-mainline_integration_policy: pr-required
+mainline_integration_policy: local-merge-push
 
 # === 必須環境変数（プロジェクト固有）===
 # SessionStart hook (.claude/hooks/check-required-env.sh) が読み、未設定があれば
@@ -388,6 +388,12 @@ feature_failure_loop_detect_enabled: true         # failure-loop-detect
 feature_agent_router_suggest_enabled: true        # agent-router-suggest (task-81 復活配線、条件付き 1 行 hint、default ON)
 feature_sessionstart_summary_enabled: true        # mode-session-start (hc-config --summary 全文注入、P1-4。feature_mode_session_start_enabled OFF 時は本 toggle に関わらず注入されない)
 feature_self_doctor_enabled: true                 # self-doctor.sh (install 末尾 D1-D8 setup issue 検証、P1-3、fail-open 2 層 install は常に exit 0)
+feature_pre_commit_smoke_enabled: true            # .githooks/pre-commit fast smoke curated set 実行 (task-92 P2-1、opt-out 契約、budget 超過は smoke 側で WARN)
+pre_commit_smoke_budget_sec: 7                    # pre-commit fast smoke 予算 (秒、超過で WARN、task-92。2026-07-06 実測 macOS bash 5.2 で curated 4 smoke 合計 5.17s (bulk 0.11 + enforcement-mismatch 0.84 + harness-config-local 4.16 + common-rules-import 0.06) を踏まえ margin ~35% で 7 に設定。default 3 は draft §3.3 timing 表の見積 (~2.4s) 起因の drift、実測 empirical で補正)
+feature_asana_prompt_enabled: true                # mode-asana-prompt.sh (SessionStart Asana 未決 hearing、mode.yml asana_enabled と直交、task-95)
+feature_agent_router_llm_fallback_enabled: false  # agent-router-suggest LLM fallback 子 toggle (default OFF、opt-in feature、cost 発生、task-96)
+agent_router_llm_budget_usd_per_day: 0.1          # LLM fallback の 1 日 (UTC day) 累積 cost 上限 (USD、超過で当日 disable + WARN、task-96)
+agent_router_llm_similarity_threshold: 0.7        # keyword confidence が本値未満の時のみ LLM fallback 発火 (0.0-1.0、上げると発火頻度低下・cost 低下、task-96)
 
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 2 D)
 # 対象: .claude/scripts/hc-config.sh の cmd_interactive dispatcher (L1782 周辺)
@@ -542,3 +548,32 @@ enforcement_matrix:
     disabled_reason:
       harness-dev: "ハーネス開発では system-review を手動運用するため"
       advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
+  # task-95 dead-hook inventory 由来の 3 新規 guard (draft §3.1 SSoT)
+  tool_call_slip_detect:
+    feature_key: feature_tool_call_slip_detect_enabled
+    docs_claim: advisory
+    events: [Stop]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: false}
+    disabled_reason:
+      harness-dev: "誤検出ループが slip 体験の主因と判明 (詳細: `git log --all --grep=slip-detector` + docs/tasks/task-95-*.md §DoD 補足の fire 実績 table)、ハーネス自身の開発 turn で false-positive block が過剰"
+      advisory: "advisory preset は warn 中心運用のため slip 自動 block は過剰 (詳細: docs/INVENTORY.md §hook 分類表)"
+  asana_prompt:
+    # advisory guard (preset 直交、asana 利用有無は project 属性で決定、MED-4 fix)
+    # 全 preset true は「本質的に disable する場面なし」ではなく「project 単位で env override 運用」の意味
+    # consuming repo で asana 排除運用は env `HC_FEATURE_ASANA_PROMPT_ENABLED=false` で無効化 (preset 変更不要)
+    feature_key: feature_asana_prompt_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  loop_mode_enforcement:
+    # aggregate = 3 hook 共有 group (mode-enforce / loop-confirmation-detector / loop-auto-progress-reminder)
+    # 案 a 集合 1 entry 採用 (task-95 draft §3.1.c、task-97 §3 L143 の判定委譲を受けて確定)
+    # hooks_covered は非公式 sub-field (現行 parser は top-level guard 名のみ抽出、後方互換)
+    feature_key: feature_loop_mode_enforcement_enabled
+    docs_claim: advisory
+    events: [SessionStart, Stop, SubagentStop]
+    hooks_covered: [mode-enforce, loop-confirmation-detector, loop-auto-progress-reminder]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
+    disabled_reason:
+      advisory: "advisory preset は個人実験 / PoC 用に Loop 遵守事項 reminder を最小化"
