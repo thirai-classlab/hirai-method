@@ -11,7 +11,7 @@ total_steps: 8
 
 # Task #95: 死蔵 hook 3 件個別判定 + enforcement_matrix 登録 (P2-4/W1-1)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-06 着手、branch `feat/p2-wave1-precommit-deadhook-router`、Phase 2 Wave 1)
 > 起案: 2026-07-06 / 承認: 2026-07-06 (AI 推奨どおり 3 hook 個別判定採用、`mode_enforce` は集合 1 entry `hooks_covered` 記法採用)
 > 関連: Phase 2 (#92-#97)、master roadmap install-immediately-usable-redesign-20260618 §5 P2-4 (W1-1) / §11.3 R3
 > 設計起源: [dead-hook-inventory.md](../draft/dead-hook-inventory.md)

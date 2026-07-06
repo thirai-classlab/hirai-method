@@ -11,7 +11,7 @@ total_steps: 7
 
 # Task #96: agent-router LLM fallback default OFF + yml toggle 明示化 (P2-5/W1-5、I7 triplet 遵守)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-06 着手、branch `feat/p2-wave1-precommit-deadhook-router`、Phase 2 Wave 1)
 > 起案: 2026-07-06 / 承認: 2026-07-06 (AI 推奨どおり default OFF + 3 key + subshell 化 + env 互換層維持採用)
 > 関連: Phase 2 (#92-#97)、master roadmap install-immediately-usable-redesign-20260618 §5 P2-5 / §11.3 R5 / §11.3 R2 / §3 I7 (Config-Consumer-Smoke Triplet)
 > 設計起源: [agent-router-llm-fallback-toggle.md](../draft/agent-router-llm-fallback-toggle.md)

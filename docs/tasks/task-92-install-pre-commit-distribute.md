@@ -11,7 +11,7 @@ total_steps: 8
 
 # Task #92: install.sh pre-commit 配布 + core.hooksPath 自動設定 + settings seed 吸収 (P2-1/I3/W1-9)
 
-> Status: **🔲 未着手**
+> Status: **🔄 進行中** (2026-07-06 着手、branch `feat/p2-wave1-precommit-deadhook-router`、Phase 2 Wave 1)
 > 起案: 2026-07-06 / 承認: 2026-07-06 (AI 推奨どおり fast smoke 4 本採用、副産物 #78 sub-item 1 吸収承認)
 > 関連: Phase 2 (#92-#97)、master roadmap install-immediately-usable-redesign-20260618 §5 P2-1 / §4.7 / §11.3 R2 / §11.3 R4
 > 設計起源: [install-pre-commit-distribute.md](../draft/install-pre-commit-distribute.md)
