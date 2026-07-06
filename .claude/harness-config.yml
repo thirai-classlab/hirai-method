@@ -577,3 +577,91 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
     disabled_reason:
       advisory: "advisory preset は個人実験 / PoC 用に Loop 遵守事項 reminder を最小化"
+  # ------------------------------------------------------------------
+  # task-97 (P2-6) 全 hook 拡張 (draft enforcement-matrix-full-hook-expansion.md §3)
+  # ------------------------------------------------------------------
+  # 中核 BLOCK guard 4 件 (delegation / confidence / autonomous-action / byproduct)
+  delegation_guard:
+    feature_key: feature_delegation_guard_enabled
+    docs_claim: block
+    events: [PreToolUse:Edit, PreToolUse:Write, PreToolUse:Read, PreToolUse:Grep, PreToolUse:Glob, PreToolUse:Bash]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
+    disabled_reason:
+      advisory: "advisory preset は個人実験 / PoC 用に warn 中心運用 (BLOCK 最小) とするため"
+  confidence_gate:
+    feature_key: feature_confidence_gate_enabled
+    docs_claim: block
+    events: [SubagentStop]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
+    disabled_reason:
+      advisory: "advisory preset は個人実験 / PoC 用に F3 事実検証 gate を運用しないため"
+  autonomous_action_guard:
+    feature_key: feature_autonomous_action_guard_enabled
+    docs_claim: block
+    events: [PreToolUse:Bash]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
+    disabled_reason:
+      advisory: "advisory preset は個人実験 / PoC 用に Loop 自律禁止 11 カテゴリ BLOCK を運用しないため"
+  byproduct_discharge:
+    feature_key: feature_byproduct_discharge_enabled
+    docs_claim: block
+    events: [Stop, SessionStart]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
+    disabled_reason:
+      advisory: "advisory preset は個人実験 / PoC 用に副産物 discharge BLOCK を運用しないため"
+  # advisory guard (reminder / warn 系) 6 件
+  # 全 preset true は「本質的に disable する場面なし」ではなく「project 単位で env override 運用」の意味
+  context_budget:
+    feature_key: feature_context_budget_enabled
+    docs_claim: advisory
+    events: [UserPromptSubmit]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  parallel_subagent_reminder:
+    feature_key: feature_parallel_subagent_reminder_enabled
+    docs_claim: advisory
+    events: [PreToolUse:Agent]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  reviewer_count_guard:
+    feature_key: feature_reviewer_count_guard_enabled
+    docs_claim: advisory
+    events: [PreToolUse:Agent]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  why_x5_enforcement:
+    feature_key: feature_why_x5_enforcement_enabled
+    docs_claim: advisory
+    events: [SessionStart, Stop]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  failure_loop_detect:
+    feature_key: feature_failure_loop_detect_enabled
+    docs_claim: advisory
+    events: [Stop, PreToolUse:Bash]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  stale_harness_detect:
+    feature_key: feature_stale_harness_detect_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  # Gate/Confidence カテゴリ (task-96 由来 agent-router 系 2 件)
+  # feature_agent_router_llm_fallback_enabled は default OFF (opt-in feature、cost 発生)
+  # parent (agent_router_suggest) は default ON、child (agent_router_llm_fallback) は default OFF
+  agent_router_suggest:
+    feature_key: feature_agent_router_suggest_enabled
+    docs_claim: advisory
+    events: [UserPromptSubmit]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  agent_router_llm_fallback:
+    # child toggle (task-96 §3.1)、default OFF for all presets (opt-in feature、cost 発生)
+    # 全 preset false は「本質的に disable」ではなく「default OFF、consuming repo 側で明示 opt-in」の意味
+    # docs_claim=advisory のため Case 3 / Case 5 の block-mismatch 対象外
+    feature_key: feature_agent_router_llm_fallback_enabled
+    docs_claim: advisory
+    events: [UserPromptSubmit]
+    presets: {advisory: false, team-default: false, strict: false, harness-dev: false}
+    disabled_reason: {}

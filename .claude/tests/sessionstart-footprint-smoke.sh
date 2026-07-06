@@ -25,6 +25,16 @@
 #   FP-6: (task-88) Loop モード + HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED=false で
 #         `totals:` absent + <system-reminder> 開閉タグ均衡 (閉じタグ健在 = hook 途中死なし)
 #         + footprint < FP-1 baseline (FP-4 の kill-switch 検証 pattern 踏襲)。
+#   FP-7: (task-97、next-actions #81 fold) hc-config.sh 不在 fixture で fail-open dedicated:
+#         - dispatcher exit 0 (hook 途中死せず)
+#         - <system-reminder> open==close (閉じタグ均衡、開閉数 >=1)
+#         mutation probe: mode-session-start.sh の `SUMMARY=""` 初期化 or
+#         `if [ -f "$HC_SCRIPT" ]` guard 削除 → set -u で printf 途中死 → 開閉不均衡で FAIL。
+#         FP-6 は複合条件 (summary off + tags balanced + footprint 差) で捕捉不能な単独 M4
+#         regression を FP-7 が dedicated に測る。
+#   FP-5': (task-97、next-actions #81 fold) FP-5 label strictness 強化:
+#         label のみ match から `totals: [0-9]+ enabled, [0-9]+ disabled` field 数検証へ強化。
+#         `totals:` label はあるが数値欠落 (parse regression) を検出できる。
 #
 # 実行: bash .claude/tests/sessionstart-footprint-smoke.sh
 # 終了: 0 = 全 case PASS / 1 = FAIL
@@ -35,12 +45,13 @@
 set -u
 
 # bytes hard cap (wc -c is bytes) — 超過で FAIL
-# task-88 Step 3 (docs/draft/sessionstart-summary-injection.md §2 実測、2026-07-05):
-#   hc-config.sh --summary 全文注入 (P1-4) 対応で 800 → 2400 に引上げ。
-#   - harness-dev worst (loop + ctx present、日本語 disabled_reason 8 件): 実測 ~2,030B + 18% margin ≈ 2400
-#   - consuming repo (team-default 全 enabled、summary 562B): ~1,230B で十分収まる
+# task-88 Step 3 (2026-07-05): hc-config.sh --summary 全文注入 (P1-4) 対応で 800 → 2400 に引上げ。
+# task-97 Step 3 (2026-07-07): enforcement_matrix 全 hook 拡張で 11 → 23 guard に増加。
+#   summary 出力に 12 新 guard 行が追加 (~50 bytes/entry = ~600B 増) するため 2400 → 3100 に引上げ。
+#   - harness-dev worst (loop + ctx present、23 guard、日本語 disabled_reason 8 件): 実測 ~2,680B + 16% margin ≈ 3100
+#   - consuming repo (team-default 全 enabled、23 guard、summary ~1050B): ~1,720B で十分収まる
 #   - budget smoke (sessionstart-budget-smoke.sh) の hard-fail 5000 の内側に位置する 2 段構成
-FOOTPRINT_CAP=2400
+FOOTPRINT_CAP=3100
 
 # --- root 解決 ---
 _resolve_root() (
@@ -263,17 +274,18 @@ else
 fi
 
 # ------------------------------------------------------------------
-# FP-5: summary full-text presence (task-88 Step 3、P1-4 全文注入の構造保証)
+# FP-5: summary full-text presence + field 数厳密化 (task-88 Step 3 + task-97 #81 fold)
 #   FP-1 の loop 出力 (OUT_LOOP 再利用、dispatcher 追加起動なし) に
 #   hc-config.sh --summary 全文注入の構造 signal が含まれること:
-#   - `totals:` (summary 末尾の enabled/disabled 集計行)
+#   - `totals: [0-9]+ enabled, [0-9]+ disabled` (field 数厳密化、値だけ欠落 regression を捕捉)
 #   - `guards:` (summary の guard 一覧 header 行。FP-2d の `guards=` compact field とは別物)
-#   値・行数はハードコードせず exists のみ assert (FP-2d と同 style、--summary format 変更耐性)。
-printf "\nFP-5: summary full-text presence (totals: / guards: in loop output)\n"
-if printf '%s' "$OUT_LOOP" | grep -q 'totals:'; then
-  ok "FP-5a 'totals:' present (summary full text injected)"
+#   task-97 (next-actions #81) で label のみ match から field 数検証へ強化。
+#   `totals:` label 存在で満足せず「N enabled, M disabled」の数値 pair を必須にする。
+printf "\nFP-5: summary full-text presence + field strictness (totals: N enabled, M disabled / guards: in loop output)\n"
+if printf '%s' "$OUT_LOOP" | grep -qE 'totals:[[:space:]]+[0-9]+[[:space:]]+enabled,[[:space:]]+[0-9]+[[:space:]]+disabled'; then
+  ok "FP-5a 'totals: N enabled, M disabled' field-count verified (values present, not label-only)"
 else
-  bad "FP-5a 'totals:' missing — hc-config.sh --summary 全文注入が regress した可能性"
+  bad "FP-5a 'totals: [0-9]+ enabled, [0-9]+ disabled' pattern missing — label のみ / 数値欠落 regression"
 fi
 if printf '%s' "$OUT_LOOP" | grep -q 'guards:'; then
   ok "FP-5b 'guards:' present (summary guard list injected)"
@@ -318,6 +330,62 @@ elif [ "$BYTES_SUMOFF" -lt "$BYTES_LOOP" ]; then
   ok "FP-6c footprint=${BYTES_SUMOFF} < baseline=${BYTES_LOOP} (summary block omitted)"
 else
   bad "FP-6c footprint=${BYTES_SUMOFF} not less than baseline=${BYTES_LOOP} — summary block may not have been omitted"
+fi
+
+# ------------------------------------------------------------------
+# FP-7: fail-open dedicated (task-97、next-actions #81 fold)
+#   hc-config.sh 不在 fixture で mode-session-start.sh の M4 SUMMARY 初期化 fix が
+#   fail-open として機能するかを dedicated に測る。
+#   FP-6 は summary toggle off の複合条件で偶然通過する場合があり、単独 M4 regression
+#   (=SUMMARY 未初期化 or file check 削除で set -u → printf 途中死 → 閉じタグ欠落) を
+#   捕捉できない。本 case は複合条件を切り離し、hc-config.sh を fixture から物理的に
+#   削除して:
+#     (a) dispatcher exit 0 (hook 途中死せず fail-open 契約遵守)
+#     (b) <system-reminder> open==close (閉じタグ均衡、開閉数 >=1 = 実出力あり)
+#   mutation probe:
+#     mode-session-start.sh L58 の `SUMMARY=""` 削除 → set -u nounset で
+#     `if [ -n "$SUMMARY" ]` 参照時 printf 途中死 → 閉じタグ欠落 → FP-7b FAIL。
+#     L59 の if guard のみ削除は `|| true` により exit 0 で死なないため FP-7 の
+#     保護対象外 (M2 単独は無害、実験確認: SUMMARY は "" 初期化のまま維持される)。
+#   fixture: cp -R .claude → tmp fixture、rm -f fixture/.claude/scripts/hc-config.sh。
+printf "\nFP-7: fail-open dedicated (hc-config.sh absent fixture)\n"
+FIXTURE_ROOT="${TMPBASE}/fixture-no-hcconfig"
+mkdir -p "$FIXTURE_ROOT"
+
+# .claude subtree を fixture に複製 (hooks + scripts + skills + templates + .workflow-state 等)。
+# `cp -R` (BSD/GNU 互換) で symlink 追随 + mode 保持。dot-file (.gitignore 等) も
+# `cp -R <src>/.claude <dst>/` で丸ごと含まれる (dir 単位のため中身の hidden も対象)。
+if cp -R "${ROOT}/.claude" "${FIXTURE_ROOT}/" 2>/dev/null; then
+  # hc-config.sh を除去 (mode-session-start.sh の `if [ -f "$HC_SCRIPT" ]` を false 化)
+  rm -f "${FIXTURE_ROOT}/.claude/scripts/hc-config.sh" 2>/dev/null || true
+
+  # 出力を独立 tmp file に保存 (前 case 変数 shadow を避ける)
+  OUT_NOHC_FILE="${TMPBASE}/out_nohc"
+  OUT_NOHC_EXIT=0
+  # dispatcher は fixture 下の絶対 path を呼ぶ (SCRIPT_DIR は fixture へ解決される)
+  measure_footprint "${ISOLATED_HOME}" "loop" "HC_PROJECT_ROOT=${FIXTURE_ROOT}" \
+    > "${OUT_NOHC_FILE}" 2>/dev/null || OUT_NOHC_EXIT=$?
+  # 注意: measure_footprint 内で bash "$DISPATCHER" を呼ぶが $DISPATCHER は REAL ROOT の path。
+  # HC_PROJECT_ROOT=fixture の env を渡すことで resolve_project_root() が fixture を返し、
+  # dispatcher-core.sh の manifest / child hook 解決も fixture 側 (hc-config.sh 削除済) を使う。
+
+  # (a) exit 0 (fail-open 契約遵守)
+  if [ "$OUT_NOHC_EXIT" = "0" ]; then
+    ok "FP-7a dispatcher exit=0 with hc-config.sh absent (fail-open contract)"
+  else
+    bad "FP-7a dispatcher exit=${OUT_NOHC_EXIT} with hc-config.sh absent — fail-open regression (SUMMARY 未初期化 疑い)"
+  fi
+
+  # (b) <system-reminder> open==close balanced + open >= 1 (実出力あり)
+  OPEN_NOHC=$(grep -c '<system-reminder>' "${OUT_NOHC_FILE}" 2>/dev/null || true)
+  CLOSE_NOHC=$(grep -c '</system-reminder>' "${OUT_NOHC_FILE}" 2>/dev/null || true)
+  if [ "${OPEN_NOHC:-0}" -ge 1 ] && [ "${OPEN_NOHC:-0}" = "${CLOSE_NOHC:-0}" ]; then
+    ok "FP-7b system-reminder tags balanced (open=${OPEN_NOHC} close=${CLOSE_NOHC}) — 閉じタグ健在 (mode-session-start.sh SUMMARY 初期化 fix effective)"
+  else
+    bad "FP-7b system-reminder tags unbalanced (open=${OPEN_NOHC:-?} close=${CLOSE_NOHC:-?}) — hook 途中死 (SUMMARY 未初期化で set -u printf 死) の可能性"
+  fi
+else
+  printf "  SKIP: FP-7 fixture setup (cp -R) failed\n"
 fi
 
 # ------------------------------------------------------------------
