@@ -1,0 +1,53 @@
+name: harness-smoke
+# task-93 (P2-2): CI matrix (2 preset × 5 category = 10 並列 job) で
+# `run-all-smokes.sh --category <name>` を実行し PR 境界の Quality Gate
+# (I3、UNEXPLAINED-FAIL == 0) を機械強制する。
+#
+# 設計 SSoT: docs/draft/install-ci-matrix-distribute.md §4.2
+# preset env: HC_DEFAULT_PRESET (config-loader.sh:353 SSoT、`_OVERRIDE` suffix 無し)
+# category 分類 SSoT: run-all-smokes.sh:46-89 _get_smoke_category()
+# fail-fast: false により 1 job FAIL でも他 job 完走 (10 job signal 独立)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  matrix-smoke:
+    name: smoke (${{ matrix.preset }} / ${{ matrix.category }})
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [team-default, strict]
+        category: [parity, behavior, budget, portability, stale-det]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (jq, rsync)
+        run: sudo apt-get update && sudo apt-get install -y jq rsync
+
+      - name: Set preset override (config-loader.sh:353 SSoT env)
+        # `HC_DEFAULT_PRESET` は `.claude/hooks/lib/config-loader.sh` L353 の
+        # SSoT env 名 (`_OVERRIDE` suffix 無し)。runtime 実装確認済:
+        # `.claude/tests/hc-config-local-yml-smoke.sh:138` Case 6a。
+        run: echo "HC_DEFAULT_PRESET=${{ matrix.preset }}" >> "$GITHUB_ENV"
+
+      - name: Run smokes for category (${{ matrix.category }})
+        # run-all-smokes.sh は UNEXPLAINED-FAIL == 0 で exit 0
+        # (`.claude/tests/run-all-smokes.sh:338-343`)。
+        run: bash .claude/tests/run-all-smokes.sh --category ${{ matrix.category }}
+
+      - name: Upload smoke logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs-${{ matrix.preset }}-${{ matrix.category }}
+          path: |
+            .claude/.workflow-state/**
+            /tmp/smoke-runner-out.*
+          retention-days: 7

@@ -960,6 +960,34 @@ fi
 unset PROJECT_RULES_SRC PROJECT_RULES_DST
 
 # ============================================================
+# 5.6. .github/workflows/harness-smoke.yml create-if-absent (task-93、P2-2)
+# ============================================================
+# I3 Quality Gate を PR 境界で機械強制するため、`.github/workflows/harness-smoke.yml`
+# を create-if-absent で配布。既存 CI (ci.yml / test.yml 等) は完全に touch しない
+# (project-rules と同じ冪等 pattern、install.sh §5.5 先例)。
+# 全 mode (install / update / force / overwrite-all) で適用 — 既存 file は skip
+# (upstream 追随には手動 diff or `--force` 未対応、CI yml は API 変更 (actions v4→v5 等)
+# で drift しうるため意図的に手動化、docs/draft/install-ci-matrix-distribute.md §4.3)。
+#
+# fail-open 契約: source `.github/workflows/harness-smoke.yml` 不在時は無出力 skip、
+# `mkdir -p` は idempotent、dry-run は run() helper で echo のみ。
+CI_SRC="$SCRIPT_DIR/.github/workflows/harness-smoke.yml"
+CI_DST_DIR="$TARGET/.github/workflows"
+CI_DST="$CI_DST_DIR/harness-smoke.yml"
+if [[ -f "$CI_SRC" ]]; then
+  run mkdir -p "$CI_DST_DIR"
+  if [[ -f "$CI_DST" ]]; then
+    # why: 既存 CI 保護 (C4 契約) / fix: 手動 diff で upstream 追随 / silence: 意図的、
+    # honor system で追随 (docs/draft/install-ci-matrix-distribute.md §4.3)
+    echo "[install] .github/workflows/harness-smoke.yml exists → skip (protected, use manual merge)"
+  else
+    echo "[install] copy harness-smoke.yml → .github/workflows/  (matrix: 2 preset × 5 category)"
+    run cp "$CI_SRC" "$CI_DST"
+  fi
+fi
+unset CI_SRC CI_DST_DIR CI_DST
+
+# ============================================================
 # 6. hook 実行権限 (rsync -a で保持されるが、念のため)
 # ============================================================
 # L-4: chmod runs in ALL modes (install / update / force). The previous
