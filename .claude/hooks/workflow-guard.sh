@@ -39,6 +39,13 @@ fi
 # shellcheck source=lib/bypass-logger.sh
 source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/bypass-logger.sh"
 
+# === BLOCK message 統一 API (task-94 P2-3、docs/draft/lib-block-message-4args.md §3.1) ===
+# shellcheck source=lib/block-message.sh
+if [ -f "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/block-message.sh" ]; then
+  # shellcheck disable=SC1091
+  source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/block-message.sh"
+fi
+
 # === workflow-state root (state file 解決に使用) ===
 _workflow_state_root="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/.workflow-state"
 
@@ -246,18 +253,25 @@ Bypass (audit-logged):
   ECC_WORKFLOW_GUARD_OFF=1 ECC_BYPASS_REASON='<理由>' /finish-task ${slug}
   または HC_WORKFLOW_GUARD_ENABLED=false (harness-config.yml)"
 
-# stderr にも出す (PreToolUse block reason はモデルに渡るが、stderr は user/log に渡る)
-printf '%s\n' "$reason" >&2
-
-if [ "$_has_jq" = "1" ]; then
-  jq -n --arg r "$reason" '{decision:"block", reason:$r}'
+# task-94 migration: PreToolUse BLOCK は emit_block_pretool 経由 (lib SSoT)
+# 既存 hybrid (stderr + JSON stdout + exit 2) を lib で保持:
+#   - emit_block_pretool は stderr 4 行 + JSON stdout を emit
+#   - caller が exit 2 を明示 (§3.5、workflow-guard の後方互換 exit code)
+if declare -f emit_block_pretool >/dev/null 2>&1; then
+  emit_block_pretool "$reason" "" "" ""
 else
-  # python3 fallback
-  printf '%s' "$reason" | python3 -c "
+  # fallback: lib source 失敗時は既存経路
+  printf '%s\n' "$reason" >&2
+  if [ "$_has_jq" = "1" ]; then
+    jq -n --arg r "$reason" '{decision:"block", reason:$r}'
+  else
+    # python3 fallback
+    printf '%s' "$reason" | python3 -c "
 import json, sys
 r = sys.stdin.read()
 print(json.dumps({'decision': 'block', 'reason': r}))
 " 2>/dev/null
+  fi
 fi
 
 exit 2

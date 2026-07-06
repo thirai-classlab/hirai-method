@@ -92,6 +92,18 @@
 | `.claude/tests/agent-router-llm-fallback-smoke.sh` | task-96 の LLM fallback child toggle 契約 smoke (ARF-1..13)。default OFF / opt-in / budget 強制 disable / threshold override / env 互換 WARN / budget accumulator + static drift check (`unset` / inline env prefix) + parent-child toggle interaction を検証。 | New (task-96) |
 | `harness-config.yml` keys: `feature_pre_commit_smoke_enabled` / `pre_commit_smoke_budget_sec` / `feature_asana_prompt_enabled` / `feature_agent_router_llm_fallback_enabled` / `agent_router_llm_budget_usd_per_day` / `agent_router_llm_similarity_threshold` | Wave 1 追加 yml key 集約。`hc-config.sh --get <key>` で raw 値取得、`--set <key>=<val>` で local override。 | New (task-92 / task-96) |
 
+## Phase 2 Wave 2 追加 (2026-07、task-93 / task-94)
+
+CI 品質ゲート (matrix 10 job) と、全 hook + self-doctor が共有する BLOCK/WARN/INFO 統一出力 API を追加する。
+
+| Path | 役割 | ステータス |
+|---|---|---|
+| `.github/workflows/harness-smoke.yml` | matrix (2 preset × 5 category = 10 並列 job) で `run-all-smokes.sh --category <name>` を実行する CI workflow。preset override は `HC_DEFAULT_PRESET` (config-loader.sh:353 SSoT)、fail-fast: false で 10 job signal 独立、失敗時は `.claude/.workflow-state/**` + `/tmp/smoke-runner-out.*` を artifact 保存 (retention 7 日)。既存 workflow.yml は create-if-absent で touch しない。 | ✅ Wave 2 (task-93) |
+| `.claude/tests/install-ci-matrix-smoke.sh` | task-93 の CI matrix workflow 配布契約 smoke。install.sh 経由での `.github/workflows/harness-smoke.yml` 配布 + 既存 workflow 保護 + matrix 構造 (2×5=10) + preset env SSoT 名 (`HC_DEFAULT_PRESET`) 一致を検証。 | ✅ Wave 2 (task-93) |
+| `.claude/hooks/lib/block-message.sh` | 全 hook (PreToolUse × 5 / Stop × 1 / SubagentStop × 1) + self-doctor が共有する BLOCK/WARN/INFO 統一 4 引数 API (`why` / `fix_one_liner` / `bypass_env` / `docs_link`)。BLOCK は 3 variant (`emit_block_pretool` / `emit_block_stop` / `emit_block_subagent`) に分割し event 別 semantics ずれを実装層で排除、`emit_warn` / `emit_info` は event 非依存。file-top strict mode leak 防止 (subshell 関数化) + jq 不在時 printf JSON fallback。 | ✅ Wave 2 (task-94) |
+| `.claude/tests/lib-block-message-smoke.sh` | task-94 の 4 引数 API 契約 smoke。event 別 stdout / stderr 契約 (JSON 有無 / 4 行 label pattern / severity 前置) + sanitize (改行 → 空白、pipe → カンマ) + fail-open (jq 不在 fallback) + BLOCK 3 variant / WARN / INFO の分岐を検証。 | ✅ Wave 2 (task-94) |
+| `.claude/tests/byproduct-discharge-guard-smoke.sh` | Stop hook `byproduct-discharge-guard.sh` の `lib/block-message.sh emit_block_stop` 移行 regression gate。JSON stdout 非出力 + 4 label stderr (why/fix/bypass/docs) + BLOCK exit 2 + bypass 挙動を A-D 4 case で検証。 | ✅ Wave 2 (task-94) |
+
 ## 規範文書の Layer A/B Strategy (2026-05-28、task-51)
 
 `.claude/rules/*.md` (規範文書) は **Layer A (要約、context 自動注入) + Layer B (詳細、明示 Read のみ)** の 2 層構造で運用する。

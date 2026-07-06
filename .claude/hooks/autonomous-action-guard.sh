@@ -96,6 +96,13 @@ if [ -f "$SCRIPT_DIR/lib/bypass-logger.sh" ]; then
   source "$SCRIPT_DIR/lib/bypass-logger.sh"
 fi
 
+# --- BLOCK message 統一 API (task-94 P2-3、docs/draft/lib-block-message-4args.md §3.1) ---
+# shellcheck source=lib/block-message.sh
+if [ -f "$SCRIPT_DIR/lib/block-message.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/block-message.sh"
+fi
+
 # --- bypass 判定 (env-level) ---
 if [ "${ECC_AUTONOMOUS_ACTION_OVERRIDE:-0}" = "1" ] || [ "${ECC_AUTONOMOUS_ACTION_OVERRIDE:-}" = "true" ]; then
   if declare -f log_bypass >/dev/null 2>&1; then
@@ -223,7 +230,14 @@ user の明示承認が必要なカテゴリです。実行前に意図を確認
 
 case "$MODE" in
   loop)
-    jq -n --arg r "$reason_loop" '{decision:"block", reason:$r}'
+    # task-94 migration: PreToolUse(Bash) BLOCK は emit_block_pretool 経由。
+    # 既存 reason_loop full text を why arg として渡し、他 3 arg 空 (msg 内に bypass / 代替が inline 済)。
+    if declare -f emit_block_pretool >/dev/null 2>&1; then
+      emit_block_pretool "$reason_loop" "" "" ""
+    else
+      # fallback: lib source 失敗時は既存 inline jq 経路
+      jq -n --arg r "$reason_loop" '{decision:"block", reason:$r}'
+    fi
     exit 0
     ;;
   *)

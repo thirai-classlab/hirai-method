@@ -247,11 +247,19 @@ EOF
 # ============================================================
 # Case G: 複数 manifest (package.json + go.mod) → first-win=ts
 #         draft §3.1 priority table row 1 (ts) > row 3 (go)
+#
+#   flakiness 緩和 (task-93 §4.4 案 3、副産物 #83):
+#   - `mktemp -d` per case で独立 tmpdir (前 case 残骸の隔離、fs sync 疑い緩和)
+#   - `trap ... RETURN` で subshell 抜け時 cleanup (set -e 下でも die しない、
+#     `|| true` 保険)
+#   - install 前に `rm -rf "$tgt"/CLAUDE.md` 明示 (前実行残骸の除去)
 # ============================================================
 _case_g() (
   set -uo pipefail
-  local tgt="${TMP_DIR}/target-g"
-  mkdir -p "$tgt"
+  local tgt
+  tgt="$(mktemp -d "${TMPDIR:-/tmp}/hirai-autofill-G.XXXXXX")"
+  trap 'rm -rf "$tgt" 2>/dev/null || true' RETURN
+  rm -rf "$tgt"/CLAUDE.md 2>/dev/null || true    # task-93: 前実行残骸の明示除去
   printf '%s\n' '{"name":"dummy-multi","scripts":{"dev":"vite"}}' > "$tgt/package.json"
   cat > "$tgt/go.mod" <<'EOF'
 module dummy-go-ignored
@@ -450,11 +458,18 @@ _case_m() (
 # ============================================================
 # Case N: --force で既存 CLAUDE.md → auto-fill 生成物で上書き
 #         draft §3.3 force mode: 「auto-fill 生成物で上書き (backup なし)」
+#
+#   flakiness 緩和 (task-93 §4.4 案 3、副産物 #83): Case G と同 pattern
+#   - `mktemp -d` per case で独立 tmpdir
+#   - `trap ... RETURN` で subshell 抜け時 cleanup
+#   - install 前に前実行残骸の除去 (rm -rf CLAUDE.md は既存 config 配置前に呼ぶと
+#     Case 意図 (--force で上書き検証) を破壊するため、本 case では意図的に skip)
 # ============================================================
 _case_n() (
   set -uo pipefail
-  local tgt="${TMP_DIR}/target-n"
-  mkdir -p "$tgt"
+  local tgt
+  tgt="$(mktemp -d "${TMPDIR:-/tmp}/hirai-autofill-N.XXXXXX")"
+  trap 'rm -rf "$tgt" 2>/dev/null || true' RETURN
   # 既存 CLAUDE.md を配置 (--force で上書き対象)
   cat > "$tgt/CLAUDE.md" <<'EOF'
 # Old CLAUDE.md that will be overwritten by --force

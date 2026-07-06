@@ -36,6 +36,10 @@ source "$SCRIPT_DIR/lib/confidence-gate/major-agent-filter.sh"
 # shellcheck source=lib/confidence-gate/messages.sh
 source "$SCRIPT_DIR/lib/confidence-gate/messages.sh"
 
+# BLOCK message 統一 API (task-94 P2-3、docs/draft/lib-block-message-4args.md §3.1)
+# shellcheck source=lib/block-message.sh
+source "$SCRIPT_DIR/lib/block-message.sh"
+
 # Phase β: F3 disable for SWE-bench grid evaluation (fail-open)
 if [ "${ECC_F3_OFF:-0}" = "1" ] || [ "${ECC_F3_OFF:-}" = "true" ]; then
   if command -v jq >/dev/null 2>&1; then
@@ -57,7 +61,10 @@ if ! command -v jq >/dev/null 2>&1; then echo '{}'; exit 0; fi
 init_bypass_paths
 handle_bypass_marker
 
-emit_block() { jq -n --arg r "$1" '{decision:"block", reason:$r}'; }
+# emit_block: task-94 migration wrapper (SubagentStop event)
+#   confidence-gate は SubagentStop hook のため emit_block_subagent へ委譲。
+#   既存 1-arg 呼出 (build_*_reason 生成 message) を full why arg として渡す。
+emit_block() { emit_block_subagent "$1" "" "" ""; }
 
 agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null)
 transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)

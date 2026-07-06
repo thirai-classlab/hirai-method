@@ -80,6 +80,7 @@ I3 Quality Gate の PR 境界機械強制不在と preset 間挙動差の CI 自
 | 2026-07-06 | 起案 | Phase 2 batch planning 経路 B、docs/draft/install-ci-matrix-distribute.md 起こし |
 | 2026-07-06 | 承認 | user 承認 (AI 推奨どおり preset × per-category matrix 採用、findings-2 fix、R2 SSoT propagate 契約 = task-93 draft §4.2 timing 補正で解消) |
 | 2026-07-06 | タスク化 | `/new-task 93 install-ci-matrix-distribute`、list.md #93 📝 → 🔲 update、docs/tasks/task-93-*.md 生成 |
+| 2026-07-07 | 完了 | Wave 2 Workflow wf_ac31538c-e9c 経由で impl → barrier → review → fix → verify を実行、worktree isolation → reconcile → Case E awk 範囲式 bug fix。install-ci-matrix-smoke 5/5 PASS + autofill 5/5 exit 0 flakiness 解消 + .github/workflows/harness-smoke.yml matrix 2preset×5category 配布 + install.sh §5.6 create-if-absent。Step 1-9 全 ✅。副産物 #83 autofill flakiness を subshell isolation + `rm -rf` pre-run で吸収 |
 
 ## 派生 task / 次アクション候補
 

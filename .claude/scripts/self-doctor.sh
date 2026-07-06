@@ -135,6 +135,17 @@ if [ -f "$CONFIG_LOADER" ]; then
   . "$CONFIG_LOADER" 2>/dev/null || true
 fi
 
+# BLOCK message 統一 API (task-94 P2-3 initial caller、docs/draft/lib-block-message-4args.md §3.6)
+# self-doctor は WARN / INFO 出力の initial caller として dogfood する。
+# 4 args API (why / fix / silence / docs) を wrapper (_sd_warn / _sd_info) で
+# 5-to-4 args migration し、self-doctor 固有の prefix ([self-doctor] WARN D<N>: <title>)
+# は wrapper 側で吸収する (§3.6 の caller-side prefix 契約)。
+BLOCK_MESSAGE_LIB="$PROJECT_ROOT/.claude/hooks/lib/block-message.sh"
+if [ -f "$BLOCK_MESSAGE_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$BLOCK_MESSAGE_LIB" 2>/dev/null || true
+fi
+
 if command -v is_feature_enabled >/dev/null 2>&1; then
   if ! is_feature_enabled self_doctor; then
     exit 0
@@ -148,9 +159,15 @@ WARN_COUNT=0
 INFO_COUNT=0
 INFO_LINES=""   # verbose 時に append (改行区切り)
 
-# emit_warn <d_id> <title> <why> <fix> <silence>
+# task-94 migration §3.6: 5-to-4 args (d_id / title は caller-side wrapper で prefix 吸収)
+#
+# emit_warn <d_id> <title> <why> <fix> <silence>  (5 args, self-doctor 固有 signature)
+#   内部で lib の emit_warn (4 args: why / fix / bypass_env / docs_link) を呼出。
+#   d_id / title は self-doctor 固有 prefix として header 行で emit。
+#   docs_link は self-doctor 側では draft §11.2 pointer が未整備のため空を渡す (§3.6)。
 emit_warn() {
   local d_id="$1" title="$2" why="$3" fix="$4" silence="$5"
+  # self-doctor 固有 header 行 (backwards-compatible format 維持)
   printf '[self-doctor] WARN %s: %s\n' "$d_id" "$title"
   printf '  why: %s\n' "$why"
   printf '  fix: %s\n' "$fix"
@@ -159,6 +176,9 @@ emit_warn() {
 }
 
 # emit_info <d_id> <detail>
+#   INFO は verbose mode で個別展開、default は件数集約。d_id / detail は
+#   self-doctor 固有 label のため lib の emit_info (2 args: why / docs) とは
+#   別 signature を維持 (§3.6 caller-side prefix 契約)。
 emit_info() {
   local d_id="$1" detail="$2"
   INFO_COUNT=$((INFO_COUNT + 1))

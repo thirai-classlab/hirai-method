@@ -112,6 +112,52 @@ _run_fast_smokes() (
   done
 )
 
+# --- task-94 §4.4: BLOCK direct-write check (raw 直書き BLOCK 検出) ---
+# hook で raw BLOCK / exit 2 を書いた場合は lib/block-message.sh source 必須。
+# 対象: staged .claude/hooks/*.sh のみ (lib 自身は除外)。
+# 誤検知回避: staged file が該当 file である場合のみ check、file が存在しない場合は skip。
+# bypass: HC_PRECOMMIT_LIB_BLOCK_CHECK_OFF=1 (1 commit のみ、bypass.log に記録)。
+_run_lib_block_check() (
+  set -uo pipefail
+  # bypass check
+  if [ "${HC_PRECOMMIT_LIB_BLOCK_CHECK_OFF:-0}" = "1" ]; then
+    return 0
+  fi
+  # staged .claude/hooks/*.sh のみ対象 (lib 自身は除外)
+  local _staged_hooks
+  _staged_hooks=$(git diff --cached --name-only --diff-filter=AM 2>/dev/null \
+    | grep -E '^\.claude/hooks/[^/]+\.sh$' \
+    || true)
+  [ -z "$_staged_hooks" ] && return 0
+
+  local _violators=""
+  local _f
+  while IFS= read -r _f; do
+    [ -z "$_f" ] && continue
+    [ ! -f "$_f" ] && continue
+    # raw BLOCK 直書き pattern 検出:
+    #   - printf.*BLOCK  (stderr / stdout に BLOCK 文字列を直書き)
+    #   - cat <<.*EOF (BLOCK / >&2 が同 hook 内)
+    #   - jq -n .*decision.*block (JSON stdout 直書き)
+    if grep -qE '(printf.*BLOCK|jq -n .*decision.*block)' "$_f" 2>/dev/null; then
+      # lib/block-message.sh を source しているか
+      if ! grep -q 'lib/block-message.sh' "$_f" 2>/dev/null; then
+        _violators="${_violators}${_f}\n"
+      fi
+    fi
+  done <<< "$_staged_hooks"
+
+  if [ -n "$_violators" ]; then
+    _pc_emit_block \
+      "hook で BLOCK message / JSON decision:block を lib 未経由で raw 直書き検出: $(printf '%b' "$_violators" | tr '\n' ' ')" \
+      "対象 hook で 'source .../lib/block-message.sh' + emit_block_pretool / emit_block_stop / emit_block_subagent API へ置換" \
+      "HC_PRECOMMIT_LIB_BLOCK_CHECK_OFF=1 git commit ...  (1 commit のみ、bypass.log 記録)" \
+      "docs/draft/lib-block-message-4args.md §4.4"
+    return 1
+  fi
+  return 0
+)
+
 # --- 予算 (default 3s、yml `pre_commit_smoke_budget_sec` → env HC_PRE_COMMIT_SMOKE_BUDGET_SEC) ---
 _pc_budget="${HC_PRE_COMMIT_SMOKE_BUDGET_SEC:-3}"
 
@@ -127,6 +173,12 @@ if ! _run_fast_smokes; then
   exit 1
 fi
 _pc_elapsed=$SECONDS
+
+# --- task-94 §4.4: BLOCK direct-write check (lib/block-message.sh 経由必須) ---
+# fast smoke PASS 後に実行。違反検出で BLOCK (exit 1)。
+if ! _run_lib_block_check; then
+  exit 1
+fi
 
 # --- 予算超過は WARN のみ (BLOCK しない、smoke curated set 見直し signal) ---
 if [ "$_pc_elapsed" -gt "$_pc_budget" ]; then

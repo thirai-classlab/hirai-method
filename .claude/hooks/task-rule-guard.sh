@@ -34,6 +34,10 @@ set -u
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
 
+# BLOCK message 統一 API (task-94 P2-3、docs/draft/lib-block-message-4args.md §3.1)
+# shellcheck source=lib/block-message.sh
+source "$(dirname "$0")/lib/block-message.sh"
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled task_rule_guard; then
   echo '{}'
@@ -277,7 +281,12 @@ ${list}
 重複作成すると list.md との対応が壊れます。
 
 Bypass: ECC_TASKGUARD=off / ${HC_TASKGUARD_STATE_DIR}/${slug}.cleared を touch"
-  jq -n --arg r "$reason" '{decision:"block", reason:$r}'
+  # task-94 migration: PreToolUse BLOCK は emit_block_pretool 経由 (lib SSoT)
+  if declare -f emit_block_pretool >/dev/null 2>&1; then
+    emit_block_pretool "$reason" "" "" ""
+  else
+    jq -n --arg r "$reason" '{decision:"block", reason:$r}'
+  fi
   exit 0
 fi
 
@@ -307,7 +316,12 @@ if [ -z "$matched_draft" ]; then
 例外（hot fix 等）:
   - ECC_TASKGUARD=off               # 全 OFF
   - touch ${HC_TASKGUARD_STATE_DIR}/${slug}.cleared    # 1 ファイル分 bypass"
-  jq -n --arg r "$reason" '{decision:"block", reason:$r}'
+  # task-94 migration: PreToolUse BLOCK は emit_block_pretool 経由 (lib SSoT)
+  if declare -f emit_block_pretool >/dev/null 2>&1; then
+    emit_block_pretool "$reason" "" "" ""
+  else
+    jq -n --arg r "$reason" '{decision:"block", reason:$r}'
+  fi
   exit 0
 fi
 

@@ -19,6 +19,10 @@ set -u
 # shellcheck source=lib/config-loader.sh
 source "$(dirname "$0")/lib/config-loader.sh"
 
+# BLOCK message 統一 API (task-94 P2-3、docs/draft/lib-block-message-4args.md §3.1)
+# shellcheck source=lib/block-message.sh
+source "$(dirname "$0")/lib/block-message.sh"
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled gateguard; then
   echo '{}'
@@ -88,8 +92,12 @@ hash_str() {
   printf '%s' "$1" | shasum -a 256 2>/dev/null | cut -c1-12
 }
 
+# emit_block: task-94 migration wrapper
+#   PreToolUse event 用に emit_block_pretool へ委譲 (lib SSoT)。
+#   既存 caller (Edit / Write / Bash gate) の 1-arg 呼出 semantic を保持するため、
+#   full message を why arg として渡し、他 3 arg は空 (msg 内に 3 点提示が inline 済)。
 emit_block() {
-  jq -n --arg r "$1" '{decision:"block", reason:$r}'
+  emit_block_pretool "$1" "" "" ""
 }
 
 # === Edit gate ===

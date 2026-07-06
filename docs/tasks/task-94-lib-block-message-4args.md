@@ -76,6 +76,7 @@ roadmap §2.3 「BLOCK 教育 3 点提示」の hook 間 drift (JSON stdout / st
 | 2026-07-06 | 起案 | Phase 2 batch planning 経路 B、docs/draft/lib-block-message-4args.md 起こし |
 | 2026-07-06 | 承認 | user 承認 (AI 推奨どおり event 別 3 variant 命名 = function 名 embed 型採用、self-doctor 5→4 args migration 承認、pre-commit grep false positive の bypass env 承認) |
 | 2026-07-06 | タスク化 | `/new-task 94 lib-block-message-4args`、list.md #94 📝 → 🔲 update、docs/tasks/task-94-*.md 生成 |
+| 2026-07-07 | 完了 | Wave 2 Workflow wf_ac31538c-e9c 経由で lib/block-message.sh 新設 (5 API: emit_block_pretool/stop/subagent + emit_warn/info) + 7 hook migration (autonomous-action-guard / byproduct-discharge-guard / confidence-gate / draft-flow-guard / gateguard / task-rule-guard / workflow-guard) + self-doctor 5→4 args + pre-commit grep policy layer。lib-block-message-smoke 7/7 (A-G) + byproduct-discharge-guard-smoke 4/4 (A-D、Stop hook migration regression gate) PASS。既存 hook smoke (confidence-gate 5/5 PASS 等) regression 0。Step 1-8 全 ✅ |
 
 ## 派生 task / 次アクション候補
 
