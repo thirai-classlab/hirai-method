@@ -170,6 +170,13 @@ if [ -f "$script_dir/lib/config-loader.sh" ]; then
   . "$script_dir/lib/config-loader.sh" >/dev/null 2>&1 || true
 fi
 
+# BLOCK message 統一 API (task-94 P2-3、docs/draft/lib-block-message-4args.md §3.1)
+# shellcheck source=lib/block-message.sh
+if [ -f "$script_dir/lib/block-message.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$script_dir/lib/block-message.sh" >/dev/null 2>&1 || true
+fi
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled draft_flow_guard; then
   exit 0
@@ -277,9 +284,10 @@ fi
 slug="${basename_md%.md}"
 slug="${slug%.mdx}"
 
-# block
-cat <<EOF >&2
-[draft-flow-guard] BLOCK: docs/ 直下への新規設計文書 Write を検出
+# block — task-94 migration: PreToolUse BLOCK は emit_block_pretool 経由 (lib SSoT)
+# 既存 stderr multi-line format を full why arg として渡し、他 3 arg 空
+# (msg 内に fix / bypass / 起源が inline 済)。caller が exit 2 を維持 (§3.5)。
+_dfg_reason="[draft-flow-guard] BLOCK: docs/ 直下への新規設計文書 Write を検出
 
   対象 file : $file_path
   対応 draft: $draft_path (不在)
@@ -293,12 +301,18 @@ cat <<EOF >&2
 bypass (一時、緊急時のみ):
   - 先に touch $draft_path してから再実行
   - or ECC_DRAFT_FLOW_GUARD_OVERRIDE=1 環境変数をセット
-  - or harness-config.yml の draft_flow_guard_whitelist に "$basename_md" 追加
+  - or harness-config.yml の draft_flow_guard_whitelist に \"$basename_md\" 追加
   - or harness-config.yml の docs_approved_dir に承認済 dir を設定
     (e.g. docs_approved_dir: design で docs/design/$basename_md は許可)
 
 設計起源: docs/draft/system-reminder-attention-fix.md Wave 2.3
-         docs/draft/taskmanagesystem-recovery.md Q2 (task-24 W3)
-EOF
+         docs/draft/taskmanagesystem-recovery.md Q2 (task-24 W3)"
+
+if declare -f emit_block_pretool >/dev/null 2>&1; then
+  emit_block_pretool "$_dfg_reason" "" "" ""
+else
+  # fallback: lib source 失敗時は既存 stderr 経路 (behavior-preserving)
+  printf '%s\n' "$_dfg_reason" >&2
+fi
 
 exit 2

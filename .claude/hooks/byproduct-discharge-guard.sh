@@ -44,6 +44,14 @@ if [ -f "${_project_dir}/.claude/hooks/lib/config-loader.sh" ]; then
   source "${_project_dir}/.claude/hooks/lib/config-loader.sh" 2>/dev/null || true
 fi
 
+# === BLOCK message 統一 API (task-94 P2-3、docs/draft/lib-block-message-4args.md §3.1) ===
+# Stop hook のため emit_block_stop を利用 (JSON stdout 非出力、停止阻止 semantic 誤発火防止)。
+if [ -f "${_project_dir}/.claude/hooks/lib/block-message.sh" ]; then
+  # shellcheck source=lib/block-message.sh
+  # shellcheck disable=SC1091
+  source "${_project_dir}/.claude/hooks/lib/block-message.sh" 2>/dev/null || true
+fi
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled byproduct_discharge; then
   exit 0
@@ -90,26 +98,27 @@ if [ "${NA_RED_COUNT:-0}" -gt 0 ]; then
     _red_titles_joined=$(printf '%s' "$NA_RED_TITLES" | awk 'BEGIN{first=1} {if(first){printf "%s",$0;first=0}else{printf ", %s",$0}}')
   fi
 
-  {
-    printf '[byproduct-discharge-guard] BLOCK: 🔴 (高) 未処理副産物 entry が %s 件残存しています。\n' "${NA_RED_COUNT}"
-    printf '\n'
-    printf '未処理 🔴 entry:\n'
-    if [ -n "$_red_titles_joined" ]; then
-      printf '  - %s\n' "$_red_titles_joined"
-    fi
-    printf '\n'
-    printf '推奨アクション:\n'
-    printf '  1. 各 🔴 entry について `/new-draft <slug>` で draft を起こす\n'
-    printf '  2. user 承認後に `/new-task <id> <slug>` で list.md に移行\n'
-    printf '  3. docs/tasks/next-actions.md の「処理結果」列に移行先を記入\n'
-    printf '  4. 全 🔴 entry 処理後にセッション終了\n'
-    printf '\n'
-    printf 'Bypass (audit-logged):\n'
-    printf '  ECC_BYPASS_DISCHARGE_GUARD=1 ECC_BYPASS_REASON="<理由>"\n'
-    printf '  → .claude/.workflow-state/bypass.log に session_id 付きで記録される\n'
-    printf '\n'
-    printf '詳細: docs/tasks/next-actions.md / .claude/rules/development-process.md\n'
-  } >&2
+  # task-94 migration: Stop hook BLOCK は emit_block_stop 経由 (JSON stdout 非出力、§3.1)。
+  # exit 2 (現状維持、§3.5 event × exit code table) は caller で明示。
+  _bdg_why="[byproduct-discharge-guard] BLOCK: 🔴 (高) 未処理副産物 entry が ${NA_RED_COUNT} 件残存しています。未処理 🔴 entry: ${_red_titles_joined}"
+  _bdg_fix="各 🔴 entry について /new-draft <slug> で draft 起こし → user 承認 → /new-task <id> <slug> で list.md 移行 → next-actions.md の「処理結果」列に移行先を記入"
+  _bdg_silence='ECC_BYPASS_DISCHARGE_GUARD=1 ECC_BYPASS_REASON="<理由>" (audit-logged: .claude/.workflow-state/bypass.log)'
+  _bdg_docs="docs/tasks/next-actions.md / .claude/rules/development-process.md"
+
+  if declare -f emit_block_stop >/dev/null 2>&1; then
+    emit_block_stop "$_bdg_why" "$_bdg_fix" "$_bdg_silence" "$_bdg_docs"
+  else
+    # fallback: lib source 失敗時は既存 stderr 経路 (behavior-preserving)
+    {
+      printf '%s\n' "$_bdg_why"
+      printf '\n'
+      printf '推奨アクション: %s\n' "$_bdg_fix"
+      printf '\n'
+      printf 'Bypass (audit-logged): %s\n' "$_bdg_silence"
+      printf '\n'
+      printf '詳細: %s\n' "$_bdg_docs"
+    } >&2
+  fi
 
   exit 2
 fi
