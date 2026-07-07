@@ -114,6 +114,24 @@ CI 品質ゲート (matrix 10 job) と、全 hook + self-doctor が共有する 
 | `.claude/tests/lib-block-message-smoke.sh` | task-94 の 4 引数 API 契約 smoke。event 別 stdout / stderr 契約 (JSON 有無 / 4 行 label pattern / severity 前置) + sanitize (改行 → 空白、pipe → カンマ) + fail-open (jq 不在 fallback) + BLOCK 3 variant / WARN / INFO の分岐を検証。 | ✅ Wave 2 (task-94) |
 | `.claude/tests/byproduct-discharge-guard-smoke.sh` | Stop hook `byproduct-discharge-guard.sh` の `lib/block-message.sh emit_block_stop` 移行 regression gate。JSON stdout 非出力 + 4 label stderr (why/fix/bypass/docs) + BLOCK exit 2 + bypass 挙動を A-D 4 case で検証。 | ✅ Wave 2 (task-94) |
 
+## Phase 3 Wave 4 追加 (2026-07、task-98 / task-99 / task-101)
+
+`.claude/hooks/ui-contract.sh` + `.claude/scripts/cross-file-contract-check.sh` で並列 subagent の cross-file 契約乖離 (memory `feedback_parallel_subagent_cross_file_contract_drift` 実証) を PostToolUse(Edit|Write) で advisory 検出。`.claude/hooks/lib/observability.sh` 5 API + `.claude/scripts/observability-gc.sh` (30 日 GC) + `.claude/scripts/hook-fire-audit.sh` (fire 0 回 hook 検出) で silent failure と死蔵 hook を機械可視化。`review_iteration_min: 3` を yml default で規範化し `reviewer-count-guard.sh` を拡張して iter 未達 slug に advisory warn を注入 (iter 後半 CRIT 検出担保、memory `feedback_iter_fix_introduces_new_crit_pattern` 実証)。
+
+| Path | 役割 | ステータス |
+|---|---|---|
+| `.claude/hooks/ui-contract.sh` | PostToolUse(Edit\|Write) hook。UI 拡張子 (`.tsx` / `.jsx` / `.vue` / `.svelte` / `.html` / `.css` / `.scss`) 検出時 `cross-file-contract-check.sh` を呼出し、drift を stderr WARN 注入 (BLOCK しない advisory、fail-open)。bypass: `ECC_UI_CONTRACT_OFF=1` (env、bypass.log 記録) / `HC_FEATURE_UI_CONTRACT_ENABLED=false` (config)。 | New (task-98) |
+| `.claude/scripts/cross-file-contract-check.sh` | id / symbol / API 名の cross-file grep assert。`.claude/contracts/*.yml` optional SSoT + git diff 対象 file 内相互参照 assert。drift 検出時 rc=1 + stdout に検出内容 1 行/件。 | New (task-98) |
+| `.claude/tests/ui-contract-smoke.sh` | task-98 Step 5 smoke (case A-E)。id mismatch fixture / symbol drift fixture / visual artifact 不在 / bypass env / fail-open 動作を検証。 | New (task-98) |
+| `.claude/hooks/lib/observability.sh` | 全 hook + self-doctor + smoke runner が source する 5 API (`log_event` / `log_block` / `log_bypass` / `log_fire` / `log_silent_failure`)。common 4-5 args + subshell 関数化 + jq 不在 fallback + fail-open。`observations.jsonl` に append。`log_bypass` は `bypass-logger.sh` の 3-arg signature 互換 (superset)。 | New (task-99) |
+| `.claude/scripts/observability-gc.sh` | `observations.jsonl` の 30 日超え entry を `.claude/observability/archive/YYYY-MM.jsonl` へ移動。`--dry-run` / `--apply` オプション。 | New (task-99) |
+| `.claude/scripts/hook-fire-audit.sh` | 最終 N 日間で `log_fire` 呼出 0 回の hook を検出 (`--days` / `--json` / `--verbose`)。死蔵 hook 棚卸しの数値根拠を提供。 | New (task-99) |
+| `.claude/tests/lib-observability-smoke.sh` | task-99 Step 5 smoke (case A-E)。5 API 存在 + JSON literal escape + jq fallback + feature toggle OFF no-op + 30 日 GC 挙動を検証。 | New (task-99) |
+| `.claude/tests/hook-fire-audit-smoke.sh` | task-99 Step 5 smoke (case A-C)。fire 0 回 hook 検出 + `--days` 期間絞込 + JSON / table 出力を検証。 | New (task-99) |
+| `.claude/tests/iter-min-3-smoke.sh` | task-101 Step 4 smoke (case A-C)。`reviewer-count-guard.sh` の iter_min:3 拡張動作 (iter 1/2/3 実行時の warn 挙動) を検証。 | New (task-101) |
+| `harness-config.yml` keys: `feature_ui_contract_enabled` / `feature_observability_enabled` / `review_iteration_min` + `enforcement_matrix.ui_contract` / `.observability` (5 field 全備、reviewer_count_guard は extended semantics 記載) | Wave 4 追加 yml key + matrix entry 集約。`hc-config.sh --get <key>` で取得、`--set` で local override。 | New (task-98/99/101) |
+| `.claude/tests/enforcement-mismatch-smoke.sh` Case 6 | reviewer 制御 3 点一致検証 (`iter_min` ≤ `iter_max` ∧ `iter_min` ∈ [1,5] ∧ `test_min` ≤ `test_max`)。task-101 DoD の「min/max/採用 6 条 4 上限 5 の 3 点一致」を機械強制。 | New (task-101) |
+
 ## 規範文書の Layer A/B Strategy (2026-05-28、task-51)
 
 `.claude/rules/*.md` (規範文書) は **Layer A (要約、context 自動注入) + Layer B (詳細、明示 Read のみ)** の 2 層構造で運用する。

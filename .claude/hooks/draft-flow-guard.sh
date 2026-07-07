@@ -177,6 +177,13 @@ if [ -f "$script_dir/lib/block-message.sh" ]; then
   . "$script_dir/lib/block-message.sh" >/dev/null 2>&1 || true
 fi
 
+# Observability 構造化 log API (task-99 P3-2、observations.jsonl)
+# shellcheck source=lib/observability.sh
+if [ -f "$script_dir/lib/observability.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$script_dir/lib/observability.sh" >/dev/null 2>&1 || true
+fi
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled draft_flow_guard; then
   exit 0
@@ -284,6 +291,11 @@ fi
 slug="${basename_md%.md}"
 slug="${slug%.mdx}"
 
+# hook fire log (task-99): 全 exemption / bypass を通過し、実 block 判定に到達した時点で log_fire
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "draft-flow-guard" "processing docs/ direct Write: $file_path" ""
+fi
+
 # block — task-94 migration: PreToolUse BLOCK は emit_block_pretool 経由 (lib SSoT)
 # 既存 stderr multi-line format を full why arg として渡し、他 3 arg 空
 # (msg 内に fix / bypass / 起源が inline 済)。caller が exit 2 を維持 (§3.5)。
@@ -308,6 +320,9 @@ bypass (一時、緊急時のみ):
 設計起源: docs/draft/system-reminder-attention-fix.md Wave 2.3
          docs/draft/taskmanagesystem-recovery.md Q2 (task-24 W3)"
 
+if declare -f log_block >/dev/null 2>&1; then
+  log_block "draft-flow-guard" "docs/ direct Write BLOCK: $file_path" ""
+fi
 if declare -f emit_block_pretool >/dev/null 2>&1; then
   emit_block_pretool "$_dfg_reason" "" "" ""
 else

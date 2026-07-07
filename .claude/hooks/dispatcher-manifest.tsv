@@ -16,6 +16,7 @@ PreToolUse	Agent|Task	3	reviewer-count-guard.sh	reviewer_count_guard	advisory	5
 PreToolUse	*	1	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
 PostToolUse	Agent|Task	1	agent-marker-clear.sh		observer	5
 PostToolUse	Edit|Write	1	check-md-mermaid.sh	check_md_mermaid	stdout-block	90
+PostToolUse	Edit|Write	2	ui-contract.sh	ui_contract	advisory	5
 PostToolUse	*	1	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
 PostToolUse	*	2	failure-loop-detect.sh	failure_loop_detect	advisory	3
 PostToolUse	*	3	why-x5-violation-detect.sh	why_x5_enforcement	advisory	3

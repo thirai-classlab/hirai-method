@@ -46,6 +46,13 @@ if [ -f "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/block-message.sh" ]; th
   source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/block-message.sh"
 fi
 
+# === Observability 構造化 log API (task-99 P3-2、observations.jsonl) ===
+# shellcheck source=lib/observability.sh
+if [ -f "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/observability.sh" ]; then
+  # shellcheck disable=SC1091
+  source "${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/hooks/lib/observability.sh"
+fi
+
 # === workflow-state root (state file 解決に使用) ===
 _workflow_state_root="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/.workflow-state"
 
@@ -139,9 +146,17 @@ if [ -z "$slug" ]; then
   exit 0
 fi
 
+# hook fire log (task-99): finish-task 対象 slug 抽出まで到達した時点で log_fire
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "workflow-guard" "processing finish-task: $slug" ""
+fi
+
 # === state JSON 不在: 旧 task 互換のため素通し ===
 state_file="${_workflow_state_root}/${slug}.json"
 if [ ! -f "$state_file" ]; then
+  if declare -f log_silent_failure >/dev/null 2>&1; then
+    log_silent_failure "workflow-guard" "state file missing (fail-open): $slug" ""
+  fi
   echo '{}'
   exit 0
 fi
@@ -257,6 +272,9 @@ Bypass (audit-logged):
 # 既存 hybrid (stderr + JSON stdout + exit 2) を lib で保持:
 #   - emit_block_pretool は stderr 4 行 + JSON stdout を emit
 #   - caller が exit 2 を明示 (§3.5、workflow-guard の後方互換 exit code)
+if declare -f log_block >/dev/null 2>&1; then
+  log_block "workflow-guard" "finish-task incomplete: $slug (stage_ok=$stage_ok findings_ok=$findings_ok)" ""
+fi
 if declare -f emit_block_pretool >/dev/null 2>&1; then
   emit_block_pretool "$reason" "" "" ""
 else

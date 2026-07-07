@@ -38,6 +38,13 @@ source "$(dirname "$0")/lib/config-loader.sh"
 # shellcheck source=lib/block-message.sh
 source "$(dirname "$0")/lib/block-message.sh"
 
+# Observability 構造化 log API (task-99 P3-2、observations.jsonl)
+# shellcheck source=lib/observability.sh
+if [ -f "$(dirname "$0")/lib/observability.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$(dirname "$0")/lib/observability.sh"
+fi
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled task_rule_guard; then
   echo '{}'
@@ -262,6 +269,11 @@ if [ "$tool" = "Edit" ]; then
 fi
 
 # === Write 時の厳格 check ===
+# hook fire log (task-99): subagent bypass / feature OFF / Edit 経路 / draft glob 経由を
+# 通過し、task_dir 配下の Write 判定に到達した時点で log_fire。
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "task-rule-guard" "processing Write: $basename" ""
+fi
 
 # (1) ID 重複検知
 shopt -s nullglob 2>/dev/null
@@ -282,6 +294,9 @@ ${list}
 
 Bypass: ECC_TASKGUARD=off / ${HC_TASKGUARD_STATE_DIR}/${slug}.cleared を touch"
   # task-94 migration: PreToolUse BLOCK は emit_block_pretool 経由 (lib SSoT)
+  if declare -f log_block >/dev/null 2>&1; then
+    log_block "task-rule-guard" "ID duplicate: ${id} (${prefix})" ""
+  fi
   if declare -f emit_block_pretool >/dev/null 2>&1; then
     emit_block_pretool "$reason" "" "" ""
   else
@@ -317,6 +332,9 @@ if [ -z "$matched_draft" ]; then
   - ECC_TASKGUARD=off               # 全 OFF
   - touch ${HC_TASKGUARD_STATE_DIR}/${slug}.cleared    # 1 ファイル分 bypass"
   # task-94 migration: PreToolUse BLOCK は emit_block_pretool 経由 (lib SSoT)
+  if declare -f log_block >/dev/null 2>&1; then
+    log_block "task-rule-guard" "draft missing: ${slug}" ""
+  fi
   if declare -f emit_block_pretool >/dev/null 2>&1; then
     emit_block_pretool "$reason" "" "" ""
   else

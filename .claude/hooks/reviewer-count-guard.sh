@@ -43,7 +43,16 @@
 #   HC_REVIEWER_COUNT_STATE_DIR=<path>     state dir override (test isolation 用)
 #   HC_REVIEWER_COUNT_STATE_TTL_DAYS=<int> state prune 閾値 (日、default 7、<=0 で無効)
 #   HC_REVIEW_MAX_COUNT_<CAT>=<int>        category 上限 override (config-loader 由来)
+#   HC_REVIEW_ITERATION_MIN=<int>          iter 最小反復数 (task-101、default 3)
+#   HC_REVIEW_STATE_DIR=<path>             iter state dir override (test isolation 用)
 #   ECC_BYPASS_REASON=<text>               bypass 理由 (bypass.log に記録)
+#
+# task-101 拡張 (iter_min:3 未達 warn):
+#   `.claude/.review-state/<slug>-iter.count` に main agent が反復回数を書き込む前提。
+#   review Agent 起動時に本 hook が全 *-iter.count を scan、count < review_iteration_min
+#   な slug があれば advisory warn を注入する (BLOCK しない)。
+#   これは iter cycle 偽収束 (iter 1-2 で closure → iter 3 で新規 CRIT 発見漏れ、
+#   memory [[feedback_iter_fix_introduces_new_crit_pattern]]) を機械補強する。
 #
 # Feature toggle:
 #   feature_reviewer_count_guard_enabled: true  (yml)
@@ -278,9 +287,57 @@ _rcg_main() (
         rmdir "$lock_dir" 2>/dev/null || true
     fi
 
-    # --- count > max_cat なら warn 注入 (BLOCK しない) ---
-    if [ "$count" -le "$max_cat" ]; then
-        # 上限内 → 注入なし
+    # --- iter_min:3 check (task-101) ---
+    # `.claude/.review-state/<slug>-iter.count` を scan し、review_iteration_min 未達の
+    # slug があれば advisory warn を作る。BLOCK しない、fail-open。
+    # 値解決順: env(HC_REVIEW_ITERATION_MIN) > default 3
+    local min_iter="${HC_REVIEW_ITERATION_MIN:-3}"
+    case "$min_iter" in
+        ''|*[!0-9]*) min_iter=3 ;;
+    esac
+
+    local iter_state_dir
+    if [ -n "${HC_REVIEW_STATE_DIR:-}" ]; then
+        iter_state_dir="$HC_REVIEW_STATE_DIR"
+    else
+        # repo_root は上部で resolve 済み (state_dir 決定ブロック内 scope 外なので再解決)
+        local _repo_root=""
+        if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
+            _repo_root="$CLAUDE_PROJECT_DIR"
+        elif _repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+            :
+        fi
+        if [ -n "$_repo_root" ] && [ -d "$_repo_root" ]; then
+            iter_state_dir="${_repo_root}/.claude/.review-state"
+        else
+            iter_state_dir=""
+        fi
+    fi
+
+    local iter_warn_lines=""
+    if [ "$min_iter" -gt 0 ] && [ -n "$iter_state_dir" ] && [ -d "$iter_state_dir" ]; then
+        local _count_file _slug_base _iter_val
+        for _count_file in "$iter_state_dir"/*-iter.count; do
+            [ -f "$_count_file" ] || continue
+            _slug_base=$(basename "$_count_file")
+            _slug_base="${_slug_base%-iter.count}"
+            _iter_val=$(head -n1 "$_count_file" 2>/dev/null | tr -d '[:space:]' || printf '')
+            case "$_iter_val" in
+                ''|*[!0-9]*) continue ;;
+            esac
+            if [ "$_iter_val" -lt "$min_iter" ]; then
+                iter_warn_lines="${iter_warn_lines}  - ${_slug_base}: iter_count=${_iter_val} < review_iteration_min=${min_iter}
+"
+            fi
+        done
+    fi
+
+    # --- warn 出力判定 (max 超過 / iter 未達 のいずれかで warn) ---
+    local over_max=0
+    [ "$count" -gt "$max_cat" ] && over_max=1
+
+    if [ "$over_max" -eq 0 ] && [ -z "$iter_warn_lines" ]; then
+        # max 内 かつ iter 未達なし → silent
         echo '{}'
         exit 0
     fi
@@ -288,8 +345,9 @@ _rcg_main() (
     local cat_label="$cat"
     [ "$cat" = "unknown" ] && cat_label="不明 (reviewer 一般、緩い上限 = max(全 cat))"
 
-    local msg
-    msg="[reviewer-count-guard] reviewer 数上限 warn:
+    local msg=""
+    if [ "$over_max" -eq 1 ]; then
+        msg="[reviewer-count-guard] reviewer 数上限 warn:
 - 本 session の review subagent 起動数が ${count} 体に達しました (推定 category: ${cat_label})。
 - review_max_count_${cat} = ${max_cat} を超過しています。
 - yml 範囲遵守を推奨: bash .claude/scripts/hc-config.sh --get review_max_count_${cat} で上限を確認し、
@@ -298,6 +356,21 @@ _rcg_main() (
 - これは warn です (BLOCK しません)。意図的な超過 (category 誤推定 / 再 review round 等) なら無視してください。
 - bypass: HC_REVIEWER_COUNT_GUARD_ENABLED=false / ECC_REVIEWER_COUNT_OFF=1
 "
+    fi
+
+    if [ -n "$iter_warn_lines" ]; then
+        [ -n "$msg" ] && msg="${msg}
+"
+        msg="${msg}[reviewer-count-guard] review_iteration_min 未達 warn (task-101):
+- 以下の review cycle が最小反復回数 (review_iteration_min = ${min_iter}) を下回っています:
+${iter_warn_lines}- 採用 6 条 4 (テスト設計レビュー) / workflow.md は iter cycle 収束条件として最小 ${min_iter} iter を要求します。
+- iter 後半で code-reviewer が新規 CRIT を検出する pattern (feedback_iter_fix_introduces_new_crit_pattern) を担保するため、iter cycle を継続してください。
+- 状態 file: ${iter_state_dir}/<slug>-iter.count (main agent が iter 実行のたびに inc)。
+- 値解決順: env(HC_REVIEW_ITERATION_MIN) > harness-config.yml (review_iteration_min) > default 3。
+- これは warn です (BLOCK しません、advisory)。
+- bypass: HC_REVIEWER_COUNT_GUARD_ENABLED=false / ECC_REVIEWER_COUNT_OFF=1
+"
+    fi
 
     jq -n --arg ctx "$msg" '{
         hookSpecificOutput: {

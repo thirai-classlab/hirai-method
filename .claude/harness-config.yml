@@ -392,6 +392,8 @@ feature_pre_commit_smoke_enabled: true            # .githooks/pre-commit fast sm
 pre_commit_smoke_budget_sec: 7                    # pre-commit fast smoke 予算 (秒、超過で WARN、task-92。2026-07-06 実測 macOS bash 5.2 で curated 4 smoke 合計 5.17s (bulk 0.11 + enforcement-mismatch 0.84 + harness-config-local 4.16 + common-rules-import 0.06) を踏まえ margin ~35% で 7 に設定。default 3 は draft §3.3 timing 表の見積 (~2.4s) 起因の drift、実測 empirical で補正)
 feature_asana_prompt_enabled: true                # mode-asana-prompt.sh (SessionStart Asana 未決 hearing、mode.yml asana_enabled と直交、task-95)
 feature_agent_router_llm_fallback_enabled: false  # agent-router-suggest LLM fallback 子 toggle (default OFF、opt-in feature、cost 発生、task-96)
+feature_ui_contract_enabled: true                 # ui-contract.sh (PostToolUse Edit|Write、UI 拡張子検出時 cross-file-contract-check 呼出、advisory、task-98)
+feature_observability_enabled: true               # lib/observability.sh 5 API (log_event/block/bypass/fire/silent_failure) 全 log_* 呼出、observability-gc.sh/hook-fire-audit.sh、task-99)
 agent_router_llm_budget_usd_per_day: 0.1          # LLM fallback の 1 日 (UTC day) 累積 cost 上限 (USD、超過で当日 disable + WARN、task-96)
 agent_router_llm_similarity_threshold: 0.7        # keyword confidence が本値未満の時のみ LLM fallback 発火 (0.0-1.0、上げると発火頻度低下・cost 低下、task-96)
 
@@ -452,7 +454,8 @@ review_required_security: false       # default false (security 影響 task の�
 review_min_count_security: 1          # default 1 (security-reviewer)
 
 # 反復制御
-review_iteration_max: 2               # default 5 (採用 6 条 4 で 5 回上限、現在値: task-61 作業中に変更)
+review_iteration_max: 5               # default 5 (採用 6 条 4 の収束上限、task-101 iter_min:3 との ordering 制約で min ≤ max 必須)
+review_iteration_min: 3               # iter cycle 最小反復回数 (task-101、採用 6 条 4 の iter 後半 CRIT 検出担保 [[feedback_iter_fix_introduces_new_crit_pattern]] 実証)。reviewer-count-guard.sh が本値未達 slug を advisory warn。値解決順: env(HC_REVIEW_ITERATION_MIN) > local.yml > yml > default 3
 
 # === Enforcement Preset + Matrix (task-70 Phase 2、draft §4.2) ===
 # docs / rules は guard を「BLOCK」と説明する一方、feature toggle が false の中間状態
@@ -624,6 +627,9 @@ enforcement_matrix:
     presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
     disabled_reason: {}
   reviewer_count_guard:
+    # task-101 (2026-07-07) で extended semantics: reviewer 並列数 min/max 検証に加え
+    # `.claude/.review-state/<slug>-iter.count` が `review_iteration_min` (default 3) 未達の
+    # slug を advisory warn 注入。BLOCK しない (fail-open)。
     feature_key: feature_reviewer_count_guard_enabled
     docs_claim: advisory
     events: [PreToolUse:Agent]
@@ -664,4 +670,27 @@ enforcement_matrix:
     docs_claim: advisory
     events: [UserPromptSubmit]
     presets: {advisory: false, team-default: false, strict: false, harness-dev: false}
+    disabled_reason: {}
+  # ------------------------------------------------------------------
+  # task-98 / task-99 / task-101 Phase 3 Wave 4 (2026-07-07)
+  # UI cross-file 契約 / Observability API / iter_min:3 の 3 新 guard 追加
+  # (iter_min は reviewer_count_guard の extended semantics で吸収、新規 guard 追加なし)
+  # ------------------------------------------------------------------
+  ui_contract:
+    # advisory guard (task-98)、UI 拡張子検出時 cross-file-contract-check 呼出、drift 検出時 WARN
+    # 全 preset true は「本質的に disable する場面なし」の advisory 方針 (project 単位で env override 運用)
+    # consuming repo で UI 非対象なら env `HC_FEATURE_UI_CONTRACT_ENABLED=false` で無効化
+    feature_key: feature_ui_contract_enabled
+    docs_claim: advisory
+    events: [PostToolUse:Edit, PostToolUse:Write]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  observability:
+    # advisory guard (task-99)、全 hook が lib/observability.sh 5 API で fire/block/bypass/silent_failure log 追記
+    # 全 preset true は「本質的に disable する場面なし」の advisory 方針
+    # consuming repo で log 停止したいなら env `HC_FEATURE_OBSERVABILITY_ENABLED=false` で no-op 化
+    feature_key: feature_observability_enabled
+    docs_claim: advisory
+    events: [PreToolUse, PostToolUse, Stop, SubagentStop, UserPromptSubmit, SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
     disabled_reason: {}

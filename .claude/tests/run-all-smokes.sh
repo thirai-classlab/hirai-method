@@ -57,8 +57,10 @@ _get_smoke_category() {
     hc-config-key-parity-smoke|\
     hc-config-local-yml-smoke|\
     hc-config-migration-smoke|\
+    iter-min-3-smoke|\
     layer-b-context-isolation-smoke|\
     lib-block-message-smoke|\
+    lib-observability-smoke|\
     review-required-min-count-smoke|\
     reviewer-count-guard-smoke|\
     rule-architecture-smoke|\
@@ -87,10 +89,13 @@ _get_smoke_category() {
       printf 'stale-det' ;;
     # behavior: BLOCK/warn 挙動検証 (default)
     # cli 機能検証 (task-83) / task #96 P2-5 agent-router LLM fallback 子 toggle /
-    # task-94 P2-3 emit_block_stop 契約 (Stop hook JSON stdout 非出力 + 4 label stderr)
+    # task-94 P2-3 emit_block_stop 契約 (Stop hook JSON stdout 非出力 + 4 label stderr) /
+    # task-98 P3-1 ui-contract advisory hook / task-99 P3-2 hook-fire-audit behavior
     npx-cli-smoke|\
     agent-router-llm-fallback-smoke|\
-    byproduct-discharge-guard-smoke)
+    byproduct-discharge-guard-smoke|\
+    hook-fire-audit-smoke|\
+    ui-contract-smoke)
       printf 'behavior' ;;
     *)
       printf 'behavior' ;;

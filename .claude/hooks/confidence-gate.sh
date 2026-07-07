@@ -40,6 +40,13 @@ source "$SCRIPT_DIR/lib/confidence-gate/messages.sh"
 # shellcheck source=lib/block-message.sh
 source "$SCRIPT_DIR/lib/block-message.sh"
 
+# Observability 構造化 log API (task-99 P3-2、observations.jsonl)
+# shellcheck source=lib/observability.sh
+if [ -f "$SCRIPT_DIR/lib/observability.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/observability.sh"
+fi
+
 # Phase β: F3 disable for SWE-bench grid evaluation (fail-open)
 if [ "${ECC_F3_OFF:-0}" = "1" ] || [ "${ECC_F3_OFF:-}" = "true" ]; then
   if command -v jq >/dev/null 2>&1; then
@@ -61,10 +68,20 @@ if ! command -v jq >/dev/null 2>&1; then echo '{}'; exit 0; fi
 init_bypass_paths
 handle_bypass_marker
 
+# hook fire log (task-99): bypass / disable / jq 不在 check を通過した時点で log_fire
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "confidence-gate" "processing SubagentStop event" ""
+fi
+
 # emit_block: task-94 migration wrapper (SubagentStop event)
 #   confidence-gate は SubagentStop hook のため emit_block_subagent へ委譲。
 #   既存 1-arg 呼出 (build_*_reason 生成 message) を full why arg として渡す。
-emit_block() { emit_block_subagent "$1" "" "" ""; }
+emit_block() {
+  if declare -f log_block >/dev/null 2>&1; then
+    log_block "confidence-gate" "confidence BLOCK" ""
+  fi
+  emit_block_subagent "$1" "" "" "";
+}
 
 agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null)
 transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
@@ -84,6 +101,9 @@ compare_and_emit() {
   ok=$(awk -v s="$score" -v t="$threshold" 'BEGIN { print (s+0 >= t+0) ? "1" : "0" }')
   if [ "$ok" = "1" ]; then echo '{}'; exit 0; fi
   log_failure "$fail_phase" "score=${score} threshold=${threshold} sidechain=${is_sidechain}"
+  if declare -f log_silent_failure >/dev/null 2>&1; then
+    log_silent_failure "confidence-gate" "$fail_phase: score=${score}" ""
+  fi
   if [ "$fail_phase" = "below_threshold_via_tool_response" ]; then
     emit_block "[confidence-gate] tool_response 経由で抽出した confidence ${score} が閾値 ${threshold} 未満です。"
   else
@@ -108,8 +128,14 @@ if [ -z "$transcript" ] || [ "$transcript" = "null" ] || [ ! -f "$transcript" ];
   fi
   if [ -z "$transcript" ] || [ "$transcript" = "null" ]; then
     log_failure "no_transcript" "transcript_path missing or null"
+    if declare -f log_silent_failure >/dev/null 2>&1; then
+      log_silent_failure "confidence-gate" "no_transcript" ""
+    fi
   else
     log_failure "file_not_found" "path=${transcript}"
+    if declare -f log_silent_failure >/dev/null 2>&1; then
+      log_silent_failure "confidence-gate" "file_not_found: $transcript" ""
+    fi
   fi
   echo '{}'; exit 0
 fi
@@ -119,6 +145,9 @@ is_sidechain=$(refine_sidechain_from_records "$is_sidechain" "$transcript")
 
 if [ -z "$final_text" ]; then
   log_failure "extract_failed" "transcript=${transcript} sidechain=${is_sidechain}"
+  if declare -f log_silent_failure >/dev/null 2>&1; then
+    log_silent_failure "confidence-gate" "extract_failed" ""
+  fi
   echo '{}'; exit 0
 fi
 

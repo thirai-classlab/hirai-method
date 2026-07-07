@@ -229,6 +229,53 @@ _case_4() (
 )
 
 # ============================================================
+# Case 6: reviewer 制御 3 点一致検証 (task-101 iter_min:3 規範化)
+#   - review_iteration_min ≤ review_iteration_max (min-max ordering)
+#   - review_iteration_min ≥ 1 かつ ≤ 採用 6 条 4 上限 5 (default 3、範囲遵守)
+#   - review_min_count_test ≤ review_max_count_test (min-max ordering、採用 6 条 4)
+#   task-101 DoD: min/max/採用 6 条 4 上限 5 の 3 点一致 verification。
+# ============================================================
+_case_6() (
+  set -uo pipefail
+  local iter_min iter_max test_min test_max errors=""
+  iter_min="$(_effective review_iteration_min)"
+  iter_max="$(_effective review_iteration_max)"
+  test_min="$(_effective review_min_count_test)"
+  test_max="$(_effective review_max_count_test)"
+  # 空文字は default 想定 (config-loader 経由でも空になるケースあり)
+  [ -z "$iter_min" ] && iter_min=3
+  [ -z "$iter_max" ] && iter_max=5
+  [ -z "$test_min" ] && test_min=5
+  [ -z "$test_max" ] && test_max=10
+  # 数値以外は fail
+  case "$iter_min" in ''|*[!0-9]*) errors="${errors} iter_min-not-integer:${iter_min}" ;; esac
+  case "$iter_max" in ''|*[!0-9]*) errors="${errors} iter_max-not-integer:${iter_max}" ;; esac
+  case "$test_min" in ''|*[!0-9]*) errors="${errors} test_min-not-integer:${test_min}" ;; esac
+  case "$test_max" in ''|*[!0-9]*) errors="${errors} test_max-not-integer:${test_max}" ;; esac
+  if [ -z "$errors" ]; then
+    # min ≤ max ordering (iter)
+    if [ "$iter_min" -gt "$iter_max" ]; then
+      errors="${errors} iter_min(${iter_min})>iter_max(${iter_max})"
+    fi
+    # min ≥ 1 かつ ≤ 5 (採用 6 条 4 の cap)
+    if [ "$iter_min" -lt 1 ] || [ "$iter_min" -gt 5 ]; then
+      errors="${errors} iter_min(${iter_min})_out_of_range[1-5]"
+    fi
+    # min ≤ max ordering (test)
+    if [ "$test_min" -gt "$test_max" ]; then
+      errors="${errors} test_min(${test_min})>test_max(${test_max})"
+    fi
+  fi
+  if [ -n "$errors" ]; then
+    printf 'Case 6: reviewer 制御 3 点一致検証 fail:%s\n' "$errors" >&2
+    return 1
+  fi
+  printf 'Case 6: iter_min=%s iter_max=%s test_min=%s test_max=%s (all ordered, iter_min ∈ [1,5])\n' \
+    "$iter_min" "$iter_max" "$test_min" "$test_max" >&2
+  return 0
+)
+
+# ============================================================
 # Case 5: docs_claim=block + 現 preset で false にする guard には必ず disabled_reason
 #         (documented-exception の網羅性: matrix の self-consistency)
 # ============================================================
@@ -269,6 +316,7 @@ if _case_2 2>&1; then _record PASS 2 "対象 23 guard (base 8 + task-95 追加 3
 if _case_3 2>&1; then _record PASS 3 "docs=block かつ実値=false の mismatch は disabled_reason 不在で fail"; else _record FAIL 3 "undocumented mismatch を検出 (disabled_reason 不在)"; fi
 if _case_4 2>&1; then _record PASS 4 "全 guard の feature_key が yml top-level に実在"; else _record FAIL 4 "feature_key が yml に実在"; fi
 if _case_5 2>&1; then _record PASS 5 "現 preset で false 期待の block guard に disabled_reason が網羅"; else _record FAIL 5 "現 preset false 期待 guard の disabled_reason 網羅"; fi
+if _case_6 2>&1; then _record PASS 6 "reviewer 制御 3 点一致 (iter_min ≤ iter_max ∧ iter_min ∈ [1,5] ∧ test_min ≤ test_max、task-101)"; else _record FAIL 6 "reviewer 制御 3 点一致 (task-101 iter_min:3 規範化)"; fi
 
 printf '\n=== Result: %d PASS, %d FAIL ===\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then
