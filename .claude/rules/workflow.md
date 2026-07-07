@@ -98,7 +98,9 @@ CRITICAL / HIGH findings は state JSON の `pending_findings.module_review` / `
 
 各カテゴリは user が **採用 (☑) / 不採用 (☒)** を全行決定。不採用には必ず理由を 4 種 (`scope-excluded` / `not-applicable` / `existing-coverage` / `accepted-risk`) から選ぶ。W4 実装後、`/new-task` は本 user 判断が未確認の場合 BLOCK (workflow-guard.sh の Stage 4 検証)。並列起動 agent は `tdd-guide` / `test-automator` / `qa-expert` (`reviewer_registry_test`)、3 agent 中 2 以上採用推奨で default ☑ / 2 以上不採用で ☒ / 意見割れで ☐ + 「user 判断要」。
 
-**yml 値による制御**: `review_required_test` / `review_min_count_test` / `review_max_count_test` / `review_iteration_max` で集中制御。**reviewer 並列起動数は固定 default ではなく `min ≤ N ≤ max` の範囲で動的選定**し、起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_test` で上限を確認する (青天井「5+」は task-64 で廃止、値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。
+**yml 値による制御**: `review_required_test` / `review_min_count_test` / `review_max_count_test` / `review_iteration_max` / `review_iteration_min` で集中制御。**reviewer 並列起動数は固定 default ではなく `min ≤ N ≤ max` の範囲で動的選定**し、起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_test` で上限を確認する (青天井「5+」は task-64 で廃止、値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。
+
+**iter_min:3 未達 closure 禁止** (task-101、2026-07-07 規範化): `review_iteration_min` (default 3) 未達での closure は禁止。iter cycle は最小 3 iter 回すことで、iter 後半で code-reviewer が新規 CRIT を検出する pattern (memory `feedback_iter_fix_introduces_new_crit_pattern`、task-61 iter 3 で規範矛盾 / 構造後方互換 / event loop / silent data loss 4 CRIT 検出実証) を担保する。`reviewer-count-guard.sh` (PreToolUse Agent) が `.claude/.review-state/<slug>-iter.count` を scan し `review_iteration_min` 未達 slug に advisory warn 注入 (BLOCK しない、fail-open)。main agent は iter 実行のたびに count file を inc し hook に検出させる。bypass: `HC_REVIEWER_COUNT_GUARD_ENABLED=false` / `ECC_REVIEWER_COUNT_OFF=1`。
 
 > **20 MECE カテゴリ各論 (採用 / 不採用判定例 table) / 3 agent 投票 default 判定**: [workflow/mece-20.md](../rules-details/workflow/mece-20.md) + [`_TEST_DESIGN_TEMPLATE.md`](../templates/docs/draft/_TEST_DESIGN_TEMPLATE.md)
 
@@ -106,7 +108,9 @@ CRITICAL / HIGH findings は state JSON の `pending_findings.module_review` / `
 
 `/design-review <slug>` は `reviewer_registry_design` + `reviewer_registry_security` カテゴリ登録 agent を **並列起動** (`run_in_background: true` 必須) し、findings を `docs/draft/<slug>-review.md` に集約。reviewer-registry (design / security / test / impl の 4 キー) と起動対象 agent の対応は `harness-config.yml` が SSoT、env (例: `HC_REVIEWER_REGISTRY_DESIGN`) で改行区切り上書き可。
 
-**並列数 / 反復制御**: `review_required_design` / `review_min_count_design` / `review_max_count_design` / `review_iteration_max` で制御。**具体値は hardcode せず `hc-config.sh --get review_min_count_design` 等で現在値確認** (値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。draft レビューは「修正 → 再レビュー」を **CRITICAL + HIGH + MEDIUM = 0** になるまで反復 (LOW は許容、cosmetic finding として記録のみ)、reviewer は **3 体以上** 並列起動 (不足で user escalation)、反復上限超過時は user escalation (bypass: `ECC_DESIGN_REVIEW_OFF=1`)。各 iter の reviewer / 件数 / 修正 commit hash は draft §「レビューサイクル」table に append。
+**並列数 / 反復制御**: `review_required_design` / `review_min_count_design` / `review_max_count_design` / `review_iteration_max` / `review_iteration_min` で制御。**具体値は hardcode せず `hc-config.sh --get review_min_count_design` 等で現在値確認** (値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。draft レビューは「修正 → 再レビュー」を **CRITICAL + HIGH + MEDIUM = 0** になるまで反復 (LOW は許容、cosmetic finding として記録のみ)、reviewer は **3 体以上** 並列起動 (不足で user escalation)、反復上限超過時は user escalation (bypass: `ECC_DESIGN_REVIEW_OFF=1`)。各 iter の reviewer / 件数 / 修正 commit hash は draft §「レビューサイクル」table に append。
+
+**iter_min:3 未達 closure 禁止** (task-101): `review_iteration_min` (default 3) 未達で「CRIT+HIGH+MEDIUM=0」に達しても closure は禁止 (偽収束防止)。reviewer が iter 1-2 で approve でも iter 3 で code-reviewer が新規 CRIT を検出する pattern を担保するため、最小 3 iter を強制する。`reviewer-count-guard.sh` が本値未達 slug を advisory warn 注入 (詳細は上記 W1 §「テスト設計 MECE」の iter_min:3 clause 参照)。
 
 > **reviewer-registry 4 キー全 agent 表 / 並列数・反復制御 yml 値 / 収束条件 table / stack heuristic 絞り込みロジック (database / API / UI 検出) / 集約フォーマット / reviewer 最低数 3 体の理由**: [workflow/fan-out.md](../rules-details/workflow/fan-out.md)
 

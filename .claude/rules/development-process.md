@@ -215,6 +215,64 @@ subagent の **最後の assistant text** に **必ず `confidence: 0.X`** (0.0�
 
 > **major subagent only block 仕様 (task #9) / 記載例 full**: [development-process/confidence-gate.md](../rules-details/development-process/confidence-gate.md)
 
+## 並列 subagent cross-file 契約 (task-98)
+
+並列 subagent が相互参照 file (例: `app.js` の render target ↔ `index.html` の DOM id、`api.ts` と `types.ts` の shape、`button.tsx` と `button.test.tsx` の props) を独立に実装すると、静的 grep smoke では単一 file 内存在確認のみで **file 間契約 (id / symbol / API 名)** の drift を捕捉できない (memory `feedback_parallel_subagent_cross_file_contract_drift` の task-63 実証: `main-panel` ↔ `view-container` id mismatch で UI 全体非描画)。
+
+### 契約 SSoT 事前明示 (必須)
+
+並列 subagent 委譲時、以下の共有契約はメイン prompt で **事前に SSoT を明示**する:
+
+- **DOM id / class 名** — subagent が生成する HTML/JSX の id と consumer が参照する id
+- **symbol / 変数名** — module 間で export/import する identifier
+- **API 名 / endpoint / shape** — client と server の契約
+- **event 名 / message type** — publisher と subscriber の契約
+
+任意で `.claude/contracts/<slug>.yml` に yml 化した契約を置き、`cross-file-contract-check.sh --file <path>` で assert 可能。
+
+### 機械強制 (advisory)
+
+`.claude/hooks/ui-contract.sh` (PostToolUse Edit|Write、`feature_ui_contract_enabled`) が UI 拡張子 (`.tsx` / `.jsx` / `.vue` / `.svelte` / `.html` / `.css` / `.scss`) を検出時、`.claude/scripts/cross-file-contract-check.sh` を呼出し drift を stderr WARN 注入する (BLOCK しない advisory、fail-open)。`/finish-task` は UI 変更含 task で `docs/tasks/<task>-visual-*.png` (or bypass log) を検証 (採用 6 条 4「UI 含 task = E2E + visual 必須」の機械強制)。
+
+| bypass 経路 | env |
+|---|---|
+| hook 全停止 | `HC_FEATURE_UI_CONTRACT_ENABLED=false` (config) |
+| 1 セッション OFF | `ECC_UI_CONTRACT_OFF=1` (env、bypass.log 記録) |
+| UI 拡張子 override | `HC_UI_CONTRACT_EXTENSIONS=".tsx,.jsx"` (default 7 種) |
+
+## Observability (task-99、hook 発火・BLOCK・bypass・silent failure の構造化 log)
+
+silent failure と死蔵 hook を機械可視化するため、全 hook (PreToolUse × 5 / Stop × 1 / SubagentStop × 1) + self-doctor + smoke runner は `.claude/hooks/lib/observability.sh` を source し 5 API 経由で `observations.jsonl` に構造化 log を append する。
+
+### 5 API (event_kind ごとの semantics)
+
+| API | event_kind | 用途 |
+|---|---|---|
+| `log_fire <hook_name> <reason> [payload]` | `fire` | hook が実行された事実 (BLOCK 有無関わらず) |
+| `log_block <hook_name> <reason> [payload]` | `block` | BLOCK 判定を下した事実 (exit 2 / decision block) |
+| `log_bypass <hook_name> <env_var> <reason> [payload]` | `bypass` | bypass env で BLOCK 回避した事実 (bypass-logger.sh 3-arg 互換 superset) |
+| `log_silent_failure <hook_name> <reason> [payload]` | `silent_failure` | 想定外の内部エラー (jq 不在 / write 失敗等、hook を止めずに log) |
+| `log_event <event_kind> <hook_name> <reason> [payload]` | 任意 | 上記に該当しない custom event |
+
+### GC + audit
+
+- **30 日 GC**: `bash .claude/scripts/observability-gc.sh --apply` で 30 日超えを `.claude/observability/archive/YYYY-MM.jsonl` に移動 (`--dry-run` で候補一覧)。
+- **fire 0 回検出**: `bash .claude/scripts/hook-fire-audit.sh --days 30` で最終 30 日 fire 0 回 hook を JSON / table 出力 → 死蔵 hook 棚卸しの数値根拠。
+
+### 実装規範
+
+- `file-top に set -euo pipefail を書かない` (feedback_set_e_in_sourced_libs、caller shell への leak 防止)
+- 各関数 body は `subshell ( set -uo pipefail; ... )` で局所化
+- jq 不在時は printf JSON literal escape で fallback
+- write 失敗は silent skip (fail-open、hook 本体を止めない)
+
+### bypass
+
+| 経路 | env | 効果 |
+|---|---|---|
+| hook 全 log_* を no-op 化 | `HC_FEATURE_OBSERVABILITY_ENABLED=false` | observations.jsonl への append 停止 |
+| log path 明示上書き | `HC_OBSERVABILITY_LOG_PATH=<abs path>` | test isolation / cross-repo 集約用 |
+
 ## 指摘対応
 
 1. 根本原因を特定する

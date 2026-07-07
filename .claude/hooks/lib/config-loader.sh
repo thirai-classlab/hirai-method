@@ -171,6 +171,8 @@ AGENT_ROUTER_LLM_SIMILARITY_THRESHOLD \
 FEATURE_PRE_COMMIT_SMOKE_ENABLED \
 PRE_COMMIT_SMOKE_BUDGET_SEC \
 FEATURE_ASANA_PROMPT_ENABLED \
+FEATURE_UI_CONTRACT_ENABLED \
+FEATURE_OBSERVABILITY_ENABLED \
 REVIEW_REQUIRED_DESIGN \
 REVIEW_MIN_COUNT_DESIGN \
 REVIEW_MAX_COUNT_DESIGN \
@@ -186,6 +188,7 @@ REVIEW_MAX_COUNT_SYSTEM \
 REVIEW_REQUIRED_SECURITY \
 REVIEW_MIN_COUNT_SECURITY \
 REVIEW_ITERATION_MAX \
+REVIEW_ITERATION_MIN \
 MAINLINE_BRANCH \
 MAINLINE_INTEGRATION_POLICY"
 
@@ -360,6 +363,13 @@ HC_PRE_COMMIT_SMOKE_BUDGET_SEC="7"
 # mode-asana-prompt.sh (task-95 3-point set):
 #   feature toggle。yml 消失時の default 保護 + config-loader/yml/hook 3-point 対称性。
 HC_FEATURE_ASANA_PROMPT_ENABLED="true"
+# ui-contract.sh (task-98 3-point set):
+#   feature toggle。yml 消失時の default 保護 + config-loader/yml/hook 3-point 対称性。
+HC_FEATURE_UI_CONTRACT_ENABLED="true"
+# lib/observability.sh (task-99 3-point set):
+#   feature toggle。yml 消失時の default 保護 + config-loader/yml/lib 3-point 対称性。
+#   false で全 log_* 呼出を no-op 化 (observations.jsonl への append 停止)。
+HC_FEATURE_OBSERVABILITY_ENABLED="true"
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 4 D、
 # config-loader.sh の対称性 + env override snapshot を確保。default false = Web UI 起動)
 HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED="false"
@@ -401,6 +411,10 @@ HC_REVIEW_MAX_COUNT_SYSTEM="5"
 HC_REVIEW_REQUIRED_SECURITY="false"
 HC_REVIEW_MIN_COUNT_SECURITY="1"
 HC_REVIEW_ITERATION_MAX="5"
+# review_iteration_min (task-101): iter cycle 最小反復回数 (default 3)。
+# reviewer-count-guard.sh が本値未達 slug を advisory warn。iter 後半 CRIT 検出担保。
+# 値解決順: env(HC_REVIEW_ITERATION_MIN) > local.yml > yml > default 3。
+HC_REVIEW_ITERATION_MIN="3"
 
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
@@ -738,6 +752,10 @@ export HC_AGENT_ROUTER_LLM_BUDGET_USD_PER_DAY HC_AGENT_ROUTER_LLM_SIMILARITY_THR
 export HC_FEATURE_PRE_COMMIT_SMOKE_ENABLED HC_PRE_COMMIT_SMOKE_BUDGET_SEC
 # task-95 mode-asana-prompt 3-point set (feature toggle)
 export HC_FEATURE_ASANA_PROMPT_ENABLED
+# task-98 P3-1 ui-contract 3-point set (feature toggle)
+export HC_FEATURE_UI_CONTRACT_ENABLED
+# task-99 P3-2 observability 3-point set (feature toggle)
+export HC_FEATURE_OBSERVABILITY_ENABLED
 
 # Reviewer 制御 (task-44 Phase 1)
 export HC_REVIEW_REQUIRED_DESIGN HC_REVIEW_MIN_COUNT_DESIGN HC_REVIEW_MAX_COUNT_DESIGN
@@ -745,7 +763,7 @@ export HC_REVIEW_REQUIRED_TEST HC_REVIEW_MIN_COUNT_TEST HC_REVIEW_MAX_COUNT_TEST
 export HC_REVIEW_REQUIRED_MODULE HC_REVIEW_MIN_COUNT_MODULE HC_REVIEW_MAX_COUNT_MODULE
 export HC_REVIEW_REQUIRED_SYSTEM HC_REVIEW_MIN_COUNT_SYSTEM HC_REVIEW_MAX_COUNT_SYSTEM
 export HC_REVIEW_REQUIRED_SECURITY HC_REVIEW_MIN_COUNT_SECURITY
-export HC_REVIEW_ITERATION_MAX
+export HC_REVIEW_ITERATION_MAX HC_REVIEW_ITERATION_MIN
 
 # Git 統合ポリシー (task-77)
 export HC_MAINLINE_BRANCH HC_MAINLINE_INTEGRATION_POLICY

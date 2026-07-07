@@ -44,5 +44,6 @@ review_max_count_system: 5
 review_required_security: false
 review_min_count_security: 1
 
-# 反復制御
-review_iteration_max: 2
+# 反復制御 (task-101: iter_min ≤ iter_max 制約に対応、min:3 に合わせて max:5)
+review_iteration_max: 5
+review_iteration_min: 3
