@@ -34,6 +34,28 @@ development-process.md「タスク管理」より:
 | docs 反映 | `git diff main..HEAD -- docs/tasks/task-41-*.md` | 差分が non-empty |
 | `list.md` 更新 | `grep -E '#41.*in_progress' docs/tasks/list.md` | hit |
 
+### Phase 1.5: UI task 検出時の visual artifact 検証 (task-98、採用 6 条 4)
+
+`docs/tasks/task-<id>-*.md` の changes に UI 拡張子 (`.tsx` / `.jsx` / `.vue` / `.svelte` / `.html` / `.css` / `.scss`) が含まれる場合、以下のいずれかを満たすことを確認:
+
+- **visual artifact 存在**: `ls docs/tasks/ 2>/dev/null | grep -E "task-<id>-.*visual-.*\.(png|jpg|jpeg)"` で 1 件以上 hit
+- **明示 bypass log**: 対応 task.md の Step 完了条件に `skip: UI 変更だが view 影響なし (<reason>)` 形式で bypass 理由が明記されている
+
+いずれも不成立なら **warn 出力** (BLOCK しない、advisory):
+
+```
+[finish-task] WARN: UI 拡張子変更を含む task で visual artifact 不在 (task-<id>)
+- 採用 6 条 4「UI 含 task = E2E + ビジュアル検証必須」の DoD 未達
+- 対処: agent-browser skill で screenshot 取得 → docs/tasks/task-<id>-visual-<state>.png 配置
+- bypass: Step 完了条件に "skip: UI 変更だが view 影響なし" と明示
+```
+
+判定は honor system + advisory (Phase 1.5 は Phase 3 以降を止めない)。UI 変更検出コマンド:
+
+```bash
+git diff main..HEAD --name-only | grep -E '\.(tsx|jsx|vue|svelte|html|css|scss)$|^(src|apps/[^/]+)/(components|pages|app)/|^components/'
+```
+
 ### Phase 2: /preflight 自動起動 (--skip-preflight でなければ)
 
 ```
