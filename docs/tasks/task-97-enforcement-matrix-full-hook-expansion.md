@@ -73,6 +73,7 @@ matrix 未登録 hook が docs↔effective 乖離を残し `enforcement-mismatch
 | 2026-07-06 | 起案 | Phase 2 batch planning 経路 B、docs/draft/enforcement-matrix-full-hook-expansion.md 起こし |
 | 2026-07-06 | 承認 | user 承認 (AI 推奨どおり案 A 採用 = task-95 完了後着手 + task-96 追加 toggle 1 件 matrix 登録 + `mode_enforce` は集合 1 entry + `hooks_covered` 記法 + Case 2 semantics 現状維持 + #81 fold = P2-6 に集約 + task-102 cross-check 契約明示) |
 | 2026-07-06 | タスク化 | `/new-task 97 enforcement-matrix-full-hook-expansion`、list.md #97 📝 → 🔲 update + 依存列 = `task-95, task-96` 維持、docs/tasks/task-97-*.md 生成 |
+| 2026-07-07 | 完了 | Wave 3 Workflow wf_73d8cf88-cb0 経由。enforcement_matrix 23 guards (base 8 + task-95 3 + task-97 12 = delegation_guard / confidence_gate / autonomous_action_guard / byproduct_discharge_guard / agent_router_llm_fallback / stale_harness_detect / reviewer_count_guard / context_budget / parallel_subagent_reminder / failure_loop_detect / agent_router_suggest 等) を 5 field 全備で登録。enforcement-mismatch-smoke.sh required= を全 23 guards に拡張、5/5 PASS。sessionstart-footprint-smoke.sh に FP-7 fail-open dedicated case + FP-5 field 数厳密化 (`[0-9]+ enabled, [0-9]+ disabled`) を追加、19/19 PASS。副産物 #81 fold 完了、regression 0 (Wave 1/2 全 smoke PASS)。Step 1-6 全 ✅ |
 
 ## 派生 task / 次アクション候補
 

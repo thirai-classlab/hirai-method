@@ -92,6 +92,16 @@
 | `.claude/tests/agent-router-llm-fallback-smoke.sh` | task-96 の LLM fallback child toggle 契約 smoke (ARF-1..13)。default OFF / opt-in / budget 強制 disable / threshold override / env 互換 WARN / budget accumulator + static drift check (`unset` / inline env prefix) + parent-child toggle interaction を検証。 | New (task-96) |
 | `harness-config.yml` keys: `feature_pre_commit_smoke_enabled` / `pre_commit_smoke_budget_sec` / `feature_asana_prompt_enabled` / `feature_agent_router_llm_fallback_enabled` / `agent_router_llm_budget_usd_per_day` / `agent_router_llm_similarity_threshold` | Wave 1 追加 yml key 集約。`hc-config.sh --get <key>` で raw 値取得、`--set <key>=<val>` で local override。 | New (task-92 / task-96) |
 
+## Phase 2 Wave 3 追加 (2026-07、task-97)
+
+`enforcement_matrix` を全 hook 拡張 (11 → 23 guard) し、`sessionstart-footprint-smoke.sh` に FP-7 fail-open dedicated case 追加 + FP-5 label 厳密化 (field 数検証) で副産物 next-actions #81 を fold。
+
+| Path | 役割 | ステータス |
+|---|---|---|
+| `.claude/harness-config.yml` `enforcement_matrix.*` | 12 新規 guard 追加: 中核 BLOCK 4 (`delegation_guard` / `confidence_gate` / `autonomous_action_guard` / `byproduct_discharge`) + advisory 6 (`context_budget` / `parallel_subagent_reminder` / `reviewer_count_guard` / `why_x5_enforcement` / `failure_loop_detect` / `stale_harness_detect`) + Gate/Confidence 2 (`agent_router_suggest` parent / `agent_router_llm_fallback` child、task-96 由来)。全 entry が 5 field (`feature_key` / `docs_claim` / `events` / `presets` / `disabled_reason`) 全備、既存 11 guard は verbatim 維持。 | ✅ Wave 3 (task-97) |
+| `.claude/tests/enforcement-mismatch-smoke.sh` `required` set | Case 2 の期待集合を 11 → 23 guard に拡張 (現状維持 semantics = 最小必須 guard 存在確認)。 | ✅ Wave 3 (task-97) |
+| `.claude/tests/sessionstart-footprint-smoke.sh` FP-5 / FP-7 | FP-5 label のみ match を `totals: [0-9]+ enabled, [0-9]+ disabled` field 数検証へ強化 (副産物 #81b)。FP-7 は hc-config.sh 不在 fixture で fail-open dedicated (dispatcher exit 0 + `<system-reminder>` open==close 均衡、副産物 #81a、mutation probe: mode-session-start.sh `SUMMARY=""` 削除で FP-7b FAIL)。FOOTPRINT_CAP を 2400 → 3100 に引上げ (23 guard summary 出力の増分 ~600B 対応)。 | ✅ Wave 3 (task-97) |
+
 ## Phase 2 Wave 2 追加 (2026-07、task-93 / task-94)
 
 CI 品質ゲート (matrix 10 job) と、全 hook + self-doctor が共有する BLOCK/WARN/INFO 統一出力 API を追加する。
