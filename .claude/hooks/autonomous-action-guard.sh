@@ -103,6 +103,13 @@ if [ -f "$SCRIPT_DIR/lib/block-message.sh" ]; then
   source "$SCRIPT_DIR/lib/block-message.sh"
 fi
 
+# --- Observability 構造化 log API (task-99 P3-2、observations.jsonl) ---
+# shellcheck source=lib/observability.sh
+if [ -f "$SCRIPT_DIR/lib/observability.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/observability.sh"
+fi
+
 # --- bypass 判定 (env-level) ---
 if [ "${ECC_AUTONOMOUS_ACTION_OVERRIDE:-0}" = "1" ] || [ "${ECC_AUTONOMOUS_ACTION_OVERRIDE:-}" = "true" ]; then
   if declare -f log_bypass >/dev/null 2>&1; then
@@ -185,6 +192,12 @@ if [ -z "$matched_pattern" ]; then
   exit 0
 fi
 
+# hook fire log (task-99): pattern match までに到達 (subagent bypass / feature OFF
+# / env bypass を全て通過) した時点で log_fire。
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "autonomous-action-guard" "match: mode=$MODE pattern=$matched_pattern" ""
+fi
+
 # --- match: モード分岐 ---
 reason_loop="[autonomous-action-guard] Loop モード自律実行禁止コマンドを検出しました。
 
@@ -232,6 +245,9 @@ case "$MODE" in
   loop)
     # task-94 migration: PreToolUse(Bash) BLOCK は emit_block_pretool 経由。
     # 既存 reason_loop full text を why arg として渡し、他 3 arg 空 (msg 内に bypass / 代替が inline 済)。
+    if declare -f log_block >/dev/null 2>&1; then
+      log_block "autonomous-action-guard" "Loop BLOCK: pattern=$matched_pattern" ""
+    fi
     if declare -f emit_block_pretool >/dev/null 2>&1; then
       emit_block_pretool "$reason_loop" "" "" ""
     else

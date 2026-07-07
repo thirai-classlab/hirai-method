@@ -23,6 +23,13 @@ source "$(dirname "$0")/lib/config-loader.sh"
 # shellcheck source=lib/block-message.sh
 source "$(dirname "$0")/lib/block-message.sh"
 
+# Observability 構造化 log API (task-99 P3-2、observations.jsonl)
+# shellcheck source=lib/observability.sh
+if [ -f "$(dirname "$0")/lib/observability.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$(dirname "$0")/lib/observability.sh"
+fi
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled gateguard; then
   echo '{}'
@@ -100,6 +107,12 @@ emit_block() {
   emit_block_pretool "$1" "" "" ""
 }
 
+# hook fire log (task-99): subagent bypass / ECC_GATEGUARD=off 等を通過し、
+# 実処理 (Edit/Write/Bash 判定) に到達した時点で log_fire。
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "gateguard" "processing tool=$tool" ""
+fi
+
 # === Edit gate ===
 if [ "$tool" = "Edit" ]; then
   file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.filePath // empty')
@@ -133,6 +146,9 @@ if [ "$tool" = "Edit" ]; then
   msg="$msg"$'\n'"for this file in this session ($state created)."
   msg="$msg"$'\n\n'"Bypass: ECC_GATEGUARD=off  /  /gate-clear  /  /gate-bypass $file"
 
+  if declare -f log_block >/dev/null 2>&1; then
+    log_block "gateguard" "first Edit BLOCK: $file" ""
+  fi
   emit_block "$msg"
   exit 0
 fi
@@ -167,6 +183,9 @@ if [ "$tool" = "Write" ]; then
   msg="$msg"$'\n'"for this file in this session ($state created)."
   msg="$msg"$'\n\n'"Bypass: ECC_GATEGUARD=off  /  /gate-clear  /  /gate-bypass $file"
 
+  if declare -f log_block >/dev/null 2>&1; then
+    log_block "gateguard" "first Write BLOCK: $file" ""
+  fi
   emit_block "$msg"
   exit 0
 fi
@@ -208,6 +227,9 @@ if [ "$tool" = "Bash" ]; then
   msg="$msg"$'\n'"command in this session ($state created)."
   msg="$msg"$'\n\n'"Bypass: ECC_GATEGUARD=off  /  /gate-clear"
 
+  if declare -f log_block >/dev/null 2>&1; then
+    log_block "gateguard" "first destructive Bash BLOCK" ""
+  fi
   emit_block "$msg"
   exit 0
 fi

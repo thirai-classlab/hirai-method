@@ -29,6 +29,15 @@ fi
 # bypass logger (log_bypass 関数を提供)
 # shellcheck source=lib/bypass-logger.sh
 source "$SCRIPT_DIR/lib/bypass-logger.sh"
+
+# Observability 構造化 log API (task-99 P3-2、observations.jsonl)
+# bypass-logger.sh の log_bypass は observability.sh の super-set 版で上書きされる
+# (bypass.log 1 行 append + observations.jsonl event 追加を両立)。
+# shellcheck source=lib/observability.sh
+if [ -f "$SCRIPT_DIR/lib/observability.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/observability.sh"
+fi
 # shellcheck source=lib/delegation-guard/subagent-detect.sh
 source "$SCRIPT_DIR/lib/delegation-guard/subagent-detect.sh"
 # shellcheck source=lib/delegation-guard/protected-paths.sh
@@ -76,6 +85,12 @@ block_search_msg=$(jq -nc --arg d "$HC_PROTECTED_DISPLAY" --arg f "$reflex_foote
 
 # task 配下の絶対 path 部分一致パターン (protected-paths.sh が参照)
 task_glob="*/${HC_TASK_DIR}/*"
+
+# hook fire log (task-99): main agent path enforcement 分岐に到達した時点で log_fire
+# (subagent bypass はすでに上で通過済み)。
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "delegation-guard" "processing main agent tool=$tool" ""
+fi
 
 case "$tool" in
   Edit|Write)

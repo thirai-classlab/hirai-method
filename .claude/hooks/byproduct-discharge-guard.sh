@@ -52,6 +52,13 @@ if [ -f "${_project_dir}/.claude/hooks/lib/block-message.sh" ]; then
   source "${_project_dir}/.claude/hooks/lib/block-message.sh" 2>/dev/null || true
 fi
 
+# === Observability 構造化 log API (task-99 P3-2、observations.jsonl) ===
+if [ -f "${_project_dir}/.claude/hooks/lib/observability.sh" ]; then
+  # shellcheck source=lib/observability.sh
+  # shellcheck disable=SC1091
+  source "${_project_dir}/.claude/hooks/lib/observability.sh" 2>/dev/null || true
+fi
+
 # Feature toggle 参照 (task-45 Phase 2)
 if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled byproduct_discharge; then
   exit 0
@@ -89,6 +96,12 @@ if [ "$_parse_rc" != "0" ]; then
   exit 0
 fi
 
+# hook fire log (task-99): bypass / feature OFF / parser 不在 / parse fail を全て
+# 通過し、実 next-actions.md 判定に到達した時点で log_fire。
+if declare -f log_fire >/dev/null 2>&1; then
+  log_fire "byproduct-discharge-guard" "processing Stop event: red=${NA_RED_COUNT:-0} yellow=${NA_YELLOW_COUNT:-0}" ""
+fi
+
 # === 判定 ===
 
 # Case A: 🔴 未処理が 1 件以上 → BLOCK
@@ -105,6 +118,9 @@ if [ "${NA_RED_COUNT:-0}" -gt 0 ]; then
   _bdg_silence='ECC_BYPASS_DISCHARGE_GUARD=1 ECC_BYPASS_REASON="<理由>" (audit-logged: .claude/.workflow-state/bypass.log)'
   _bdg_docs="docs/tasks/next-actions.md / .claude/rules/development-process.md"
 
+  if declare -f log_block >/dev/null 2>&1; then
+    log_block "byproduct-discharge-guard" "🔴 unresolved: ${NA_RED_COUNT}" ""
+  fi
   if declare -f emit_block_stop >/dev/null 2>&1; then
     emit_block_stop "$_bdg_why" "$_bdg_fix" "$_bdg_silence" "$_bdg_docs"
   else
