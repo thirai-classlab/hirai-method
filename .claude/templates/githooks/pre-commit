@@ -180,6 +180,147 @@ if ! _run_lib_block_check; then
   exit 1
 fi
 
+# --- task-100 §4.5: yml triplet policy (key + consumer + smoke 同 commit BLOCK) ---
+# harness-config.yml diff から新規追加 key を抽出し、consumer (hook / script /
+# template で該当 key を Read) + smoke (.claude/tests/*-smoke.sh で該当 key を
+# 試験) の存在を grep で検証。三点揃わない状態の commit を BLOCK。
+#
+# 対象 pattern (staged +行、既存 modification は対象外):
+#   - feature_<name>_enabled: <value>   → 期待 env HC_FEATURE_<NAME>_ENABLED
+#   - <scalar_key>: <value>             → 期待 env HC_<KEY> (要 grep hit)
+#
+# 検出方針:
+#   - 追加行 (diff `^+` かつ `^-` 対応行なし) のみ対象
+#   - top-level key に限定 (indent 0 のみ、nested block は除外して false positive 削減)
+#   - コメント行 (^# / 末尾 `# comment`) はコメント除去してから判定
+#
+# consumer / smoke 判定:
+#   - consumer: .claude/hooks/**/*.sh + .claude/scripts/**/*.sh + .claude/templates/**
+#     の中で env 名 or key 名を含む file が 1 つでも存在
+#   - smoke: .claude/tests/*-smoke.sh の中で env 名 or key 名を含む file が 1 つでも存在
+#
+# bypass:
+#   HC_FEATURE_YML_TRIPLET_CHECK_ENABLED=false  # config 系統 (yml feature toggle、session 全体 OFF)
+#   HC_YML_TRIPLET_CHECK_ENABLED=false          # config 系統 (旧名 alias、後方互換維持)
+#   ECC_YML_TRIPLET_OFF=1                       # env 系統 (1 commit のみ)
+#   HC_PRECOMMIT_SKIP=1                         # 上位 bypass (fast smoke 前で既に return)
+#
+# fail-open:
+#   - git diff --cached が取得失敗 → skip (BLOCK しない)
+#   - harness-config.yml が staged 内に無い → skip
+#   - 追加 key 0 件 → skip
+_run_yml_triplet_check() (
+  set -uo pipefail
+  # bypass check (env 系統 / config 系統いずれか OFF なら skip)
+  if [ "${ECC_YML_TRIPLET_OFF:-0}" = "1" ]; then
+    return 0
+  fi
+  # feature toggle 正式名 (yml `feature_yml_triplet_check_enabled` に対応、
+  # config-loader.sh 経由で HC_FEATURE_YML_TRIPLET_CHECK_ENABLED として export される)
+  if [ "${HC_FEATURE_YML_TRIPLET_CHECK_ENABLED:-true}" = "false" ]; then
+    return 0
+  fi
+  # 旧名 alias (後方互換、documentation の bypass hint を維持)
+  if [ "${HC_YML_TRIPLET_CHECK_ENABLED:-true}" = "false" ]; then
+    return 0
+  fi
+  # harness-config.yml が staged に含まれるか判定
+  local _yml_path=".claude/harness-config.yml"
+  local _staged
+  _staged=$(git diff --cached --name-only --diff-filter=AM 2>/dev/null || true)
+  if [ -z "$_staged" ]; then
+    return 0  # diff 取得失敗 or staged 空 → fail-open
+  fi
+  if ! printf '%s\n' "$_staged" | grep -qxF "$_yml_path"; then
+    return 0  # yml 変更なし → skip
+  fi
+  # 新規追加 key 抽出 (top-level key のみ、コメント除去、既存修正は除外)
+  # git diff --cached -U0 -- .claude/harness-config.yml で unified diff (context 0)
+  # `+` 行のうち `+++` header を除外し、`<key>: <value>` パターンで top-level key 抽出
+  local _diff
+  _diff=$(git diff --cached -U0 -- "$_yml_path" 2>/dev/null || true)
+  [ -z "$_diff" ] && return 0
+  # 追加行から top-level key (indent 0) の new key を抽出
+  # pattern: `^+<key>: ...` (key は [a-z_][a-z0-9_]* に限定、feature_* / scalar 両対応)
+  # `-<key>: ...` (旧行) 対応がある場合は modification 扱いで除外
+  # 実装: awk で hunk 単位に - と + の key set を比較、新規 key のみ抽出
+  local _new_keys
+  _new_keys=$(printf '%s\n' "$_diff" | awk '
+    /^@@/ { in_hunk=1; delete removed; delete added; next }
+    !in_hunk { next }
+    /^---/ || /^\+\+\+/ { next }
+    /^-[a-z_][a-z0-9_]*:/ {
+      line=$0; sub(/^-/,"",line); sub(/:.*$/,"",line); removed[line]=1; next
+    }
+    /^\+[a-z_][a-z0-9_]*:/ {
+      line=$0; sub(/^\+/,"",line);
+      # コメント行 (末尾 `# ...`) は key 抽出後に無視
+      sub(/:.*$/,"",line)
+      added[line]=1
+      # 次段で removed に無ければ new key
+    }
+    END {
+      for (k in added) {
+        if (!(k in removed)) print k
+      }
+    }
+  ' | sort -u)
+  [ -z "$_new_keys" ] && return 0  # 新規 top-level key 0 件 → skip
+
+  # 各 key について consumer + smoke grep
+  local _violators=""
+  local _key _env_name _hint _found_consumer _found_smoke
+  while IFS= read -r _key; do
+    [ -z "$_key" ] && continue
+    # env 名派生: feature_*_enabled → HC_FEATURE_<NAME>_ENABLED, その他 → HC_<KEY>
+    local _upper
+    _upper=$(printf '%s' "$_key" | tr '[:lower:]' '[:upper:]')
+    _env_name="HC_${_upper}"
+    # consumer 検索: hooks/ + scripts/ + templates/ で env 名 or key 名を含む file
+    _found_consumer=""
+    if compgen -G ".claude/hooks/*.sh" >/dev/null 2>&1 \
+       || compgen -G ".claude/scripts/*.sh" >/dev/null 2>&1 \
+       || [ -d ".claude/templates" ]; then
+      # grep -l で file 名 list、非 0 (不在) は無視
+      _found_consumer=$(
+        {
+          [ -d ".claude/hooks" ] && grep -rlE "(${_env_name}|${_key})" .claude/hooks 2>/dev/null || true
+          [ -d ".claude/scripts" ] && grep -rlE "(${_env_name}|${_key})" .claude/scripts 2>/dev/null || true
+          [ -d ".claude/templates" ] && grep -rlE "(${_env_name}|${_key})" .claude/templates 2>/dev/null || true
+          # config-loader.sh 自身は consumer とみなさない (定義のみ) → path 除外
+        } | grep -v -E '^(\.claude/hooks/lib/config-loader\.sh|\.claude/scripts/lib/hc-config-metadata\.sh)$' || true
+      )
+    fi
+    # smoke 検索: .claude/tests/*-smoke.sh
+    _found_smoke=""
+    if compgen -G ".claude/tests/*-smoke.sh" >/dev/null 2>&1; then
+      _found_smoke=$(grep -lE "(${_env_name}|${_key})" .claude/tests/*-smoke.sh 2>/dev/null || true)
+    fi
+    # 判定
+    if [ -z "$_found_consumer" ] && [ -z "$_found_smoke" ]; then
+      _violators="${_violators}${_key} (consumer + smoke 不在)\n"
+    elif [ -z "$_found_consumer" ]; then
+      _violators="${_violators}${_key} (consumer 不在)\n"
+    elif [ -z "$_found_smoke" ]; then
+      _violators="${_violators}${_key} (smoke 不在)\n"
+    fi
+  done <<< "$_new_keys"
+
+  if [ -n "$_violators" ]; then
+    _pc_emit_block \
+      "harness-config.yml に新規 key を追加したが consumer/smoke が同 commit に不在: $(printf '%b' "$_violators" | tr '\n' ' ')" \
+      "3 点セットを同 commit に含める: (1) yml の key 定義 (2) 該当 key を Read する hook/script/template (consumer) (3) key を試験する .claude/tests/*-smoke.sh (smoke)" \
+      "HC_FEATURE_YML_TRIPLET_CHECK_ENABLED=false git commit ...  または  ECC_YML_TRIPLET_OFF=1 git commit ...  (bypass 時は理由を task/docs に記録、旧名 HC_YML_TRIPLET_CHECK_ENABLED=false も後方互換で有効)" \
+      ".claude/rules/development-process.md §「I7 triplet」+ docs/draft/install-immediately-usable-redesign-20260618.md §3 I7"
+    return 1
+  fi
+  return 0
+)
+
+if ! _run_yml_triplet_check; then
+  exit 1
+fi
+
 # --- 予算超過は WARN のみ (BLOCK しない、smoke curated set 見直し signal) ---
 if [ "$_pc_elapsed" -gt "$_pc_budget" ]; then
   _pc_emit_warn \
