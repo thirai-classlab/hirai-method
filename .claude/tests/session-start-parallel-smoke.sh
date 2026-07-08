@@ -74,10 +74,12 @@ EOF
 # Run wrapper with custom SCRIPT_DIR (override hook locations via fake wrapper)
 # We re-implement minimal wrapper logic by sourcing the wrapper with overridden SCRIPT_DIR
 # Strategy: copy wrapper to FAKE_HOOK_DIR, then it picks up FAKE_HOOK_DIR/*.sh
+# task-104 W1-8: wrapper が shim mode 化されたため、legacy 並列実行 path を強制的に有効化する env
+# HC_SESSION_START_USE_WRAPPER=true を追加。これにより既存 smoke Case 1-5 は wrapper legacy 動作を検証。
 run_fake_wrapper() {
   cp "$WRAPPER" "$FAKE_HOOK_DIR/wrapper.sh"
   chmod +x "$FAKE_HOOK_DIR/wrapper.sh"
-  "$@" bash "$FAKE_HOOK_DIR/wrapper.sh" </dev/null 2>"$FAKE_HOOK_DIR/stderr" >"$FAKE_HOOK_DIR/stdout"
+  HC_SESSION_START_USE_WRAPPER=true "$@" bash "$FAKE_HOOK_DIR/wrapper.sh" </dev/null 2>"$FAKE_HOOK_DIR/stderr" >"$FAKE_HOOK_DIR/stdout"
   echo "$?"
 }
 
@@ -145,7 +147,8 @@ assert_le "case4.parallel < serial/2" "$threshold" "$parallel_ms"
 echo ""
 echo "=== Case 5: regression — real SessionStart hooks via wrapper ==="
 # Use actual wrapper with default hooks (the production one)
-real_rc=$(bash "$WRAPPER" </dev/null 1>"$FAKE_HOOK_DIR/real-stdout" 2>"$FAKE_HOOK_DIR/real-stderr"; echo $?)
+# task-104 W1-8: wrapper が shim mode 化されたため HC_SESSION_START_USE_WRAPPER=true で legacy path 強制
+real_rc=$(HC_SESSION_START_USE_WRAPPER=true bash "$WRAPPER" </dev/null 1>"$FAKE_HOOK_DIR/real-stdout" 2>"$FAKE_HOOK_DIR/real-stderr"; echo $?)
 assert_eq "case5.rc" "0" "$real_rc"
 # mode-session-start emits Serena resume reminder when .serena/memories/session/context.md exists
 # why-x5-reminder emits a system-reminder unconditionally

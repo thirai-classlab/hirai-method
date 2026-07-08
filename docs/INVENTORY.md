@@ -136,6 +136,19 @@ CI 品質ゲート (matrix 10 job) と、全 hook + self-doctor が共有する 
 | `.claude/tests/normative-ssot-integrity-smoke.sh` | task-103 Step 4 smoke (case A-C、parity)。規範文書 SSoT 整合検証。7 rule file の preset pointer (`現 effective preset は... hc-config.sh --summary` 1 行) 全存在 / BLOCK 記述への preset aware badge 総数 >= 15 / `_TASK_TEMPLATE.md` + `_DRAFT_TEMPLATE.md` preset pointer 存在を機械検証。 | New (task-103) |
 | `harness-config.yml` keys: `feature_yml_triplet_check_enabled` + `enforcement_matrix.yml_triplet_check` (5 field 全備、docs_claim=block、harness-dev 含む 3 preset で true、advisory のみ disabled_reason 記載) | Wave 5 追加 yml key + matrix entry。「config 値は consumer + smoke がなければ飾り」memory 起点の 3-point set (yml + hc-config-metadata TSV + config-loader default/export) を規範に機械強制するための guard。 | New (task-100) |
 
+## Phase 2 Wave 6 追加 (2026-07、task-104 W1-8 wrapper hardcode dissolution)
+
+`session-start-wrapper.sh` の `DEFAULT_HOOKS` bash 配列 10 件 hardcode を廃止し、10 hook を `dispatcher-manifest.tsv` SessionStart bootstrap channel 行として登録。wrapper は default で shim (即 exit 0)、`HC_SESSION_START_USE_WRAPPER=true` env で legacy 並列実行 path 復元 (1-2 リリース観察期間の緊急 rollback 経路)。`session-start-dispatcher.sh` に bootstrap channel 用の並列 fan-out ロジックを追加し (`HC_SESSION_START_PARALLEL=true` default、実測 ~3s、historical wrapper parallel 2.7s と同等)、dispatcher 経由率 100% + 10 hook に feature toggle / preset 別運用 / drift 検出網が適用される。W1-1 (真 orphan 機械検出) / W1-2 (preset summary 化) / W2-A (死蔵 hook 棚卸し) の後続 task を unblock。
+
+| Path | 役割 | ステータス |
+|---|---|---|
+| `.claude/hooks/dispatcher-manifest.tsv` SessionStart bootstrap 10 rows | init-tasks-on-start / check-required-env / improvement-proposal / mode-session-start / mode-enforce / why-x5-reminder / next-actions-surface / mode-asana-prompt / check-serena-mcp / session-help-surface を SessionStart bootstrap channel に登録、feature_key 全 filled。 | New (task-104) |
+| `.claude/hooks/session-start-wrapper.sh` shim 化 | default で即 exit 0 (shim mode、4ms 実測)、`HC_SESSION_START_USE_WRAPPER=true` env で従来の DEFAULT_HOOKS 並列実行 path 復元 (2.7s 実測)。1-2 リリース観察期間の緊急 rollback 経路として維持。 | Updated (task-104) |
+| `.claude/hooks/session-start-dispatcher.sh` 並列 fan-out | `HC_SESSION_START_PARALLEL=true` default で bootstrap channel の 10 hook を background 並列実行 (3s 実測)、`false` で sequential fallback (17s、debug 用途)。observer channel は fire-and-forget 追加起動。 | Updated (task-104) |
+| `.claude/tests/wrapper-dissolution-smoke.sh` | task-104 Step 5 smoke (Case A-F、portability)。dispatcher fan-out / feature toggle / enforcement_matrix 5-field / shim vs legacy 分岐 / manifest 完全性 / startup time を検証。 | New (task-104) |
+| `harness-config.yml` keys: `feature_init_tasks_enabled` / `feature_why_x5_reminder_enabled` / `feature_next_actions_surface_enabled` + `enforcement_matrix.{init_tasks_on_start,check_required_env,improvement_proposal,mode_session_start,mode_enforce,why_x5_reminder,next_actions_surface,mode_asana_prompt,check_serena_mcp,session_help_surface}` (5 field 全備 × 10 guard) | Wave 6 追加 yml key + matrix entry。3 新 key は SessionStart bootstrap 個別 hook の finer-grained toggle、10 matrix entry は preset 別運用 + drift 検出網の SSoT。 | New (task-104) |
+| `.claude/tests/sessionstart-footprint-smoke.sh` FOOTPRINT_CAP | 3100 → 3800 に引上げ (task-104 で SessionStart bootstrap 10 guard 追加により summary ~588B 増、実測 3268B + 16% margin ≈ 3800)。 | Updated (task-104) |
+
 ## 規範文書の Layer A/B Strategy (2026-05-28、task-51)
 
 `.claude/rules/*.md` (規範文書) は **Layer A (要約、context 自動注入) + Layer B (詳細、明示 Read のみ)** の 2 層構造で運用する。
