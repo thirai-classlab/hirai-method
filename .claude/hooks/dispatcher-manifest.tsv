@@ -31,9 +31,19 @@ SubagentStop		1	confidence-gate.sh	confidence_gate	stdout-block	10
 SubagentStop		2	loop-auto-progress-reminder.sh	loop_mode_enforcement	advisory	5
 SubagentStop		3	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
 SessionStart		1	session-start-wrapper.sh		bootstrap	15
-SessionStart		2	list-md-plan-first-reminder.sh	task_rule_guard	bootstrap	5
-SessionStart		3	stale-harness-detect.sh	stale_harness_detect	bootstrap	5
-SessionStart		4	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
+SessionStart		2	init-tasks-on-start.sh	init_tasks	bootstrap	5
+SessionStart		3	check-required-env.sh	check_required_env	bootstrap	5
+SessionStart		4	improvement-proposal.sh	improvement_proposal	bootstrap	5
+SessionStart		5	mode-session-start.sh	mode_session_start	bootstrap	5
+SessionStart		6	mode-enforce.sh	loop_mode_enforcement	bootstrap	5
+SessionStart		7	why-x5-reminder.sh	why_x5_reminder	bootstrap	5
+SessionStart		8	next-actions-surface.sh	next_actions_surface	bootstrap	5
+SessionStart		9	mode-asana-prompt.sh	asana_prompt	bootstrap	5
+SessionStart		10	check-serena-mcp.sh	check_serena_mcp	bootstrap	5
+SessionStart		11	session-help-surface.sh	session_help_surface	bootstrap	5
+SessionStart		12	list-md-plan-first-reminder.sh	task_rule_guard	bootstrap	5
+SessionStart		13	stale-harness-detect.sh	stale_harness_detect	bootstrap	5
+SessionStart		14	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
 UserPromptSubmit		1	context-budget.sh	context_budget	advisory	5
 UserPromptSubmit		2	../skills/continuous-learning-v2/hooks/observe.sh		observer	3
 UserPromptSubmit		3	agent-router-suggest.sh	agent_router_suggest	advisory	5

@@ -22,9 +22,17 @@ if [ -f "$SCRIPT_DIR/lib/config-loader.sh" ]; then
   source "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
 fi
 
-# Feature toggle 参照 (task-45 Phase 2)
-if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled why_x5_enforcement; then
-  exit 0   # feature OFF で no-op
+# Feature toggle 参照 (task-45 Phase 2 + task-104 W1-8 child toggle)
+# 親 (why_x5_enforcement) と子 (why_x5_reminder) の両方 check、どちらか OFF なら skip。
+# 子 toggle は dispatcher-manifest SessionStart bootstrap feature_key 用 (finer-grained control)、
+# 親 toggle は grouped feature 用 (why-x5-reminder + why-x5-violation-detect 一括制御)。
+if command -v is_feature_enabled >/dev/null 2>&1; then
+  if ! is_feature_enabled why_x5_enforcement; then
+    exit 0   # 親 feature OFF で no-op
+  fi
+  if ! is_feature_enabled why_x5_reminder; then
+    exit 0   # 子 feature OFF で no-op (task-104)
+  fi
 fi
 
 # stdin を必ず消費（消費しないと caller が pipe block する可能性がある）

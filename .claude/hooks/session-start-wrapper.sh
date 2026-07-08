@@ -1,26 +1,46 @@
 #!/usr/bin/env bash
-# session-start-wrapper.sh — SessionStart hook orchestrator (task-25 Sub-epic A2)
+# session-start-wrapper.sh — SessionStart shim (task-104 W1-8 wrapper hardcode dissolution)
 #
-# 役割:
-#   既存 SessionStart hooks を **並列実行** してセッション起動時間を短縮する。
-#   各 hook は background で起動 + wait で同期、stdout は順序維持のため一時 buffer
-#   経由で集約。stderr は tag prefix 付きで集約。
+# 役割 (2 mode):
+#   default (shim mode): 即 exit 0、dispatcher-manifest SessionStart bootstrap 経由で
+#     10 hook (init-tasks-on-start / check-required-env / improvement-proposal /
+#     mode-session-start / mode-enforce / why-x5-reminder / next-actions-surface /
+#     mode-asana-prompt / check-serena-mcp / session-help-surface) が spawn される。
+#   legacy mode (HC_SESSION_START_USE_WRAPPER=true): 従来の DEFAULT_HOOKS 並列実行を復元
+#     (1-2 リリース観察期間、regression 検出時の緊急 rollback 経路)。
 #
-# 設計方針 (案 D 採用):
-#   - 既存 hook 自体は無改変 (surgical changes、karpathy-guidelines 遵守)
-#   - 各 hook は per-hook timeout (5s) で wrap、1 hook fail は全体に伝播しない (fail-open)
-#   - stdout は file buffer → 起動順に concat で出力 (stable order)
-#   - stderr は tag prefix 付き集約 ([hook-name] ...)
-#   - wrapper 自体も fail-open (exit 0)
+# 設計方針 (task-104):
+#   - default で shim 化 (dispatcher 経由率 100% 達成、37/37 → 47/47)。
+#   - 既存 hook 自体は無改変、各 hook 冒頭で is_feature_enabled gate を持つ (task-45 Phase 2 済)。
+#   - dispatcher-manifest.tsv が SSoT、wrapper legacy path は緊急 rollback 用のみ維持。
+#   - dispatcher 経由の 10 hook は各々 feature toggle で個別制御可能 (SSoT: harness-config.yml)。
 #
-# 失敗時の挙動: 個別 hook 失敗 → tag 付き warn を stderr、wrapper exit 0 継続。
+# 失敗時の挙動: wrapper 自体は常に exit 0 (fail-open、session start をブロックしない)。
 #
 # 環境変数:
-#   HC_SESSION_START_PARALLEL_TIMEOUT_SEC: per-hook timeout 秒 (default 5)
-#   HC_SESSION_START_PARALLEL_ENABLED: false で全 hook をシリアル実行 (default true)
-#   HC_SESSION_START_PARALLEL_HOOKS: コロン区切りで hook list 上書き (testing用)
+#   HC_SESSION_START_USE_WRAPPER: true で legacy DEFAULT_HOOKS 並列実行を有効化 (default false = shim)
+#   HC_SESSION_START_PARALLEL_TIMEOUT_SEC: legacy path per-hook timeout 秒 (default 5)
+#   HC_SESSION_START_PARALLEL_ENABLED: legacy path で false ならシリアル実行 (default true)
+#   HC_SESSION_START_PARALLEL_HOOKS: legacy path でコロン区切り hook list 上書き (testing用)
 
 set -uo pipefail  # CLAUDE.md Critical Lessons HIGH: file-top errexit 禁止
+
+# --- task-104 shim mode gate ---
+# default では即 exit 0 (dispatcher-manifest 経由で 10 hook が spawn される)。
+# HC_SESSION_START_USE_WRAPPER=true で以下 legacy path を実行 (1-2 リリース観察期間)。
+_ssw_use_wrapper="${HC_SESSION_START_USE_WRAPPER:-false}"
+_ssw_use_wrapper_lc=$(printf '%s' "$_ssw_use_wrapper" | tr '[:upper:]' '[:lower:]')
+case "$_ssw_use_wrapper_lc" in
+  true|1|yes|on)
+    # legacy path 実行 (以下 fall-through)
+    :
+    ;;
+  *)
+    # default: shim mode、即 exit 0 (fail-open、dispatcher が 10 hook を担当)
+    exit 0
+    ;;
+esac
+unset _ssw_use_wrapper _ssw_use_wrapper_lc
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
