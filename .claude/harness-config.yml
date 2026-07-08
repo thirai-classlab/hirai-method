@@ -394,6 +394,7 @@ feature_asana_prompt_enabled: true                # mode-asana-prompt.sh (Sessio
 feature_agent_router_llm_fallback_enabled: false  # agent-router-suggest LLM fallback 子 toggle (default OFF、opt-in feature、cost 発生、task-96)
 feature_ui_contract_enabled: true                 # ui-contract.sh (PostToolUse Edit|Write、UI 拡張子検出時 cross-file-contract-check 呼出、advisory、task-98)
 feature_observability_enabled: true               # lib/observability.sh 5 API (log_event/block/bypass/fire/silent_failure) 全 log_* 呼出、observability-gc.sh/hook-fire-audit.sh、task-99)
+feature_yml_triplet_check_enabled: true           # pre-commit §4.5 yml triplet policy (harness-config.yml 新規 key 追加時に consumer + smoke 三点揃を強制、BLOCK、task-100)
 agent_router_llm_budget_usd_per_day: 0.1          # LLM fallback の 1 日 (UTC day) 累積 cost 上限 (USD、超過で当日 disable + WARN、task-96)
 agent_router_llm_similarity_threshold: 0.7        # keyword confidence が本値未満の時のみ LLM fallback 発火 (0.0-1.0、上げると発火頻度低下・cost 低下、task-96)
 
@@ -694,3 +695,13 @@ enforcement_matrix:
     events: [PreToolUse, PostToolUse, Stop, SubagentStop, UserPromptSubmit, SessionStart]
     presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
     disabled_reason: {}
+  yml_triplet_check:
+    # block guard (task-100)、pre-commit §4.5 で新規 yml key に対し consumer + smoke 三点揃を強制
+    # 全 preset true は「規範の SSoT 統一 (task-64「config 値は consumer + smoke がなければ飾り」memory 起点)」を機械保証
+    # consuming repo で opt-out したい場合は env `HC_FEATURE_YML_TRIPLET_CHECK_ENABLED=false` (config) / `ECC_YML_TRIPLET_OFF=1` (env 1 セッション)
+    feature_key: feature_yml_triplet_check_enabled
+    docs_claim: block
+    events: [git-hook:pre-commit]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
+    disabled_reason:
+      advisory: "advisory preset は個人実験 / PoC 用に BLOCK 最小運用のため pre-commit yml triplet BLOCK を運用しない"

@@ -168,6 +168,27 @@ bash .claude/tests/install-ci-matrix-smoke.sh
 # → distribution / 既存 workflow 保護 / matrix 構造 (2×5) / preset env SSoT 名一致 を検証
 ```
 
+## Phase 3 Wave 5 install-time 挙動 (2026-07、task-102)
+
+Wave 5 で `install.sh` の全 mode / preset を tmp dir で実 install する **全体健全性 gate** `install-full-smoke` を追加。副産物 #78 (install.sh settings seed copy)、#80 (install-local-yml case I/J false-pass 補強)、#82 (`{{TOKEN}}` literal 残存 assertion)、#83 (initial run flakiness) を横断的に fold し、既存 install 系 smoke (install-ci-matrix / install-local-yml / install-mcp-servers / install-claude-md-autofill / install-pre-commit / install-sh-*) を補強する portability regression 検証を CI matrix で実行する。
+
+### install-full-smoke の位置付け
+
+| 観点 | 詳細 |
+|---|---|
+| 目的 | consuming repo 側で発現する portability regression を「全 mode × 全 preset」実 install の網羅で機械捕捉 |
+| 実行 | tmp dir に fresh install → mode / preset を切替えつつ 9 case 実行 (core 5 + fold 4) |
+| SSoT | master roadmap `docs/draft/install-immediately-usable-redesign-20260618.md` §3 I3 (Quality Gate invariant) + §5 P3-5 + §11.3 R4 |
+| category | `portability` (`run-all-smokes.sh` 分類、CI matrix 上 `portability` job で実行) |
+| 副産物吸収 | #78 (settings seed copy 部分実装済、statusline は別 task defer) / #80 (case I/J preset 事前 assert) / #82 (`{{TOKEN}}` literal grep) / #83 (first-win / --force sync retry) |
+
+### 動作確認
+
+```bash
+bash .claude/tests/install-full-smoke.sh
+# → 9 case (fresh install / yml key 完全性 / mode 切替 / preset 切替 / settings seed / TOKEN literal / first-win / --force / rerun) を検証
+```
+
 ## 既存セクション (project-level install 中心)
 
 ## アーキテクチャ
