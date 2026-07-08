@@ -395,6 +395,14 @@ feature_agent_router_llm_fallback_enabled: false  # agent-router-suggest LLM fal
 feature_ui_contract_enabled: true                 # ui-contract.sh (PostToolUse Edit|Write、UI 拡張子検出時 cross-file-contract-check 呼出、advisory、task-98)
 feature_observability_enabled: true               # lib/observability.sh 5 API (log_event/block/bypass/fire/silent_failure) 全 log_* 呼出、observability-gc.sh/hook-fire-audit.sh、task-99)
 feature_yml_triplet_check_enabled: true           # pre-commit §4.5 yml triplet policy (harness-config.yml 新規 key 追加時に consumer + smoke 三点揃を強制、BLOCK、task-100)
+# --- task-104 W1-8 wrapper hardcode dissolution (3 new keys、SessionStart bootstrap 10 hook 別 dispatcher-manifest feature_key 用) ---
+# 用途: dispatcher-manifest.tsv SessionStart bootstrap 10 行の feature_key、dispatcher-core.sh がここを見て子 hook を spawn or skip。
+# 既存 feature toggle と重複する部分は「finer-grained 個別 hook 制御」役 (親 toggle は grouped、child toggle は個別)。
+# 全 default true (backward compat、shim path も直ちに OFF させない)。
+# 注: feature_check_required_env_enabled は既存 (task-97 由来)、feature_init_tasks_on_start_enabled とは別に feature_init_tasks_enabled を alias として追加 (shorter name、manifest 参照用)。
+feature_init_tasks_enabled: true                  # init-tasks-on-start.sh (feature_init_tasks_on_start_enabled と alias 関係、SessionStart bootstrap manifest feature_key 用、後方互換)
+feature_why_x5_reminder_enabled: true             # why-x5-reminder.sh 個別 toggle (feature_why_x5_enforcement_enabled parent の child、reminder のみ止める用途、SessionStart bootstrap manifest 用)
+feature_next_actions_surface_enabled: true        # next-actions-surface.sh 個別 toggle (feature_byproduct_discharge_enabled parent の child、surface のみ止める用途、SessionStart bootstrap manifest 用)
 agent_router_llm_budget_usd_per_day: 0.1          # LLM fallback の 1 日 (UTC day) 累積 cost 上限 (USD、超過で当日 disable + WARN、task-96)
 agent_router_llm_similarity_threshold: 0.7        # keyword confidence が本値未満の時のみ LLM fallback 発火 (0.0-1.0、上げると発火頻度低下・cost 低下、task-96)
 
@@ -705,3 +713,69 @@ enforcement_matrix:
     presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
     disabled_reason:
       advisory: "advisory preset は個人実験 / PoC 用に BLOCK 最小運用のため pre-commit yml triplet BLOCK を運用しない"
+  # ------------------------------------------------------------------
+  # task-104 W1-8 wrapper hardcode dissolution (SessionStart bootstrap 10 hook)
+  # 全 advisory (SessionStart bootstrap は BLOCK ではなく context 注入 / warn 系)
+  # 全 preset true = 「本質的に disable する場面なし」の advisory 方針 (consuming repo は env override 運用)
+  # ------------------------------------------------------------------
+  init_tasks_on_start:
+    feature_key: feature_init_tasks_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  check_required_env:
+    feature_key: feature_check_required_env_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  improvement_proposal:
+    feature_key: feature_improvement_proposal_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  mode_session_start:
+    feature_key: feature_mode_session_start_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  mode_enforce:
+    feature_key: feature_loop_mode_enforcement_enabled
+    docs_claim: advisory
+    events: [SessionStart, UserPromptSubmit]
+    presets: {advisory: false, team-default: true, strict: true, harness-dev: true}
+    disabled_reason:
+      advisory: "advisory preset は個人実験 / PoC 用に Loop 遵守事項 reminder を最小化"
+  why_x5_reminder:
+    feature_key: feature_why_x5_reminder_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  next_actions_surface:
+    feature_key: feature_next_actions_surface_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  mode_asana_prompt:
+    feature_key: feature_asana_prompt_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  check_serena_mcp:
+    feature_key: feature_check_serena_mcp_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
+  session_help_surface:
+    feature_key: feature_session_help_surface_enabled
+    docs_claim: advisory
+    events: [SessionStart]
+    presets: {advisory: true, team-default: true, strict: true, harness-dev: true}
+    disabled_reason: {}
