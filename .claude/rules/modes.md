@@ -20,6 +20,8 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
 > 詳細: 各 § 末尾 pointer から該当断片を直リンク Read (断片群: [`../rules-details/modes/`](../rules-details/modes/))
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 rule 内 BLOCK 記述は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## モード一覧
 
 ### Normal モード（既定値）
@@ -80,7 +82,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
    - **subagent への委譲拡張**: 上記操作を subagent prompt で許可すること
    - **第三者リポ**: submodule update / fork 外への push / `gh repo` 操作
 
-   違反検出時の hook 強制: `.claude/hooks/autonomous-action-guard.sh` が PreToolUse(Bash) で対象コマンドを `exit 2` BLOCK。bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` (`.claude/.workflow-state/bypass.log` に記録)。honor system (hook 未実装パスの場合): メインは自律実行せず user に「実行を承認しますか?」と提示してから実行。各カテゴリの例外 (準備として OK) 詳細は Layer B 参照。
+   違反検出時の hook 強制: `.claude/hooks/autonomous-action-guard.sh` が PreToolUse(Bash) で対象コマンドを **team-default / strict preset では `exit 2` BLOCK / harness-dev preset では advisory** (⚠️ preset aware、`feature_autonomous_action_enabled` 依存、現 effective 状態は `bash .claude/scripts/hc-config.sh --summary` 参照)。bypass: `ECC_AUTONOMOUS_ACTION_OVERRIDE=1` (`.claude/.workflow-state/bypass.log` に記録)。honor system (hook 未実装パスの場合): メインは自律実行せず user に「実行を承認しますか?」と提示してから実行。各カテゴリの例外 (準備として OK) 詳細は Layer B 参照。
 
 9. **Loop モード = list.md 全 task 連続自律実行** (必須、2026-05-27 task-47 新設): `/resume-state loop` 起動時、`session/context` 着手手順完遂後も `docs/tasks/list.md` の **🔄 進行中 + 🔲 未着手** task を依存解決順で自動 enque + 着手。draft `approved_at:` 非空 (= user 承認済) task のみ自律着手可、draft 不在 / 未承認 task は user 確認必須項目として stop。停止条件 3 つ:
    - context 閾値到達 (tier 80 以上で強制 `/save-state`、`context-budget.sh` `ratio >= 0.80` で発火)
@@ -104,7 +106,7 @@ HIRAI メソッドは **Normal / Loop** 2 つの動作モードを持つ。Loop 
 |---|---|---|---|
 | 1 | `.claude/rules/modes.md` 遵守事項 7+8 | (規範) | subagent 待ち中独立作業義務 + 自律禁止 11 カテゴリ明文化 |
 | 2 | `.claude/hooks/loop-auto-progress-reminder.sh` (UserPromptSubmit) | 毎ターン | 待ち中報告キーワード検出 + pending Agent tool_use 数集計 → `<system-reminder>` 強制注入 |
-| 3 | `.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) | Bash 実行前 | 11 カテゴリ regex 照合 → Loop なら `{"decision":"block"}` / Normal なら context 注入 |
+| 3 | `.claude/hooks/autonomous-action-guard.sh` (PreToolUse Bash) | Bash 実行前 | 11 カテゴリ regex 照合 → Loop なら `{"decision":"block"}` / Normal なら context 注入 ⚠️ preset aware (`feature_autonomous_action_enabled`、harness-dev では advisory) |
 | 4 | `.claude/settings.json` 配線 | (機構接続) | UserPromptSubmit 末尾 + PreToolUse Bash 先頭に配置 |
 | 5 | `.claude/tests/loop-auto-progress-smoke.sh` | 検証 | 9 ケースで両 hook の動作検証 |
 | 6 | `.claude/hooks/loop-confirmation-detector.sh` (Stop) | AI 最終 message 出力後 | 確認質問 regex 検出 (「進めてよいですか」「OK ですか」「お待ちします」等) → `<system-reminder>` 強制注入で次 turn 自律是正 |

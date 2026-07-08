@@ -19,6 +19,8 @@ paths:
 >
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。各 § 末尾の pointer から該当断片を直リンクで明示 Read する (断片群: [`../rules-details/workflow/`](../rules-details/workflow/))。
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 rule 内 BLOCK 記述は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## 概要
 
 - **テスト設計 MECE** (W1): テスト観点を 20 カテゴリ MECE で user 判断強制
@@ -36,7 +38,7 @@ paths:
 | [`/system-review`](../commands/system-review.md) | 全モジュール統合後にモジュール間重複 / 設計乖離検出 | W3 |
 | [`/new-feature <slug>`](../commands/new-feature.md) | 新規機能 14-stage workflow orchestrator | W4 |
 | [`/modify-feature <slug>`](../commands/modify-feature.md) | 既存機能修正 10-stage workflow orchestrator | W4 |
-| [`/finish-task <id>`](../commands/finish-task.md) | 完了クローズ。`workflow-guard.sh` が state JSON を検証して BLOCK | W4 |
+| [`/finish-task <id>`](../commands/finish-task.md) | 完了クローズ。`workflow-guard.sh` が state JSON を検証して BLOCK ⚠️ preset aware | W4 |
 
 ## 新規機能開発フロー (14-stage)
 
@@ -76,7 +78,7 @@ paths:
 
 ## リファクタリング強制 (W3)
 
-`/module-review` と `/system-review` は workflow の **必須 stage**、skip は default 禁止 (workflow-guard.sh が `/finish-task` で BLOCK)。
+`/module-review` と `/system-review` は workflow の **必須 stage**、skip は default 禁止 (workflow-guard.sh が `/finish-task` で BLOCK ⚠️ preset aware、harness-dev では advisory)。
 
 ### 観点 (`/module-review` 3 観点 + `/system-review` system-level)
 
@@ -84,7 +86,7 @@ paths:
 
 ### pending_findings 連携
 
-CRITICAL / HIGH findings は state JSON の `pending_findings.module_review` / `pending_findings.system_review` 配列 (id / severity / summary) に追加。**CRITICAL / HIGH 残存中は `workflow-guard.sh` が `/finish-task` を BLOCK**。MEDIUM / LOW のみ残存は user 承認のうえ `skip_log` 記録で pass 可。
+CRITICAL / HIGH findings は state JSON の `pending_findings.module_review` / `pending_findings.system_review` 配列 (id / severity / summary) に追加。**CRITICAL / HIGH 残存中は `workflow-guard.sh` が `/finish-task` を BLOCK** ⚠️ preset aware (`feature_workflow_enforcement_enabled`、harness-dev では advisory)。MEDIUM / LOW のみ残存は user 承認のうえ `skip_log` 記録で pass 可。
 
 **yml 値による制御**: `/module-review` は `review_required_module` / `review_min_count_module` / `review_max_count_module`、`/system-review` は `review_required_system` / `review_min_count_system` / `review_max_count_system`。`review_iteration_max` は全レビュー共通。**具体値は散文に hardcode せず、起動前に `bash .claude/scripts/hc-config.sh --get review_max_count_module` 等で現在値を確認する** (値解決順 `env > harness-config.local.yml > harness-config.yml > default`)。`hc-config.sh --set review_required_module=false` で局所無効化可。
 

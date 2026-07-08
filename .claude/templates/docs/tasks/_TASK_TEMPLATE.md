@@ -22,6 +22,8 @@ total_steps: 0
 > 関連: <#N, #M>
 > 設計起源: [<draft または PDCA リンク>](../draft/<file>.md)
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 task 内 BLOCK 記述 / hook 強制動作は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## Task ゴール
 
 <完了時に何が達成されているか、1 文、観察可能な事実で記述>

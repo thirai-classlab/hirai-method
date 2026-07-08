@@ -20,6 +20,8 @@ task-67 Step 3 (2026-06-01): Layer B 断片化、Layer A pointer 直リンク化
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
 > 詳細: 各 § 末尾 pointer から該当断片を直リンク Read (断片群: [`../rules-details/task-management/`](../rules-details/task-management/))
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 rule 内 BLOCK 記述は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## bypass env naming convention (SSoT)
 
 本 harness の全 bypass env は **2 系統に分離** され、用途・痕跡・スコープが明確に区別される。各規範文書 (`task-management.md` / `workflow.md` / `modes.md` / `development-process.md`) の bypass table はこの規約に従う。
@@ -195,13 +197,15 @@ UI 変更だが view 影響なし時、Step 完了条件に明示:
 
 | シナリオ | 動作 |
 |---|---|
-| `task-<id>-<slug>.md` Write、対応 draft 不在 | **BLOCK** |
-| `task-<id>-*.md` / `phase-<id>-*.md` Write、同 ID 既存 | **BLOCK** |
+| `task-<id>-<slug>.md` Write、対応 draft 不在 | **BLOCK** ⚠️ preset aware |
+| `task-<id>-*.md` / `phase-<id>-*.md` Write、同 ID 既存 | **BLOCK** ⚠️ preset aware |
 | `docs/tasks/` 命名規約外 Write | 警告 context 注入 |
 | `task-*.md` Edit (既存編集) | 「list.md 同期更新せよ」context 注入 |
 | `parking-lot.md` Edit | 必須 7 項目の hint 注入 |
 | `list.md` / `_*_TEMPLATE.md` Edit/Write | exempt |
 | サブエージェント実行中 | 全パス通過 |
+
+> ⚠️ preset aware badges: 「BLOCK」動作は `feature_task_rule_guard_enabled` に依存 (harness-dev では advisory)、現 effective 状態は `bash .claude/scripts/hc-config.sh --summary` 参照。
 
 ### Bypass
 

@@ -19,6 +19,8 @@ task-67 (2026-06-01): details.md → 断片群 (why-x5-output/) に再構造化�
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
 > 詳細: 各 § 末尾 pointer から該当断片を直リンク Read (断片群: [`../rules-details/why-x5-output/`](../rules-details/why-x5-output/))
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 rule 内 BLOCK 記述は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。本 rule は Why × 5 出力規範 (honor system) のため BLOCK 対象は少ないが、規範文書 SSoT 整合方針として全 rule 共通の pointer を掲載する。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## format
 
 ```

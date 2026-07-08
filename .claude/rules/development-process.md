@@ -27,6 +27,8 @@ paths:
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
 > 詳細: 各 § 末尾 pointer から該当断片を直リンク Read (断片群: [`../rules-details/development-process/`](../rules-details/development-process/))
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 rule 内 BLOCK 記述は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## コーディング指針 / 出力 / 研究 (必読)
 
 | 規範 | SSoT |
@@ -190,7 +192,7 @@ Claude Code permission system は subagent context での `.claude/` 配下へ�
 
 ## サブエージェント完了サマリ (Confidence Gate / F3 必須)
 
-subagent の **最後の assistant text** に **必ず `confidence: 0.X`** (0.0〜1.0) を含める。`confidence-gate.sh` (SubagentStop hook) が抽出し閾値 (既定 0.6) 未満は **block**。
+subagent の **最後の assistant text** に **必ず `confidence: 0.X`** (0.0〜1.0) を含める。`confidence-gate.sh` (SubagentStop hook) が抽出し閾値 (既定 0.6) 未満は **block** ⚠️ preset aware (`feature_confidence_gate_enabled`、harness-dev では advisory)。
 
 ### 算出基準 (4 段階)
 
@@ -342,7 +344,7 @@ consuming repo は **proactive に harness 最新版を取り込む** 義務を�
 ### 強制機構 (実装予定)
 
 - `next-actions-surface.sh` (SessionStart): 未処理 entry を毎セッション開始時に `<system-reminder>` で stderr 出力
-- `workflow-guard.sh` (PreToolUse Bash `/finish-task`): next-actions.md 関連 entry 未処理なら BLOCK
+- `workflow-guard.sh` (PreToolUse Bash `/finish-task`): next-actions.md 関連 entry 未処理なら BLOCK ⚠️ preset aware (`feature_byproduct_discharge_enabled`、harness-dev では advisory、現 effective 状態は `bash .claude/scripts/hc-config.sh --summary` 参照)
 
 詳細は [`workflow.md`](./workflow.md) + [`docs/draft/byproduct-discharge-mechanism.md`](../../docs/draft/byproduct-discharge-mechanism.md) 参照。
 

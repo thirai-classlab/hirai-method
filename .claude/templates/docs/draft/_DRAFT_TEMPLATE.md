@@ -13,6 +13,8 @@ retroactive: false                 # 遡及作成か (true = 既存実装の事�
 **前提:**
 - <前提となる完了済タスクや前提環境>
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 draft 内 BLOCK 記述 / hook 強制動作は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 **関連 fixture / rule:**
 - `<.claude/rules/...>`
 - `<tests/fixtures/...>`

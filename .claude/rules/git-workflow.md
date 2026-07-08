@@ -1,5 +1,7 @@
 # Git Workflow Rules: ブランチ命名規約（harness 共通）
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 rule 内 BLOCK 記述 (branch 命名 pre-push hook / GitHub Rulesets reject) は preset 依存の対象外だが、harness-dev / team-default / strict のいずれでも動作するのは同じ (git-integration-policy と本 rule は独立)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## 規約
 
 ```
