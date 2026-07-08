@@ -173,6 +173,7 @@ PRE_COMMIT_SMOKE_BUDGET_SEC \
 FEATURE_ASANA_PROMPT_ENABLED \
 FEATURE_UI_CONTRACT_ENABLED \
 FEATURE_OBSERVABILITY_ENABLED \
+FEATURE_YML_TRIPLET_CHECK_ENABLED \
 REVIEW_REQUIRED_DESIGN \
 REVIEW_MIN_COUNT_DESIGN \
 REVIEW_MAX_COUNT_DESIGN \
@@ -370,6 +371,10 @@ HC_FEATURE_UI_CONTRACT_ENABLED="true"
 #   feature toggle。yml 消失時の default 保護 + config-loader/yml/lib 3-point 対称性。
 #   false で全 log_* 呼出を no-op 化 (observations.jsonl への append 停止)。
 HC_FEATURE_OBSERVABILITY_ENABLED="true"
+# .claude/templates/githooks/pre-commit §4.5 yml triplet policy (task-100 3-point set):
+#   feature toggle。yml 消失時の default 保護 + config-loader/yml/pre-commit 3-point 対称性。
+#   false で pre-commit §4.5 の yml triplet BLOCK が停止 (新規 key + consumer + smoke の三点揃強制が緩む)。
+HC_FEATURE_YML_TRIPLET_CHECK_ENABLED="true"
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 4 D、
 # config-loader.sh の対称性 + env override snapshot を確保。default false = Web UI 起動)
 HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED="false"
@@ -756,6 +761,8 @@ export HC_FEATURE_ASANA_PROMPT_ENABLED
 export HC_FEATURE_UI_CONTRACT_ENABLED
 # task-99 P3-2 observability 3-point set (feature toggle)
 export HC_FEATURE_OBSERVABILITY_ENABLED
+# task-100 P3-3 yml triplet check 3-point set (feature toggle)
+export HC_FEATURE_YML_TRIPLET_CHECK_ENABLED
 
 # Reviewer 制御 (task-44 Phase 1)
 export HC_REVIEW_REQUIRED_DESIGN HC_REVIEW_MIN_COUNT_DESIGN HC_REVIEW_MAX_COUNT_DESIGN

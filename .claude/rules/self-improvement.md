@@ -11,6 +11,8 @@
 > 通常運用は Layer A のみで判断、Layer B Read skip (token 節約)。
 > 詳細: 各 § 末尾 pointer から該当断片を直リンク Read (断片群: [`../rules-details/self-improvement/`](../rules-details/self-improvement/))
 
+> **現 effective preset は** `bash .claude/scripts/hc-config.sh --summary` で確認。本 rule 内 BLOCK 記述 (特に F1 GateGuard の Edit/Write/破壊的 Bash BLOCK) は preset 依存 (harness-dev では advisory、team-default / strict では BLOCK)。docs↔effective 乖離は `.claude/tests/enforcement-mismatch-smoke.sh` が機械検証する。
+
 ## 層構造
 
 | 層 | 名称 | 改善対象 | 観察粒度 | 永続化先 |
@@ -27,8 +29,8 @@
 
 ```
 タスク受領 → L1 で合否基準 → L2 でループ実装 → L1 で合否確認
-Edit/Write 初回 → F1 BLOCK → 4 事実提示 → retry 通過
-破壊的 Bash 初回 → F1 BLOCK → rollback/影響/逐語引用 → retry
+Edit/Write 初回 → F1 BLOCK → 4 事実提示 → retry 通過   ⚠️ preset aware (feature_gateguard_enabled、harness-dev では advisory)
+破壊的 Bash 初回 → F1 BLOCK → rollback/影響/逐語引用 → retry   ⚠️ preset aware (同上)
 PR 直前 → F2 /verify 6 phase → READY なら commit/push
 失敗 3 連 → L5 /agent-introspect → L4 /learn で教訓化
 セッション終了 → L4 自動観察済 (Hook 経由)

@@ -61,6 +61,7 @@ _get_smoke_category() {
     layer-b-context-isolation-smoke|\
     lib-block-message-smoke|\
     lib-observability-smoke|\
+    normative-ssot-integrity-smoke|\
     review-required-min-count-smoke|\
     reviewer-count-guard-smoke|\
     rule-architecture-smoke|\
@@ -76,13 +77,15 @@ _get_smoke_category() {
     hook-cwd-robustness-smoke|\
     install-ci-matrix-smoke|\
     install-claude-md-autofill-smoke|\
+    install-full-smoke|\
     install-local-yml-smoke|\
     install-mcp-servers-smoke|\
     install-pre-commit-smoke|\
     install-sh-sync-drift-smoke|\
     project-root-smoke|\
     self-doctor-smoke|\
-    session-start-parallel-smoke)
+    session-start-parallel-smoke|\
+    yml-triplet-pre-commit-smoke)
       printf 'portability' ;;
     # stale-det: 古い期待値自己検出
     stale-harness-detect-smoke)
