@@ -174,6 +174,9 @@ FEATURE_ASANA_PROMPT_ENABLED \
 FEATURE_UI_CONTRACT_ENABLED \
 FEATURE_OBSERVABILITY_ENABLED \
 FEATURE_YML_TRIPLET_CHECK_ENABLED \
+FEATURE_INIT_TASKS_ENABLED \
+FEATURE_WHY_X5_REMINDER_ENABLED \
+FEATURE_NEXT_ACTIONS_SURFACE_ENABLED \
 REVIEW_REQUIRED_DESIGN \
 REVIEW_MIN_COUNT_DESIGN \
 REVIEW_MAX_COUNT_DESIGN \
@@ -375,6 +378,12 @@ HC_FEATURE_OBSERVABILITY_ENABLED="true"
 #   feature toggle。yml 消失時の default 保護 + config-loader/yml/pre-commit 3-point 対称性。
 #   false で pre-commit §4.5 の yml triplet BLOCK が停止 (新規 key + consumer + smoke の三点揃強制が緩む)。
 HC_FEATURE_YML_TRIPLET_CHECK_ENABLED="true"
+# task-104 W1-8 wrapper hardcode dissolution (3 new keys):
+#   SessionStart bootstrap 10 hook を dispatcher-manifest 経由に移行、各 hook を finer-grained toggle で個別制御。
+#   default true (backward compat、shim path 経由でも動作継続)。
+HC_FEATURE_INIT_TASKS_ENABLED="true"
+HC_FEATURE_WHY_X5_REMINDER_ENABLED="true"
+HC_FEATURE_NEXT_ACTIONS_SURFACE_ENABLED="true"
 # hc-config.sh interactive の TUI legacy fallback (task-61 Step 5 iter 4 D、
 # config-loader.sh の対称性 + env override snapshot を確保。default false = Web UI 起動)
 HC_FEATURE_HC_CONFIG_TUI_LEGACY_ENABLED="false"
@@ -763,6 +772,8 @@ export HC_FEATURE_UI_CONTRACT_ENABLED
 export HC_FEATURE_OBSERVABILITY_ENABLED
 # task-100 P3-3 yml triplet check 3-point set (feature toggle)
 export HC_FEATURE_YML_TRIPLET_CHECK_ENABLED
+# task-104 W1-8 wrapper hardcode dissolution (3 new keys)
+export HC_FEATURE_INIT_TASKS_ENABLED HC_FEATURE_WHY_X5_REMINDER_ENABLED HC_FEATURE_NEXT_ACTIONS_SURFACE_ENABLED
 
 # Reviewer 制御 (task-44 Phase 1)
 export HC_REVIEW_REQUIRED_DESIGN HC_REVIEW_MIN_COUNT_DESIGN HC_REVIEW_MAX_COUNT_DESIGN

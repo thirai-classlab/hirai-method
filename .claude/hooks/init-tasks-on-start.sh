@@ -16,9 +16,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/config-loader.sh
 . "$SCRIPT_DIR/lib/config-loader.sh" 2>/dev/null || true
 
-# Feature toggle 参照 (task-45 Phase 2)
-if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled init_tasks_on_start; then
-  exit 0   # feature OFF で no-op
+# Feature toggle 参照 (task-45 Phase 2 + task-104 W1-8 short-name alias)
+# 既存 (init_tasks_on_start) + alias (init_tasks) の両方 check、どちらか OFF なら skip。
+# alias は dispatcher-manifest SessionStart bootstrap feature_key の短縮名として task-104 で追加。
+if command -v is_feature_enabled >/dev/null 2>&1; then
+  if ! is_feature_enabled init_tasks_on_start; then
+    exit 0   # 既存 key OFF で no-op
+  fi
+  if ! is_feature_enabled init_tasks; then
+    exit 0   # alias key OFF で no-op (task-104)
+  fi
 fi
 
 # プロジェクト直下で実行

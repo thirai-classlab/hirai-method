@@ -85,6 +85,7 @@ _get_smoke_category() {
     project-root-smoke|\
     self-doctor-smoke|\
     session-start-parallel-smoke|\
+    wrapper-dissolution-smoke|\
     yml-triplet-pre-commit-smoke)
       printf 'portability' ;;
     # stale-det: 古い期待値自己検出

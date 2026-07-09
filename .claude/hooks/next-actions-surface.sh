@@ -43,9 +43,17 @@ if [ -f "${_project_dir}/.claude/hooks/lib/config-loader.sh" ]; then
   source "${_project_dir}/.claude/hooks/lib/config-loader.sh" 2>/dev/null || true
 fi
 
-# Feature toggle 参照 (task-45 Phase 2)
-if command -v is_feature_enabled >/dev/null 2>&1 && ! is_feature_enabled byproduct_discharge; then
-  exit 0   # feature OFF で no-op
+# Feature toggle 参照 (task-45 Phase 2 + task-104 W1-8 child toggle)
+# 親 (byproduct_discharge) と子 (next_actions_surface) の両方 check、どちらか OFF なら skip。
+# 子 toggle は dispatcher-manifest SessionStart bootstrap feature_key 用 (finer-grained control)、
+# 親 toggle は grouped feature 用 (next-actions-surface + byproduct-discharge-guard 一括制御)。
+if command -v is_feature_enabled >/dev/null 2>&1; then
+  if ! is_feature_enabled byproduct_discharge; then
+    exit 0   # 親 feature OFF で no-op
+  fi
+  if ! is_feature_enabled next_actions_surface; then
+    exit 0   # 子 feature OFF で no-op (task-104)
+  fi
 fi
 
 # stdin を消費 (SessionStart hook は使わないが、消費しないと caller 側で残ることがある)

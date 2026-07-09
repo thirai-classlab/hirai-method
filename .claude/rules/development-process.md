@@ -242,6 +242,41 @@ subagent の **最後の assistant text** に **必ず `confidence: 0.X`** (0.0�
 | 1 セッション OFF | `ECC_UI_CONTRACT_OFF=1` (env、bypass.log 記録) |
 | UI 拡張子 override | `HC_UI_CONTRACT_EXTENSIONS=".tsx,.jsx"` (default 7 種) |
 
+## dispatcher-manifest SSoT + SessionStart bootstrap 経路 (task-104)
+
+`.claude/hooks/dispatcher-manifest.tsv` は全 hook (PreToolUse / PostToolUse / Notification / Stop / SubagentStop / SessionStart / UserPromptSubmit) を dispatcher (`session-start-dispatcher.sh` 等) 経由で spawn する manifest 唯一の SSoT。task-104 W1-8 で **session-start-wrapper.sh の DEFAULT_HOOKS 10 件 hardcode を廃止** し、10 hook (init-tasks-on-start / check-required-env / improvement-proposal / mode-session-start / mode-enforce / why-x5-reminder / next-actions-surface / mode-asana-prompt / check-serena-mcp / session-help-surface) を SessionStart bootstrap channel 行として manifest に登録した。これにより dispatcher 経由率 100% + 各 hook に feature toggle / preset 別運用 / drift 検出網が適用される。
+
+### session-start-wrapper.sh shim mode (default) + legacy mode (opt-in)
+
+- **default (shim mode)**: `session-start-wrapper.sh` は即 exit 0、dispatcher-manifest SessionStart bootstrap 経由で 10 hook が spawn される。
+- **legacy mode**: `HC_SESSION_START_USE_WRAPPER=true` env で従来の並列実行 path を復元 (1-2 リリース観察期間の緊急 rollback 経路)。
+- **shim mode 実測**: 4ms (即 exit 0)、**dispatcher parallel 実測**: ~3s (10 hook 並列 + observer 追加起動、default `HC_SESSION_START_PARALLEL=true`)。
+- **sequential fallback**: `HC_SESSION_START_PARALLEL=false` で dispatcher-core.sh 逐次実行 (~17s、debug 用途のみ)。
+
+### 10 hook の feature toggle 個別制御
+
+各 hook は manifest `feature_key` 列で個別 toggle 可能:
+
+| hook | manifest feature_key | yml key |
+|---|---|---|
+| init-tasks-on-start | `init_tasks` | `feature_init_tasks_enabled` (task-104 新) |
+| check-required-env | `check_required_env` | `feature_check_required_env_enabled` |
+| improvement-proposal | `improvement_proposal` | `feature_improvement_proposal_enabled` |
+| mode-session-start | `mode_session_start` | `feature_mode_session_start_enabled` |
+| mode-enforce | `loop_mode_enforcement` | `feature_loop_mode_enforcement_enabled` |
+| why-x5-reminder | `why_x5_reminder` | `feature_why_x5_reminder_enabled` (task-104 新) |
+| next-actions-surface | `next_actions_surface` | `feature_next_actions_surface_enabled` (task-104 新) |
+| mode-asana-prompt | `asana_prompt` | `feature_asana_prompt_enabled` |
+| check-serena-mcp | `check_serena_mcp` | `feature_check_serena_mcp_enabled` |
+| session-help-surface | `session_help_surface` | `feature_session_help_surface_enabled` |
+
+hook 自身も冒頭で `is_feature_enabled` gate を持つ (dual 防御、fail-open pattern per `feedback_set_e_in_sourced_libs`)。dispatcher が feature OFF で child spawn を skip、hook 自身も自前で feature check して no-op 化する。
+
+### 検証
+
+- **smoke**: [`.claude/tests/wrapper-dissolution-smoke.sh`](../tests/wrapper-dissolution-smoke.sh) (Case A-F: manifest 完全性 / feature toggle / enforcement_matrix 5-field / shim vs legacy 分岐 / startup time)
+- **enforcement_matrix**: 10 guard entry (`init_tasks_on_start` / `check_required_env` / `improvement_proposal` / `mode_session_start` / `mode_enforce` / `why_x5_reminder` / `next_actions_surface` / `mode_asana_prompt` / `check_serena_mcp` / `session_help_surface`) が harness-config.yml に追加、5 field 全備 (`feature_key` / `docs_claim` / `events` / `presets` / `disabled_reason`)。
+
 ## Observability (task-99、hook 発火・BLOCK・bypass・silent failure の構造化 log)
 
 silent failure と死蔵 hook を機械可視化するため、全 hook (PreToolUse × 5 / Stop × 1 / SubagentStop × 1) + self-doctor + smoke runner は `.claude/hooks/lib/observability.sh` を source し 5 API 経由で `observations.jsonl` に構造化 log を append する。

@@ -48,10 +48,13 @@ set -u
 # task-88 Step 3 (2026-07-05): hc-config.sh --summary 全文注入 (P1-4) 対応で 800 → 2400 に引上げ。
 # task-97 Step 3 (2026-07-07): enforcement_matrix 全 hook 拡張で 11 → 23 guard に増加。
 #   summary 出力に 12 新 guard 行が追加 (~50 bytes/entry = ~600B 増) するため 2400 → 3100 に引上げ。
-#   - harness-dev worst (loop + ctx present、23 guard、日本語 disabled_reason 8 件): 実測 ~2,680B + 16% margin ≈ 3100
-#   - consuming repo (team-default 全 enabled、23 guard、summary ~1050B): ~1,720B で十分収まる
+# task-104 Step 5 (2026-07-08): SessionStart bootstrap 10 guard 追加 (init_tasks_on_start / check_required_env /
+#   improvement_proposal / mode_session_start / mode_enforce / why_x5_reminder / next_actions_surface /
+#   mode_asana_prompt / check_serena_mcp / session_help_surface) で ~588B 増 (実測 3268B)。3100 → 3800 に引上げ。
+#   - harness-dev worst (loop + ctx present、33 guard、日本語 disabled_reason 8 件): 実測 ~3,268B + 16% margin ≈ 3800
+#   - consuming repo (team-default 全 enabled、33 guard、summary ~1450B): ~2,150B で十分収まる
 #   - budget smoke (sessionstart-budget-smoke.sh) の hard-fail 5000 の内側に位置する 2 段構成
-FOOTPRINT_CAP=3100
+FOOTPRINT_CAP=3800
 
 # --- root 解決 ---
 _resolve_root() (
