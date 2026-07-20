@@ -50,6 +50,7 @@ _get_smoke_category() {
     action-space-count-smoke|\
     common-rules-import-smoke|\
     config-feature-toggles-smoke|\
+    config-loader-yml-drift-smoke|\
     dead-hook-inventory-smoke|\
     effective-hook-matrix-smoke|\
     enforcement-mismatch-smoke|\

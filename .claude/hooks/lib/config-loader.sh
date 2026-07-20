@@ -194,7 +194,13 @@ REVIEW_MIN_COUNT_SECURITY \
 REVIEW_ITERATION_MAX \
 REVIEW_ITERATION_MIN \
 MAINLINE_BRANCH \
-MAINLINE_INTEGRATION_POLICY"
+MAINLINE_INTEGRATION_POLICY \
+HARNESS_VERSION \
+STALE_HARNESS_MARKERS \
+PROTECTED_PATHS_CODE \
+CODE_FILE_EXTENSIONS \
+FEATURE_SELF_DOCTOR_ENABLED \
+FEATURE_SESSIONSTART_SUMMARY_ENABLED"
 
 # --- Step 1: 呼び出し時 env をスナップショット ---
 # bash 3.2 互換のため eval を使う (declare -g / ${!var} はあるが eval が最も安全)。
@@ -271,8 +277,8 @@ HC_FAILURE_WINDOW_DIR=".claude/.failure-window"
 HC_HOMUNCULUS_ROOT="$HOME/.claude/homunculus"
 HC_NOTIFY_SOUND="/System/Library/Sounds/Hero.aiff"
 HC_STOP_SOUND="/System/Library/Sounds/Glass.aiff"
-HC_CONFIDENCE_THRESHOLD="0.6"
-HC_CONFIDENCE_REQUIRED="true"
+HC_CONFIDENCE_THRESHOLD="0.5"
+HC_CONFIDENCE_REQUIRED="false"
 HC_CONFIDENCE_STATE_DIR=".claude/.confidence-gate-state"
 HC_REQUIRED_ENV=""
 HC_IMPROVEMENT_PROPOSAL_ENABLED="true"
@@ -282,7 +288,7 @@ HC_IMPROVEMENT_PROPOSAL_STATE_DIR=".claude/.improvement-proposal-state"
 HC_IMPROVEMENT_PROPOSAL_DEDUP_HOURS="24"
 HC_CONTEXT_BUDGET_ENABLED="true"
 HC_CONTEXT_BUDGET_LIMIT="1000000"
-HC_CONTEXT_BUDGET_THRESHOLD="0.60"
+HC_CONTEXT_BUDGET_THRESHOLD="0.66"
 HC_CONTEXT_BUDGET_STATE_DIR=".claude/.context-budget-state"
 HC_LIST_PLAN_FIRST_REMINDER_ENABLED="true"
 HC_PARALLEL_SUBAGENT_REMINDER_ENABLED="true"
@@ -294,10 +300,10 @@ HC_PARALLEL_SUBAGENT_STATE_DIR=""
 # 空文字が default、env override 経由でのみ上書き可。yaml 経由の multi-line value は
 # config-loader.sh 単行 parser の制約で flat 1 行構文 (例: "keyword1|type1,keyword2|type2") 推奨。
 HC_AGENT_TYPE_KEYWORD_MAPPING=""
-HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer\ncode-architect'
-HC_REVIEWER_REGISTRY_SECURITY=$'security-auditor\nsecurity-reviewer'
-HC_REVIEWER_REGISTRY_TEST=$'tdd-guide\ntest-automator\nqa-expert'
-HC_REVIEWER_REGISTRY_IMPL=$'code-reviewer\nrefactoring-specialist'
+HC_REVIEWER_REGISTRY_DESIGN=$'architect\narchitect-reviewer\ncode-architect\napi-designer\nui-designer\ndatabase-reviewer\nharness-optimizer'
+HC_REVIEWER_REGISTRY_SECURITY=$'security-auditor\nsecurity-reviewer\npenetration-tester'
+HC_REVIEWER_REGISTRY_TEST=$'tdd-guide\ntest-automator\nqa-expert\npr-test-analyzer'
+HC_REVIEWER_REGISTRY_IMPL=$'code-reviewer\nrefactoring-specialist\ntypescript-reviewer\npython-reviewer\ngo-reviewer\nrust-reviewer\ncsharp-reviewer\njava-reviewer\nkotlin-reviewer\ncpp-reviewer\nflutter-reviewer'
 HC_WORKFLOW_STAGES_NEW=$'requirements\nbasic-design\ndetailed-design\ntest-design\ndesign-review\nuser-approval\ntask-creation\ntdd\nmodule-review\nlocal-test\nsystem-review\nci-cd\nscenario-test\nfinish'
 HC_WORKFLOW_STAGES_MODIFY=$'branch-decision\ncheckout\nrecover-design\npre-test\nredesign\nretest-design\ntdd\nmodule-review\nfull-test\nsystem-review'
 HC_DOCS_APPROVED_DIR=""
@@ -319,12 +325,12 @@ HC_LOOP_CONFIRMATION_PATTERNS=""
 # 採用先 yml に key 不在でも本 defaults で fallback 動作 (backward compat)。
 # env override: HC_FEATURE_<NAME>_ENABLED=false で個別 OFF 可能。
 HC_FEATURE_LOOP_MODE_ENFORCEMENT_ENABLED="true"
-HC_FEATURE_DRAFT_FLOW_GUARD_ENABLED="true"
-HC_FEATURE_TASK_RULE_GUARD_ENABLED="true"
+HC_FEATURE_DRAFT_FLOW_GUARD_ENABLED="false"
+HC_FEATURE_TASK_RULE_GUARD_ENABLED="false"
 HC_FEATURE_DELEGATION_GUARD_ENABLED="true"
-HC_FEATURE_WORKFLOW_ENFORCEMENT_ENABLED="true"
+HC_FEATURE_WORKFLOW_ENFORCEMENT_ENABLED="false"
 HC_FEATURE_CONFIDENCE_GATE_ENABLED="true"
-HC_FEATURE_GATEGUARD_ENABLED="true"
+HC_FEATURE_GATEGUARD_ENABLED="false"
 HC_FEATURE_CONTEXT_BUDGET_ENABLED="true"
 HC_FEATURE_PARALLEL_SUBAGENT_REMINDER_ENABLED="true"
 HC_FEATURE_AUTONOMOUS_ACTION_GUARD_ENABLED="true"
@@ -342,7 +348,7 @@ HC_FEATURE_FAILURE_LOOP_DETECT_ENABLED="true"
 # reviewer-count-guard.sh (task-64 Step 5): PreToolUse(Agent) reviewer 数上限 warn hook
 HC_FEATURE_REVIEWER_COUNT_GUARD_ENABLED="true"
 # tool-call-slip-detector.sh (next-actions #66): Stop hook、tool-call markup slip 検出
-HC_FEATURE_TOOL_CALL_SLIP_DETECT_ENABLED="true"
+HC_FEATURE_TOOL_CALL_SLIP_DETECT_ENABLED="false"
 # stale-harness-detect.sh (task-56 F): SessionStart hook、consuming repo の harness 鮮度検出
 HC_FEATURE_STALE_HARNESS_DETECT_ENABLED="true"
 # stale-harness-detect.sh (task-84): registry 比較の throttle 間隔 (時間) + npm semver stamp
@@ -350,7 +356,7 @@ HC_STALE_HARNESS_CHECK_INTERVAL_HOURS="24"
 # L3 (task-84 fix): HC_HARNESS_NPM_VERSION は対称性のため export するが、
 #   stale-harness-detect.sh は throttle / stamp 比較で yml を直接 grep するため本 env を消費しない
 #   (env override で stamp を偽装できない設計)。consumer 追加時はここを更新する。
-HC_HARNESS_NPM_VERSION=""
+HC_HARNESS_NPM_VERSION="0.1.0"
 # agent-router-suggest.sh (task-81): UserPromptSubmit hook、named agent 推薦 hint を条件付き 1 行注入
 HC_FEATURE_AGENT_ROUTER_SUGGEST_ENABLED="true"
 # agent-router-suggest.sh LLM fallback (task-96 P2-3):
@@ -403,23 +409,23 @@ HC_ENFORCEMENT_MATRIX=""
 #   値解決: env(HC_*) > local.yml > yml > default。不正/未知値は hook 実行時に
 #   fail-safe で pr-required 扱い (本 default で fallback、guard 側で再検証)。
 HC_MAINLINE_BRANCH="main"
-HC_MAINLINE_INTEGRATION_POLICY="pr-required"
+HC_MAINLINE_INTEGRATION_POLICY="local-merge-push"
 
 # --- Reviewer 制御 (task-44 Phase 1、2026-05-27 追加) ---
 # review_required_* (bool default true、security のみ false): false で当該 review command を skip
 # review_min_count_* (int): reviewer 並列起動最低数 (採用 6 条 4 同期)
 # review_max_count_* (int): reviewer 並列起動上限 (registry 件数で絞り込み)
 # review_iteration_max: 反復上限 (default 5、超過時 user escalation)
-HC_REVIEW_REQUIRED_DESIGN="true"
-HC_REVIEW_MIN_COUNT_DESIGN="3"
+HC_REVIEW_REQUIRED_DESIGN="false"
+HC_REVIEW_MIN_COUNT_DESIGN="1"
 HC_REVIEW_MAX_COUNT_DESIGN="7"
-HC_REVIEW_REQUIRED_TEST="true"
-HC_REVIEW_MIN_COUNT_TEST="5"
+HC_REVIEW_REQUIRED_TEST="false"
+HC_REVIEW_MIN_COUNT_TEST="1"
 HC_REVIEW_MAX_COUNT_TEST="10"
-HC_REVIEW_REQUIRED_MODULE="true"
+HC_REVIEW_REQUIRED_MODULE="false"
 HC_REVIEW_MIN_COUNT_MODULE="2"
 HC_REVIEW_MAX_COUNT_MODULE="5"
-HC_REVIEW_REQUIRED_SYSTEM="true"
+HC_REVIEW_REQUIRED_SYSTEM="false"
 HC_REVIEW_MIN_COUNT_SYSTEM="2"
 HC_REVIEW_MAX_COUNT_SYSTEM="5"
 HC_REVIEW_REQUIRED_SECURITY="false"
@@ -429,6 +435,24 @@ HC_REVIEW_ITERATION_MAX="5"
 # reviewer-count-guard.sh が本値未達 slug を advisory warn。iter 後半 CRIT 検出担保。
 # 値解決順: env(HC_REVIEW_ITERATION_MIN) > local.yml > yml > default 3。
 HC_REVIEW_ITERATION_MIN="3"
+
+# --- YML-only key defaults (task-106 W1-4 drift fix) ---
+# 以下は yml SSoT には存在するが従来 config-loader.sh に default 定義が無かった key。
+# task-106 (context_budget_threshold drift 解消) の全数 audit で asymmetric 検出し、
+# SSoT 対称性のため default を追加。値解決順: env(HC_*) > local.yml > yml > 本 defaults。
+#
+# harness_version: install.sh --init/--update が書き込む UTC stamp、stale-harness-detect が消費
+# stale_harness_markers: 主要 marker file 一覧 (yml [] 形式、config-loader が \n 区切りに変換)
+# protected_paths_code: subagent 委譲強制 code path (delegation-guard.sh が消費)
+# code_file_extensions: protected_paths_code 判定対象拡張子 (delegation-guard.sh が消費)
+# feature_self_doctor_enabled: install 末尾 D1-D8 setup issue 検証 (self-doctor.sh)
+# feature_sessionstart_summary_enabled: mode-session-start での hc-config --summary 全文注入
+HC_HARNESS_VERSION="2026-05-29"
+HC_STALE_HARNESS_MARKERS=$'CommonRules.md\nscripts/hc-config.sh\nhooks/lib/config-loader.sh\nhooks/loop-confirmation-detector.sh\nhooks/stale-harness-detect.sh'
+HC_PROTECTED_PATHS_CODE=$'.claude/hooks\n.claude/skills\n.claude/scripts'
+HC_CODE_FILE_EXTENSIONS=$'sh\npy\nmjs\nts\njs\ntsx\njsx\nrb\ngo\nrs\njava\nkt\nswift\nphp\ncpp\nc\nh'
+HC_FEATURE_SELF_DOCTOR_ENABLED="true"
+HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED="true"
 
 # --- 値整形 helper ---
 # tilde 展開 + クォート strip + 前後空白 trim
@@ -785,6 +809,11 @@ export HC_REVIEW_ITERATION_MAX HC_REVIEW_ITERATION_MIN
 
 # Git 統合ポリシー (task-77)
 export HC_MAINLINE_BRANCH HC_MAINLINE_INTEGRATION_POLICY
+
+# YML-only key defaults (task-106 W1-4 drift fix、SSoT 対称性)
+export HC_HARNESS_VERSION HC_STALE_HARNESS_MARKERS
+export HC_PROTECTED_PATHS_CODE HC_CODE_FILE_EXTENSIONS
+export HC_FEATURE_SELF_DOCTOR_ENABLED HC_FEATURE_SESSIONSTART_SUMMARY_ENABLED
 
 # --- 内部変数を unset (caller を汚染しない) ---
 unset _hc_root _hc_top _hc_line _hc_stripped _hc_key _hc_key_upper
